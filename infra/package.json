@@ -1,0 +1,13 @@
+{
+  "name": "@mise/infra",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pulumi/cloudflare": "6.23.0",
+    "@pulumi/pulumi": "3.270.0"
+  }
+}

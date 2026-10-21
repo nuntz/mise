@@ -1,0 +1,6 @@
+name: mise
+description: Cloudflare infrastructure for a Mise deployment
+runtime:
+  name: nodejs
+  options:
+    packagemanager: bun

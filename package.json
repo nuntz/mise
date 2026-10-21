@@ -1,0 +1,24 @@
+{
+  "name": "mise",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "infra"
+  ],
+  "scripts": {
+    "dev": "bun run --filter @mise/web build && bun run --filter @mise/worker dev",
+    "seed": "bun run --filter @mise/worker seed",
+    "test": "bun test packages",
+    "test:worker": "bun run --filter @mise/worker test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "typescript": "5.9.3"
+  },
+  "trustedDependencies": [],
+  "packageManager": "bun@1.4.3"
+}

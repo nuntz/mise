@@ -1,0 +1,23 @@
+{
+  "name": "@mise/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "seed": "bun scripts/seed.ts",
+    "test": "vitest run",
+    "typecheck": "wrangler types && tsc --noEmit"
+  },
+  "dependencies": {
+    "@mise/domain": "workspace:*",
+    "agents": "0.29.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-decorators": "8.0.2",
+    "@cloudflare/vitest-plugin": "1.4.6",
+    "@types/bun": "1.4.3",
+    "vitest": "5.0.5",
+    "wrangler": "4.151.3"
+  }
+}

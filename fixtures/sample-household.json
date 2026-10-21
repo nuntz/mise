@@ -1,0 +1,8 @@
+{
+  "name": "The Example Family",
+  "timezone": "America/Vancouver",
+  "dinnerTime": "18:00",
+  "weekStartsOn": "monday",
+  "units": "metric",
+  "locale": "en-CA"
+}
