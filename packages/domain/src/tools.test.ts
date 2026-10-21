@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { isHardConstraint } from "./members";
 import { parseToolInput } from "./tools";
 
 describe("parseToolInput", () => {
@@ -14,6 +15,7 @@ describe("parseToolInput", () => {
         weekStartsOn: "monday",
         units: "metric",
         locale: "en-CA",
+        members: [],
       },
     });
   });
@@ -50,7 +52,7 @@ describe("parseToolInput", () => {
   });
 
   test("unexpected fields are rejected rather than silently dropped", () => {
-    const result = parseToolInput("setup_household", { name: "The Example Family", members: [] });
+    const result = parseToolInput("setup_household", { name: "The Example Family", pets: [] });
 
     expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
   });
@@ -59,5 +61,77 @@ describe("parseToolInput", () => {
     const result = parseToolInput("setup_household", { name: "The Example Family", timezone: "europe/paris" });
 
     expect(result).toMatchObject({ ok: true, value: { timezone: "Europe/Paris" } });
+  });
+});
+
+describe("Member Constraints", () => {
+  test("an allergy must name an Allergen", () => {
+    const result = parseToolInput("add_member", { name: "Alex", constraints: [{ kind: "allergy", term: "nuts" }] });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+  });
+
+  test("an Allergen comes from the canonical list", () => {
+    const result = parseToolInput("add_member", {
+      name: "Alex",
+      constraints: [{ kind: "allergy", allergen: "kryptonite" }],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input", issues: [{ path: "constraints.0.allergen" }] },
+    });
+  });
+
+  test("intolerances, diets and dislikes name an Allergen, a term or both", () => {
+    const constraints = [
+      { kind: "intolerance", allergen: "milk" },
+      { kind: "diet", term: "vegetarian" },
+      { kind: "dislike", allergen: "fish", term: "salmon" },
+    ];
+
+    expect(parseToolInput("add_member", { name: "Alex", constraints })).toMatchObject({
+      ok: true,
+      value: { constraints },
+    });
+  });
+
+  test("a Constraint that names nothing is rejected", () => {
+    const result = parseToolInput("add_member", {
+      name: "Alex",
+      constraints: [{ kind: "diet" }, { kind: "dislike", term: "  " }],
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+  });
+
+  test("allergy, intolerance and diet are Hard; dislike is Soft", () => {
+    expect(isHardConstraint({ kind: "allergy", allergen: "peanut" })).toBe(true);
+    expect(isHardConstraint({ kind: "intolerance", allergen: "milk" })).toBe(true);
+    expect(isHardConstraint({ kind: "diet", term: "vegetarian" })).toBe(true);
+    expect(isHardConstraint({ kind: "dislike", term: "mushrooms" })).toBe(false);
+  });
+});
+
+describe("Members", () => {
+  test("a Member may have no email", () => {
+    expect(parseToolInput("add_member", { name: "Sam" })).toEqual({
+      ok: true,
+      value: { name: "Sam", email: null, constraints: [] },
+    });
+  });
+
+  test("a Member's email is stored in lower case, as Callers' are", () => {
+    expect(parseToolInput("add_member", { name: "Alex", email: "Alex@Example.com" })).toMatchObject({
+      ok: true,
+      value: { email: "alex@example.com" },
+    });
+  });
+
+  test("a Member's email must be an email address", () => {
+    expect(parseToolInput("add_member", { name: "Alex", email: "alex" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input", issues: [{ path: "email" }] },
+    });
   });
 });

@@ -1,22 +1,16 @@
 import { HOUSEHOLD_DEFAULTS, LOCALES, type ToolInput, UNITS, WEEKDAYS } from "@mise/domain";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Index, Show } from "solid-js";
 import type { MiseClient } from "./client";
-import { type MessageKey, t } from "./messages";
+import { errorText } from "./errors";
+import { emptyMember, type MemberDraft, MemberFields, memberOf } from "./MemberFields";
+import { t } from "./messages";
 
-type SetupInput = Required<ToolInput<"setup_household">>;
-
-const fieldLabels: Record<keyof SetupInput, MessageKey> = {
-  name: "setup.name",
-  timezone: "setup.timezone",
-  dinnerTime: "setup.dinnerTime",
-  weekStartsOn: "setup.weekStartsOn",
-  units: "setup.units",
-  locale: "setup.locale",
-};
+type SetupInput = Required<Omit<ToolInput<"setup_household">, "members">>;
 
 /** First-run setup. On success the change notice makes every open tab refetch, this one included. */
 export function SetupForm(props: { client: MiseClient }) {
   const [input, setInput] = createSignal<SetupInput>({ name: "", ...HOUSEHOLD_DEFAULTS });
+  const [members, setMembers] = createSignal<MemberDraft[]>([]);
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal<string>();
 
@@ -28,18 +22,8 @@ export function SetupForm(props: { client: MiseClient }) {
     setSubmitting(true);
     setError(undefined);
     try {
-      const result = await props.client.call("setup_household", input());
-      if (result.ok) return;
-      if (result.error.code === "invalid_input") {
-        const fields = (result.error.issues ?? []).map((issue) =>
-          issue.path in fieldLabels ? t(fieldLabels[issue.path as keyof SetupInput]) : issue.path,
-        );
-        setError(t("setup.invalid", { fields: fields.join(", ") }));
-      } else if (result.error.code === "already_set_up") {
-        setError(t("setup.alreadySetUp"));
-      } else {
-        setError(t("app.error"));
-      }
+      const result = await props.client.call("setup_household", { ...input(), members: members().map(memberOf) });
+      if (!result.ok) setError(errorText(result.error, "household"));
     } catch {
       setError(t("app.error"));
     } finally {
@@ -100,6 +84,25 @@ export function SetupForm(props: { client: MiseClient }) {
           <For each={LOCALES}>{(locale) => <option value={locale}>{t(`locale.${locale}`)}</option>}</For>
         </select>
       </label>
+
+      <h3>{t("setup.members")}</h3>
+      <p>{t("setup.membersIntro")}</p>
+      <Index each={members()}>
+        {(member, index) => (
+          <div>
+            <MemberFields
+              draft={member()}
+              onChange={(draft) => setMembers((all) => all.map((m, i) => (i === index ? draft : m)))}
+            />
+            <button type="button" onClick={() => setMembers((all) => all.filter((_, i) => i !== index))}>
+              {t("member.remove")}
+            </button>
+          </div>
+        )}
+      </Index>
+      <button type="button" onClick={() => setMembers((all) => [...all, emptyMember()])}>
+        {t("members.add")}
+      </button>
 
       <Show when={error()}>
         <p role="alert">{error()}</p>

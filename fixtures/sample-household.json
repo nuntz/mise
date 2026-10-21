@@ -4,5 +4,22 @@
   "dinnerTime": "18:00",
   "weekStartsOn": "monday",
   "units": "metric",
-  "locale": "en-CA"
+  "locale": "en-CA",
+  "members": [
+    {
+      "name": "Robin",
+      "email": "cook@example.com",
+      "constraints": [{ "kind": "dislike", "term": "olives" }]
+    },
+    {
+      "name": "Alex",
+      "email": "alex@example.com",
+      "constraints": [{ "kind": "intolerance", "allergen": "milk", "term": "lactose" }]
+    },
+    {
+      "name": "Sam",
+      "email": null,
+      "constraints": [{ "kind": "allergy", "allergen": "peanut" }]
+    }
+  ]
 }

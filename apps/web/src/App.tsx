@@ -1,6 +1,7 @@
 import type { Household } from "@mise/domain";
 import { createSignal, Match, onCleanup, Switch } from "solid-js";
 import type { MiseClient } from "./client";
+import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
 import { SetupForm } from "./SetupForm";
 
@@ -30,7 +31,12 @@ export function App(props: { client: MiseClient }) {
           <p role="alert">{t("app.error")}</p>
         </Match>
         <Match when={readyHousehold(state())} keyed>
-          {(household) => <HouseholdSummary household={household} />}
+          {(household) => (
+            <>
+              <HouseholdSummary household={household} />
+              <MembersSettings client={props.client} members={household.members} />
+            </>
+          )}
         </Match>
         <Match when={state().status === "ready"}>
           <SetupForm client={props.client} />

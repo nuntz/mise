@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Member, NewMember } from "./members";
 
 export const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 
@@ -24,13 +25,19 @@ export const Timezone = z.string().transform((name, ctx) => {
 /** A local wall-clock time, HH:MM in 24-hour form. */
 export const LocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
 
-export const Household = z.object({
+/** How the Household runs its kitchen: everything about it except its Members. */
+export const HouseholdSettings = z.object({
   name: z.string().trim().min(1).max(100),
   timezone: Timezone,
   dinnerTime: LocalTime,
   weekStartsOn: Weekday,
   units: Units,
   locale: Locale,
+});
+export type HouseholdSettings = z.infer<typeof HouseholdSettings>;
+
+export const Household = HouseholdSettings.extend({
+  members: z.array(Member),
 });
 export type Household = z.infer<typeof Household>;
 
@@ -40,14 +47,16 @@ export const HOUSEHOLD_DEFAULTS = {
   weekStartsOn: "monday",
   units: "metric",
   locale: "en-CA",
-} as const satisfies Omit<Household, "name">;
+} as const satisfies Omit<HouseholdSettings, "name">;
 
-export const SetupHouseholdInput = Household.extend({
+/** First-run setup: the settings, with defaults, and any Members known so far. */
+export const SetupHouseholdInput = HouseholdSettings.extend({
   timezone: Timezone.default(HOUSEHOLD_DEFAULTS.timezone),
   dinnerTime: LocalTime.default(HOUSEHOLD_DEFAULTS.dinnerTime),
   weekStartsOn: Weekday.default(HOUSEHOLD_DEFAULTS.weekStartsOn),
   units: Units.default(HOUSEHOLD_DEFAULTS.units),
   locale: Locale.default(HOUSEHOLD_DEFAULTS.locale),
+  members: z.array(NewMember).max(50).default([]),
 }).strict();
 
 function canonicalTimezone(name: string): string | undefined {

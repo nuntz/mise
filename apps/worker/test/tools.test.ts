@@ -26,6 +26,7 @@ describe("first-run Household setup", () => {
       weekStartsOn: "monday",
       units: "metric",
       locale: "en-CA",
+      members: [],
     };
     expect(setup).toEqual({ ok: true, value: expected });
     expect(read).toEqual({ ok: true, value: expected });
@@ -36,7 +37,7 @@ describe("first-run Household setup", () => {
 
     await household.callTool("setup_household", sampleHousehold);
 
-    expect(await household.callTool("get_household", {})).toEqual({ ok: true, value: sampleHousehold });
+    expect(await household.callTool("get_household", {})).toEqual({ ok: true, value: withMemberIds(sampleHousehold) });
   });
 
   test("setup only works on first run", async () => {
@@ -86,6 +87,16 @@ describe("change notices", () => {
     expect(await notices.next()).toEqual({ type: "mise:change", topic: "household", revision: 1 });
   });
 
+  test("a connected client is told when a Member changes", async () => {
+    const household = freshHousehold();
+    await household.callTool("setup_household", { name: "The Example Family" });
+    const notices = await connect(household);
+
+    await household.callTool("add_member", { name: "Sam" });
+
+    expect(await notices.next()).toEqual({ type: "mise:change", topic: "household", revision: 2 });
+  });
+
   test("a rejected mutation neither broadcasts nor advances the revision", async () => {
     const household = freshHousehold();
     const notices = await connect(household);
@@ -99,6 +110,11 @@ describe("change notices", () => {
     expect(notices.received()).toEqual([]);
   });
 });
+
+/** A Household as set up from `input`: its Members numbered in the order given. */
+function withMemberIds<T extends { members: object[] }>(input: T) {
+  return { ...input, members: input.members.map((member, index) => ({ id: index + 1, ...member })) };
+}
 
 /** Opens a WebSocket to the household and collects the change notices it receives. */
 async function connect(household: DurableObjectStub<import("../src/household").Household>) {

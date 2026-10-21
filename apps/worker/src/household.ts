@@ -70,11 +70,19 @@ class HouseholdAgent extends Agent<Env> {
     const context: ToolContext = { caller: this.callerOf(getCurrentAgent().connection) };
     const topic = changeTopicOf(toolName);
 
-    const { result, revision } = this.ctx.storage.transactionSync(() => {
-      const result = handler(this.ctx.storage.sql, parsed.value, context);
-      if (!result.ok || !topic) return { result, revision: undefined };
-      return { result, revision: this.bumpRevision() };
-    });
+    let outcome: { result: ToolResult<unknown>; revision?: number };
+    try {
+      outcome = this.ctx.storage.transactionSync(() => {
+        const result = handler(this.ctx.storage.sql, parsed.value, context);
+        // Thrown so that a handler refusing part-way through leaves nothing behind.
+        if (!result.ok) throw new Rejected(result);
+        return { result, revision: topic && this.bumpRevision() };
+      });
+    } catch (error) {
+      if (error instanceof Rejected) return error.result;
+      throw error;
+    }
+    const { result, revision } = outcome;
 
     if (topic && revision !== undefined) {
       this.notify(topic, revision);
@@ -183,6 +191,13 @@ class HouseholdAgent extends Agent<Env> {
     return this.ctx.storage.sql
       .exec<{ value: number }>("UPDATE revision SET value = value + 1 WHERE id = 1 RETURNING value")
       .one().value;
+  }
+}
+
+/** A tool's refusal, carried out of the transaction it rolls back. */
+class Rejected extends Error {
+  constructor(readonly result: ToolResult<unknown>) {
+    super("Tool call refused");
   }
 }
 

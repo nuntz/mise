@@ -78,7 +78,7 @@ describe("identity at the HTTP seam", () => {
     const { response, call } = await connect(await accessJwt());
 
     expect(response.status).toBe(101);
-    expect(await call?.("get_caller", {})).toEqual({ ok: true, value: { email: "cook@example.com" } });
+    expect(await call?.("get_caller", {})).toEqual({ ok: true, value: { email: "cook@example.com", member: null } });
   });
 
   test("without an Access token the household is refused", async () => {
@@ -112,7 +112,7 @@ describe("identity at the HTTP seam", () => {
   test("the caller's email is normalised to lower case", async () => {
     const { call } = await connect(await accessJwt({ email: "Cook@Example.com" }));
 
-    expect(await call?.("get_caller", {})).toEqual({ ok: true, value: { email: "cook@example.com" } });
+    expect(await call?.("get_caller", {})).toEqual({ ok: true, value: { email: "cook@example.com", member: null } });
   });
 
   test("the calendar feed does not ask for sign-in", async () => {

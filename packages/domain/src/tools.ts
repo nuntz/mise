@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { Caller } from "./caller";
+import { type Caller, ResolvedCaller } from "./caller";
 import { Household, SetupHouseholdInput } from "./household";
+import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 
 /** Topics a change notice can name; clients refetch the matching tools. */
 export const ChangeTopic = z.enum(["household"]);
@@ -28,9 +29,31 @@ export const tools = {
     input: z.object({}).strict(),
     output: Household.nullable(),
   }),
+  add_member: defineTool({
+    input: NewMember,
+    output: Member,
+    changes: "household",
+  }),
+  update_member: defineTool({
+    input: UpdateMemberInput,
+    output: Member,
+    changes: "household",
+  }),
+  /** Replaces the Member's Constraints with the list given. */
+  update_member_constraints: defineTool({
+    input: UpdateMemberConstraintsInput,
+    output: Member,
+    changes: "household",
+  }),
+  /** Returns the Member as it was before removal. */
+  remove_member: defineTool({
+    input: RemoveMemberInput,
+    output: Member,
+    changes: "household",
+  }),
   get_caller: defineTool({
     input: z.object({}).strict(),
-    output: Caller.nullable(),
+    output: ResolvedCaller.nullable(),
   }),
 };
 
@@ -48,7 +71,13 @@ export type ToolContext = {
   caller: Caller | null;
 };
 
-export type ToolErrorCode = "unknown_tool" | "invalid_input" | "already_set_up";
+export type ToolErrorCode =
+  | "unknown_tool"
+  | "invalid_input"
+  | "already_set_up"
+  | "not_set_up"
+  | "not_found"
+  | "email_in_use";
 
 export type ToolError = {
   code: ToolErrorCode;

@@ -23,6 +23,25 @@ const migrations: { version: number; statements: string[] }[] = [
       "INSERT INTO revision (id, value) VALUES (1, 0)",
     ],
   },
+  {
+    version: 2,
+    statements: [
+      // AUTOINCREMENT so a removed Member's id is never handed to someone else.
+      `CREATE TABLE member (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE
+      )`,
+      `CREATE TABLE member_constraint (
+        member_id INTEGER NOT NULL REFERENCES member (id),
+        position INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        allergen TEXT,
+        term TEXT,
+        PRIMARY KEY (member_id, position)
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

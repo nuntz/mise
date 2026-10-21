@@ -36,7 +36,10 @@ describe("export and restore", () => {
 
     expect(restored.status).toBe(200);
     expect(await exportOf(fresh)).toBe(exported);
-    expect(await fresh.callTool("get_household", {})).toEqual({ ok: true, value: sampleHousehold });
+    expect(await fresh.callTool("get_household", {})).toMatchObject({
+      ok: true,
+      value: { name: sampleHousehold.name, members: [{ name: "Robin" }, { name: "Alex" }, { name: "Sam" }] },
+    });
   });
 
   test("restore refuses a household that already holds data", async () => {
@@ -62,7 +65,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 1,
-      schemaVersion: 1,
+      schemaVersion: 2,
       tables: {
         household: [
           {
@@ -74,6 +77,16 @@ describe("export and restore", () => {
             units: "metric",
             locale: "en-CA",
           },
+        ],
+        member: [
+          { id: 1, name: "Robin", email: "cook@example.com" },
+          { id: 2, name: "Alex", email: "alex@example.com" },
+          { id: 3, name: "Sam", email: null },
+        ],
+        member_constraint: [
+          { member_id: 1, position: 0, kind: "dislike", allergen: null, term: "olives" },
+          { member_id: 2, position: 0, kind: "intolerance", allergen: "milk", term: "lactose" },
+          { member_id: 3, position: 0, kind: "allergy", allergen: "peanut", term: null },
         ],
       },
       photoKeys: [],
