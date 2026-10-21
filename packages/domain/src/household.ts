@@ -5,15 +5,21 @@ export const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday",
 export const Weekday = z.enum(WEEKDAYS);
 export type Weekday = z.infer<typeof Weekday>;
 
-export const Units = z.enum(["metric", "imperial"]);
+export const UNITS = ["metric", "imperial"] as const;
+export const Units = z.enum(UNITS);
 export type Units = z.infer<typeof Units>;
 
 export const LOCALES = ["en-CA"] as const;
 export const Locale = z.enum(LOCALES);
 export type Locale = z.infer<typeof Locale>;
 
-/** An IANA timezone name the runtime recognises, such as America/Vancouver. */
-export const Timezone = z.string().refine(isKnownTimezone, { message: "Unknown IANA timezone" });
+/** An IANA timezone name the runtime recognises, such as America/Vancouver, stored in its canonical spelling. */
+export const Timezone = z.string().transform((name, ctx) => {
+  const canonical = canonicalTimezone(name);
+  if (canonical) return canonical;
+  ctx.addIssue({ code: "custom", message: "Unknown IANA timezone" });
+  return z.NEVER;
+});
 
 /** A local wall-clock time, HH:MM in 24-hour form. */
 export const LocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
@@ -44,11 +50,10 @@ export const SetupHouseholdInput = Household.extend({
   locale: Locale.default(HOUSEHOLD_DEFAULTS.locale),
 }).strict();
 
-function isKnownTimezone(name: string): boolean {
+function canonicalTimezone(name: string): string | undefined {
   try {
-    new Intl.DateTimeFormat("en", { timeZone: name });
-    return true;
+    return new Intl.DateTimeFormat("en", { timeZone: name }).resolvedOptions().timeZone;
   } catch {
-    return false;
+    return undefined;
   }
 }

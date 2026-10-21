@@ -1,4 +1,4 @@
-import type { Household, ParsedToolInput, ToolName, ToolOutput, ToolResult } from "@mise/domain";
+import { Household, type ParsedToolInput, type ToolName, type ToolOutput, type ToolResult } from "@mise/domain";
 
 type HouseholdRow = {
   name: string;
@@ -38,13 +38,12 @@ export const handlers: Handlers = {
 function readHousehold(sql: SqlStorage): Household | null {
   const [row] = sql.exec<HouseholdRow>("SELECT * FROM household WHERE id = 1").toArray();
   if (!row) return null;
-  // Columns are only ever written from validated tool input.
-  return {
+  return Household.parse({
     name: row.name,
     timezone: row.timezone,
     dinnerTime: row.dinner_time,
-    weekStartsOn: row.week_starts_on as Household["weekStartsOn"],
-    units: row.units as Household["units"],
-    locale: row.locale as Household["locale"],
-  };
+    weekStartsOn: row.week_starts_on,
+    units: row.units,
+    locale: row.locale,
+  });
 }

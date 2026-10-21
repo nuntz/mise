@@ -54,4 +54,10 @@ describe("parseToolInput", () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
   });
+
+  test("a timezone is stored under its canonical IANA name", () => {
+    const result = parseToolInput("setup_household", { name: "The Example Family", timezone: "europe/paris" });
+
+    expect(result).toMatchObject({ ok: true, value: { timezone: "Europe/Paris" } });
+  });
 });

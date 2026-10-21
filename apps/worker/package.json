@@ -6,7 +6,7 @@
     "dev": "wrangler dev",
     "seed": "bun scripts/seed.ts",
     "test": "vitest run",
-    "typecheck": "wrangler types && tsc --noEmit"
+    "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p scripts"
   },
   "dependencies": {
     "@mise/domain": "workspace:*",

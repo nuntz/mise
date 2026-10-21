@@ -3,9 +3,9 @@
   "compilerOptions": {
     "lib": ["ES2022"],
     "jsx": "preserve",
-    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types", "bun"],
+    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
     "resolveJsonModule": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "test", "scripts", "vitest.config.ts"]
+  "include": ["src", "test", "vitest.config.ts"]
 }

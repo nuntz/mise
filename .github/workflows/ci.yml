@@ -17,4 +17,5 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun test packages
+      - run: bun run --filter @mise/web build
       - run: bun run test:worker

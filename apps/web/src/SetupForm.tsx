@@ -1,4 +1,4 @@
-import { HOUSEHOLD_DEFAULTS, LOCALES, type ToolInput, WEEKDAYS } from "@mise/domain";
+import { HOUSEHOLD_DEFAULTS, LOCALES, type ToolInput, UNITS, WEEKDAYS } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { type MessageKey, t } from "./messages";
@@ -87,8 +87,7 @@ export function SetupForm(props: { client: MiseClient }) {
       <label>
         {t("setup.units")}
         <select value={input().units} onChange={(e) => update("units", e.currentTarget.value as SetupInput["units"])}>
-          <option value="metric">{t("units.metric")}</option>
-          <option value="imperial">{t("units.imperial")}</option>
+          <For each={UNITS}>{(units) => <option value={units}>{t(`units.${units}`)}</option>}</For>
         </select>
       </label>
 
