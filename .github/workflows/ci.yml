@@ -52,6 +52,9 @@ jobs:
           PULUMI_STACK: ${{ vars.PULUMI_STACK }}
           PULUMI_ESC_ENVIRONMENT: ${{ vars.PULUMI_ESC_ENVIRONMENT }}
         run: |
+          # Pulumi prints update URLs naming the organization.
+          echo "::add-mask::$PULUMI_STACK"
+          echo "::add-mask::${PULUMI_STACK%%/*}"
           pulumi stack select "$PULUMI_STACK"
           pulumi config env add "$PULUMI_ESC_ENVIRONMENT" --yes > /dev/null
           pulumi config --show-secrets --json | jq -r '.. | strings | select(length >= 4)' |

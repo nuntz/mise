@@ -243,13 +243,17 @@ step "Your zone is the domain listed under Domains (e.g. example.com)."
 ask CF_ZONE "Zone:"
 ask MISE_HOSTNAME "Hostname to serve Mise at (e.g. mise.example.com):"
 open_url "https://one.dash.cloudflare.com/"
-step "Zero Trust → Settings → Team name and domain. (First time: choose a team name and the Free plan.)"
+step "First time: finish onboarding (choose a team name and the Free plan), or the API refuses Access changes."
+step "Zero Trust → Settings → Team name and domain."
 ask ACCESS_TEAM_DOMAIN "Team domain (e.g. example.cloudflareaccess.com):"
 ACCESS_TEAM_DOMAIN="${ACCESS_TEAM_DOMAIN#https://}"; ACCESS_TEAM_DOMAIN="${ACCESS_TEAM_DOMAIN%/}"
 write_env CF_ACCOUNT_ID "$CF_ACCOUNT_ID"
 write_env CF_ZONE "$CF_ZONE"
 write_env MISE_HOSTNAME "$MISE_HOSTNAME"
 write_env ACCESS_TEAM_DOMAIN "$ACCESS_TEAM_DOMAIN"
+open_url "https://dash.cloudflare.com/?to=/:account/r2/overview"
+step "R2 holds photos and nightly exports. If it isn't enabled yet: Enable R2 (the free tier asks for a payment method)."
+pause "Press Enter once R2 shows its overview page"
 
 # ── 3 ─────────────────────────────────────────────────────────────────────
 stage "Cloudflare: API token for Pulumi and Wrangler"
@@ -358,7 +362,10 @@ fi
 if (( started )); then
   note "Pick the run that just started (it can take a few seconds to appear)."
   sleep 5
-  gh run watch || true
+  if ! gh run watch --exit-status; then
+    warn "The deploy failed: read the failed step with 'gh run view --log-failed', fix it, and re-run this wizard."
+    exit 1
+  fi
 fi
 open_url "https://$MISE_HOSTNAME"
 step "Sign in with an allowed Google account: the Mise setup screen appears."
