@@ -88,7 +88,7 @@ describe("Member Constraints", () => {
     const constraints = [
       { kind: "allergy", allergen: "sesame" },
       { kind: "intolerance", allergen: "milk", term: "lactose" },
-      { kind: "diet", term: "vegetarian" },
+      { kind: "diet", allergen: "wheat", term: "gluten-free" },
     ];
     const updated = await household.callTool("update_member_constraints", { id: 1, constraints });
 

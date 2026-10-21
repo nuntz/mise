@@ -26,7 +26,7 @@ export function draftOf(member: Member): MemberDraft {
     constraints: member.constraints.map((constraint) => ({
       kind: constraint.kind,
       allergen: constraint.allergen ?? "",
-      term: "term" in constraint ? (constraint.term ?? "") : "",
+      term: constraint.term ?? "",
     })),
   };
 }
@@ -41,8 +41,7 @@ export function memberOf(draft: MemberDraft): Required<ToolInput<"add_member">> 
         ({
           kind,
           ...(allergen && { allergen }),
-          // An allergy is only ever its Allergen.
-          ...(kind !== "allergy" && term.trim() && { term: term.trim() }),
+          ...(term.trim() && { term: term.trim() }),
         }) as Constraint,
     ),
   };
@@ -59,8 +58,8 @@ export function MemberFields(props: { draft: MemberDraft; onChange: (draft: Memb
     );
   const changeKind = (index: number, kind: ConstraintKind) => {
     const current = props.draft.constraints[index];
-    // An allergy must name an Allergen, so pick the first rather than leave the select lying.
-    const allergen = kind === "allergy" && !current?.allergen ? ALLERGENS[0] : current?.allergen;
+    // A Hard Constraint must name an Allergen, so pick the first rather than leave the select lying.
+    const allergen = constraintSeverity(kind) === "hard" && !current?.allergen ? ALLERGENS[0] : current?.allergen;
     updateConstraint(index, { kind, ...(allergen !== undefined && { allergen }) });
   };
 
@@ -105,7 +104,7 @@ export function MemberFields(props: { draft: MemberDraft; onChange: (draft: Memb
                 value={constraint().allergen}
                 onChange={(e) => updateConstraint(index, { allergen: e.currentTarget.value as Allergen | "" })}
               >
-                <Show when={constraint().kind !== "allergy"}>
+                <Show when={constraintSeverity(constraint().kind) === "soft"}>
                   <option value="">{t("constraint.noAllergen")}</option>
                 </Show>
                 <For each={ALLERGENS}>
@@ -113,15 +112,13 @@ export function MemberFields(props: { draft: MemberDraft; onChange: (draft: Memb
                 </For>
               </select>
 
-              <Show when={constraint().kind !== "allergy"}>
-                <input
-                  aria-label={t("constraint.term")}
-                  placeholder={t("constraint.termPlaceholder")}
-                  maxLength={100}
-                  value={constraint().term}
-                  onInput={(e) => updateConstraint(index, { term: e.currentTarget.value })}
-                />
-              </Show>
+              <input
+                aria-label={t("constraint.term")}
+                placeholder={t("constraint.termPlaceholder")}
+                maxLength={100}
+                value={constraint().term}
+                onInput={(e) => updateConstraint(index, { term: e.currentTarget.value })}
+              />
 
               <button
                 type="button"

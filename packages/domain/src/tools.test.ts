@@ -65,10 +65,26 @@ describe("parseToolInput", () => {
 });
 
 describe("Member Constraints", () => {
-  test("an allergy must name an Allergen", () => {
-    const result = parseToolInput("add_member", { name: "Alex", constraints: [{ kind: "allergy", term: "nuts" }] });
+  test.each(["allergy", "intolerance", "diet"])("a Hard Constraint (%s) must name an Allergen", (kind) => {
+    const result = parseToolInput("add_member", { name: "Alex", constraints: [{ kind, term: "vegetarian" }] });
 
-    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input", issues: [{ path: "constraints.0.allergen" }] },
+    });
+  });
+
+  test("a Hard Constraint may label its Allergen with a term", () => {
+    const constraints = [
+      { kind: "allergy", allergen: "peanut", term: "anaphylactic" },
+      { kind: "intolerance", allergen: "milk", term: "lactose" },
+      { kind: "diet", allergen: "wheat", term: "gluten-free" },
+    ];
+
+    expect(parseToolInput("add_member", { name: "Alex", constraints })).toMatchObject({
+      ok: true,
+      value: { constraints },
+    });
   });
 
   test("an Allergen comes from the canonical list", () => {
@@ -83,10 +99,10 @@ describe("Member Constraints", () => {
     });
   });
 
-  test("intolerances, diets and dislikes name an Allergen, a term or both", () => {
+  test("a dislike names an Allergen, a term or both", () => {
     const constraints = [
-      { kind: "intolerance", allergen: "milk" },
-      { kind: "diet", term: "vegetarian" },
+      { kind: "dislike", allergen: "fish" },
+      { kind: "dislike", term: "mushrooms" },
       { kind: "dislike", allergen: "fish", term: "salmon" },
     ];
 
@@ -96,10 +112,10 @@ describe("Member Constraints", () => {
     });
   });
 
-  test("a Constraint that names nothing is rejected", () => {
+  test("a dislike that names nothing is rejected", () => {
     const result = parseToolInput("add_member", {
       name: "Alex",
-      constraints: [{ kind: "diet" }, { kind: "dislike", term: "  " }],
+      constraints: [{ kind: "dislike" }, { kind: "dislike", term: "  " }],
     });
 
     expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
@@ -108,7 +124,7 @@ describe("Member Constraints", () => {
   test("allergy, intolerance and diet are Hard; dislike is Soft", () => {
     expect(isHardConstraint({ kind: "allergy", allergen: "peanut" })).toBe(true);
     expect(isHardConstraint({ kind: "intolerance", allergen: "milk" })).toBe(true);
-    expect(isHardConstraint({ kind: "diet", term: "vegetarian" })).toBe(true);
+    expect(isHardConstraint({ kind: "diet", allergen: "wheat" })).toBe(true);
     expect(isHardConstraint({ kind: "dislike", term: "mushrooms" })).toBe(false);
   });
 });

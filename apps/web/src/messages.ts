@@ -43,7 +43,7 @@ const en = {
   "constraint.kind": "Kind",
   "constraint.allergen": "Allergen",
   "constraint.term": "What",
-  "constraint.termPlaceholder": "e.g. vegetarian, mushrooms",
+  "constraint.termPlaceholder": "e.g. lactose, mushrooms",
   "constraint.noAllergen": "No Allergen",
   "constraint.add": "Add a Constraint",
   "constraint.remove": "Remove",

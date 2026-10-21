@@ -32,7 +32,7 @@ A rule about what a Member or Guest can eat; either Hard or Soft.
 _Avoid_: Restriction, preference
 
 **Hard Constraint**:
-An allergy, intolerance or diet; a Recipe that violates it is excluded, never merely scored down.
+An allergy, intolerance or diet, always naming an Allergen; a Recipe that violates it is excluded, never merely scored down.
 
 **Soft Constraint**:
 A dislike; a Recipe that violates it is scored down but can still be chosen.

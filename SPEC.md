@@ -50,9 +50,10 @@ Cloud-hosted TypeScript on DO SQLite, chosen for its fit with Pi Durable and the
 ```
 Household   { id, domain, members[], defaultDiners: memberId[] (default: all members), weekStartsOn, planHorizonWeeks: 1|2, units: metric|imperial, locale }
 Member      { id, name, email, constraints[] }
-Constraint  { kind: allergy|intolerance|diet|dislike, allergen?: Allergen, term?: string, severity: hard|soft }
-              // allergy/intolerance/diet are hard: recipes containing the allergen are excluded, never scored down
-              // dislike is soft: scored down, can be overridden
+Constraint  { kind: allergy|intolerance|diet|dislike, allergen?: Allergen, term?: string }
+              // allergy/intolerance/diet are hard and must name an allergen (ADR 0008): recipes containing it are excluded, never scored down
+              // dislike is soft: names an allergen, a term or both; scored down, can be overridden
+              // severity (hard|soft) follows from kind and is not stored
 Allergen    = peanut|tree_nut|milk|egg|wheat|soy|fish|shellfish|sesame|mustard|sulphite|… (canonical list, extensible)
 Ingredient  { raw, item, qty?, unit?, note?, section, allergens: Allergen[] }   // allergens tagged at import; see §4.2
 Recipe      { id, title, lang, baseServings, ingredients[], steps[], tags[], effortMinutes, photoKey?,

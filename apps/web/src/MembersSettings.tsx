@@ -165,9 +165,6 @@ function AddMember(props: { client: MiseClient }) {
 /** "Allergy (hard): Peanut", "Dislike (soft): mushrooms". */
 function constraintText(constraint: Constraint): string {
   const kind = `${t(`constraint.${constraint.kind}`)} (${t(`constraint.${constraintSeverity(constraint.kind)}`)})`;
-  const named = [
-    constraint.allergen && t(`allergen.${constraint.allergen}`),
-    "term" in constraint && constraint.term,
-  ].filter(Boolean);
+  const named = [constraint.allergen && t(`allergen.${constraint.allergen}`), constraint.term].filter(Boolean);
   return `${kind}: ${named.join(", ")}`;
 }

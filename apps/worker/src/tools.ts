@@ -110,7 +110,7 @@ function writeConstraints(sql: SqlStorage, memberId: MemberId, constraints: Cons
       position,
       constraint.kind,
       constraint.allergen ?? null,
-      "term" in constraint ? (constraint.term ?? null) : null,
+      constraint.term ?? null,
     );
   });
 }

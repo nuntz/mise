@@ -29,23 +29,26 @@ export function constraintSeverity(kind: ConstraintKind): "hard" | "soft" {
   return kind === "dislike" ? "soft" : "hard";
 }
 
-/** What a Constraint names when no Allergen covers it, such as "vegetarian" or "mushrooms". */
+/** A label for what a Constraint is about, such as "lactose" or "mushrooms". */
 const Term = z.string().trim().min(1).max(100);
 
-/** An allergy always names its Allergen; the other kinds name an Allergen, a term, or both. */
-const allergenOrTerm = <K extends Exclude<ConstraintKind, "allergy">>(kind: K) =>
+/**
+ * A Hard Constraint names its Allergen, which is what Recipes are checked against (ADR 0008); its
+ * term is only a label. A dislike is Soft, so it may name just a term.
+ */
+const hard = <K extends Exclude<ConstraintKind, "dislike">>(kind: K) =>
+  z.object({ kind: z.literal(kind), allergen: Allergen, term: Term.optional() }).strict();
+
+export const Constraint = z.discriminatedUnion("kind", [
+  hard("allergy"),
+  hard("intolerance"),
+  hard("diet"),
   z
-    .object({ kind: z.literal(kind), allergen: Allergen.optional(), term: Term.optional() })
+    .object({ kind: z.literal("dislike"), allergen: Allergen.optional(), term: Term.optional() })
     .strict()
     .refine((constraint) => constraint.allergen !== undefined || constraint.term !== undefined, {
       message: "Name an Allergen or a term",
-    });
-
-export const Constraint = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("allergy"), allergen: Allergen }).strict(),
-  allergenOrTerm("intolerance"),
-  allergenOrTerm("diet"),
-  allergenOrTerm("dislike"),
+    }),
 ]);
 export type Constraint = z.infer<typeof Constraint>;
 
