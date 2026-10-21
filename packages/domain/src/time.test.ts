@@ -1,0 +1,52 @@
+import { describe, expect, test } from "bun:test";
+import { localDate, nextOccurrence } from "./time";
+
+describe("nextOccurrence", () => {
+  test("a time already past today is tomorrow", () => {
+    // 05:00 in Vancouver (PDT, UTC-7).
+    const now = new Date("2026-10-20T12:00:00Z");
+
+    expect(nextOccurrence(now, "03:00", "America/Vancouver")).toEqual(new Date("2026-10-21T10:00:00Z"));
+  });
+
+  test("a time still ahead today is today", () => {
+    // 01:00 in Vancouver.
+    const now = new Date("2026-10-20T08:00:00Z");
+
+    expect(nextOccurrence(now, "03:00", "America/Vancouver")).toEqual(new Date("2026-10-20T10:00:00Z"));
+  });
+
+  test("the night the clocks go back uses the new offset", () => {
+    // Vancouver leaves PDT at 02:00 on 1 November 2026; 03:00 that morning is PST (UTC-8).
+    const now = new Date("2026-10-31T12:00:00Z");
+
+    expect(nextOccurrence(now, "03:00", "America/Vancouver")).toEqual(new Date("2026-11-01T11:00:00Z"));
+  });
+
+  test("a timezone ahead of UTC gets its own calendar day", () => {
+    // 05:00 on 21 October in Tokyo (UTC+9), still 20 October in UTC.
+    const now = new Date("2026-10-20T20:00:00Z");
+
+    expect(nextOccurrence(now, "03:00", "Asia/Tokyo")).toEqual(new Date("2026-10-21T18:00:00Z"));
+  });
+
+  test("a time skipped by the clocks going forward happens just after the change", () => {
+    // Athens jumps from 03:00 to 04:00 on 29 March 2026, so 03:00 never shows; 04:00 EEST is 01:00 UTC.
+    const now = new Date("2026-03-28T12:00:00Z");
+
+    expect(nextOccurrence(now, "03:00", "Europe/Athens")).toEqual(new Date("2026-03-29T01:00:00Z"));
+  });
+
+  test("a skipped time west of UTC also happens just after the change", () => {
+    // Vancouver jumps from 02:00 to 03:00 on 8 March 2026; 02:30 becomes 03:30 PDT, 10:30 UTC.
+    const now = new Date("2026-03-07T12:00:00Z");
+
+    expect(nextOccurrence(now, "02:30", "America/Vancouver")).toEqual(new Date("2026-03-08T10:30:00Z"));
+  });
+});
+
+describe("localDate", () => {
+  test("is the date on the Household's wall clock, not in UTC", () => {
+    expect(localDate(new Date("2026-10-21T03:00:00Z"), "America/Vancouver")).toBe("2026-10-20");
+  });
+});

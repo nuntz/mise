@@ -14,5 +14,7 @@
   "durable_objects": {
     "bindings": [{ "name": "Household", "class_name": "Household" }]
   },
+  // Recipe photos under photos/, nightly exports under exports/. Pulumi creates the bucket.
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "mise" }],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Household"] }]
 }

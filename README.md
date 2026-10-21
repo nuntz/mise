@@ -21,6 +21,22 @@ bun test packages    # domain tests
 bun run test:worker  # tool-seam tests in workerd
 ```
 
+## Backup and restore
+
+At 03:00 Household time the household Durable Object writes a JSON export of all Household data to R2 at `exports/<date>.json` (ADR 0006). To take one by hand or restore one into a fresh deployment:
+
+```sh
+curl https://mise.example.com/agents/household/household/export > export.json
+curl -X POST -H 'Content-Type: application/json' --data-binary @export.json \
+  https://mise.example.com/agents/household/household/restore
+```
+
+Restore refuses a household that already holds data. Behind Access, `curl` needs a service token or a `cloudflared access` login.
+
+## Observability
+
+Errors and traces go to Sentry when the `SENTRY_DSN` Worker secret is set. The SDK collects no user info, cookies, bodies, query strings or AI inputs and outputs, and `apps/worker/src/observability.ts` scrubs events and spans again before they leave. There is no other third-party analytics.
+
 ## Layout
 
 - `packages/domain`: pure TypeScript: the Household model and the tool registry. No Cloudflare or Bun imports.

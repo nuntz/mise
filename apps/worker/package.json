@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mise/domain": "workspace:*",
+    "@sentry/cloudflare": "11.4.0",
     "agents": "0.29.0",
     "zod": "4.6.7"
   },
