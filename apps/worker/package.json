@@ -12,6 +12,7 @@
     "@mise/domain": "workspace:*",
     "@sentry/cloudflare": "11.4.0",
     "agents": "0.29.0",
+    "jose": "6.2.13",
     "zod": "4.6.7"
   },
   "devDependencies": {

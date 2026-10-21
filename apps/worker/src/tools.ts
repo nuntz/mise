@@ -1,4 +1,11 @@
-import { Household, type ParsedToolInput, type ToolName, type ToolOutput, type ToolResult } from "@mise/domain";
+import {
+  Household,
+  type ParsedToolInput,
+  type ToolContext,
+  type ToolName,
+  type ToolOutput,
+  type ToolResult,
+} from "@mise/domain";
 
 type HouseholdRow = {
   name: string;
@@ -10,7 +17,7 @@ type HouseholdRow = {
 };
 
 type Handlers = {
-  [N in ToolName]: (sql: SqlStorage, input: ParsedToolInput<N>) => ToolResult<ToolOutput<N>>;
+  [N in ToolName]: (sql: SqlStorage, input: ParsedToolInput<N>, context: ToolContext) => ToolResult<ToolOutput<N>>;
 };
 
 /** The implementation of every tool in the registry, against the household's SQLite. */
@@ -33,6 +40,8 @@ export const handlers: Handlers = {
     );
     return { ok: true, value: input };
   },
+
+  get_caller: (_sql, _input, context) => ({ ok: true, value: context.caller }),
 };
 
 function readHousehold(sql: SqlStorage): Household | null {

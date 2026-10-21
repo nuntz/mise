@@ -1,0 +1,3 @@
+# Copy to .dev.vars for `wrangler dev`, which has no Cloudflare Access in front of it.
+# The email local tool calls are made as.
+DEV_CALLER_EMAIL=cook@example.com

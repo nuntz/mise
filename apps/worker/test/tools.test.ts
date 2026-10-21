@@ -70,6 +70,12 @@ describe("callTool", () => {
   });
 });
 
+describe("get_caller", () => {
+  test("a call from inside the deployment has no caller", async () => {
+    expect(await freshHousehold().callTool("get_caller", {})).toEqual({ ok: true, value: null });
+  });
+});
+
 describe("change notices", () => {
   test("a connected client is told when the Household changes", async () => {
     const household = freshHousehold();

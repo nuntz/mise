@@ -9,5 +9,8 @@
   "dependencies": {
     "@pulumi/cloudflare": "6.23.0",
     "@pulumi/pulumi": "3.270.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1"
   }
 }

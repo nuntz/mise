@@ -1,4 +1,5 @@
 import {
+  type Caller,
   type ChangeNotice,
   ChangeTopic,
   changeTopicOf,
@@ -10,12 +11,14 @@ import {
   nextOccurrence,
   PHOTO_PREFIX,
   parseToolInput,
+  type ToolContext,
   type ToolName,
   type ToolResult,
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
-import { Agent, callable } from "agents";
+import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
+import { callerFrom } from "./identity";
 import { migrate } from "./migrations";
 import { sentryOptions } from "./observability";
 import { handlers } from "./tools";
@@ -25,6 +28,9 @@ const RESTORE_STATUS: Record<RestoreError["code"], number> = {
   schema_mismatch: 409,
   not_empty: 409,
 };
+
+/** What the household remembers about each WebSocket; it survives hibernation. */
+type ConnectionState = { caller: Caller | null };
 
 /** The household Durable Object: the one place Mise's data lives. */
 class HouseholdAgent extends Agent<Env> {
@@ -36,6 +42,12 @@ class HouseholdAgent extends Agent<Env> {
 
   override async onStart(): Promise<void> {
     await this.scheduleNightlyExport();
+  }
+
+  /** Remembers who opened the connection, as the Worker resolved them, for every tool call it makes. */
+  override async onConnect(connection: Connection<ConnectionState>, ctx: ConnectionContext): Promise<void> {
+    connection.setState({ caller: callerFrom(ctx.request) });
+    await super.onConnect(connection, ctx);
   }
 
   /** The single entry point to every tool (ADR 0002). Input is validated against the registry. */
@@ -50,11 +62,16 @@ class HouseholdAgent extends Agent<Env> {
     const parsed = parseToolInput(name, input);
     if (!parsed.ok) return parsed;
     const toolName = name as ToolName;
-    const handler = handlers[toolName] as (sql: SqlStorage, input: unknown) => ToolResult<unknown>;
+    const handler = handlers[toolName] as (
+      sql: SqlStorage,
+      input: unknown,
+      context: ToolContext,
+    ) => ToolResult<unknown>;
+    const context: ToolContext = { caller: this.callerOf(getCurrentAgent().connection) };
     const topic = changeTopicOf(toolName);
 
     const { result, revision } = this.ctx.storage.transactionSync(() => {
-      const result = handler(this.ctx.storage.sql, parsed.value);
+      const result = handler(this.ctx.storage.sql, parsed.value, context);
       if (!result.ok || !topic) return { result, revision: undefined };
       return { result, revision: this.bumpRevision() };
     });
@@ -137,8 +154,13 @@ class HouseholdAgent extends Agent<Env> {
     if (next) await this.schedule(next, "nightlyExport");
   }
 
+  /** The caller over a WebSocket; RPC from inside the deployment (tests, scheduled jobs) has none. */
+  private callerOf(connection: Connection | undefined): Caller | null {
+    return (connection?.state as ConnectionState | null | undefined)?.caller ?? null;
+  }
+
   private household(): HouseholdData | null {
-    const result = handlers.get_household(this.ctx.storage.sql, {});
+    const result = handlers.get_household(this.ctx.storage.sql, {}, { caller: null });
     return result.ok ? result.value : null;
   }
 

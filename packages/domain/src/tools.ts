@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Caller } from "./caller";
 import { Household, SetupHouseholdInput } from "./household";
 
 /** Topics a change notice can name; clients refetch the matching tools. */
@@ -27,6 +28,10 @@ export const tools = {
     input: z.object({}).strict(),
     output: Household.nullable(),
   }),
+  get_caller: defineTool({
+    input: z.object({}).strict(),
+    output: Caller.nullable(),
+  }),
 };
 
 export type Tools = typeof tools;
@@ -36,6 +41,12 @@ export type ToolInput<N extends ToolName> = z.input<Tools[N]["input"]>;
 /** What a handler receives once the input is validated and defaulted. */
 export type ParsedToolInput<N extends ToolName> = z.output<Tools[N]["input"]>;
 export type ToolOutput<N extends ToolName> = z.output<Tools[N]["output"]>;
+
+/** What every tool handler is told about the call. */
+export type ToolContext = {
+  /** Null for calls Mise makes itself, such as scheduled jobs, which no one signed in for. */
+  caller: Caller | null;
+};
 
 export type ToolErrorCode = "unknown_tool" | "invalid_input" | "already_set_up";
 

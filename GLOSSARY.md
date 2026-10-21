@@ -12,6 +12,10 @@ _Avoid_: Family, account, tenant
 A person who belongs to the Household and can be a Diner; may or may not be someone who signs in.
 _Avoid_: User, person
 
+**Caller**:
+The signed-in person a tool call is made for, known by the email Cloudflare Access vouched for; not necessarily a Member.
+_Avoid_: User, current user
+
 **Diner**:
 A Member eating a particular Slot.
 _Avoid_: Eater, attendee

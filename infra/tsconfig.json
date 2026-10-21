@@ -1,4 +1,8 @@
 {
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Pulumi runs this program on Node.
+    "types": ["node"]
+  },
   "include": ["index.ts"]
 }

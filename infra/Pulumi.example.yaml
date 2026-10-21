@@ -1,0 +1,30 @@
+# The settings a Mise deployment needs. Real values never go in this repo (ADR 0005): keep them in a
+# Pulumi ESC environment and point your stack at it. `bun run wizard` walks you through it.
+#
+# 1. Create the ESC environment (e.g. `<your-org>/mise/production`) with this definition:
+#
+#    values:
+#      pulumiConfig:
+#        # Your Cloudflare account ID, and the zone and hostname Mise is served at.
+#        mise:accountId: 0123456789abcdef0123456789abcdef
+#        mise:zone: example.com
+#        mise:hostname: mise.example.com
+#        # Your Zero Trust team domain (Zero Trust → Settings → Custom pages).
+#        mise:accessTeamDomain: example.cloudflareaccess.com
+#        # Who may sign in: a list of Google accounts, a Google Workspace domain, or both.
+#        mise:allowedEmails:
+#          - cook@example.com
+#          - sous-chef@example.com
+#        # mise:allowedEmailDomain: example.com
+#        # A Google OAuth client for Access's Google login.
+#        mise:googleClientId: 000000000000-example.apps.googleusercontent.com
+#        mise:googleClientSecret:
+#          fn::secret: GOCSPX-example
+#        # Optional: report errors and traces to Sentry.
+#        # mise:sentryDsn:
+#        #   fn::secret: https://<public-key>@<org>.ingest.sentry.io/<project>
+#
+# 2. The stack file then only imports it. CI writes this file on every run from the
+#    PULUMI_ESC_ENVIRONMENT repository variable; locally, `pulumi config env add` writes it.
+environment:
+  - mise/production
