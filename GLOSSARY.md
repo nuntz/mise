@@ -1,0 +1,102 @@
+# Mise
+
+A household meal planner covering everything that happens in the kitchen: recipes, the plan, groceries and the pantry.
+
+## Household
+
+**Household**:
+The single family a Mise deployment serves, with its members, timezone, week start, units and locale.
+_Avoid_: Family, account, tenant
+
+**Member**:
+A person who belongs to the Household and can be a Diner; may or may not be someone who signs in.
+_Avoid_: User, person
+
+**Diner**:
+A Member eating a particular Slot.
+_Avoid_: Eater, attendee
+
+**Guest**:
+A non-Member eating a particular Slot, counted by number with optional Constraints.
+
+**Servings**:
+How many portions a Slot needs: one per Diner plus one per Guest.
+_Avoid_: Portions, covers
+
+**Constraint**:
+A rule about what a Member or Guest can eat; either Hard or Soft.
+_Avoid_: Restriction, preference
+
+**Hard Constraint**:
+An allergy, intolerance or diet; a Recipe that violates it is excluded, never merely scored down.
+
+**Soft Constraint**:
+A dislike; a Recipe that violates it is scored down but can still be chosen.
+
+**Allergen**:
+A substance from the canonical list (peanut, milk, sesame, …) that a Hard Constraint can name.
+
+## Recipes and ingredients
+
+**Recipe**:
+A dish Mise can plan, with ingredients, steps and a base number of servings.
+
+**Item**:
+A canonical grocery thing ("garlic", "eggs", "soy sauce") with its aliases, store section and Allergens.
+_Avoid_: Product, food, ingredient (when meaning the canonical thing)
+
+**Store Section**:
+An area of the store (produce, dairy, frozen, …); the Household orders its sections in walking order.
+_Avoid_: Aisle, category
+
+**Ingredient**:
+One line of a Recipe: an amount of an Item, as written in the source and as parsed.
+_Avoid_: Item (when meaning a recipe line)
+
+**Unresolved Ingredient**:
+An Ingredient not yet matched to an Item; its Allergens are unknown and treated as conflicting.
+
+**Imported Preference**:
+How much the Household liked a Recipe before Mise, carried over from its source; separate from Ratings made in Mise.
+
+**Rating**:
+A verdict on a Recipe after cooking it: again, meh or never.
+
+## Planning
+
+**Week**:
+The run of days from the Household's week start that is planned, shopped and reviewed together.
+_Avoid_: Plan (when meaning the week itself)
+
+**Slot**:
+One meal on one date (for example, dinner on 2026-10-26); there is exactly one Slot per date and meal.
+_Avoid_: Meal (when meaning the planned occurrence), entry
+
+**Locked Slot**:
+A Slot whose Recipe survives a re-proposal.
+
+**Recurring Recipe**:
+A Recipe explicitly pinned to come back every week or on a given weekday.
+_Avoid_: Favourite (when meaning pinned)
+
+**Effort Budget**:
+The most cooking time the Household wants to spend on a given weekday's dinner.
+
+**Leftovers**:
+A Slot filled by food cooked for an earlier Slot; the earlier Slot is cooked for both.
+
+**Proposal**:
+A suggested set of Recipes for a Week's dinners, with a reason for each choice.
+
+## Groceries and pantry
+
+**Staple**:
+An Item the Household keeps on hand and checks by status (stocked, low, out) rather than by quantity.
+_Avoid_: Inventory, pantry item
+
+**Grocery List**:
+What to buy for a Week: Ingredients scaled to Servings and merged, plus Staples that are due to be bought.
+_Avoid_: Shopping list, cart
+
+**Have Tick**:
+A mark on a Grocery List line saying the Household already has it, so it is not bought.
