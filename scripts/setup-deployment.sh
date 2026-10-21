@@ -346,8 +346,16 @@ pause
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Deploy and check sign-in"
 say "The deploy job runs on every push to master, or by hand."
-if confirm "Run the CI workflow on master now?"; then
-  gh workflow run ci.yml --ref master
+started=0
+git fetch --quiet origin master 2>/dev/null || true
+if [[ -n "$(git rev-list origin/master..master 2>/dev/null)" ]]; then
+  warn "Your master has commits GitHub doesn't have yet, and CI deploys what is on GitHub."
+  confirm "Push master now? That starts the deploy." && git push origin master && started=1
+elif confirm "Run the CI workflow on master now?"; then
+  if gh workflow run ci.yml --ref master; then started=1
+  else warn "Couldn't start the workflow: push to master to deploy, then re-run this wizard."; fi
+fi
+if (( started )); then
   note "Pick the run that just started (it can take a few seconds to appear)."
   sleep 5
   gh run watch || true
