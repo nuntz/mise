@@ -42,6 +42,53 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 3,
+    statements: [
+      `CREATE TABLE recipe (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        base_servings INTEGER NOT NULL,
+        effort_minutes INTEGER,
+        cuisine TEXT,
+        main_protein TEXT,
+        -- 'weekly', or the weekday it comes back on
+        recurring TEXT,
+        yields_leftovers INTEGER NOT NULL,
+        prep_ahead TEXT,
+        photo_key TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // The line as written and as parsed; item_id is null for an Unresolved Ingredient.
+      `CREATE TABLE recipe_ingredient (
+        recipe_id INTEGER NOT NULL REFERENCES recipe (id),
+        position INTEGER NOT NULL,
+        raw TEXT NOT NULL,
+        amount_min REAL,
+        amount_max REAL,
+        unit TEXT,
+        name TEXT NOT NULL,
+        note TEXT,
+        item_id TEXT,
+        PRIMARY KEY (recipe_id, position)
+      )`,
+      "CREATE INDEX recipe_ingredient_item ON recipe_ingredient (item_id)",
+      `CREATE TABLE recipe_step (
+        recipe_id INTEGER NOT NULL REFERENCES recipe (id),
+        position INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        PRIMARY KEY (recipe_id, position)
+      )`,
+      `CREATE TABLE recipe_tag (
+        recipe_id INTEGER NOT NULL REFERENCES recipe (id),
+        position INTEGER NOT NULL,
+        tag TEXT NOT NULL,
+        PRIMARY KEY (recipe_id, position)
+      )`,
+      "CREATE INDEX recipe_tag_tag ON recipe_tag (tag)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

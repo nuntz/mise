@@ -5,6 +5,15 @@ import sampleHousehold from "../../../fixtures/sample-household.json";
 
 const householdUrl = "http://mise.example.com/agents/household/household";
 
+const recipe = {
+  title: "Dal",
+  baseServings: 4,
+  ingredients: ["1 ⅓ cups red lentils", "1 tbsp ghee", "1 tsp mystery masala"],
+  steps: ["Simmer."],
+  tags: ["vegetarian"],
+  recurring: { weekday: "monday" },
+};
+
 function freshHousehold() {
   return env.Household.getByName(crypto.randomUUID());
 }
@@ -29,6 +38,7 @@ describe("export and restore", () => {
   test("export → restore into a fresh deployment → export gives an identical file", async () => {
     const original = freshHousehold();
     await original.callTool("setup_household", sampleHousehold);
+    await original.callTool("create_recipe", recipe);
     const exported = await exportOf(original);
 
     const fresh = freshHousehold();
@@ -40,6 +50,7 @@ describe("export and restore", () => {
       ok: true,
       value: { name: sampleHousehold.name, members: [{ name: "Robin" }, { name: "Alex" }, { name: "Sam" }] },
     });
+    expect(await fresh.callTool("get_recipe", { id: 1 })).toEqual(await original.callTool("get_recipe", { id: 1 }));
   });
 
   test("a removed Member's id is not handed out again after a restore", async () => {
@@ -80,7 +91,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 2,
+      schemaVersion: 3,
       tables: {
         household: [
           {
@@ -103,6 +114,10 @@ describe("export and restore", () => {
           { member_id: 2, position: 0, kind: "intolerance", allergen: "milk", term: "lactose" },
           { member_id: 3, position: 0, kind: "allergy", allergen: "peanut", term: null },
         ],
+        recipe: [],
+        recipe_ingredient: [],
+        recipe_step: [],
+        recipe_tag: [],
       },
       sequences: { member: 3 },
       photoKeys: [],
@@ -191,6 +206,21 @@ describe("export and restore", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "invalid_export" });
+  });
+
+  test("restore rejects an Ingredient naming an Item the catalogue does not have", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    await source.callTool("create_recipe", recipe);
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.recipe_ingredient[0].item_id = "unobtainium";
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+    expect(await target.callTool("search_recipes", {})).toEqual({ ok: true, value: [] });
   });
 
   test("restore rejects an export from another schema version", async () => {

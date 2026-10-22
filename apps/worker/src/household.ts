@@ -11,6 +11,7 @@ import {
   nextOccurrence,
   PHOTO_PREFIX,
   parseToolInput,
+  type Recipe,
   type ToolContext,
   type ToolName,
   type ToolResult,
@@ -21,7 +22,12 @@ import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { callerFrom } from "./identity";
 import { migrate } from "./migrations";
 import { sentryOptions } from "./observability";
+import { photoKeyOf, setPhotoKey } from "./recipes";
 import { handlers } from "./tools";
+
+/** The image types a Recipe photo may be, and the largest one accepted. */
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 const RESTORE_STATUS: Record<RestoreError["code"], number> = {
   invalid_export: 400,
@@ -89,6 +95,8 @@ class HouseholdAgent extends Agent<Env> {
       // The Household's timezone decides when the export runs.
       if (topic === "household") await this.scheduleNightlyExport();
     }
+    // Photos live in R2, outside the transaction: a deleted Recipe's goes once the deletion is committed.
+    if (toolName === "delete_recipe" && result.ok) await this.deletePhoto((result.value as Recipe).photoKey);
     return result;
   }
 
@@ -110,9 +118,16 @@ class HouseholdAgent extends Agent<Env> {
     }
   }
 
-  /** Backup over HTTP: `GET …/export` downloads the export, `POST …/restore` loads one into an empty household. */
+  /**
+   * Backup over HTTP: `GET …/export` downloads the export, `POST …/restore` loads one into an empty
+   * household. Recipe photos, which are too big for a tool call (ADR 0010): `GET`, `PUT` (the image
+   * as the body) and `DELETE …/recipes/<id>/photo`.
+   */
   override async onRequest(request: Request): Promise<Response> {
-    const action = new URL(request.url).pathname.split("/").at(-1);
+    const { pathname } = new URL(request.url);
+    const photo = /\/recipes\/(\d+)\/photo$/.exec(pathname);
+    if (photo) return this.photo(request, Number(photo[1]));
+    const action = pathname.split("/").at(-1);
     if (request.method === "GET" && action === "export") {
       return new Response(await this.exportFile(), { headers: { "Content-Type": "application/json" } });
     }
@@ -143,6 +158,58 @@ class HouseholdAgent extends Agent<Env> {
     for (const topic of ChangeTopic.options) this.notify(topic, revision);
     await this.scheduleNightlyExport();
     return Response.json({ ok: true });
+  }
+
+  private async photo(request: Request, recipeId: number): Promise<Response> {
+    const { sql } = this.ctx.storage;
+    if (request.method === "GET") {
+      const key = photoKeyOf(sql, recipeId);
+      const object = key ? await this.env.BUCKET.get(key) : null;
+      if (!object) return new Response("Not found", { status: 404 });
+      return new Response(object.body, {
+        headers: {
+          "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+          "Cache-Control": "private, no-cache",
+          ETag: object.httpEtag,
+        },
+      });
+    }
+    if (request.method === "PUT") {
+      const type = request.headers.get("Content-Type")?.split(";")[0]?.trim() ?? "";
+      if (!PHOTO_TYPES.has(type)) return new Response("Send a JPEG, PNG, WebP, GIF or AVIF image", { status: 415 });
+      if (photoKeyOf(sql, recipeId) === undefined) return new Response("No such Recipe", { status: 404 });
+      const image = await request.arrayBuffer();
+      if (image.byteLength > MAX_PHOTO_BYTES) return new Response("The photo is larger than 10 MB", { status: 413 });
+      const key = `${PHOTO_PREFIX}recipe-${recipeId}-${crypto.randomUUID()}`;
+      await this.env.BUCKET.put(key, image, { httpMetadata: { contentType: type } });
+      // The Recipe may have been deleted while the photo uploaded.
+      if (!(await this.changePhoto(recipeId, key))) {
+        await this.deletePhoto(key);
+        return new Response("No such Recipe", { status: 404 });
+      }
+      return Response.json({ ok: true, photoKey: key });
+    }
+    if (request.method === "DELETE") {
+      if (!(await this.changePhoto(recipeId, null))) return new Response("No such Recipe", { status: 404 });
+      return Response.json({ ok: true });
+    }
+    return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, PUT, DELETE" } });
+  }
+
+  /** Points a Recipe at a new photo (or none) and deletes the old one. False if there is no such Recipe. */
+  private async changePhoto(recipeId: number, key: string | null): Promise<boolean> {
+    const changed = this.ctx.storage.transactionSync(() => {
+      const set = setPhotoKey(this.ctx.storage.sql, recipeId, key);
+      return set && { previous: set.previous, revision: this.bumpRevision() };
+    });
+    if (!changed) return false;
+    this.notify("recipes", changed.revision);
+    await this.deletePhoto(changed.previous);
+    return true;
+  }
+
+  private async deletePhoto(key: string | null): Promise<void> {
+    if (key) await this.env.BUCKET.delete(key);
   }
 
   /**

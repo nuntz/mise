@@ -33,6 +33,7 @@ function fakeClient(initial: Household) {
         return { ok: true, value: current };
       }
       if (name === "get_caller") return { ok: true, value: null };
+      if (name === "search_recipes") return { ok: true, value: [] };
       throw new Error(`Unexpected tool ${name}`);
     }) as MiseClient["call"],
     subscribe(_topic, refetch) {
@@ -41,6 +42,9 @@ function fakeClient(initial: Household) {
       queueMicrotask(refetch);
       return () => listeners.delete(refetch);
     },
+    photoUrl: () => "",
+    uploadPhoto: async () => true,
+    removePhoto: async () => true,
     close() {},
   };
   const notify = (next: Household | Error) => {
@@ -56,6 +60,7 @@ test("a household change notice keeps unsaved Member input and shows the new dat
   render(() => <App client={client} />);
 
   await screen.findByRole("heading", { name: "The Tremblays" });
+  await user.click(screen.getByRole("button", { name: "Members" }));
   // Half-edit Sam, and half-add a new Member.
   await user.click(screen.getAllByRole("button", { name: "Edit" })[1] as HTMLElement);
   const editName = screen.getByDisplayValue("Sam");
@@ -86,6 +91,7 @@ test("a refresh that fails keeps the settings and their unsaved input, and says 
   render(() => <App client={client} />);
 
   await screen.findByRole("heading", { name: "The Tremblays" });
+  await user.click(screen.getByRole("button", { name: "Members" }));
   await user.click(screen.getByRole("button", { name: "Add a Member" }));
   await user.type(screen.getAllByRole("textbox", { name: "Name" }).at(-1) as HTMLInputElement, "Robin");
 

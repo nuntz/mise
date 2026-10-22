@@ -19,8 +19,23 @@ const memberFields: Record<string, MessageKey> = {
   constraints: "member.constraints",
 };
 
+const recipeFields: Record<string, MessageKey> = {
+  title: "recipeForm.title",
+  baseServings: "recipeForm.baseServings",
+  ingredients: "recipeForm.ingredients",
+  steps: "recipeForm.steps",
+  tags: "recipeForm.tags",
+  effortMinutes: "recipeForm.effortMinutes",
+  cuisine: "recipeForm.cuisine",
+  mainProtein: "recipeForm.mainProtein",
+  recurring: "recipeForm.recurring",
+  prepAhead: "recipeForm.prepAhead",
+};
+
+type Form = "household" | "member" | "recipe";
+
 /** What to show when a tool refuses; `form` says which fields a bare name like `name` means. */
-export function errorText(error: ToolError, form: "household" | "member"): string {
+export function errorText(error: ToolError, form: Form): string {
   switch (error.code) {
     case "invalid_input": {
       const fields = new Set((error.issues ?? []).map((issue) => fieldLabel(issue.path, form)));
@@ -31,15 +46,20 @@ export function errorText(error: ToolError, form: "household" | "member"): strin
     case "email_in_use":
       return t("member.emailInUse");
     case "not_found":
-      return t("member.notFound");
+      return t(form === "recipe" ? "recipe.notFound" : "member.notFound");
     default:
       return t("app.error");
   }
 }
 
 /** A field's label from an issue path such as `name` or `members.1.constraints.0.allergen`. */
-function fieldLabel(path: string, form: "household" | "member"): string {
-  const labels = form === "household" && !path.startsWith("members.") ? householdFields : memberFields;
+function fieldLabel(path: string, form: Form): string {
+  const labels =
+    form === "recipe"
+      ? recipeFields
+      : form === "household" && !path.startsWith("members.")
+        ? householdFields
+        : memberFields;
   const field =
     path
       .split(".")

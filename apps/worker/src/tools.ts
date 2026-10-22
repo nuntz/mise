@@ -11,6 +11,7 @@ import {
   type ToolOutput,
   type ToolResult,
 } from "@mise/domain";
+import { readRecipes, recipeHandlers } from "./recipes";
 
 type HouseholdRow = {
   name: string;
@@ -25,7 +26,7 @@ type MemberRow = { id: number; name: string; email: string | null };
 
 type ConstraintRow = { member_id: number; kind: string; allergen: string | null; term: string | null };
 
-type Handlers = {
+export type Handlers = {
   [N in ToolName]: (sql: SqlStorage, input: ParsedToolInput<N>, context: ToolContext) => ToolResult<ToolOutput<N>>;
 };
 
@@ -86,6 +87,8 @@ export const handlers: Handlers = {
     return { ok: true, value: member };
   },
 
+  ...recipeHandlers,
+
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
     value: caller && { ...caller, member: memberSignedInAs(sql, caller.email) },
@@ -99,6 +102,7 @@ export const handlers: Handlers = {
 export function parseStoredHousehold(sql: SqlStorage): void {
   readSettings(sql);
   readMembers(sql);
+  readRecipes(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {

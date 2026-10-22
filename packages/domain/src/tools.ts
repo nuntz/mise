@@ -2,9 +2,18 @@ import { z } from "zod";
 import { type Caller, ResolvedCaller } from "./caller";
 import { Household, SetupHouseholdInput } from "./household";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
+import {
+  DeleteRecipeInput,
+  GetRecipeInput,
+  NewRecipe,
+  Recipe,
+  RecipeSummary,
+  SearchRecipesInput,
+  UpdateRecipeInput,
+} from "./recipes";
 
 /** Topics a change notice can name; clients refetch the matching tools. */
-export const ChangeTopic = z.enum(["household"]);
+export const ChangeTopic = z.enum(["household", "recipes"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 type ToolDefinition = {
@@ -50,6 +59,31 @@ export const tools = {
     input: RemoveMemberInput,
     output: Member,
     changes: "household",
+  }),
+  create_recipe: defineTool({
+    input: NewRecipe,
+    output: Recipe,
+    changes: "recipes",
+  }),
+  get_recipe: defineTool({
+    input: GetRecipeInput,
+    output: Recipe,
+  }),
+  update_recipe: defineTool({
+    input: UpdateRecipeInput,
+    output: Recipe,
+    changes: "recipes",
+  }),
+  /** Requires `confirm: true`. Returns the Recipe as it was before deletion. */
+  delete_recipe: defineTool({
+    input: DeleteRecipeInput,
+    output: Recipe,
+    changes: "recipes",
+  }),
+  /** Recipes in title order. */
+  search_recipes: defineTool({
+    input: SearchRecipesInput,
+    output: z.array(RecipeSummary),
   }),
   get_caller: defineTool({
     input: z.object({}).strict(),
