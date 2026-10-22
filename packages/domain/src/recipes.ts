@@ -21,7 +21,10 @@ export const RecipeAllergens = z.discriminatedUnion("kind", [
 ]);
 export type RecipeAllergens = z.infer<typeof RecipeAllergens>;
 
-export function recipeAllergens(ingredients: Ingredient[], catalogue: ItemCatalogue = SHIPPED_ITEMS): RecipeAllergens {
+export function recipeAllergens(
+  ingredients: Pick<Ingredient, "item">[],
+  catalogue: ItemCatalogue = SHIPPED_ITEMS,
+): RecipeAllergens {
   const found = new Set<Allergen>();
   let unresolved = 0;
   for (const ingredient of ingredients) {

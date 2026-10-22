@@ -1,15 +1,19 @@
 import {
   addDays,
+  type Conflict,
   type Household as HouseholdData,
   type LocalDate,
   type Locale,
   type Meal,
   type Member,
   type MemberId,
+  type Override,
   type RecipeSummary,
+  type RefusedConflict,
   SLOT_KINDS,
   type Slot,
   type SlotKind,
+  sameConflict,
   type ToolInput,
   type ToolResult,
   type Week,
@@ -59,7 +63,9 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
 
   const clear = async (shown: Week) => {
     if (!window.confirm(t("week.clearConfirm", { date: dayTitle(shown.startDate, props.household.locale) }))) return;
-    setError(await failureOf(() => props.client.call("clear_week", { date: shown.startDate, confirm: true })));
+    setError(
+      (await outcomeOf(() => props.client.call("clear_week", { date: shown.startDate, confirm: true }))).failure,
+    );
   };
 
   return (
@@ -107,7 +113,7 @@ function Day(props: { client: MiseClient; household: Household; date: LocalDate;
     <section aria-label={title()}>
       <h3>{title()}</h3>
       <SlotView client={props.client} household={props.household} slot={slot("dinner")} prominent />
-      <details>
+      <details open={["breakfast", "lunch"].some((meal) => blocking(slot(meal as Meal)))}>
         <summary>{t("week.otherMeals")}</summary>
         <SlotView client={props.client} household={props.household} slot={slot("breakfast")} />
         <SlotView client={props.client} household={props.household} slot={slot("lunch")} />
@@ -122,9 +128,9 @@ function Day(props: { client: MiseClient; household: Household; date: LocalDate;
       >
         <DayDinersForm
           client={props.client}
-          members={props.household.members}
+          household={props.household}
           date={props.date}
-          dinner={slot("dinner")}
+          slots={props.slots}
           onDone={() => setEditingDiners(false)}
         />
       </Show>
@@ -161,6 +167,18 @@ function SlotView(props: { client: MiseClient; household: Household; slot: Slot;
         <h4>{slotTitle(props.slot)}</h4>
       </Show>
       <p>{servingsText(props.slot, props.household)}</p>
+      <For each={props.slot.conflicts}>
+        {(conflict) => (
+          <Show
+            when={conflict.override}
+            fallback={<p role="alert">{conflictText(conflict, props.household, slotTitle(props.slot))}</p>}
+          >
+            {(reason) => (
+              <p>{t("conflict.overridden", { ...conflictParams(conflict, props.household), reason: reason() })}</p>
+            )}
+          </Show>
+        )}
+      </For>
       <Show when={props.slot.note}>{(note) => <p>{note()}</p>}</Show>
       <Show when={props.slot.locked}>
         <p>{t("slot.locked")}</p>
@@ -175,7 +193,7 @@ function SlotView(props: { client: MiseClient; household: Household; slot: Slot;
       >
         <SlotForm
           client={props.client}
-          members={props.household.members}
+          household={props.household}
           slot={props.slot}
           onDone={() => setEditing(false)}
         />
@@ -187,7 +205,7 @@ function SlotView(props: { client: MiseClient; household: Household; slot: Slot;
 /** Who is eating, as a form holds it: the Household's default, or the Members ticked. */
 type DinersDraft = { everyone: boolean; diners: MemberId[] };
 
-function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; onDone: () => void }) {
+function SlotForm(props: { client: MiseClient; household: Household; slot: Slot; onDone: () => void }) {
   const { slot } = props;
   const [kind, setKind] = createSignal<SlotKind>(slot.kind);
   const [recipeId, setRecipeId] = createSignal(slot.recipe ? String(slot.recipe.id) : "");
@@ -201,6 +219,16 @@ function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; on
   const [recipes, setRecipes] = createSignal<RecipeSummary[]>([]);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
+  const [refused, setRefused] = createSignal<RefusedConflict[]>([]);
+  const [reasons, setReasons] = createSignal<Record<string, string>>({});
+  // A refusal is for the change as it was; changing it again asks afresh, with no old reasons.
+  const changing =
+    <T,>(set: (value: T) => unknown) =>
+    (value: T) => {
+      setRefused([]);
+      setReasons({});
+      set(value);
+    };
 
   void props.client.call("search_recipes", {}).then(
     (result) => result.ok && setRecipes(result.value),
@@ -209,36 +237,45 @@ function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; on
 
   const save = async (event: SubmitEvent) => {
     event.preventDefault();
+    const overrides = overridesOf(refused(), reasons());
+    if (!overrides) return;
     const where = { date: slot.date, meal: slot.meal };
     const writes: (() => Promise<ToolResult<unknown>>)[] = [];
     const typedNote = note().trim() || null;
-    if (kind() !== slot.kind || recipeId() !== String(slot.recipe?.id ?? "") || typedNote !== slot.note) {
+    const dinersInput = dinersOf(diners(), props.household.members);
+    const constraints = constraintsOf(guestConstraints());
+    const guestsChanged =
+      Number(guests()) !== slot.guests || JSON.stringify(constraints) !== JSON.stringify(slot.guestConstraints);
+    const slotChanged =
+      kind() !== slot.kind ||
+      recipeId() !== String(slot.recipe?.id ?? "") ||
+      typedNote !== slot.note ||
+      dinersChanged(dinersInput, slot) ||
+      guestsChanged;
+    if (slotChanged) {
+      // One change, so that its Conflicts are checked against the Slot as it ends up.
+      const change = {
+        ...where,
+        note: typedNote,
+        ...(dinersChanged(dinersInput, slot) && { diners: dinersInput }),
+        ...(guestsChanged && { guests: Number(guests()), guestConstraints: constraints }),
+        ...(overrides.length > 0 && { overrides }),
+      };
       const chosen = kind();
       // No Recipe chosen sends 0, which the tool refuses by name.
       const input: ToolInput<"set_slot"> =
-        chosen === "recipe"
-          ? { ...where, kind: chosen, recipeId: Number(recipeId()), note: typedNote }
-          : { ...where, kind: chosen, note: typedNote };
+        chosen === "recipe" ? { ...change, kind: chosen, recipeId: Number(recipeId()) } : { ...change, kind: chosen };
       writes.push(() => props.client.call("set_slot", input));
-    }
-    const dinersInput = dinersOf(diners(), props.members);
-    if (dinersChanged(dinersInput, slot)) {
-      writes.push(() => props.client.call("set_diners", { ...where, diners: dinersInput }));
-    }
-    const constraints = constraintsOf(guestConstraints());
-    if (Number(guests()) !== slot.guests || JSON.stringify(constraints) !== JSON.stringify(slot.guestConstraints)) {
-      writes.push(() =>
-        props.client.call("set_guests", { ...where, guests: Number(guests()), guestConstraints: constraints }),
-      );
     }
     if (locked() !== slot.locked) writes.push(() => props.client.call("lock_slot", { ...where, locked: locked() }));
 
     setBusy(true);
     // In order, stopping at the first refusal; what was saved before it stays saved.
     for (const write of writes) {
-      const failure = await failureOf(write);
-      if (failure) {
-        setError(failure);
+      const outcome = await outcomeOf(write);
+      if (outcome.conflicts) setRefused(outcome.conflicts);
+      setError(outcome.failure);
+      if (outcome.conflicts || outcome.failure) {
         setBusy(false);
         return;
       }
@@ -247,6 +284,9 @@ function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; on
     props.onDone();
   };
 
+  const recipeTitle = () =>
+    recipes().find((recipe) => String(recipe.id) === recipeId())?.title ?? slot.recipe?.title ?? "";
+
   return (
     <form aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
       <Show when={error()}>
@@ -254,14 +294,14 @@ function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; on
       </Show>
       <label>
         {t("slot.kind")}
-        <select value={kind()} onChange={(e) => setKind(e.currentTarget.value as SlotKind)}>
+        <select value={kind()} onChange={(e) => changing(setKind)(e.currentTarget.value as SlotKind)}>
           <For each={SLOT_KINDS}>{(option) => <option value={option}>{t(`slotKind.${option}`)}</option>}</For>
         </select>
       </label>
       <Show when={kind() === "recipe"}>
         <label>
           {t("slot.recipe")}
-          <select value={recipeId()} onChange={(e) => setRecipeId(e.currentTarget.value)}>
+          <select value={recipeId()} onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
             <option value="">{t("slot.chooseRecipe")}</option>
             <For each={recipes()}>{(recipe) => <option value={String(recipe.id)}>{recipe.title}</option>}</For>
           </select>
@@ -271,23 +311,34 @@ function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; on
         {t("slot.note")}
         <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
       </label>
-      <DinersFields members={props.members} draft={diners()} onChange={setDiners} />
+      <DinersFields members={props.household.members} draft={diners()} onChange={changing(setDiners)} />
       <label>
         {t("slot.guests")}
-        <input type="number" min={0} max={50} value={guests()} onInput={(e) => setGuests(e.currentTarget.value)} />
+        <input
+          type="number"
+          min={0}
+          max={50}
+          value={guests()}
+          onInput={(e) => changing(setGuests)(e.currentTarget.value)}
+        />
       </label>
       <fieldset>
         <legend>{t("slot.guestConstraints")}</legend>
-        <ConstraintFields constraints={guestConstraints()} onChange={setGuestConstraints} />
+        <ConstraintFields constraints={guestConstraints()} onChange={changing(setGuestConstraints)} />
       </fieldset>
       <label>
         <input type="checkbox" checked={locked()} onChange={(e) => setLocked(e.currentTarget.checked)} />
         {t("slot.locked")}
       </label>
       <small>{t("slot.lockedHint")}</small>
-      <button type="submit" disabled={busy()}>
-        {busy() ? t("slot.saving") : t("slot.save")}
-      </button>
+      <ConflictOverrides
+        household={props.household}
+        conflicts={refused()}
+        describe={(conflict) => conflictText(conflict, props.household, recipeTitle())}
+        reasons={reasons()}
+        onChange={setReasons}
+      />
+      <SaveButton busy={busy()} refused={refused().length > 0} />
       <button type="button" onClick={() => props.onDone()}>
         {t("slot.cancel")}
       </button>
@@ -298,27 +349,50 @@ function SlotForm(props: { client: MiseClient; members: Member[]; slot: Slot; on
 /** Who is eating every meal of a day; it starts from who is eating dinner. */
 function DayDinersForm(props: {
   client: MiseClient;
-  members: Member[];
+  household: Household;
   date: LocalDate;
-  dinner: Slot;
+  slots: Slot[];
   onDone: () => void;
 }) {
-  const [diners, setDiners] = createSignal<DinersDraft>({
-    everyone: props.dinner.dinersAreDefault,
-    diners: props.dinner.diners,
-  });
+  const dinner = props.slots.find((slot) => slot.meal === "dinner") as Slot;
+  const [diners, setDiners] = createSignal<DinersDraft>({ everyone: dinner.dinersAreDefault, diners: dinner.diners });
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
+  const [refused, setRefused] = createSignal<RefusedConflict[]>([]);
+  const [reasons, setReasons] = createSignal<Record<string, string>>({});
+  // A refusal is for the change as it was; changing it again asks afresh, with no old reasons.
+  const changing =
+    <T,>(set: (value: T) => unknown) =>
+    (value: T) => {
+      setRefused([]);
+      setReasons({});
+      set(value);
+    };
 
   const save = async (event: SubmitEvent) => {
     event.preventDefault();
+    const overrides = overridesOf(refused(), reasons());
+    if (!overrides) return;
     setBusy(true);
-    const failure = await failureOf(() =>
-      props.client.call("set_diners", { date: props.date, diners: dinersOf(diners(), props.members) }),
+    const outcome = await outcomeOf(() =>
+      props.client.call("set_diners", {
+        date: props.date,
+        diners: dinersOf(diners(), props.household.members),
+        ...(overrides.length > 0 && { overrides }),
+      }),
     );
     setBusy(false);
-    if (failure) setError(failure);
-    else props.onDone();
+    if (outcome.conflicts) setRefused(outcome.conflicts);
+    setError(outcome.failure);
+    if (!outcome.conflicts && !outcome.failure) props.onDone();
+  };
+
+  const describe = (conflict: RefusedConflict) => {
+    const slot = props.slots.find((other) => other.meal === conflict.meal);
+    return t("conflict.inMeal", {
+      meal: t(`meal.${conflict.meal}`),
+      conflict: conflictText(conflict, props.household, slot ? slotTitle(slot) : ""),
+    });
   };
 
   return (
@@ -326,15 +400,81 @@ function DayDinersForm(props: {
       <Show when={error()}>
         <p role="alert">{error()}</p>
       </Show>
-      <DinersFields members={props.members} draft={diners()} onChange={setDiners} />
-      <button type="submit" disabled={busy()}>
-        {busy() ? t("slot.saving") : t("slot.save")}
-      </button>
+      <DinersFields members={props.household.members} draft={diners()} onChange={changing(setDiners)} />
+      <ConflictOverrides
+        household={props.household}
+        conflicts={refused()}
+        describe={describe}
+        reasons={reasons()}
+        onChange={setReasons}
+      />
+      <SaveButton busy={busy()} refused={refused().length > 0} />
       <button type="button" onClick={() => props.onDone()}>
         {t("slot.cancel")}
       </button>
     </form>
   );
+}
+
+/**
+ * What a refused change says: each Conflict, naming the person and the Allergen, and a
+ * reason to give for each person and Allergen before saving anyway.
+ */
+function ConflictOverrides(props: {
+  household: Household;
+  conflicts: RefusedConflict[];
+  describe: (conflict: RefusedConflict) => string;
+  reasons: Record<string, string>;
+  onChange: (reasons: Record<string, string>) => void;
+}) {
+  return (
+    <Show when={props.conflicts.length > 0}>
+      <div role="alert">
+        <p>{t("conflict.refused")}</p>
+        <For each={props.conflicts}>{(conflict) => <p>{props.describe(conflict)}</p>}</For>
+        <For each={overridable(props.conflicts)}>
+          {(conflict) => (
+            <label>
+              {t("conflict.reason", conflictParams(conflict, props.household))}
+              <input
+                required
+                maxLength={500}
+                value={props.reasons[overrideKey(conflict)] ?? ""}
+                onInput={(e) => props.onChange({ ...props.reasons, [overrideKey(conflict)]: e.currentTarget.value })}
+              />
+            </label>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
+function SaveButton(props: { busy: boolean; refused: boolean }) {
+  return (
+    <button type="submit" disabled={props.busy}>
+      {props.busy ? t("slot.saving") : props.refused ? t("conflict.saveAnyway") : t("slot.save")}
+    </button>
+  );
+}
+
+/** One Conflict per person and Allergen: an Override covers it in every Slot the change touches. */
+function overridable(conflicts: RefusedConflict[]): RefusedConflict[] {
+  return conflicts.filter((conflict, index) => conflicts.findIndex((other) => sameConflict(other, conflict)) === index);
+}
+
+function overrideKey(conflict: Pick<Conflict, "who" | "allergen">): string {
+  return `${conflict.who}:${conflict.allergen}`;
+}
+
+/** The Overrides the reasons given make; null while one is missing. */
+function overridesOf(conflicts: RefusedConflict[], reasons: Record<string, string>): Override[] | null {
+  const overrides = overridable(conflicts).map((conflict) => ({
+    who: conflict.who,
+    allergen: conflict.allergen,
+    reason: (reasons[overrideKey(conflict)] ?? "").trim(),
+  }));
+  return overrides.every((override) => override.reason) ? overrides : null;
 }
 
 /** "Everyone" follows the Household's default; untick it to choose Members one by one. */
@@ -411,12 +551,41 @@ function dayTitle(date: LocalDate, locale: Locale): string {
   );
 }
 
-/** Makes a tool call; what to show if it was refused or never answered, or undefined if it succeeded. */
-async function failureOf(call: () => Promise<ToolResult<unknown>>): Promise<string | undefined> {
+/** Whether the Slot has a Conflict nobody has overridden. */
+function blocking(slot: Slot): boolean {
+  return slot.conflicts.some((conflict) => conflict.override === null);
+}
+
+function conflictParams(conflict: Conflict, household: Household): Record<string, string> {
+  const who =
+    conflict.who === "guests"
+      ? t("conflict.guests")
+      : (household.members.find((member) => member.id === conflict.who)?.name ?? String(conflict.who));
+  return { who, allergen: t(`allergen.${conflict.allergen}`), constraint: t(`constraint.${conflict.constraint}`) };
+}
+
+/** A Conflict of `title` with someone's Hard Constraint, naming them and the Allergen. */
+function conflictText(conflict: Conflict, household: Household, title: string): string {
+  return t(conflict.cause === "contains" ? "conflict.contains" : "conflict.unknown", {
+    ...conflictParams(conflict, household),
+    title,
+  });
+}
+
+/**
+ * Makes a tool call. A refusal for Conflicts comes back as those Conflicts; any other refusal, or no
+ * answer at all, as what to show. Neither, if it succeeded.
+ */
+async function outcomeOf(
+  call: () => Promise<ToolResult<unknown>>,
+): Promise<{ failure?: string; conflicts?: RefusedConflict[] }> {
   try {
     const result = await call();
-    return result.ok ? undefined : errorText(result.error, "slot");
+    if (result.ok) return {};
+    if (result.error.code === "constraint_conflict" && result.error.conflicts)
+      return { conflicts: result.error.conflicts };
+    return { failure: errorText(result.error, "slot") };
   } catch {
-    return t("app.error");
+    return { failure: t("app.error") };
   }
 }

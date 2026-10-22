@@ -3,6 +3,7 @@ import {
   type NewRecipe,
   parseIngredient,
   Recipe,
+  type RecipeAllergens,
   type RecipeId,
   type RecipeSummary,
   type Recurrence,
@@ -121,7 +122,12 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
       sql.exec(`DELETE FROM ${table} WHERE recipe_id = ?`, recipe.id);
     }
     sql.exec("DELETE FROM import_flag WHERE recipe_id = ?1 OR duplicate_of = ?1", recipe.id);
-    // Slots planned with it are unplanned again, and no longer Locked: there is no Recipe to keep.
+    // Slots planned with it are unplanned again, and no longer Locked: there is no Recipe to keep,
+    // nor any Conflict to override.
+    sql.exec(
+      "DELETE FROM slot_override WHERE (date, meal) IN (SELECT date, meal FROM slot WHERE recipe_id = ?)",
+      recipe.id,
+    );
     sql.exec("UPDATE slot SET kind = 'unplanned', recipe_id = NULL, locked = 0 WHERE recipe_id = ?", recipe.id);
     sql.exec("DELETE FROM recipe WHERE id = ?", recipe.id);
     return { ok: true, value: recipe };
@@ -275,6 +281,31 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       editedInAppAt: row.edited_in_app_at,
     });
   });
+}
+
+/** The Allergens of each Recipe given, derived as `readRecipes` does but from their Items alone. */
+export function readRecipeAllergens(sql: SqlStorage, ids: RecipeId[]): Map<RecipeId, RecipeAllergens> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const items = groupByRecipe(
+    sql
+      .exec<{ recipe_id: number; item_id: string | null }>(
+        `SELECT recipe_id, item_id FROM recipe_ingredient WHERE recipe_id IN (${unique.map(() => "?").join()})`,
+        ...unique,
+      )
+      .toArray(),
+  );
+  const catalogue = readCatalogue(sql);
+  const item = catalogue.knownItemId.nullable();
+  return new Map(
+    unique.map((id) => [
+      id,
+      recipeAllergens(
+        (items.get(id) ?? []).map((row) => ({ item: item.parse(row.item_id) })),
+        catalogue,
+      ),
+    ]),
+  );
 }
 
 function sourceOf(row: RecipeRow): unknown {

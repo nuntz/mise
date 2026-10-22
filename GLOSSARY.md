@@ -83,6 +83,14 @@ _Avoid_: Plan (when meaning the week itself)
 One meal on one date (for example, dinner on 2026-10-26); there is exactly one Slot per date and meal.
 _Avoid_: Meal (when meaning the planned occurrence), entry
 
+**Conflict**:
+A Hard Constraint of a Diner, or of a Slot's Guests, that the Slot's Recipe violates: it contains the Allergen, or its Allergens are unknown.
+_Avoid_: Clash, warning
+
+**Override**:
+A reason, recorded on a Slot, for planning it despite one Conflict ("we'll make hers without the nuts"); it holds only while the Slot keeps its Recipe.
+_Avoid_: Exception, waiver
+
 **Locked Slot**:
 A Slot whose Recipe survives a re-proposal.
 

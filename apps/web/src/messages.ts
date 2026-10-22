@@ -230,6 +230,16 @@ const en = {
   "slot.guestCountMany": "{count} Guests",
   "slot.notFound": "That Recipe or Member no longer exists.",
 
+  "conflict.contains": "Not safe for {who} ({allergen}, {constraint}): {title} contains it.",
+  "conflict.unknown":
+    "Maybe not safe for {who} ({allergen}, {constraint}): {title} has Unresolved Ingredients, so its Allergens are unknown. Resolve them under Resolve Ingredients.",
+  "conflict.overridden": "Planned anyway for {who} ({allergen}, {constraint}): {reason}",
+  "conflict.guests": "the Guests",
+  "conflict.inMeal": "{meal}: {conflict}",
+  "conflict.refused": "This isn't safe for everyone eating. Change it, or say why it's safe and save anyway.",
+  "conflict.reason": "Why it's safe for {who} ({allergen})",
+  "conflict.saveAnyway": "Save anyway",
+
   "household.title": "{name}",
   "household.summary": "Week starts on {weekday}. Dinner at {dinnerTime}, {timezone}.",
   "household.units": "Units: {units}. Language: {locale}.",

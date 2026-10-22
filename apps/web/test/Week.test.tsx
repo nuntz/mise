@@ -1,4 +1,13 @@
-import { addDays, type Household, MEALS, type Member, type RecipeSummary, type Slot, type Week } from "@mise/domain";
+import {
+  addDays,
+  type Household,
+  MEALS,
+  type Member,
+  type RecipeSummary,
+  type Slot,
+  type ToolResult,
+  type Week,
+} from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
@@ -48,14 +57,20 @@ function emptyWeek(startDate: string): Week {
           guestConstraints: [],
           servings: 3,
           locked: false,
+          conflicts: [],
         }),
       ),
     ),
   };
 }
 
-/** A client whose current Week starts on Monday, October 26; it records every tool call made. */
-function fakeClient() {
+type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefined;
+
+/**
+ * A client whose current Week starts on Monday, October 26; it records every tool call made. `answers`
+ * answer a tool's calls instead, unless they return undefined.
+ */
+function fakeClient(answers: Record<string, Answer> = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
   const thisWeek = emptyWeek("2026-10-26");
   const tuesdayDinner = thisWeek.slots[5] as Slot;
@@ -70,6 +85,8 @@ function fakeClient() {
   const client: MiseClient = {
     call: (async (name: string, input: Record<string, unknown>) => {
       calls.push({ name, input });
+      const answer = answers[name]?.(input);
+      if (answer) return answer;
       switch (name) {
         case "get_household":
           return { ok: true, value: household };
@@ -136,7 +153,7 @@ test("next Week is a tap away", async () => {
   expect(calls.filter((call) => call.name === "get_week").at(-1)?.input).toEqual({ date: "2026-11-02" });
 });
 
-test("editing a dinner sends only what changed: the Recipe, who's eating and the Lock", async () => {
+test("editing a dinner sends what changed in one change to the Slot, then the Lock", async () => {
   const { client, calls } = fakeClient();
   const user = userEvent.setup();
   render(() => <App client={client} />);
@@ -155,9 +172,15 @@ test("editing a dinner sends only what changed: the Recipe, who's eating and the
   expect(writes(calls)).toEqual([
     {
       name: "set_slot",
-      input: { date: "2026-10-27", meal: "dinner", kind: "recipe", recipeId: 2, note: "Use the fresh basil" },
+      input: {
+        date: "2026-10-27",
+        meal: "dinner",
+        kind: "recipe",
+        recipeId: 2,
+        note: "Use the fresh basil",
+        diners: [1, 3],
+      },
     },
-    { name: "set_diners", input: { date: "2026-10-27", meal: "dinner", diners: [1, 3] } },
     { name: "lock_slot", input: { date: "2026-10-27", meal: "dinner", locked: false } },
   ]);
 });
@@ -179,12 +202,13 @@ test("Guests and their Constraints are set on the Slot", async () => {
 
   await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
   expect(writes(calls)).toEqual([
-    { name: "set_slot", input: { date: "2026-10-26", meal: "dinner", kind: "eat_out", note: null } },
     {
-      name: "set_guests",
+      name: "set_slot",
       input: {
         date: "2026-10-26",
         meal: "dinner",
+        kind: "eat_out",
+        note: null,
         guests: 2,
         guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
       },
@@ -224,4 +248,162 @@ test("clearing the Week asks first", async () => {
     expect(writes(calls)).toEqual([{ name: "clear_week", input: { date: "2026-10-26", confirm: true } }]),
   );
   confirm.mockRestore();
+});
+
+const robinsPeanut = { who: 1, allergen: "peanut", constraint: "allergy", cause: "contains" } as const;
+
+test("each Slot shows its Conflicts: blocking ones as warnings, overridden ones with their reason", async () => {
+  const { client } = fakeClient({
+    get_week: (input) => {
+      if (input.date) return undefined;
+      const week = emptyWeek("2026-10-26");
+      Object.assign(week.slots[2] as Slot, {
+        kind: "recipe",
+        recipe: { id: 1, title: "Satay", baseServings: 4, photoKey: null },
+        conflicts: [{ ...robinsPeanut, override: "Hers without the peanut butter" }],
+      });
+      Object.assign(week.slots[5] as Slot, {
+        kind: "recipe",
+        recipe: { id: 4, title: "Stew", baseServings: 4, photoKey: null },
+        guests: 1,
+        conflicts: [{ who: "guests", allergen: "milk", constraint: "intolerance", cause: "unknown", override: null }],
+      });
+      return { ok: true, value: week };
+    },
+  });
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
+  expect(within(monday).queryByRole("alert")).toBeNull();
+  expect(
+    within(monday).getByText("Planned anyway for Robin (Peanut, Allergy): Hers without the peanut butter"),
+  ).toBeTruthy();
+  expect(within(tuesday).getByRole("alert").textContent).toBe(
+    "Maybe not safe for the Guests (Milk, Intolerance): Stew has Unresolved Ingredients, so its Allergens are unknown. Resolve them under Resolve Ingredients.",
+  );
+});
+
+test("a change refused for a Conflict names the person and the Allergen, and saves anyway with a reason", async () => {
+  const { client, calls } = fakeClient({
+    set_slot: (input) =>
+      input.overrides
+        ? undefined
+        : {
+            ok: false,
+            error: {
+              code: "constraint_conflict",
+              message: "Refused",
+              conflicts: [{ date: "2026-10-26", meal: "dinner", ...robinsPeanut }],
+            },
+          },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(monday).getByRole("button", { name: "Edit Dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
+  await within(form).findByRole("option", { name: "Curry" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  const warning = await within(form).findByRole("alert");
+  expect(warning.textContent).toContain("Not safe for Robin (Peanut, Allergy): Curry contains it.");
+  await user.click(within(form).getByRole("button", { name: "Save anyway" }));
+  expect(writes(calls)).toHaveLength(1);
+  await user.type(within(form).getByRole("textbox", { name: "Why it's safe for Robin (Peanut)" }), "Hers on the side");
+  await user.click(within(form).getByRole("button", { name: "Save anyway" }));
+
+  await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
+  expect(writes(calls).at(-1)).toEqual({
+    name: "set_slot",
+    input: {
+      date: "2026-10-26",
+      meal: "dinner",
+      kind: "recipe",
+      recipeId: 2,
+      note: null,
+      overrides: [{ who: 1, allergen: "peanut", reason: "Hers on the side" }],
+    },
+  });
+});
+
+test("who's eating for a day is refused and overridden the same way", async () => {
+  const { client, calls } = fakeClient({
+    set_diners: (input) =>
+      input.overrides
+        ? undefined
+        : {
+            ok: false,
+            error: {
+              code: "constraint_conflict",
+              message: "Refused",
+              conflicts: [{ date: "2026-10-27", meal: "dinner", ...robinsPeanut }],
+            },
+          },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+
+  await user.click(within(tuesday).getByRole("button", { name: "Who's eating today" }));
+  const form = within(tuesday).getByRole("form", { name: "Who's eating today" });
+  await user.click(within(form).getByRole("checkbox", { name: "Everyone" }));
+  await user.click(within(form).getByRole("checkbox", { name: "Alex" }));
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  expect((await within(form).findByRole("alert")).textContent).toContain(
+    "Dinner: Not safe for Robin (Peanut, Allergy): Pasta contains it.",
+  );
+  await user.type(within(form).getByRole("textbox", { name: "Why it's safe for Robin (Peanut)" }), "No sauce");
+  await user.click(within(form).getByRole("button", { name: "Save anyway" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls).at(-1)).toEqual({
+      name: "set_diners",
+      input: {
+        date: "2026-10-27",
+        diners: [1, 3],
+        overrides: [{ who: 1, allergen: "peanut", reason: "No sauce" }],
+      },
+    }),
+  );
+});
+
+test("changing the Slot after a refusal takes the warning away, and its reasons with it", async () => {
+  const { client, calls } = fakeClient({
+    set_slot: (input) =>
+      input.recipeId === 2 && !input.overrides
+        ? {
+            ok: false,
+            error: {
+              code: "constraint_conflict",
+              message: "Refused",
+              conflicts: [{ date: "2026-10-26", meal: "dinner", ...robinsPeanut }],
+            },
+          }
+        : undefined,
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(monday).getByRole("button", { name: "Edit Dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
+  await within(form).findByRole("option", { name: "Curry" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+  await user.type(await within(form).findByRole("textbox", { name: "Why it's safe for Robin (Peanut)" }), "Hers apart");
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Pasta");
+
+  expect(within(form).queryByRole("alert")).toBeNull();
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+  await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
+  expect(writes(calls).at(-1)).toEqual({
+    name: "set_slot",
+    input: { date: "2026-10-26", meal: "dinner", kind: "recipe", recipeId: 1, note: null },
+  });
 });

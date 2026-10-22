@@ -96,8 +96,9 @@ export const handlers: Handlers = {
     const member = readMember(sql, input.id);
     if (!member) return memberNotFound(input.id);
     sql.exec("DELETE FROM member_constraint WHERE member_id = ?", member.id);
-    // Slots they were chosen to eat go on without them.
+    // Slots they were chosen to eat go on without them, and need no Override for them.
     sql.exec("DELETE FROM slot_diner WHERE member_id = ?", member.id);
+    sql.exec("DELETE FROM slot_override WHERE member_id = ?", member.id);
     sql.exec("DELETE FROM member WHERE id = ?", member.id);
     return { ok: true, value: member };
   },
@@ -148,6 +149,13 @@ function writeConstraints(sql: SqlStorage, memberId: MemberId, constraints: Cons
       constraint.term ?? null,
     );
   });
+  // An Override is for a Hard Constraint: one taken away and given back later needs a new reason.
+  const hard = constraints.flatMap((constraint) => (constraint.kind === "dislike" ? [] : [constraint.allergen]));
+  sql.exec(
+    "DELETE FROM slot_override WHERE member_id = ? AND allergen NOT IN (SELECT value FROM json_each(?))",
+    memberId,
+    JSON.stringify(hard),
+  );
 }
 
 /** The Member who signs in as `email`; Caller and Member emails are both lower case. */
@@ -189,7 +197,7 @@ function readMember(sql: SqlStorage, id: MemberId): Member | null {
 }
 
 /** Every Member in the order they were added, or just the one with `id`. */
-function readMembers(sql: SqlStorage, id?: MemberId): Member[] {
+export function readMembers(sql: SqlStorage, id?: MemberId): Member[] {
   const members = sql
     .exec<MemberRow>("SELECT id, name, email FROM member WHERE ? IS NULL OR id = ? ORDER BY id", id ?? null, id ?? null)
     .toArray();

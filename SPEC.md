@@ -63,7 +63,7 @@ Source      { kind: paprika|gdrive|url|tiktok|instagram|manual, externalId?, ext
 WeekPlan    { id, startDate, slots[], groceryListId?, instacartUrl? }
 Slot        { date, meal: breakfast|lunch|dinner, kind: recipe|leftovers|eat_out|unplanned|skip,
               recipeId?, leftoversOf?: slotId, diners: memberId[], guests: int, guestConstraints: Constraint[],
-              locked: bool, note?, cookedAt?, rating? }
+              locked: bool, note?, cookedAt?, rating?, overrides: { who: memberId|"guests", allergen, reason }[] }
               // servings = diners.length + guests
 Staple      { id, item, location: pantry|fridge|freezer, checkEvery: duration | "every_shop", alwaysBuy: bool,
               status: stocked|low|out, lastChecked, unit?, qtyPerShop? }

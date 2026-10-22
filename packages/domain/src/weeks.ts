@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Overrides, SlotConflict } from "./conflicts";
 import { WEEKDAYS, type Weekday } from "./household";
 import { Constraint, MemberId } from "./members";
 import { Recipe, RecipeId } from "./recipes";
@@ -70,6 +71,8 @@ export const Slot = z.object({
   /** Diners plus Guests: how many the Recipe is scaled to. */
   servings: z.number().int().nonnegative(),
   locked: z.boolean(),
+  /** Every Conflict of its Recipe with a Hard Constraint of someone eating it, overridden or not. */
+  conflicts: z.array(SlotConflict),
 });
 export type Slot = z.infer<typeof Slot>;
 
@@ -85,21 +88,34 @@ export const GetWeekInput = z.object({ date: LocalDate.optional() }).strict();
 
 const SlotRef = { date: LocalDate, meal: Meal };
 
+const Diners = z
+  .array(MemberId)
+  .max(50)
+  .refine((ids) => new Set(ids).size === ids.length, { message: "A Member can only be a Diner once" })
+  .nullable();
+
+/**
+ * What a change to a Slot may bring: refused if it leaves the Slot with a Conflict it did not have,
+ * unless that Conflict is overridden here. Overrides already on the Slot stay while its Recipe does.
+ */
+const SlotChange = {
+  ...SlotRef,
+  note: SlotNote.nullable().optional(),
+  /** As `set_diners` takes them; left as they are when left out. */
+  diners: Diners.optional(),
+  guests: Guests.optional(),
+  guestConstraints: GuestConstraints.optional(),
+  overrides: Overrides.optional(),
+};
+
 /**
  * Sets what a Slot holds. A Recipe is given exactly when the kind is "recipe". The note is kept
- * when left out and cleared by null. Diners, Guests and the Lock are left as they are.
+ * when left out and cleared by null. Diners and Guests can be set in the same change, so that their
+ * Conflicts are checked once, against the Slot as it ends up; the Lock is left as it is.
  */
 export const SetSlotInput = z.discriminatedUnion("kind", [
-  z
-    .object({ ...SlotRef, kind: z.literal("recipe"), recipeId: RecipeId, note: SlotNote.nullable().optional() })
-    .strict(),
-  z
-    .object({
-      ...SlotRef,
-      kind: SlotKind.exclude(["recipe"]),
-      note: SlotNote.nullable().optional(),
-    })
-    .strict(),
+  z.object({ ...SlotChange, kind: z.literal("recipe"), recipeId: RecipeId }).strict(),
+  z.object({ ...SlotChange, kind: SlotKind.exclude(["recipe"]) }).strict(),
 ]);
 
 /**
@@ -110,17 +126,34 @@ export const SetDinersInput = z
   .object({
     date: LocalDate,
     meal: Meal.optional(),
-    diners: z
-      .array(MemberId)
-      .max(50)
-      .refine((ids) => new Set(ids).size === ids.length, { message: "A Member can only be a Diner once" })
-      .nullable(),
+    diners: Diners,
+    /** Each applies to every Slot changed that has its Conflict. */
+    overrides: Overrides.optional(),
   })
   .strict();
 
 /** Sets how many Guests eat a Slot, and their Constraints (kept when left out). */
 export const SetGuestsInput = z
-  .object({ ...SlotRef, guests: Guests, guestConstraints: GuestConstraints.optional() })
+  .object({
+    ...SlotRef,
+    guests: Guests,
+    guestConstraints: GuestConstraints.optional(),
+    overrides: Overrides.optional(),
+  })
+  .strict();
+
+/**
+ * The Conflicts a Slot would have with the changes given (each left as it is when left out; a null
+ * Recipe is none), without changing it. Overrides on the Slot still show while its Recipe stays.
+ */
+export const CheckSlotConstraintsInput = z
+  .object({
+    ...SlotRef,
+    recipeId: RecipeId.nullable().optional(),
+    diners: Diners.optional(),
+    guests: Guests.optional(),
+    guestConstraints: GuestConstraints.optional(),
+  })
   .strict();
 
 export const LockSlotInput = z.object({ ...SlotRef, locked: z.boolean() }).strict();

@@ -59,6 +59,7 @@ describe("a Week", () => {
       guestConstraints: [],
       servings: 3,
       locked: false,
+      conflicts: [],
     });
   });
 });
@@ -90,6 +91,7 @@ describe("setting a Slot", () => {
       guestConstraints: [],
       servings: 3,
       locked: false,
+      conflicts: [],
     };
     expect(set).toEqual({ ok: true, value: slot });
     expect(slotOf(weekOf(await household.callTool("get_week", { date: MONDAY })), TUESDAY, "dinner")).toEqual(slot);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type Caller, ResolvedCaller } from "./caller";
+import { type Conflict, SlotConflict } from "./conflicts";
 import { Household, SetupHouseholdInput } from "./household";
 import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput } from "./items";
@@ -15,9 +16,12 @@ import {
   UpdateRecipeInput,
 } from "./recipes";
 import {
+  CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
+  type LocalDate,
   LockSlotInput,
+  type Meal,
   SetDinersInput,
   SetGuestsInput,
   SetSlotInput,
@@ -153,21 +157,28 @@ export const tools = {
     input: GetWeekInput,
     output: Week,
   }),
+  /** Refuses a change that leaves the Slot with a new Conflict it doesn't override (`constraint_conflict`). */
   set_slot: defineTool({
     input: SetSlotInput,
     output: Slot,
     changes: "plan",
   }),
-  /** Returns the Slots changed: one, or the day's three. */
+  /** Returns the Slots changed: one, or the day's three. Refuses new Conflicts as `set_slot` does. */
   set_diners: defineTool({
     input: SetDinersInput,
     output: z.array(Slot),
     changes: "plan",
   }),
+  /** Refuses new Conflicts as `set_slot` does. */
   set_guests: defineTool({
     input: SetGuestsInput,
     output: Slot,
     changes: "plan",
+  }),
+  /** Read-only: what a change would conflict with, before making it. */
+  check_slot_constraints: defineTool({
+    input: CheckSlotConstraintsInput,
+    output: z.array(SlotConflict),
   }),
   /** A Locked Slot keeps its Recipe when the Week is proposed again; it can still be edited by hand. */
   lock_slot: defineTool({
@@ -208,12 +219,18 @@ export type ToolErrorCode =
   | "not_set_up"
   | "not_found"
   | "email_in_use"
-  | "name_in_use";
+  | "name_in_use"
+  | "constraint_conflict";
+
+/** A Conflict a change was refused for, and the Slot it would have been in. */
+export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };
 
 export type ToolError = {
   code: ToolErrorCode;
   message: string;
   issues?: { path: string; message: string }[];
+  /** With `constraint_conflict`: every Conflict the change would have brought that no override covered. */
+  conflicts?: RefusedConflict[];
 };
 
 export type ToolResult<T> = { ok: true; value: T } | { ok: false; error: ToolError };

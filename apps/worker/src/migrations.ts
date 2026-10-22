@@ -196,6 +196,25 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 7,
+    statements: [
+      // A Slot planned despite a Conflict: member_id is the Diner it is for, or NULL for the Guests. It
+      // holds only while the Conflict has the same cause: a reason given for unknown Allergens says
+      // nothing once the Recipe is known to contain one.
+      `CREATE TABLE slot_override (
+        date TEXT NOT NULL,
+        meal TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        member_id INTEGER REFERENCES member (id),
+        allergen TEXT NOT NULL,
+        cause TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        PRIMARY KEY (date, meal, position),
+        FOREIGN KEY (date, meal) REFERENCES slot (date, meal)
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

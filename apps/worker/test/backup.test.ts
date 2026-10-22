@@ -40,14 +40,27 @@ describe("export and restore", () => {
     const original = freshHousehold();
     await original.callTool("setup_household", sampleHousehold);
     await original.callTool("create_recipe", recipe);
-    await original.callTool("set_slot", { date: "2026-10-26", meal: "dinner", kind: "recipe", recipeId: 1 });
-    await original.callTool("set_diners", { date: "2026-10-26", meal: "dinner", diners: [1, 3] });
-    await original.callTool("set_guests", {
-      date: "2026-10-26",
-      meal: "dinner",
-      guests: 1,
-      guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
-    });
+    const planned = [
+      await original.callTool("set_slot", {
+        date: "2026-10-26",
+        meal: "dinner",
+        kind: "recipe",
+        recipeId: 1,
+        overrides: [
+          { who: 2, allergen: "milk", reason: "Oil instead of ghee for Alex" },
+          { who: 3, allergen: "peanut", reason: "The masala is ours, no peanut" },
+        ],
+      }),
+      await original.callTool("set_diners", { date: "2026-10-26", meal: "dinner", diners: [1, 3] }),
+      await original.callTool("set_guests", {
+        date: "2026-10-26",
+        meal: "dinner",
+        guests: 1,
+        guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
+        overrides: [{ who: "guests", allergen: "sesame", reason: "The masala is ours, no sesame" }],
+      }),
+    ];
+    expect(planned.every((result) => result.ok)).toBe(true);
     const exported = await exportOf(original);
 
     const fresh = freshHousehold();
@@ -150,7 +163,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 6,
+      schemaVersion: 7,
       tables: {
         household: [
           {
@@ -186,6 +199,7 @@ describe("export and restore", () => {
         slot: [],
         slot_diner: [],
         slot_guest_constraint: [],
+        slot_override: [],
         week: [],
       },
       sequences: { member: 3 },
