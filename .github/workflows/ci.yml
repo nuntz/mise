@@ -21,6 +21,7 @@ jobs:
       - run: bun test packages
       - run: bun run --filter @mise/web build
       - run: bun run test:worker
+      - run: bun run test:web
 
   # Deployment values live in Pulumi ESC (ADR 0005); `bun run wizard` sets up the secrets and
   # variables this job reads; until then (and on forks) it is skipped. Logs are public, so every

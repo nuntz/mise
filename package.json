@@ -12,6 +12,7 @@
     "seed": "bun run --filter @mise/worker seed",
     "test": "bun test packages",
     "test:worker": "bun run --filter @mise/worker test",
+    "test:web": "bun run --filter @mise/web test",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p scripts",
     "lint": "biome check .",
     "check:private": "bun scripts/check-private.ts",

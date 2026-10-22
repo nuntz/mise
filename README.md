@@ -20,6 +20,7 @@ bun run lint
 bun run typecheck
 bun test packages    # domain tests
 bun run test:worker  # tool-seam tests in workerd
+bun run test:web     # component tests in jsdom
 bun run check:private  # no personal emails committed
 ```
 

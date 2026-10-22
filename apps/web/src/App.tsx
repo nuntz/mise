@@ -1,21 +1,24 @@
 import type { Household } from "@mise/domain";
-import { createSignal, Match, onCleanup, Switch } from "solid-js";
+import { createSignal, Match, onCleanup, Show, Switch } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
 import { SetupForm } from "./SetupForm";
 
-type Loaded = { status: "loading" } | { status: "error" } | { status: "ready"; household: Household | null };
-
 export function App(props: { client: MiseClient }) {
-  const [state, setState] = createSignal<Loaded>({ status: "loading" });
+  const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
+  // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
+  // refresh updates the settings without remounting them and throwing away a form someone is filling in.
+  const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: null });
 
   const refetch = async () => {
     try {
       const result = await props.client.call("get_household", {});
-      setState(result.ok ? { status: "ready", household: result.value } : { status: "error" });
+      if (result.ok) setLoaded("household", reconcile(result.value));
+      setStatus(result.ok ? "ready" : "error");
     } catch {
-      setState({ status: "error" });
+      setStatus("error");
     }
   };
   onCleanup(props.client.subscribe("household", refetch));
@@ -24,30 +27,30 @@ export function App(props: { client: MiseClient }) {
     <main>
       <h1>{t("app.name")}</h1>
       <Switch>
-        <Match when={state().status === "loading"}>
+        <Match when={status() === "loading"}>
           <p>{t("app.loading")}</p>
         </Match>
-        <Match when={state().status === "error"}>
-          <p role="alert">{t("app.error")}</p>
-        </Match>
-        <Match when={readyHousehold(state())} keyed>
+        <Match when={loaded.household}>
           {(household) => (
             <>
-              <HouseholdSummary household={household} />
-              <MembersSettings client={props.client} members={household.members} />
+              {/* A failed refresh keeps the last Household on screen, and any forms with it. */}
+              <Show when={status() === "error"}>
+                <p role="alert">{t("app.error")}</p>
+              </Show>
+              <HouseholdSummary household={household()} />
+              <MembersSettings client={props.client} members={household().members} />
             </>
           )}
         </Match>
-        <Match when={state().status === "ready"}>
+        <Match when={status() === "error"}>
+          <p role="alert">{t("app.error")}</p>
+        </Match>
+        <Match when={status() === "ready"}>
           <SetupForm client={props.client} />
         </Match>
       </Switch>
     </main>
   );
-}
-
-function readyHousehold(state: Loaded): Household | undefined {
-  return state.status === "ready" ? (state.household ?? undefined) : undefined;
 }
 
 function HouseholdSummary(props: { household: Household }) {
