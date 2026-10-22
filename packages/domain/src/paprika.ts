@@ -115,7 +115,7 @@ function mapPaprikaRecipe(json: unknown, fallbackRevision: string): Mapped {
     const issue = recipe.error.issues[0];
     return { ok: false, error: `${title}: ${issue?.path.join(".")} ${issue?.message}` };
   }
-  const photo = photoOf(paprika.photo_data);
+  const photo = photoOf(largePhotoData(paprika) ?? paprika.photo_data);
   return {
     ok: true,
     recipe: recipe.data,
@@ -269,6 +269,17 @@ function firstSynonym(categories: string[], table: Map<string, string>): string 
     if (value) return value;
   }
   return null;
+}
+
+/**
+ * The full-size photo's data. `photo_data` is only a thumbnail (280 px in a real export); the
+ * full photo is the entry of `photos` whose filename `photo_large` names.
+ */
+function largePhotoData(paprika: z.infer<typeof PaprikaRecipe>): unknown {
+  const filename = text(paprika.photo_large);
+  if (!filename || !Array.isArray(paprika.photos)) return undefined;
+  const large = paprika.photos.find((photo) => typeof photo === "object" && photo?.filename === filename);
+  return large?.data;
 }
 
 function photoOf(data: unknown): { photo: ImportedPhoto | null } | { error: string } {

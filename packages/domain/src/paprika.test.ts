@@ -170,6 +170,26 @@ describe("what an export can't give", () => {
     ]);
   });
 
+  test("the full-size photo is taken over the thumbnail when the export has both", async () => {
+    // As Paprika writes them: `photo_data` is a thumbnail; `photo_large` names the full photo in `photos`.
+    const full = new Uint8Array([...SAMPLE_JPEG, 9, 9, 9]);
+    const [entry] = await entriesOf(
+      await paprikaExport([
+        {
+          ...toast,
+          photo_data: btoa(String.fromCharCode(...SAMPLE_JPEG)),
+          photo_large: "FULL.jpg",
+          photos: [
+            { name: "2", filename: "OTHER.jpg", data: btoa("not this one") },
+            { name: "1", filename: "FULL.jpg", data: btoa(String.fromCharCode(...full)) },
+          ],
+        },
+      ]),
+    );
+
+    expect(entry).toMatchObject({ ok: true, photo: { bytes: full, type: "image/jpeg" }, photoError: null });
+  });
+
   test("a photo that is not an image is reported, and the Recipe kept without it", async () => {
     const [entry] = await entriesOf(await paprikaExport([{ ...toast, photo_data: btoa("<svg/>") }]));
 
