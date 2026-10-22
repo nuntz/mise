@@ -48,7 +48,7 @@ Cloud-hosted TypeScript on DO SQLite, chosen for its fit with Pi Durable and the
 ## 3. Domain model
 
 ```
-Household   { id, domain, members[], defaultDiners: memberId[] (default: all members), weekStartsOn, planHorizonWeeks: 1|2, units: metric|imperial, locale }
+Household   { id, domain, members[], weekStartsOn, planHorizonWeeks: 1|2, units: metric|imperial, locale }
 Member      { id, name, email, constraints[] }
 Constraint  { kind: allergy|intolerance|diet|dislike, allergen?: Allergen, term?: string }
               // allergy/intolerance/diet are hard and must name an allergen (ADR 0008): recipes containing it are excluded, never scored down
@@ -73,7 +73,7 @@ Rating      { slotId, memberId?, value: again|meh|never, note?, at }
 ```
 
 Notes
-- **Diners by person, not number.** Enables per-member constraints, "Alex's away Tuesday" (day-level clear), and future calendar input from a coordinator. `guests` remains the numeric fallback.
+- **Diners by person, not number.** Enables per-member constraints, "Alex's away Tuesday" (day-level clear), and future calendar input from a coordinator. `guests` remains the numeric fallback. A Slot's Diners are every Member until chosen for that Slot or day; there is no separate default list, so someone who is away is taken off those days.
 - **Locked** slots survive a re-roll. Changing diners never changes the recipe, only the scale.
 - **Leftovers** link to their source slot; `yieldsLeftovers` recipes auto-fill a later `leftovers` slot.
 - **Breakfast/lunch** exist in the model, default `unplanned`, collapsed in the UI. The proposer only fills dinners.
