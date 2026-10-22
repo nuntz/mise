@@ -14,7 +14,8 @@ const Count = z.number().int().nonnegative();
 
 /**
  * The log of one import. Running the same file again creates and updates nothing: every Recipe in
- * it is skipped (or, if it was already flagged, skipped without being flagged again).
+ * it is skipped (or, if it was already flagged, skipped without being flagged again). The exception
+ * is a Recipe deleted in Mise since, which the import creates again, by design.
  */
 export const ImportRun = z.object({
   id: z.number().int().positive(),
