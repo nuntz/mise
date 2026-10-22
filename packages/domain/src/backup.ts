@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Bumped when the shape of the export file changes, independently of the database schema. */
-export const EXPORT_FORMAT_VERSION = 1;
+export const EXPORT_FORMAT_VERSION = 2;
 
 /** The Household-local wall-clock time the nightly export runs at. */
 export const NIGHTLY_EXPORT_TIME = "03:00";
@@ -21,6 +21,8 @@ export const HouseholdExport = z
     schemaVersion: z.number().int().positive(),
     /** Every domain table, by name, with its rows in insertion order. */
     tables: z.record(z.string(), z.array(z.record(z.string(), SqlValue))),
+    /** The last id each AUTOINCREMENT table handed out, so a removed row's id is never reused. */
+    sequences: z.record(z.string(), z.number().int().nonnegative()),
     /** Keys of the R2 objects (recipe photos) the data refers to. The objects stay in R2. */
     photoKeys: z.array(z.string()),
   })

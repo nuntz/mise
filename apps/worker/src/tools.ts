@@ -92,6 +92,15 @@ export const handlers: Handlers = {
   }),
 };
 
+/**
+ * Reads every stored row the tools read through the domain parsers, settings or not, so that data no
+ * tool can read throws here (a `ZodError`). A new domain table needs its reader added.
+ */
+export function parseStoredHousehold(sql: SqlStorage): void {
+  readSettings(sql);
+  readMembers(sql);
+}
+
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {
   if (member.email !== null && emailInUse(sql, member.email)) return emailTaken(member.email);
   const { id } = sql

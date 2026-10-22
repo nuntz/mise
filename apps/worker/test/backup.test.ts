@@ -42,6 +42,21 @@ describe("export and restore", () => {
     });
   });
 
+  test("a removed Member's id is not handed out again after a restore", async () => {
+    const original = freshHousehold();
+    await original.callTool("setup_household", sampleHousehold);
+    const sam = 3;
+    await original.callTool("remove_member", { id: sam });
+    const exported = await exportOf(original);
+    const fresh = freshHousehold();
+    await restore(fresh, exported);
+    expect(await exportOf(fresh)).toBe(exported);
+
+    const added = await fresh.callTool("add_member", { name: "Jordan" });
+
+    expect(added).toMatchObject({ ok: true, value: { id: 4, name: "Jordan" } });
+  });
+
   test("restore refuses a household that already holds data", async () => {
     const source = freshHousehold();
     await source.callTool("setup_household", sampleHousehold);
@@ -64,7 +79,7 @@ describe("export and restore", () => {
 
     expect(exported).toEqual({
       format: "mise.household-export",
-      version: 1,
+      version: 2,
       schemaVersion: 2,
       tables: {
         household: [
@@ -89,6 +104,7 @@ describe("export and restore", () => {
           { member_id: 3, position: 0, kind: "allergy", allergen: "peanut", term: null },
         ],
       },
+      sequences: { member: 3 },
       photoKeys: [],
     });
   });
@@ -107,7 +123,7 @@ describe("export and restore", () => {
   test.each([
     ["not JSON", "{"],
     ["not an export", JSON.stringify({ hello: "world" })],
-    ["a future export format", JSON.stringify({ format: "mise.household-export", version: 2 })],
+    ["a future export format", JSON.stringify({ format: "mise.household-export", version: 3 })],
   ])("restore rejects a body that is %s", async (_, body) => {
     const household = freshHousehold();
 
@@ -144,6 +160,37 @@ describe("export and restore", () => {
 
     expect(response.status).toBe(400);
     expect(await target.callTool("get_household", {})).toEqual({ ok: true, value: null });
+  });
+
+  test("restore rejects rows the Household cannot read, leaving it empty for a corrected export", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    const exported = JSON.parse(await exportOf(source));
+    const valid = JSON.stringify(exported);
+    exported.tables.household[0].timezone = "Mars/Olympus_Mons";
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+    expect(await target.callTool("get_household", {})).toEqual({ ok: true, value: null });
+    expect((await restore(target, valid)).status).toBe(200);
+    expect(await exportOf(target)).toBe(await exportOf(source));
+  });
+
+  test("restore rejects a malformed Constraint even when the export has no Household settings", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.household = [];
+    exported.tables.member_constraint[2].allergen = "unicorn";
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
   });
 
   test("restore rejects an export from another schema version", async () => {

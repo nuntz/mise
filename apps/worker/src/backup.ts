@@ -1,5 +1,7 @@
 import { EXPORT_FORMAT_VERSION, HouseholdExport } from "@mise/domain";
+import { z } from "zod";
 import { schemaVersion } from "./migrations";
+import { parseStoredHousehold } from "./tools";
 
 /**
  * Tables that are not Household data: SQLite's and Cloudflare's internals, the Agents SDK and
@@ -28,6 +30,7 @@ export function exportHousehold(sql: SqlStorage, photoKeys: string[]): Household
     version: EXPORT_FORMAT_VERSION,
     schemaVersion: schemaVersion(sql),
     tables,
+    sequences: sequences(sql, householdTables(sql)),
     photoKeys,
   };
 }
@@ -59,7 +62,14 @@ export function restoreHousehold(storage: DurableObjectStorage, input: unknown):
   }
 
   try {
-    return storage.transactionSync(() => loadRows(sql, tables, data));
+    return storage.transactionSync(() => {
+      const loaded = loadRows(sql, tables, data);
+      if (loaded.ok) {
+        restoreSequences(sql, tables, data.sequences);
+        readBack(sql);
+      }
+      return loaded;
+    });
   } catch (error) {
     // Thrown inside the transaction so that a bad row rolls the whole restore back.
     if (error instanceof InvalidExport) return { ok: false, error: { code: "invalid_export", message: error.message } };
@@ -90,6 +100,35 @@ function loadRows(sql: SqlStorage, tables: string[], data: HouseholdExport): Res
     }
   }
   return { ok: true };
+}
+
+/** Puts back the id counters, which the rows alone would leave at the highest surviving id. */
+function restoreSequences(sql: SqlStorage, tables: string[], exported: HouseholdExport["sequences"]): void {
+  // Inserting the rows has already moved each counter up to its table's highest id.
+  const afterInsert = sequences(sql, tables);
+  for (const [table, seq] of Object.entries(exported)) {
+    if (!tables.includes(table)) throw new InvalidExport(`Id counter for unknown table ${table}`);
+    const current = afterInsert[table];
+    if (current === undefined) sql.exec("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", table, seq);
+    else if (seq < current) throw new InvalidExport(`The id counter for ${table} is behind its rows`);
+    else sql.exec("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", seq, table);
+  }
+}
+
+/** The AUTOINCREMENT counters of the household tables, by table name. */
+function sequences(sql: SqlStorage, tables: string[]): HouseholdExport["sequences"] {
+  const rows = sql.exec<{ name: string; seq: number }>("SELECT name, seq FROM sqlite_sequence ORDER BY name").toArray();
+  return Object.fromEntries(rows.filter(({ name }) => tables.includes(name)).map(({ name, seq }) => [name, seq]));
+}
+
+/** Reads the restored household through the domain parsers, so a household no tool can read is never committed. */
+function readBack(sql: SqlStorage): void {
+  try {
+    parseStoredHousehold(sql);
+  } catch (error) {
+    if (error instanceof z.ZodError) throw new InvalidExport("The export holds data that is not valid Household data");
+    throw error;
+  }
 }
 
 class InvalidExport extends Error {}
