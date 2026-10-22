@@ -1,4 +1,4 @@
-import type { Household, Recipe, RecipeSummary } from "@mise/domain";
+import { type Household, ITEMS, type Recipe, type RecipeSummary } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
@@ -79,6 +79,8 @@ function fakeClient(recipes: Recipe[]) {
           const recipe = recipes.find((r) => r.id === input.id);
           return recipe ? { ok: true, value: recipe } : { ok: false, error: { code: "not_found", message: "" } };
         }
+        case "list_items":
+          return { ok: true, value: ITEMS };
         case "create_recipe":
           return { ok: true, value: { ...rice, id: 3, title: String(input.title) } };
         case "update_recipe":

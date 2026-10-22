@@ -11,6 +11,7 @@ import {
   type ToolOutput,
   type ToolResult,
 } from "@mise/domain";
+import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
 
 type HouseholdRow = {
@@ -88,6 +89,7 @@ export const handlers: Handlers = {
   },
 
   ...recipeHandlers,
+  ...itemHandlers,
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
@@ -102,6 +104,7 @@ export const handlers: Handlers = {
 export function parseStoredHousehold(sql: SqlStorage): void {
   readSettings(sql);
   readMembers(sql);
+  readCatalogue(sql);
   readRecipes(sql);
 }
 

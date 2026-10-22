@@ -32,7 +32,17 @@ const recipeFields: Record<string, MessageKey> = {
   prepAhead: "recipeForm.prepAhead",
 };
 
-type Form = "household" | "member" | "recipe";
+const itemFields: Record<string, MessageKey> = {
+  name: "item.name",
+  section: "item.section",
+  unitFamily: "item.unitFamily",
+  allergens: "item.allergens",
+  text: "item.name",
+  aliases: "item.name",
+  item: "resolve.item",
+};
+
+type Form = "household" | "member" | "recipe" | "item";
 
 /** What to show when a tool refuses; `form` says which fields a bare name like `name` means. */
 export function errorText(error: ToolError, form: Form): string {
@@ -45,8 +55,10 @@ export function errorText(error: ToolError, form: Form): string {
       return t("setup.alreadySetUp");
     case "email_in_use":
       return t("member.emailInUse");
+    case "name_in_use":
+      return t("item.nameInUse");
     case "not_found":
-      return t(form === "recipe" ? "recipe.notFound" : "member.notFound");
+      return t(form === "recipe" ? "recipe.notFound" : form === "item" ? "item.notFound" : "member.notFound");
     default:
       return t("app.error");
   }
@@ -57,9 +69,11 @@ function fieldLabel(path: string, form: Form): string {
   const labels =
     form === "recipe"
       ? recipeFields
-      : form === "household" && !path.startsWith("members.")
-        ? householdFields
-        : memberFields;
+      : form === "item"
+        ? itemFields
+        : form === "household" && !path.startsWith("members.")
+          ? householdFields
+          : memberFields;
   const field =
     path
       .split(".")

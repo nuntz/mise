@@ -89,6 +89,31 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE INDEX recipe_tag_tag ON recipe_tag (tag)",
     ],
   },
+  {
+    version: 4,
+    statements: [
+      // The Household's own Items, keyed 'household:<id>' (ADR 0009). AUTOINCREMENT because
+      // Ingredients store the key, so a key is never handed out twice.
+      `CREATE TABLE item (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        section TEXT NOT NULL,
+        unit_family TEXT NOT NULL
+      )`,
+      `CREATE TABLE item_allergen (
+        item_id INTEGER NOT NULL REFERENCES item (id),
+        position INTEGER NOT NULL,
+        allergen TEXT NOT NULL,
+        PRIMARY KEY (item_id, position)
+      )`,
+      // Names the Household gave an Item, shipped or its own; item_id is the Item's key.
+      `CREATE TABLE item_alias (
+        id INTEGER PRIMARY KEY,
+        item_id TEXT NOT NULL,
+        alias TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

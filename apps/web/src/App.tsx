@@ -1,15 +1,20 @@
 import type { Household } from "@mise/domain";
-import { createSignal, Match, onCleanup, Show, Switch } from "solid-js";
+import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
 import { RecipesPage } from "./Recipes";
+import { ResolveIngredients } from "./ResolveIngredients";
 import { SetupForm } from "./SetupForm";
+import { TagRecipes } from "./TagRecipes";
+
+type Page = "recipes" | "resolve" | "tag" | "members";
+const PAGES: Page[] = ["recipes", "resolve", "tag", "members"];
 
 export function App(props: { client: MiseClient }) {
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
-  const [page, setPage] = createSignal<"recipes" | "members">("recipes");
+  const [page, setPage] = createSignal<Page>("recipes");
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
   // refresh updates the settings without remounting them and throwing away a form someone is filling in.
   const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: null });
@@ -41,16 +46,28 @@ export function App(props: { client: MiseClient }) {
               </Show>
               <HouseholdSummary household={household()} />
               <nav>
-                <button type="button" aria-pressed={page() === "recipes"} onClick={() => setPage("recipes")}>
-                  {t("nav.recipes")}
-                </button>
-                <button type="button" aria-pressed={page() === "members"} onClick={() => setPage("members")}>
-                  {t("nav.members")}
-                </button>
+                <For each={PAGES}>
+                  {(name) => (
+                    <button type="button" aria-pressed={page() === name} onClick={() => setPage(name)}>
+                      {t(`nav.${name}`)}
+                    </button>
+                  )}
+                </For>
               </nav>
-              <Show when={page() === "members"} fallback={<RecipesPage client={props.client} />}>
-                <MembersSettings client={props.client} members={household().members} />
-              </Show>
+              <Switch>
+                <Match when={page() === "recipes"}>
+                  <RecipesPage client={props.client} />
+                </Match>
+                <Match when={page() === "resolve"}>
+                  <ResolveIngredients client={props.client} />
+                </Match>
+                <Match when={page() === "tag"}>
+                  <TagRecipes client={props.client} />
+                </Match>
+                <Match when={page() === "members"}>
+                  <MembersSettings client={props.client} members={household().members} />
+                </Match>
+              </Switch>
             </>
           )}
         </Match>

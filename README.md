@@ -4,7 +4,7 @@ A self-hosted family meal planner. See `SPEC.md` for the product and architectur
 
 ## Allergens
 
-Mise checks Recipes against the Household's allergies by looking up each Ingredient in a built-in Item catalogue (`packages/domain/src/catalogue.ts`). An AI drafted that catalogue, and a maintainer reviews it, but **it is not guaranteed to be complete or correct**: brands and recipes vary by country and change over time, and many Items are tagged from what is typical rather than from a specific product's label. Ingredients Mise can't match are treated as conflicting with every allergy, but a matched Item can still be wrong. Use Mise as a planning aid, not as a substitute for reading labels or for medical advice.
+Mise checks Recipes against the Household's allergies by looking up each Ingredient in a built-in Item catalogue (`packages/domain/src/catalogue.ts`). An AI drafted that catalogue, and a maintainer reviews it, but **it is not guaranteed to be complete or correct**: brands and recipes vary by country and change over time, and many Items are tagged from what is typical rather than from a specific product's label. Ingredients Mise can't match are treated as conflicting with every allergy, but a matched Item can still be wrong. The same goes for Items your Household adds on the Resolve Ingredients screen: Mise trusts the Allergens chosen there for every Recipe that uses them. Use Mise as a planning aid, not as a substitute for reading labels or for medical advice.
 
 ## Development
 

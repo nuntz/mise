@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Weekday } from "./household";
 import { Ingredient } from "./ingredients";
-import { itemById } from "./items";
+import { type ItemCatalogue, SHIPPED_ITEMS } from "./items";
 import { ALLERGENS, Allergen } from "./members";
 
 export const RecipeId = z.number().int().positive();
@@ -21,12 +21,16 @@ export const RecipeAllergens = z.discriminatedUnion("kind", [
 ]);
 export type RecipeAllergens = z.infer<typeof RecipeAllergens>;
 
-export function recipeAllergens(ingredients: Ingredient[]): RecipeAllergens {
+export function recipeAllergens(ingredients: Ingredient[], catalogue: ItemCatalogue = SHIPPED_ITEMS): RecipeAllergens {
   const found = new Set<Allergen>();
   let unresolved = 0;
   for (const ingredient of ingredients) {
     if (ingredient.item === null) unresolved++;
-    else for (const allergen of itemById(ingredient.item).allergens) found.add(allergen);
+    else {
+      const item = catalogue.item(ingredient.item);
+      if (!item) throw new Error(`No Item ${ingredient.item}`);
+      for (const allergen of item.allergens) found.add(allergen);
+    }
   }
   const allergens = ALLERGENS.filter((allergen) => found.has(allergen));
   return unresolved > 0 ? { kind: "unknown", atLeast: allergens, unresolved } : { kind: "known", allergens };
@@ -145,3 +149,18 @@ export const SearchRecipesInput = z
     tag: z.string().trim().toLowerCase().min(1).max(50).optional(),
   })
   .strict();
+
+/**
+ * Unresolved Ingredients that read the same once normalised (case, plurals, punctuation), so that
+ * one decision resolves them all. `text` is that normalised text.
+ */
+export const UnresolvedGroup = z.object({
+  text: z.string(),
+  /** How many lines read this way, across every Recipe. */
+  count: z.number().int().positive(),
+  /** The lines as written. */
+  lines: z.array(z.string()),
+  /** The Recipes they come from, each once. */
+  recipes: z.array(Recipe.pick({ id: true, title: true })),
+});
+export type UnresolvedGroup = z.infer<typeof UnresolvedGroup>;

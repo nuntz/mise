@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { CATALOGUE, type CatalogueEntry } from "./catalogue";
-import type { Allergen } from "./members";
-import type { UnitFamily } from "./units";
+import { ALLERGENS, Allergen } from "./members";
+import { UnitFamily } from "./units";
 
 /** Areas of the store. The Household will order them in walking order. */
 export const STORE_SECTIONS = [
@@ -21,31 +21,39 @@ export const STORE_SECTIONS = [
 export const StoreSection = z.enum(STORE_SECTIONS);
 export type StoreSection = z.infer<typeof StoreSection>;
 
+/** The key of an Item in the shipped catalogue (ADR 0009). */
+export type ShippedItemId = keyof typeof CATALOGUE;
+export const ITEM_IDS = Object.keys(CATALOGUE) as [ShippedItemId, ...ShippedItemId[]];
+export const ShippedItemId = z.enum(ITEM_IDS);
+
+/** The key of an Item the Household added, from its row id; never reused. */
+export type HouseholdItemId = `household:${number}`;
+export const HouseholdItemId = z.custom<HouseholdItemId>(
+  (value) => typeof value === "string" && /^household:[1-9]\d*$/.test(value),
+  "Not a Household Item",
+);
+
+export const ItemId = z.union([ShippedItemId, HouseholdItemId]);
+export type ItemId = z.infer<typeof ItemId>;
+
 /** A canonical grocery thing that Ingredients and Staples refer to (ADR 0001). */
-export type Item = {
-  id: string;
-  name: string;
+export const Item = z.object({
+  id: ItemId,
+  name: z.string(),
   /** Other names for it; plurals and common adjectives are handled by matching, not listed here. */
-  aliases: readonly string[];
-  section: StoreSection;
-  allergens: readonly Allergen[];
+  aliases: z.array(z.string()),
+  section: StoreSection,
+  allergens: z.array(Allergen),
   /** What it is usually measured in. */
-  unitFamily: UnitFamily;
-};
+  unitFamily: UnitFamily,
+});
+export type Item = z.infer<typeof Item>;
 
-export type ItemId = keyof typeof CATALOGUE;
-export const ITEM_IDS = Object.keys(CATALOGUE) as [ItemId, ...ItemId[]];
-export const ItemId = z.enum(ITEM_IDS);
-
-/** Every Item, in catalogue order. */
+/** Every shipped Item, in catalogue order. */
 export const ITEMS: readonly Item[] = ITEM_IDS.map((id) => {
   const entry: CatalogueEntry = CATALOGUE[id];
-  return { aliases: [], allergens: [], ...entry, id };
+  return { ...entry, id, aliases: [...(entry.aliases ?? [])], allergens: [...(entry.allergens ?? [])] };
 });
-
-export function itemById(id: ItemId): Item {
-  return ITEMS.find((item) => item.id === id) as Item;
-}
 
 /**
  * Descriptive words that say which form of a thing it is. A form can carry Allergens the plain thing
@@ -104,7 +112,7 @@ const DESCRIPTIVE_WORDS = new Set([
 ]);
 
 /** A name reduced to what matching compares: lower case, single spaces, every word singular. */
-function normalise(name: string): string {
+export function normaliseItemName(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFC")
@@ -128,16 +136,107 @@ function singular(word: string): string {
   return word;
 }
 
-const itemsByName = new Map<string, ItemId>();
-for (const item of ITEMS) {
-  for (const name of [item.name, ...item.aliases]) itemsByName.set(normalise(name), item.id as ItemId);
+/** A name the Household gave an Item, shipped or its own. */
+export type ItemAlias = { item: ItemId; alias: string };
+
+/**
+ * The Items a Household's Ingredients can resolve to: the shipped catalogue, plus the Household's own
+ * Items and the aliases it added. Where a name of the Household's and a shipped one read the same, the
+ * Household's wins (ADR 0009).
+ */
+export class ItemCatalogue {
+  readonly #items = new Map<ItemId, Item>();
+  readonly #byName = new Map<string, ItemId>();
+
+  constructor(householdItems: readonly Item[] = [], aliases: readonly ItemAlias[] = []) {
+    for (const item of [...ITEMS, ...householdItems]) this.#items.set(item.id, item);
+    for (const { item, alias } of aliases) {
+      const found = this.#items.get(item);
+      if (!found) throw new Error(`No Item ${item} to alias as "${alias}"`);
+      this.#items.set(item, { ...found, aliases: [...found.aliases, alias] });
+    }
+    for (const item of [...ITEMS, ...householdItems]) {
+      for (const name of [item.name, ...item.aliases]) this.#name(name, item.id);
+    }
+    for (const { item, alias } of aliases) this.#name(alias, item);
+  }
+
+  #name(name: string, id: ItemId): void {
+    this.#byName.set(normaliseItemName(name), id);
+  }
+
+  /** Every Item: shipped ones in catalogue order, then the Household's. */
+  get items(): Item[] {
+    return [...this.#items.values()];
+  }
+
+  item(id: ItemId): Item | undefined {
+    return this.#items.get(id);
+  }
+
+  /** The key of an Item this catalogue has, for reading stored keys; others fail to parse. */
+  get knownItemId(): z.ZodType<ItemId> {
+    return ItemId.refine((id) => this.#items.has(id), "No such Item");
+  }
+
+  /** The Item whose name or alias `text` is, ignoring only case, plurals and punctuation; null if none. */
+  named(text: string): ItemId | null {
+    return this.#byName.get(normaliseItemName(text)) ?? null;
+  }
+
+  /** The Item an Ingredient's name refers to, ignoring case, plurals and descriptive words; null if none. */
+  match(name: string): ItemId | null {
+    const normalised = normaliseItemName(name);
+    const words = normalised.split(" ");
+    const keepingForms = words.filter((word) => !DESCRIPTIVE_WORDS.has(word) || FORM_WORDS.has(word)).join(" ");
+    const plain = words.filter((word) => !DESCRIPTIVE_WORDS.has(word)).join(" ");
+    return this.#byName.get(normalised) ?? this.#byName.get(keepingForms) ?? this.#byName.get(plain) ?? null;
+  }
 }
 
-/** The Item an Ingredient's name refers to, ignoring case, plurals and descriptive words; null if none. */
+/** The shipped Items alone, for a Household that has added none. */
+export const SHIPPED_ITEMS = new ItemCatalogue();
+
+/** The shipped Item an Ingredient's name refers to; null if none. */
 export function matchItem(name: string): ItemId | null {
-  const normalised = normalise(name);
-  const words = normalised.split(" ");
-  const keepingForms = words.filter((word) => !DESCRIPTIVE_WORDS.has(word) || FORM_WORDS.has(word)).join(" ");
-  const plain = words.filter((word) => !DESCRIPTIVE_WORDS.has(word)).join(" ");
-  return itemsByName.get(normalised) ?? itemsByName.get(keepingForms) ?? itemsByName.get(plain) ?? null;
+  return SHIPPED_ITEMS.match(name);
 }
+
+/** A name for an Item: it must keep a letter or digit once normalised, or it would match nothing. */
+const ItemName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .refine((name) => /[\p{L}\p{N}]/u.test(name), "Needs a letter or digit");
+
+/**
+ * Adds `text` as an alias of `item`, then resolves every Unresolved Ingredient it now matches, in
+ * every Recipe. Lines written later match it too.
+ */
+export const ResolveIngredientInput = z.object({ text: ItemName, item: ItemId }).strict();
+
+export const ResolveIngredientOutput = z.object({
+  item: Item,
+  /** How many Ingredients it resolved. */
+  resolved: z.number().int().nonnegative(),
+});
+
+/**
+ * A new Item of the Household's, with the Allergens and Store Section someone chose for it. Every
+ * Unresolved Ingredient its name or an alias matches resolves to it.
+ */
+export const NewItem = z
+  .object({
+    name: ItemName,
+    section: StoreSection,
+    /**
+     * Each once, in canonical order. Required even when empty: a Recipe trusts them, so "none" must be
+     * said, never assumed.
+     */
+    allergens: z.array(Allergen).transform((chosen) => ALLERGENS.filter((allergen) => chosen.includes(allergen))),
+    unitFamily: UnitFamily,
+    aliases: z.array(ItemName).max(50).default([]),
+  })
+  .strict();
+export type NewItem = z.output<typeof NewItem>;

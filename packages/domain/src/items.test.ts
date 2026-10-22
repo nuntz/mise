@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ITEM_IDS, ITEMS, matchItem } from "./items";
+import { ITEM_IDS, ITEMS, type Item, ItemCatalogue, matchItem } from "./items";
 
 /** Every key the catalogue had shipped before the starter catalogue. Stored Ingredients refer to them. */
 const SHIPPED_KEYS = [
@@ -165,5 +165,59 @@ describe("the Item catalogue", () => {
         .filter(({ expected, matched }) => matched !== expected),
     );
     expect(mismatched).toEqual([]);
+  });
+});
+
+describe("a Household's Item catalogue", () => {
+  const gochujang: Item = {
+    id: "household:1",
+    name: "gochujang",
+    aliases: ["korean chili paste"],
+    section: "international",
+    allergens: ["soy", "wheat"],
+    unitFamily: "volume",
+  };
+  const catalogue = new ItemCatalogue(
+    [gochujang],
+    [
+      { item: "butter", alias: "beurre" },
+      { item: "household:1", alias: "red pepper paste" },
+    ],
+  );
+
+  test("matches the Household's Items by name and alias, ignoring case, plurals and descriptive words", () => {
+    expect(catalogue.match("Gochujang")).toBe("household:1");
+    expect(catalogue.match("korean chili pastes")).toBe("household:1");
+    expect(catalogue.match("red pepper paste")).toBe("household:1");
+  });
+
+  test("matches an alias the Household gave a shipped Item", () => {
+    expect(catalogue.match("softened beurre")).toBe("butter");
+    expect(catalogue.match("garlic")).toBe("garlic");
+  });
+
+  test("lists a shipped Item with the Household's aliases added", () => {
+    expect(catalogue.item("butter")?.aliases).toContain("beurre");
+    expect(catalogue.item("household:1")).toEqual({
+      ...gochujang,
+      aliases: ["korean chili paste", "red pepper paste"],
+    });
+    expect(catalogue.items).toHaveLength(ITEMS.length + 1);
+  });
+
+  test("an alias of the Household's wins over the shipped Item of that name", () => {
+    const overriding = new ItemCatalogue([gochujang], [{ item: "household:1", alias: "sriracha" }]);
+
+    expect(overriding.match("sriracha")).toBe("household:1");
+  });
+
+  test("names the Item a text already is, without dropping descriptive words", () => {
+    expect(catalogue.named("Beurre")).toBe("butter");
+    expect(catalogue.named("melted beurre")).toBeNull();
+  });
+
+  test("the shipped catalogue alone knows nothing of a Household", () => {
+    expect(matchItem("gochujang")).toBeNull();
+    expect(new ItemCatalogue().item("household:1")).toBeUndefined();
   });
 });

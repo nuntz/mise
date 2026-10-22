@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ItemId, matchItem } from "./items";
+import { type ItemCatalogue, ItemId, SHIPPED_ITEMS } from "./items";
 import { IngredientUnit, readUnit, trailingCountUnit } from "./units";
 
 /** How much of something: a single number has `min` equal to `max`; "2–3" is a range. */
@@ -24,8 +24,11 @@ export type Ingredient = z.infer<typeof Ingredient>;
 /** Phrases at the end of a line that say how or whether to use it, not what it is. */
 const TRAILING_NOTE = /\s+(to taste|for (?:garnish|serving|topping|drizzling|greasing)|optional|divided)$/i;
 
-/** Reads an Ingredient line such as "2 cloves garlic, minced". Deterministic; never fails. */
-export function parseIngredient(raw: string): Ingredient {
+/**
+ * Reads an Ingredient line such as "2 cloves garlic, minced", matching it against `catalogue`.
+ * Deterministic; never fails.
+ */
+export function parseIngredient(raw: string, catalogue: ItemCatalogue = SHIPPED_ITEMS): Ingredient {
   const notes: string[] = [];
   // "(14 oz)", "(optional)": wherever they are, in the order written.
   let text = raw
@@ -67,7 +70,7 @@ export function parseIngredient(raw: string): Ingredient {
     unit,
     name,
     note: notes.length > 0 ? notes.join("; ") : null,
-    item: matchItem(name),
+    item: catalogue.match(name),
   };
 }
 

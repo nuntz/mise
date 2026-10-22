@@ -53,6 +53,30 @@ describe("export and restore", () => {
     expect(await fresh.callTool("get_recipe", { id: 1 })).toEqual(await original.callTool("get_recipe", { id: 1 }));
   });
 
+  test("the Household's own Items and aliases survive a restore, and its Recipes still resolve to them", async () => {
+    const original = freshHousehold();
+    await original.callTool("setup_household", sampleHousehold);
+    await original.callTool("create_recipe", recipe);
+    await original.callTool("create_item", {
+      name: "mystery masala",
+      section: "spices",
+      allergens: ["mustard"],
+      unitFamily: "volume",
+    });
+    await original.callTool("resolve_ingredient", { text: "ghee butter", item: "ghee" });
+    const exported = await exportOf(original);
+
+    const fresh = freshHousehold();
+    expect((await restore(fresh, exported)).status).toBe(200);
+
+    expect(await exportOf(fresh)).toBe(exported);
+    expect(await fresh.callTool("get_recipe", { id: 1 })).toMatchObject({
+      ok: true,
+      value: { ingredients: [{}, {}, { item: "household:1" }], allergens: { kind: "known" } },
+    });
+    expect(await fresh.callTool("list_items", {})).toEqual(await original.callTool("list_items", {}));
+  });
+
   test("a removed Member's id is not handed out again after a restore", async () => {
     const original = freshHousehold();
     await original.callTool("setup_household", sampleHousehold);
@@ -91,7 +115,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 3,
+      schemaVersion: 4,
       tables: {
         household: [
           {
@@ -114,6 +138,9 @@ describe("export and restore", () => {
           { member_id: 2, position: 0, kind: "intolerance", allergen: "milk", term: "lactose" },
           { member_id: 3, position: 0, kind: "allergy", allergen: "peanut", term: null },
         ],
+        item: [],
+        item_alias: [],
+        item_allergen: [],
         recipe: [],
         recipe_ingredient: [],
         recipe_step: [],
@@ -221,6 +248,20 @@ describe("export and restore", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "invalid_export" });
     expect(await target.callTool("search_recipes", {})).toEqual({ ok: true, value: [] });
+  });
+
+  test("restore rejects an alias of an Item the catalogue does not have", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    await source.callTool("resolve_ingredient", { text: "beurre", item: "butter" });
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.item_alias[0].item_id = "household:9";
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
   });
 
   test("restore rejects an export from another schema version", async () => {

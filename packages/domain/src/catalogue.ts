@@ -1,7 +1,12 @@
-import type { Item } from "./items";
+import type { StoreSection } from "./items";
 import type { Allergen } from "./members";
+import type { UnitFamily } from "./units";
 
-export type CatalogueEntry = Omit<Item, "id" | "aliases" | "allergens"> & {
+/** An Item as the catalogue lists it, keyed by its id. */
+export type CatalogueEntry = {
+  name: string;
+  section: StoreSection;
+  unitFamily: UnitFamily;
   aliases?: readonly string[];
   allergens?: readonly Allergen[];
 };

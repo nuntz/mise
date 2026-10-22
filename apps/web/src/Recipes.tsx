@@ -1,16 +1,18 @@
-import {
-  type Allergen,
-  type Ingredient,
-  itemById,
-  type Recipe,
-  type RecipeAllergens,
-  type RecipeId,
-  type RecipeSummary,
-  type Recurrence,
+import type {
+  Allergen,
+  Ingredient,
+  Item,
+  ItemId,
+  Recipe,
+  RecipeAllergens,
+  RecipeId,
+  RecipeSummary,
+  Recurrence,
 } from "@mise/domain";
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { createItems } from "./items";
 import { t } from "./messages";
 import { RecipeForm } from "./RecipeForm";
 
@@ -135,6 +137,7 @@ function RecipeDetail(props: {
   const [recipe, setRecipe] = createSignal<Recipe>();
   const [error, setError] = createSignal<string>();
   const [busy, setBusy] = createSignal(false);
+  const items = createItems(props.client);
 
   const refetch = async () => {
     try {
@@ -219,7 +222,7 @@ function RecipeDetail(props: {
               <For each={current().ingredients}>
                 {(ingredient) => (
                   <li>
-                    {ingredient.raw} — {resolutionText(ingredient)}
+                    {ingredient.raw} — {resolutionText(ingredient, items())}
                   </li>
                 )}
               </For>
@@ -265,9 +268,10 @@ function RecipeDetail(props: {
   );
 }
 
-/** The Item a line resolved to, or that it is Unresolved. */
-function resolutionText(ingredient: Ingredient): string {
-  return ingredient.item ? itemById(ingredient.item).name : t("recipe.unresolved");
+/** The Item a line resolved to (its key until the Items load), or that it is Unresolved. */
+function resolutionText(ingredient: Ingredient, items: Map<ItemId, Item>): string {
+  if (ingredient.item === null) return t("recipe.unresolved");
+  return items.get(ingredient.item)?.name ?? ingredient.item;
 }
 
 function allergensText(allergens: RecipeAllergens): string {

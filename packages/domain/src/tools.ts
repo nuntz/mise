@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Caller, ResolvedCaller } from "./caller";
 import { Household, SetupHouseholdInput } from "./household";
+import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 import {
   DeleteRecipeInput,
@@ -9,10 +10,14 @@ import {
   Recipe,
   RecipeSummary,
   SearchRecipesInput,
+  UnresolvedGroup,
   UpdateRecipeInput,
 } from "./recipes";
 
-/** Topics a change notice can name; clients refetch the matching tools. */
+/**
+ * Topics a change notice can name; clients refetch the matching tools. Items are announced as
+ * "recipes": a change to one changes the Recipes that resolve to it.
+ */
 export const ChangeTopic = z.enum(["household", "recipes"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
@@ -85,6 +90,33 @@ export const tools = {
     input: SearchRecipesInput,
     output: z.array(RecipeSummary),
   }),
+  /** Recipes missing a cuisine or a main protein, in title order; `update_recipe` sets them. */
+  list_untagged_recipes: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(RecipeSummary),
+  }),
+  /** Unresolved Ingredients grouped by their normalised text, most frequent first. */
+  list_unresolved_ingredients: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(UnresolvedGroup),
+  }),
+  /** Refuses a text that already names another Item. */
+  resolve_ingredient: defineTool({
+    input: ResolveIngredientInput,
+    output: ResolveIngredientOutput,
+    changes: "recipes",
+  }),
+  /** Refuses a name or alias that already names an Item. */
+  create_item: defineTool({
+    input: NewItem,
+    output: Item,
+    changes: "recipes",
+  }),
+  /** Every Item: the shipped ones in catalogue order, then the Household's in the order added. */
+  list_items: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(Item),
+  }),
   get_caller: defineTool({
     input: z.object({}).strict(),
     output: ResolvedCaller.nullable(),
@@ -111,7 +143,8 @@ export type ToolErrorCode =
   | "already_set_up"
   | "not_set_up"
   | "not_found"
-  | "email_in_use";
+  | "email_in_use"
+  | "name_in_use";
 
 export type ToolError = {
   code: ToolErrorCode;

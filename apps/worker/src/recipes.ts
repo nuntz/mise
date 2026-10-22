@@ -1,14 +1,15 @@
 import {
   Ingredient,
-  matchItem,
   type NewRecipe,
   parseIngredient,
   Recipe,
   type RecipeId,
+  type RecipeSummary,
   type Recurrence,
   recipeAllergens,
   type ToolResult,
 } from "@mise/domain";
+import { readCatalogue } from "./items";
 import type { Handlers } from "./tools";
 
 type RecipeRow = {
@@ -39,7 +40,13 @@ type IngredientRow = {
 
 type LineRow = { recipe_id: number; text: string };
 
-type RecipeTools = "create_recipe" | "get_recipe" | "update_recipe" | "delete_recipe" | "search_recipes";
+type RecipeTools =
+  | "create_recipe"
+  | "get_recipe"
+  | "update_recipe"
+  | "delete_recipe"
+  | "search_recipes"
+  | "list_untagged_recipes";
 
 /** The Recipe tools, against the household's SQLite. */
 export const recipeHandlers: Pick<Handlers, RecipeTools> = {
@@ -118,30 +125,36 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
                             AND (instr(lower(i.raw), ?1) > 0 OR i.item_id = ?2)))
              AND (?3 IS NULL OR EXISTS (SELECT 1 FROM recipe_tag AS t WHERE t.recipe_id = r.id AND t.tag = ?3))`,
           query,
-          matchItem(query),
+          readCatalogue(sql).match(query),
           input.tag ?? null,
         )
         .toArray()
         .map((row) => row.id),
     );
-    const found = readRecipes(sql)
-      .filter((recipe) => matching.has(recipe.id))
-      .sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id);
-    return {
-      ok: true,
-      value: found.map(({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }) => ({
-        id,
-        title,
-        tags,
-        effortMinutes,
-        cuisine,
-        mainProtein,
-        allergens,
-        photoKey,
-      })),
-    };
+    return { ok: true, value: summaries(readRecipes(sql).filter((recipe) => matching.has(recipe.id))) };
   },
+
+  list_untagged_recipes: (sql) => ({
+    ok: true,
+    value: summaries(readRecipes(sql).filter((recipe) => recipe.cuisine === null || recipe.mainProtein === null)),
+  }),
 };
+
+/** What a list shows of each Recipe, in title order. */
+function summaries(recipes: Recipe[]): RecipeSummary[] {
+  return recipes
+    .sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id)
+    .map(({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }) => ({
+      id,
+      title,
+      tags,
+      effortMinutes,
+      cuisine,
+      mainProtein,
+      allergens,
+      photoKey,
+    }));
+}
 
 /** Replaces a Recipe's Ingredients, steps and tags with those given, parsing each Ingredient line. */
 function writeLists(
@@ -151,7 +164,9 @@ function writeLists(
 ): void {
   if (lists.ingredients) {
     sql.exec("DELETE FROM recipe_ingredient WHERE recipe_id = ?", id);
-    lists.ingredients.map(parseIngredient).forEach((ingredient, position) => {
+    const catalogue = readCatalogue(sql);
+    lists.ingredients.forEach((line, position) => {
+      const ingredient = parseIngredient(line, catalogue);
       sql.exec(
         `INSERT INTO recipe_ingredient (recipe_id, position, raw, amount_min, amount_max, unit, name, note, item_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -214,9 +229,14 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       )
       .toArray(),
   );
+  const catalogue = readCatalogue(sql);
+  // Refuses an Item the Household's catalogue does not have.
+  const StoredIngredient = Ingredient.extend({ item: catalogue.knownItemId.nullable() });
   return rows.map((row) => {
     // Parsed before the Allergens are derived, so an unknown Item fails here as invalid data.
-    const parsed = (ingredients.get(row.id) ?? []).map((ingredient) => Ingredient.parse(ingredientOf(ingredient)));
+    const parsed = (ingredients.get(row.id) ?? []).map((ingredient) =>
+      StoredIngredient.parse(ingredientOf(ingredient)),
+    );
     return Recipe.parse({
       id: row.id,
       title: row.title,
@@ -231,7 +251,7 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       yieldsLeftovers: row.yields_leftovers === 1,
       prepAhead: row.prep_ahead,
       photoKey: row.photo_key,
-      allergens: recipeAllergens(parsed),
+      allergens: recipeAllergens(parsed, catalogue),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     });

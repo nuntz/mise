@@ -321,6 +321,29 @@ describe("searching Recipes", () => {
   });
 });
 
+describe("tagging Recipes", () => {
+  test("lists the Recipes missing a cuisine or main protein, in title order, until both are set", async () => {
+    const household = await setUpHousehold();
+    const recipe = { baseServings: 2, ingredients: ["1 cup rice"] };
+    await household.callTool("create_recipe", { ...recipe, title: "Tacos", cuisine: "mexican" });
+    await household.callTool("create_recipe", { ...recipe, title: "Dal", cuisine: "indian", mainProtein: "lentils" });
+    await household.callTool("create_recipe", { ...recipe, title: "Bibimbap" });
+
+    const before = await household.callTool("list_untagged_recipes", {});
+    await household.callTool("update_recipe", { id: 1, mainProtein: "beef" });
+    const after = await household.callTool("list_untagged_recipes", {});
+
+    expect(before).toMatchObject({
+      ok: true,
+      value: [
+        { id: 3, title: "Bibimbap", cuisine: null, mainProtein: null },
+        { id: 1, title: "Tacos", cuisine: "mexican", mainProtein: null },
+      ],
+    });
+    expect(after).toMatchObject({ ok: true, value: [{ id: 3, title: "Bibimbap" }] });
+  });
+});
+
 describe("change notices", () => {
   test("a connected client is told when Recipes change", async () => {
     const household = await setUpHousehold();
