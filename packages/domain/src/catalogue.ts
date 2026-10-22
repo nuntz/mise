@@ -7,7 +7,9 @@ export type CatalogueEntry = Omit<Item, "id" | "aliases" | "allergens"> & {
 };
 
 /**
- * The Item catalogue (ADR 0009), curated by hand; a person approves every Allergen before release (#8).
+ * The Item catalogue (ADR 0009). It was drafted by an AI and its Allergens are reviewed by a person
+ * (#8), but it is not guaranteed complete or correct: brands and recipes vary by country and change,
+ * and nothing here replaces reading the label.
  * Ingredients store the key, so never rename or remove one. Only add an Item whose Allergens are
  * dependable whatever the brand: anything that varies open-endedly (bread, stock cubes, sausages,
  * curry paste) stays out, so its Ingredients stay Unresolved and fail closed. When brands differ only
