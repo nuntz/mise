@@ -23,11 +23,7 @@ export function draftOf(member: Member): MemberDraft {
   return {
     name: member.name,
     email: member.email ?? "",
-    constraints: member.constraints.map((constraint) => ({
-      kind: constraint.kind,
-      allergen: constraint.allergen ?? "",
-      term: constraint.term ?? "",
-    })),
+    constraints: constraintDraftsOf(member.constraints),
   };
 }
 
@@ -36,32 +32,34 @@ export function memberOf(draft: MemberDraft): Required<ToolInput<"add_member">> 
   return {
     name: draft.name,
     email: draft.email.trim() || null,
-    constraints: draft.constraints.map(
-      ({ kind, allergen, term }) =>
-        ({
-          kind,
-          ...(allergen && { allergen }),
-          ...(term.trim() && { term: term.trim() }),
-        }) as Constraint,
-    ),
+    constraints: constraintsOf(draft.constraints),
   };
+}
+
+export function constraintDraftsOf(constraints: Constraint[]): ConstraintDraft[] {
+  return constraints.map((constraint) => ({
+    kind: constraint.kind,
+    allergen: constraint.allergen ?? "",
+    term: constraint.term ?? "",
+  }));
+}
+
+/** The drafts as tool input; the tools validate them. */
+export function constraintsOf(drafts: ConstraintDraft[]): Constraint[] {
+  return drafts.map(
+    ({ kind, allergen, term }) =>
+      ({
+        kind,
+        ...(allergen && { allergen }),
+        ...(term.trim() && { term: term.trim() }),
+      }) as Constraint,
+  );
 }
 
 /** Name, sign-in email and Constraints of one Member. */
 export function MemberFields(props: { draft: MemberDraft; onChange: (draft: MemberDraft) => void }) {
   const update = <K extends keyof MemberDraft>(key: K, value: MemberDraft[K]) =>
     props.onChange({ ...props.draft, [key]: value });
-  const updateConstraint = (index: number, change: Partial<ConstraintDraft>) =>
-    update(
-      "constraints",
-      props.draft.constraints.map((constraint, i) => (i === index ? { ...constraint, ...change } : constraint)),
-    );
-  const changeKind = (index: number, kind: ConstraintKind) => {
-    const current = props.draft.constraints[index];
-    // A Hard Constraint must name an Allergen, so pick the first rather than leave the select lying.
-    const allergen = constraintSeverity(kind) === "hard" && !current?.allergen ? ALLERGENS[0] : current?.allergen;
-    updateConstraint(index, { kind, ...(allergen !== undefined && { allergen }) });
-  };
 
   return (
     <fieldset>
@@ -81,8 +79,29 @@ export function MemberFields(props: { draft: MemberDraft; onChange: (draft: Memb
       </label>
       <small>{t("member.emailHint")}</small>
 
+      <ConstraintFields constraints={props.draft.constraints} onChange={(list) => update("constraints", list)} />
+    </fieldset>
+  );
+}
+
+/** A list of Constraints, a Member's or a Slot's Guests', with buttons to add and remove them. */
+export function ConstraintFields(props: {
+  constraints: ConstraintDraft[];
+  onChange: (constraints: ConstraintDraft[]) => void;
+}) {
+  const updateConstraint = (index: number, change: Partial<ConstraintDraft>) =>
+    props.onChange(props.constraints.map((constraint, i) => (i === index ? { ...constraint, ...change } : constraint)));
+  const changeKind = (index: number, kind: ConstraintKind) => {
+    const current = props.constraints[index];
+    // A Hard Constraint must name an Allergen, so pick the first rather than leave the select lying.
+    const allergen = constraintSeverity(kind) === "hard" && !current?.allergen ? ALLERGENS[0] : current?.allergen;
+    updateConstraint(index, { kind, ...(allergen !== undefined && { allergen }) });
+  };
+
+  return (
+    <>
       <ul>
-        <Index each={props.draft.constraints}>
+        <Index each={props.constraints}>
           {(constraint, index) => (
             <li>
               <select
@@ -120,15 +139,7 @@ export function MemberFields(props: { draft: MemberDraft; onChange: (draft: Memb
                 onInput={(e) => updateConstraint(index, { term: e.currentTarget.value })}
               />
 
-              <button
-                type="button"
-                onClick={() =>
-                  update(
-                    "constraints",
-                    props.draft.constraints.filter((_, i) => i !== index),
-                  )
-                }
-              >
+              <button type="button" onClick={() => props.onChange(props.constraints.filter((_, i) => i !== index))}>
                 {t("constraint.remove")}
               </button>
             </li>
@@ -137,12 +148,10 @@ export function MemberFields(props: { draft: MemberDraft; onChange: (draft: Memb
       </ul>
       <button
         type="button"
-        onClick={() =>
-          update("constraints", [...props.draft.constraints, { kind: "allergy", allergen: ALLERGENS[0], term: "" }])
-        }
+        onClick={() => props.onChange([...props.constraints, { kind: "allergy", allergen: ALLERGENS[0], term: "" }])}
       >
         {t("constraint.add")}
       </button>
-    </fieldset>
+    </>
   );
 }

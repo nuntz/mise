@@ -9,13 +9,14 @@ import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
 import { SetupForm } from "./SetupForm";
 import { TagRecipes } from "./TagRecipes";
+import { WeekPage } from "./Week";
 
-type Page = "recipes" | "import" | "resolve" | "tag" | "members";
-const PAGES: Page[] = ["recipes", "import", "resolve", "tag", "members"];
+type Page = "week" | "recipes" | "import" | "resolve" | "tag" | "members";
+const PAGES: Page[] = ["week", "recipes", "import", "resolve", "tag", "members"];
 
 export function App(props: { client: MiseClient }) {
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
-  const [page, setPage] = createSignal<Page>("recipes");
+  const [page, setPage] = createSignal<Page>("week");
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
   // refresh updates the settings without remounting them and throwing away a form someone is filling in.
   const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: null });
@@ -56,6 +57,9 @@ export function App(props: { client: MiseClient }) {
                 </For>
               </nav>
               <Switch>
+                <Match when={page() === "week"}>
+                  <WeekPage client={props.client} household={household()} />
+                </Match>
                 <Match when={page() === "recipes"}>
                   <RecipesPage client={props.client} />
                 </Match>

@@ -42,7 +42,16 @@ const itemFields: Record<string, MessageKey> = {
   item: "resolve.item",
 };
 
-type Form = "household" | "member" | "recipe" | "item";
+const slotFields: Record<string, MessageKey> = {
+  kind: "slot.kind",
+  recipeId: "slot.recipe",
+  note: "slot.note",
+  diners: "slot.diners",
+  guests: "slot.guests",
+  guestConstraints: "slot.guestConstraints",
+};
+
+type Form = "household" | "member" | "recipe" | "item" | "slot";
 
 /** What to show when a tool refuses; `form` says which fields a bare name like `name` means. */
 export function errorText(error: ToolError, form: Form): string {
@@ -58,7 +67,15 @@ export function errorText(error: ToolError, form: Form): string {
     case "name_in_use":
       return t("item.nameInUse");
     case "not_found":
-      return t(form === "recipe" ? "recipe.notFound" : form === "item" ? "item.notFound" : "member.notFound");
+      return t(
+        form === "recipe"
+          ? "recipe.notFound"
+          : form === "item"
+            ? "item.notFound"
+            : form === "slot"
+              ? "slot.notFound"
+              : "member.notFound",
+      );
     default:
       return t("app.error");
   }
@@ -71,9 +88,11 @@ function fieldLabel(path: string, form: Form): string {
       ? recipeFields
       : form === "item"
         ? itemFields
-        : form === "household" && !path.startsWith("members.")
-          ? householdFields
-          : memberFields;
+        : form === "slot" && !path.startsWith("guestConstraints.")
+          ? slotFields
+          : form === "household" && !path.startsWith("members.")
+            ? householdFields
+            : memberFields;
   const field =
     path
       .split(".")

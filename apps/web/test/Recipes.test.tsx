@@ -109,7 +109,7 @@ function fakeClient(recipes: Recipe[]) {
 test("the Recipes are listed, and searching narrows them", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([toast, rice]);
-  render(() => <App client={client} />);
+  await openRecipes(client);
 
   await screen.findByRole("button", { name: "Toast" });
   expect(screen.getByRole("button", { name: "Rice" })).toBeTruthy();
@@ -124,7 +124,7 @@ test("the Recipes are listed, and searching narrows them", async () => {
 test("a Recipe shows how each line resolved, and Allergens unknown while one is Unresolved", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient([toast, rice]);
-  render(() => <App client={client} />);
+  await openRecipes(client);
 
   await user.click(await screen.findByRole("button", { name: "Toast" }));
 
@@ -141,7 +141,7 @@ test("a Recipe shows how each line resolved, and Allergens unknown while one is 
 test("a Recipe whose lines all resolved lists its Allergens", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient([toast, rice]);
-  render(() => <App client={client} />);
+  await openRecipes(client);
 
   await user.click(await screen.findByRole("button", { name: "Rice" }));
 
@@ -151,7 +151,7 @@ test("a Recipe whose lines all resolved lists its Allergens", async () => {
 test("a new Recipe is created from its lines and fields", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([]);
-  render(() => <App client={client} />);
+  await openRecipes(client);
 
   await user.click(await screen.findByRole("button", { name: "New Recipe" }));
   await user.type(screen.getByRole("textbox", { name: "Title" }), "Dal");
@@ -195,7 +195,7 @@ test("an imported Recipe shows its notes and where it came from", async () => {
     },
   };
   const { client } = fakeClient([imported]);
-  render(() => <App client={client} />);
+  await openRecipes(client);
 
   await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
 
@@ -206,7 +206,7 @@ test("an imported Recipe shows its notes and where it came from", async () => {
 test("editing a Recipe starts from what it has and saves the changes", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([toast]);
-  render(() => <App client={client} />);
+  await openRecipes(client);
 
   await user.click(await screen.findByRole("button", { name: "Toast" }));
   await user.click(await screen.findByRole("button", { name: "Edit Recipe" }));
@@ -227,6 +227,12 @@ test("editing a Recipe starts from what it has and saves the changes", async () 
     recurring: "weekly",
   });
 });
+
+/** The App opens on the Week; these tests start from the Recipes. */
+async function openRecipes(client: MiseClient) {
+  render(() => <App client={client} />);
+  await userEvent.click(await screen.findByRole("button", { name: "Recipes" }));
+}
 
 async function waitForGone(query: () => HTMLElement | null) {
   for (let i = 0; i < 50 && query(); i++) await new Promise((resolve) => setTimeout(resolve, 10));

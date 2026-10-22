@@ -40,6 +40,14 @@ describe("export and restore", () => {
     const original = freshHousehold();
     await original.callTool("setup_household", sampleHousehold);
     await original.callTool("create_recipe", recipe);
+    await original.callTool("set_slot", { date: "2026-10-26", meal: "dinner", kind: "recipe", recipeId: 1 });
+    await original.callTool("set_diners", { date: "2026-10-26", meal: "dinner", diners: [1, 3] });
+    await original.callTool("set_guests", {
+      date: "2026-10-26",
+      meal: "dinner",
+      guests: 1,
+      guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
+    });
     const exported = await exportOf(original);
 
     const fresh = freshHousehold();
@@ -52,6 +60,9 @@ describe("export and restore", () => {
       value: { name: sampleHousehold.name, members: [{ name: "Robin" }, { name: "Alex" }, { name: "Sam" }] },
     });
     expect(await fresh.callTool("get_recipe", { id: 1 })).toEqual(await original.callTool("get_recipe", { id: 1 }));
+    expect(await fresh.callTool("get_week", { date: "2026-10-26" })).toEqual(
+      await original.callTool("get_week", { date: "2026-10-26" }),
+    );
   });
 
   test("the Household's own Items and aliases survive a restore, and its Recipes still resolve to them", async () => {
@@ -139,7 +150,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 5,
+      schemaVersion: 6,
       tables: {
         household: [
           {
@@ -172,6 +183,10 @@ describe("export and restore", () => {
         recipe_ingredient: [],
         recipe_step: [],
         recipe_tag: [],
+        slot: [],
+        slot_diner: [],
+        slot_guest_constraint: [],
+        week: [],
       },
       sequences: { member: 3 },
       photoKeys: [],

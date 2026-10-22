@@ -14,6 +14,7 @@ import {
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
+import { readSlots, weekHandlers } from "./weeks";
 
 type HouseholdRow = {
   name: string;
@@ -26,7 +27,10 @@ type HouseholdRow = {
 
 type MemberRow = { id: number; name: string; email: string | null };
 
-type ConstraintRow = { member_id: number; kind: string; allergen: string | null; term: string | null };
+/** A stored Constraint's columns, as a Member's and a Slot's Guests' are kept. */
+export type ConstraintColumns = { kind: string; allergen: string | null; term: string | null };
+
+type ConstraintRow = ConstraintColumns & { member_id: number };
 
 /** Tools that need more than SQLite, which the household runs itself: an import reads R2. */
 export type HouseholdToolName = "run_paprika_import";
@@ -92,6 +96,8 @@ export const handlers: Handlers = {
     const member = readMember(sql, input.id);
     if (!member) return memberNotFound(input.id);
     sql.exec("DELETE FROM member_constraint WHERE member_id = ?", member.id);
+    // Slots they were chosen to eat go on without them.
+    sql.exec("DELETE FROM slot_diner WHERE member_id = ?", member.id);
     sql.exec("DELETE FROM member WHERE id = ?", member.id);
     return { ok: true, value: member };
   },
@@ -99,6 +105,7 @@ export const handlers: Handlers = {
   ...recipeHandlers,
   ...itemHandlers,
   ...importHandlers,
+  ...weekHandlers,
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
@@ -117,6 +124,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readRecipes(sql);
   readImportRuns(sql);
   readImportFlags(sql);
+  readSlots(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {
@@ -152,7 +160,12 @@ function emailInUse(sql: SqlStorage, email: string, exceptId?: MemberId): boolea
   return sql.exec("SELECT 1 FROM member WHERE email = ? AND id IS NOT ?", email, exceptId ?? null).toArray().length > 0;
 }
 
-function readSettings(sql: SqlStorage): HouseholdSettings | null {
+/** A stored Constraint, unparsed: the caller parses it with what it belongs to. */
+export function constraintOf({ kind, allergen, term }: ConstraintColumns): unknown {
+  return { kind, ...(allergen !== null && { allergen }), ...(term !== null && { term }) };
+}
+
+export function readSettings(sql: SqlStorage): HouseholdSettings | null {
   const [row] = sql.exec<HouseholdRow>("SELECT * FROM household WHERE id = 1").toArray();
   if (!row) return null;
   return HouseholdSettings.parse({
@@ -191,18 +204,12 @@ function readMembers(sql: SqlStorage, id?: MemberId): Member[] {
   return members.map((row) =>
     Member.parse({
       ...row,
-      constraints: constraints
-        .filter((constraint) => constraint.member_id === row.id)
-        .map(({ kind, allergen, term }) => ({
-          kind,
-          ...(allergen !== null && { allergen }),
-          ...(term !== null && { term }),
-        })),
+      constraints: constraints.filter((constraint) => constraint.member_id === row.id).map(constraintOf),
     }),
   );
 }
 
-function notSetUp<T>(): ToolResult<T> {
+export function notSetUp<T>(): ToolResult<T> {
   return { ok: false, error: { code: "not_set_up", message: "Set up the Household first" } };
 }
 
@@ -210,6 +217,6 @@ function emailTaken<T>(email: string): ToolResult<T> {
   return { ok: false, error: { code: "email_in_use", message: `Another Member signs in as ${email}` } };
 }
 
-function memberNotFound<T>(id: MemberId): ToolResult<T> {
+export function memberNotFound<T>(id: MemberId): ToolResult<T> {
   return { ok: false, error: { code: "not_found", message: `No Member with id ${id}` } };
 }

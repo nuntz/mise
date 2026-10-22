@@ -14,13 +14,23 @@ import {
   UnresolvedGroup,
   UpdateRecipeInput,
 } from "./recipes";
+import {
+  ClearWeekInput,
+  GetWeekInput,
+  LockSlotInput,
+  SetDinersInput,
+  SetGuestsInput,
+  SetSlotInput,
+  Slot,
+  Week,
+} from "./weeks";
 
 /**
  * Topics a change notice can name; clients refetch the matching tools. Items are announced as
  * "recipes": a change to one changes the Recipes that resolve to it. So are imports: a run changes
- * Recipes, and its log and flags are read beside them.
+ * Recipes, and its log and flags are read beside them. "plan" is the Weeks and their Slots.
  */
-export const ChangeTopic = z.enum(["household", "recipes"]);
+export const ChangeTopic = z.enum(["household", "recipes", "plan"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 type ToolDefinition = {
@@ -137,6 +147,39 @@ export const tools = {
   list_import_flags: defineTool({
     input: z.object({}).strict(),
     output: z.array(ImportFlag),
+  }),
+  /** The Week with every Slot, stored or not; see `GetWeekInput`. */
+  get_week: defineTool({
+    input: GetWeekInput,
+    output: Week,
+  }),
+  set_slot: defineTool({
+    input: SetSlotInput,
+    output: Slot,
+    changes: "plan",
+  }),
+  /** Returns the Slots changed: one, or the day's three. */
+  set_diners: defineTool({
+    input: SetDinersInput,
+    output: z.array(Slot),
+    changes: "plan",
+  }),
+  set_guests: defineTool({
+    input: SetGuestsInput,
+    output: Slot,
+    changes: "plan",
+  }),
+  /** A Locked Slot keeps its Recipe when the Week is proposed again; it can still be edited by hand. */
+  lock_slot: defineTool({
+    input: LockSlotInput,
+    output: Slot,
+    changes: "plan",
+  }),
+  /** Requires `confirm: true`. Puts every Slot of the Week back as it starts, Locked ones too; returns the Week. */
+  clear_week: defineTool({
+    input: ClearWeekInput,
+    output: Week,
+    changes: "plan",
   }),
   get_caller: defineTool({
     input: z.object({}).strict(),

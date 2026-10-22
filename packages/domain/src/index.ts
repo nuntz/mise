@@ -10,6 +10,7 @@ export * from "./recipes";
 export * from "./time";
 export * from "./tools";
 export * from "./units";
+export * from "./weeks";
 
 /** The one household Durable Object a deployment serves. */
 export const HOUSEHOLD_AGENT = { agent: "Household", name: "household" } as const;

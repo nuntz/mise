@@ -121,6 +121,8 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
       sql.exec(`DELETE FROM ${table} WHERE recipe_id = ?`, recipe.id);
     }
     sql.exec("DELETE FROM import_flag WHERE recipe_id = ?1 OR duplicate_of = ?1", recipe.id);
+    // Slots planned with it are unplanned again, and no longer Locked: there is no Recipe to keep.
+    sql.exec("UPDATE slot SET kind = 'unplanned', recipe_id = NULL, locked = 0 WHERE recipe_id = ?", recipe.id);
     sql.exec("DELETE FROM recipe WHERE id = ?", recipe.id);
     return { ok: true, value: recipe };
   },
@@ -313,7 +315,7 @@ function recurrenceOf(column: string | null): Recurrence | null {
   return column === "weekly" ? "weekly" : ({ weekday: column } as Recurrence);
 }
 
-function recipeNotFound<T>(id: RecipeId): ToolResult<T> {
+export function recipeNotFound<T>(id: RecipeId): ToolResult<T> {
   return { ok: false, error: { code: "not_found", message: `No Recipe with id ${id}` } };
 }
 

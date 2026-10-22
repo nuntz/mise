@@ -157,6 +157,45 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 6,
+    statements: [
+      // A Week is keyed by its start date. Slots are keyed by their own date, not by their Week, so
+      // they stay on their dates whatever day the Week starts on.
+      "CREATE TABLE week (start_date TEXT PRIMARY KEY)",
+      // A Slot is stored once someone edits it; until then it is unplanned, for the default Diners.
+      // diners_chosen is 0 while the Diners follow the Household's default, 1 once slot_diner lists them.
+      `CREATE TABLE slot (
+        date TEXT NOT NULL,
+        meal TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        recipe_id INTEGER REFERENCES recipe (id),
+        note TEXT,
+        diners_chosen INTEGER NOT NULL,
+        guests INTEGER NOT NULL,
+        locked INTEGER NOT NULL,
+        PRIMARY KEY (date, meal)
+      )`,
+      "CREATE INDEX slot_recipe ON slot (recipe_id)",
+      `CREATE TABLE slot_diner (
+        date TEXT NOT NULL,
+        meal TEXT NOT NULL,
+        member_id INTEGER NOT NULL REFERENCES member (id),
+        PRIMARY KEY (date, meal, member_id),
+        FOREIGN KEY (date, meal) REFERENCES slot (date, meal)
+      )`,
+      `CREATE TABLE slot_guest_constraint (
+        date TEXT NOT NULL,
+        meal TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        allergen TEXT,
+        term TEXT,
+        PRIMARY KEY (date, meal, position),
+        FOREIGN KEY (date, meal) REFERENCES slot (date, meal)
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {
