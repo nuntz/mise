@@ -17,6 +17,7 @@ type RecipeDraft = {
   recurring: "" | "weekly" | Weekday;
   yieldsLeftovers: boolean;
   prepAhead: string;
+  notes: string;
 };
 
 const emptyRecipe = (): RecipeDraft => ({
@@ -31,6 +32,7 @@ const emptyRecipe = (): RecipeDraft => ({
   recurring: "",
   yieldsLeftovers: false,
   prepAhead: "",
+  notes: "",
 });
 
 function draftOf(recipe: Recipe): RecipeDraft {
@@ -46,6 +48,7 @@ function draftOf(recipe: Recipe): RecipeDraft {
     recurring: recipe.recurring === null ? "" : recipe.recurring === "weekly" ? "weekly" : recipe.recurring.weekday,
     yieldsLeftovers: recipe.yieldsLeftovers,
     prepAhead: recipe.prepAhead ?? "",
+    notes: recipe.notes ?? "",
   };
 }
 
@@ -67,6 +70,7 @@ function recipeOf(draft: RecipeDraft): Required<ToolInput<"create_recipe">> {
     recurring: draft.recurring === "" ? null : draft.recurring === "weekly" ? "weekly" : { weekday: draft.recurring },
     yieldsLeftovers: draft.yieldsLeftovers,
     prepAhead: text(draft.prepAhead),
+    notes: text(draft.notes),
   };
 }
 
@@ -180,6 +184,15 @@ export function RecipeForm(props: {
       <label>
         {t("recipeForm.prepAhead")}
         <input maxLength={500} value={draft().prepAhead} onInput={(e) => update("prepAhead", e.currentTarget.value)} />
+      </label>
+      <label>
+        {t("recipeForm.notes")}
+        <textarea
+          rows={4}
+          maxLength={20_000}
+          value={draft().notes}
+          onInput={(e) => update("notes", e.currentTarget.value)}
+        />
       </label>
       <Show when={error()}>
         <p role="alert">{error()}</p>

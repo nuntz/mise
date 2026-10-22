@@ -5,13 +5,19 @@ import {
   changeTopicOf,
   exportKey,
   type Household as HouseholdData,
+  type ImportError,
+  type ImportedPhoto,
+  type ImportRun,
+  importUploadKey,
   isToolName,
   localDate,
   NIGHTLY_EXPORT_TIME,
   nextOccurrence,
+  type ParsedToolInput,
   PHOTO_PREFIX,
   parseToolInput,
   type Recipe,
+  readPaprikaExport,
   type ToolContext,
   type ToolName,
   type ToolResult,
@@ -20,14 +26,20 @@ import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { callerFrom } from "./identity";
+import { type PreparedRecipe, runImport } from "./imports";
 import { migrate } from "./migrations";
 import { sentryOptions } from "./observability";
-import { photoKeyOf, setPhotoKey } from "./recipes";
+import { photoInUse, photoKeyOf, setPhotoKey } from "./recipes";
 import { handlers } from "./tools";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/** The largest export accepted: what a Worker can be sent, and what the household can hold in memory. */
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+/** Not a type a form can send, so another site needs a CORS preflight, which is refused (ADR 0011). */
+const UPLOAD_TYPES = new Set(["application/octet-stream", "application/zip"]);
 
 const RESTORE_STATUS: Record<RestoreError["code"], number> = {
   invalid_export: 400,
@@ -67,7 +79,10 @@ class HouseholdAgent extends Agent<Env> {
   private async runTool(name: string, input: unknown): Promise<ToolResult<unknown>> {
     const parsed = parseToolInput(name, input);
     if (!parsed.ok) return parsed;
-    const toolName = name as ToolName;
+    if (name === "run_paprika_import") {
+      return this.runPaprikaImport(parsed.value as ParsedToolInput<"run_paprika_import">);
+    }
+    const toolName = name as Exclude<ToolName, "run_paprika_import">;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
       input: unknown,
@@ -100,6 +115,69 @@ class HouseholdAgent extends Agent<Env> {
     return result;
   }
 
+  /**
+   * Imports an uploaded Paprika export. Photos go to R2 first, keyed by their content, so the same
+   * photo is stored once however often it is imported; then every Recipe is upserted in one
+   * transaction. Photos nothing shows any more are deleted after it commits, and so is the upload.
+   */
+  private async runPaprikaImport(input: ParsedToolInput<"run_paprika_import">): Promise<ToolResult<ImportRun>> {
+    const uploadKey = importUploadKey(input.upload);
+    const upload = await this.env.BUCKET.get(uploadKey);
+    if (!upload) return { ok: false, error: { code: "not_found", message: "No uploaded export with that id" } };
+    const startedAt = new Date().toISOString();
+    const { sql } = this.ctx.storage;
+
+    const prepared: PreparedRecipe[] = [];
+    const errors: ImportError[] = [];
+    const stored: string[] = [];
+    const entries = readPaprikaExport(new Uint8Array(await upload.arrayBuffer()));
+    if (!entries) errors.push({ entry: null, message: "The file is not a Paprika export (.paprikarecipes)" });
+    for await (const entry of entries ?? []) {
+      if (!entry.ok) {
+        errors.push({ entry: entry.entry, message: entry.error });
+        continue;
+      }
+      const { recipe, photo } = entry;
+      let photoError = entry.photoError;
+      if (photo && photo.bytes.byteLength > MAX_PHOTO_BYTES) photoError = "The photo is larger than 10 MB";
+      if (photoError) errors.push({ entry: entry.entry, message: photoError });
+      // An unchanged Recipe is skipped, so its photo is not stored again.
+      const unchanged =
+        sql
+          .exec(
+            "SELECT 1 FROM recipe WHERE source_kind = 'paprika' AND source_id = ? AND source_revision = ?",
+            recipe.externalId,
+            recipe.revision,
+          )
+          .toArray().length > 0;
+      let photoKey: string | null | undefined = null;
+      if (photoError || unchanged) photoKey = undefined;
+      else if (photo) photoKey = await this.storeImportedPhoto(photo, stored);
+      prepared.push({ recipe, photoKey });
+    }
+
+    const outcome = this.ctx.storage.transactionSync(() => ({
+      ...runImport(sql, "paprika", startedAt, prepared, errors),
+      revision: this.bumpRevision(),
+    }));
+    this.notify("recipes", outcome.revision);
+    // Photos the updated Recipes replaced, and new ones a Recipe flagged for a merge did not take.
+    for (const key of [...outcome.replacedPhotos, ...stored]) await this.deletePhoto(key);
+    await this.env.BUCKET.delete(uploadKey);
+    return { ok: true, value: outcome.run };
+  }
+
+  /** Stores an imported photo under its SHA-256 unless already there; returns its key. */
+  private async storeImportedPhoto(photo: ImportedPhoto, stored: string[]): Promise<string> {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", photo.bytes));
+    const key = `${PHOTO_PREFIX}sha256-${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    if (!(await this.env.BUCKET.head(key))) {
+      await this.env.BUCKET.put(key, photo.bytes, { httpMetadata: { contentType: photo.type } });
+      stored.push(key);
+    }
+    return key;
+  }
+
   /** Writes tonight's export to R2, then schedules tomorrow's. Run by the scheduler at 03:00 Household time. */
   async nightlyExport(): Promise<void> {
     try {
@@ -121,12 +199,14 @@ class HouseholdAgent extends Agent<Env> {
   /**
    * Backup over HTTP: `GET …/export` downloads the export, `POST …/restore` loads one into an empty
    * household. Recipe photos, which are too big for a tool call (ADR 0010): `GET`, `PUT` (the image
-   * as the body) and `DELETE …/recipes/<id>/photo`.
+   * as the body) and `DELETE …/recipes/<id>/photo`. A Paprika export, for `run_paprika_import` to
+   * import (ADR 0011): `PUT …/imports/paprika`.
    */
   override async onRequest(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
     const photo = /\/recipes\/(\d+)\/photo$/.exec(pathname);
     if (photo) return this.photo(request, Number(photo[1]));
+    if (pathname.endsWith("/imports/paprika")) return this.uploadExport(request);
     const action = pathname.split("/").at(-1);
     if (request.method === "GET" && action === "export") {
       return new Response(await this.exportFile(), { headers: { "Content-Type": "application/json" } });
@@ -158,6 +238,20 @@ class HouseholdAgent extends Agent<Env> {
     for (const topic of ChangeTopic.options) this.notify(topic, revision);
     await this.scheduleNightlyExport();
     return Response.json({ ok: true });
+  }
+
+  /** Keeps an uploaded export in R2 under a new id, which `run_paprika_import` is then given. */
+  private async uploadExport(request: Request): Promise<Response> {
+    if (request.method !== "PUT") {
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "PUT" } });
+    }
+    const type = request.headers.get("Content-Type")?.split(";")[0]?.trim() ?? "";
+    if (!UPLOAD_TYPES.has(type)) return new Response("Send the export as application/octet-stream", { status: 415 });
+    const file = await request.arrayBuffer();
+    if (file.byteLength > MAX_UPLOAD_BYTES) return new Response("The export is larger than 100 MB", { status: 413 });
+    const upload = crypto.randomUUID();
+    await this.env.BUCKET.put(importUploadKey(upload), file);
+    return Response.json({ ok: true, upload });
   }
 
   private async photo(request: Request, recipeId: number): Promise<Response> {
@@ -208,8 +302,9 @@ class HouseholdAgent extends Agent<Env> {
     return true;
   }
 
+  /** Deletes a photo from R2 unless a Recipe still shows it (imported photos can be shared). */
   private async deletePhoto(key: string | null): Promise<void> {
-    if (key) await this.env.BUCKET.delete(key);
+    if (key && !photoInUse(this.ctx.storage.sql, key)) await this.env.BUCKET.delete(key);
   }
 
   /**

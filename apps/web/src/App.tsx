@@ -2,6 +2,7 @@ import type { Household } from "@mise/domain";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
+import { ImportPage } from "./Import";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
 import { RecipesPage } from "./Recipes";
@@ -9,8 +10,8 @@ import { ResolveIngredients } from "./ResolveIngredients";
 import { SetupForm } from "./SetupForm";
 import { TagRecipes } from "./TagRecipes";
 
-type Page = "recipes" | "resolve" | "tag" | "members";
-const PAGES: Page[] = ["recipes", "resolve", "tag", "members"];
+type Page = "recipes" | "import" | "resolve" | "tag" | "members";
+const PAGES: Page[] = ["recipes", "import", "resolve", "tag", "members"];
 
 export function App(props: { client: MiseClient }) {
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
@@ -57,6 +58,9 @@ export function App(props: { client: MiseClient }) {
               <Switch>
                 <Match when={page() === "recipes"}>
                   <RecipesPage client={props.client} />
+                </Match>
+                <Match when={page() === "import"}>
+                  <ImportPage client={props.client} />
                 </Match>
                 <Match when={page() === "resolve"}>
                   <ResolveIngredients client={props.client} />

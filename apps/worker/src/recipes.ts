@@ -23,8 +23,16 @@ type RecipeRow = {
   yields_leftovers: number;
   prep_ahead: string | null;
   photo_key: string | null;
+  notes: string | null;
+  source_kind: string;
+  source_id: string | null;
+  source_url: string | null;
+  source_author: string | null;
+  imported_at: string | null;
+  imported_preference: string | null;
   created_at: string;
   updated_at: string;
+  edited_in_app_at: string | null;
 };
 
 type IngredientRow = {
@@ -55,8 +63,8 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     const { id } = sql
       .exec<{ id: number }>(
         `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, recurring,
-           yields_leftovers, prep_ahead, photo_key, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?) RETURNING id`,
+           yields_leftovers, prep_ahead, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         input.title,
         input.baseServings,
         input.effortMinutes,
@@ -65,6 +73,7 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
         recurrenceColumn(input.recurring),
         Number(input.yieldsLeftovers),
         input.prepAhead,
+        input.notes,
         now,
         now,
       )
@@ -82,10 +91,11 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     const recipe = readRecipe(sql, input.id);
     if (!recipe) return recipeNotFound(input.id);
     const { id, ingredients: _, ...changes } = input;
+    const now = new Date().toISOString();
     const fields = { ...recipe, ...changes };
     sql.exec(
       `UPDATE recipe SET title = ?, base_servings = ?, effort_minutes = ?, cuisine = ?, main_protein = ?,
-         recurring = ?, yields_leftovers = ?, prep_ahead = ?, updated_at = ?
+         recurring = ?, yields_leftovers = ?, prep_ahead = ?, notes = ?, updated_at = ?, edited_in_app_at = ?
        WHERE id = ?`,
       fields.title,
       fields.baseServings,
@@ -95,7 +105,9 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
       recurrenceColumn(fields.recurring),
       Number(fields.yieldsLeftovers),
       fields.prepAhead,
-      new Date().toISOString(),
+      fields.notes,
+      now,
+      now,
       id,
     );
     writeLists(sql, id, input);
@@ -108,6 +120,7 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     for (const table of ["recipe_ingredient", "recipe_step", "recipe_tag"]) {
       sql.exec(`DELETE FROM ${table} WHERE recipe_id = ?`, recipe.id);
     }
+    sql.exec("DELETE FROM import_flag WHERE recipe_id = ?1 OR duplicate_of = ?1", recipe.id);
     sql.exec("DELETE FROM recipe WHERE id = ?", recipe.id);
     return { ok: true, value: recipe };
   },
@@ -157,7 +170,7 @@ function summaries(recipes: Recipe[]): RecipeSummary[] {
 }
 
 /** Replaces a Recipe's Ingredients, steps and tags with those given, parsing each Ingredient line. */
-function writeLists(
+export function writeLists(
   sql: SqlStorage,
   id: RecipeId,
   lists: Partial<Pick<NewRecipe, "ingredients" | "steps" | "tags">>,
@@ -250,12 +263,27 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       recurring: recurrenceOf(row.recurring),
       yieldsLeftovers: row.yields_leftovers === 1,
       prepAhead: row.prep_ahead,
+      notes: row.notes,
       photoKey: row.photo_key,
       allergens: recipeAllergens(parsed, catalogue),
+      source: sourceOf(row),
+      importedPreference: row.imported_preference,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      editedInAppAt: row.edited_in_app_at,
     });
   });
+}
+
+function sourceOf(row: RecipeRow): unknown {
+  if (row.source_kind === "manual") return { kind: "manual" };
+  return {
+    kind: row.source_kind,
+    externalId: row.source_id,
+    url: row.source_url,
+    author: row.source_author,
+    importedAt: row.imported_at,
+  };
 }
 
 function ingredientOf(row: IngredientRow): unknown {
@@ -290,7 +318,7 @@ function recipeNotFound<T>(id: RecipeId): ToolResult<T> {
 }
 
 /**
- * Points a Recipe at a new photo, or at none. Returns the key it pointed at before, or undefined
+ * Points a Recipe at a new photo, or at none: an edit in Mise. Returns the key it pointed at before, or undefined
  * when there is no such Recipe.
  */
 export function setPhotoKey(
@@ -300,7 +328,8 @@ export function setPhotoKey(
 ): { previous: string | null } | undefined {
   const [row] = sql.exec<{ photo_key: string | null }>("SELECT photo_key FROM recipe WHERE id = ?", id).toArray();
   if (!row) return undefined;
-  sql.exec("UPDATE recipe SET photo_key = ?, updated_at = ? WHERE id = ?", key, new Date().toISOString(), id);
+  const now = new Date().toISOString();
+  sql.exec("UPDATE recipe SET photo_key = ?, updated_at = ?, edited_in_app_at = ? WHERE id = ?", key, now, now, id);
   return { previous: row.photo_key };
 }
 
@@ -308,4 +337,9 @@ export function setPhotoKey(
 export function photoKeyOf(sql: SqlStorage, id: RecipeId): string | null | undefined {
   const [row] = sql.exec<{ photo_key: string | null }>("SELECT photo_key FROM recipe WHERE id = ?", id).toArray();
   return row?.photo_key;
+}
+
+/** Whether any Recipe still shows the photo; imported photos are content-addressed, so Recipes can share one. */
+export function photoInUse(sql: SqlStorage, key: string): boolean {
+  return sql.exec("SELECT 1 FROM recipe WHERE photo_key = ? LIMIT 1", key).toArray().length > 0;
 }

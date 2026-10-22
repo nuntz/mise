@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import agents from "agents/vite";
 import { defineConfig } from "vitest/config";
@@ -5,6 +6,15 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [
     agents(),
+    // Binary fixtures (`.paprikarecipes`) import as their bytes; see test/fixtures.d.ts.
+    {
+      name: "binary-fixtures",
+      load(id) {
+        if (!id.endsWith(".paprikarecipes")) return null;
+        const base64 = readFileSync(id).toString("base64");
+        return `export default Uint8Array.from(atob(${JSON.stringify(base64)}), (c) => c.charCodeAt(0));`;
+      },
+    },
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
       // A fictional Access team and application; identity.test.ts signs tokens for them.

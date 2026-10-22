@@ -2,6 +2,7 @@ import {
   ChangeNotice,
   type ChangeTopic,
   HOUSEHOLD_AGENT,
+  PAPRIKA_UPLOAD_PATH,
   type RecipeId,
   recipePhotoPath,
   type ToolInput,
@@ -24,6 +25,8 @@ export type MiseClient = {
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
   uploadPhoto(recipeId: RecipeId, photo: Blob): Promise<boolean>;
   removePhoto(recipeId: RecipeId): Promise<boolean>;
+  /** Uploads a Paprika export over HTTP too (ADR 0011); `run_paprika_import` takes the id returned. Null if refused. */
+  uploadExport(file: Blob): Promise<string | null>;
   close(): void;
 };
 
@@ -60,6 +63,17 @@ export function createMiseClient(host = window.location.host): MiseClient {
 
     async removePhoto(recipeId) {
       return (await fetch(recipePhotoPath(recipeId), { method: "DELETE" })).ok;
+    },
+
+    async uploadExport(file) {
+      const response = await fetch(PAPRIKA_UPLOAD_PATH, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+      });
+      if (!response.ok) return null;
+      const { upload } = (await response.json()) as { upload?: unknown };
+      return typeof upload === "string" ? upload : null;
     },
 
     close: () => agent.close(),

@@ -45,6 +45,7 @@ function fakeClient(initial: Household) {
     photoUrl: () => "",
     uploadPhoto: async () => true,
     removePhoto: async () => true,
+    uploadExport: async () => null,
     close() {},
   };
   const notify = (next: Household | Error) => {

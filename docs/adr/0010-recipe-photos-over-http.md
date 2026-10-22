@@ -2,7 +2,7 @@
 
 A Recipe photo is uploaded, replaced and removed with `PUT` and `DELETE …/recipes/<id>/photo` on the household Durable Object, and served by `GET` on the same path, rather than through `callTool` (ADR 0002). Photos are megabytes of binary. Tool calls are JSON over the WebSocket, where they would need base64 and run into message size limits. The image goes to R2 under `photos/`; the Recipe keeps only its key (`photoKey`), which every tool returns.
 
-This is the one exception to "tools are the API" (SPEC.md §2). It is kept narrow: the routes carry nothing but the image, they bump the revision and send a `recipes` change notice like any tool, and `delete_recipe` deletes the photo once the deletion is committed. The agent never needs to upload bytes, so it loses nothing.
+This is an exception to "tools are the API" (SPEC.md §2), and was the only one until uploaded imports joined it (ADR 0011). It is kept narrow: the routes carry nothing but the image, they bump the revision and send a `recipes` change notice like any tool, and `delete_recipe` deletes the photo once the deletion is committed. The agent never needs to upload bytes, so it loses nothing.
 
 ## Consequences
 

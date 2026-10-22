@@ -114,6 +114,49 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 5,
+    statements: [
+      "ALTER TABLE recipe ADD COLUMN notes TEXT",
+      // 'manual' or 'paprika'; an imported Recipe keeps the source's id and revision of it.
+      "ALTER TABLE recipe ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'manual'",
+      "ALTER TABLE recipe ADD COLUMN source_id TEXT",
+      "ALTER TABLE recipe ADD COLUMN source_revision TEXT",
+      "ALTER TABLE recipe ADD COLUMN source_url TEXT",
+      "ALTER TABLE recipe ADD COLUMN source_author TEXT",
+      "ALTER TABLE recipe ADD COLUMN imported_at TEXT",
+      "ALTER TABLE recipe ADD COLUMN imported_preference TEXT",
+      "ALTER TABLE recipe ADD COLUMN edited_in_app_at TEXT",
+      "CREATE UNIQUE INDEX recipe_source ON recipe (source_kind, source_id) WHERE source_id IS NOT NULL",
+      `CREATE TABLE import_run (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        created INTEGER NOT NULL,
+        updated INTEGER NOT NULL,
+        skipped INTEGER NOT NULL,
+        flagged INTEGER NOT NULL
+      )`,
+      // entry is null for an error about the export as a whole.
+      `CREATE TABLE import_error (
+        run_id INTEGER NOT NULL REFERENCES import_run (id),
+        position INTEGER NOT NULL,
+        entry TEXT,
+        message TEXT NOT NULL,
+        PRIMARY KEY (run_id, position)
+      )`,
+      // source_revision is the revision a merge flag left alone, so the same one is flagged once.
+      `CREATE TABLE import_flag (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES import_run (id),
+        kind TEXT NOT NULL,
+        recipe_id INTEGER NOT NULL REFERENCES recipe (id),
+        duplicate_of INTEGER REFERENCES recipe (id),
+        source_revision TEXT,
+        flagged_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

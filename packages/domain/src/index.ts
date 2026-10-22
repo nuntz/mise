@@ -1,9 +1,11 @@
 export * from "./backup";
 export * from "./caller";
 export * from "./household";
+export * from "./imports";
 export * from "./ingredients";
 export * from "./items";
 export * from "./members";
+export * from "./paprika";
 export * from "./recipes";
 export * from "./time";
 export * from "./tools";
@@ -19,3 +21,6 @@ export const HOUSEHOLD_PATH = `/agents/${HOUSEHOLD_AGENT.agent.toLowerCase()}/${
 export function recipePhotoPath(id: number): string {
   return `${HOUSEHOLD_PATH}/recipes/${id}/photo`;
 }
+
+/** Where a Paprika export is uploaded (PUT) before `run_paprika_import` imports it. */
+export const PAPRIKA_UPLOAD_PATH = `${HOUSEHOLD_PATH}/imports/paprika`;

@@ -81,6 +81,9 @@ function loadRows(sql: SqlStorage, tables: string[], data: HouseholdExport): Res
   if (tables.some((table) => sql.exec(`SELECT 1 FROM "${table}" LIMIT 1`).toArray().length > 0)) {
     return { ok: false, error: { code: "not_empty", message: "Restore only loads into an empty household" } };
   }
+  // Tables load in name order, so a row can arrive before the row it references (import_error
+  // before import_run); the references are checked when the transaction commits.
+  sql.exec("PRAGMA defer_foreign_keys = ON");
   for (const table of tables) {
     const columns = new Set(
       sql
@@ -123,6 +126,10 @@ function sequences(sql: SqlStorage, tables: string[]): HouseholdExport["sequence
 
 /** Reads the restored household through the domain parsers, so a household no tool can read is never committed. */
 function readBack(sql: SqlStorage): void {
+  // Foreign keys are only checked on commit (see loadRows), too late to refuse the export cleanly.
+  if (sql.exec("PRAGMA foreign_key_check").toArray().length > 0) {
+    throw new InvalidExport("The export holds rows that refer to rows it does not have");
+  }
   try {
     parseStoredHousehold(sql);
   } catch (error) {

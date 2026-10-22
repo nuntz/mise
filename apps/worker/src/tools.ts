@@ -11,6 +11,7 @@ import {
   type ToolOutput,
   type ToolResult,
 } from "@mise/domain";
+import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
 
@@ -27,11 +28,18 @@ type MemberRow = { id: number; name: string; email: string | null };
 
 type ConstraintRow = { member_id: number; kind: string; allergen: string | null; term: string | null };
 
+/** Tools that need more than SQLite, which the household runs itself: an import reads R2. */
+export type HouseholdToolName = "run_paprika_import";
+
 export type Handlers = {
-  [N in ToolName]: (sql: SqlStorage, input: ParsedToolInput<N>, context: ToolContext) => ToolResult<ToolOutput<N>>;
+  [N in Exclude<ToolName, HouseholdToolName>]: (
+    sql: SqlStorage,
+    input: ParsedToolInput<N>,
+    context: ToolContext,
+  ) => ToolResult<ToolOutput<N>>;
 };
 
-/** The implementation of every tool in the registry, against the household's SQLite. */
+/** The implementation of every other tool in the registry, against the household's SQLite. */
 export const handlers: Handlers = {
   get_household: (sql) => ({ ok: true, value: readHousehold(sql) }),
 
@@ -90,6 +98,7 @@ export const handlers: Handlers = {
 
   ...recipeHandlers,
   ...itemHandlers,
+  ...importHandlers,
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
@@ -106,6 +115,8 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readMembers(sql);
   readCatalogue(sql);
   readRecipes(sql);
+  readImportRuns(sql);
+  readImportFlags(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {

@@ -65,10 +65,14 @@ describe("hand-entered Recipes", () => {
       recurring: null,
       yieldsLeftovers: false,
       prepAhead: null,
+      notes: null,
       photoKey: null,
       allergens: { kind: "known", allergens: ["milk", "egg", "wheat"] },
+      source: { kind: "manual" },
+      importedPreference: null,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
+      editedInAppAt: null,
     };
     expect(created).toEqual({ ok: true, value: expected });
     expect(read).toEqual({ ok: true, value: expected });
@@ -110,6 +114,7 @@ describe("hand-entered Recipes", () => {
       recurring: { weekday: "sunday" },
       yieldsLeftovers: true,
       prepAhead: "Mix the dry ingredients the night before.",
+      notes: "From Grandma's card.",
     };
 
     await household.callTool("create_recipe", { ...pancakes, ...fields });
@@ -205,6 +210,15 @@ describe("editing and deleting Recipes", () => {
 
     expect(recipeOf(updated).createdAt).toBe(recipeOf(created).createdAt);
     expect(recipeOf(updated).updatedAt > recipeOf(created).updatedAt).toBe(true);
+  });
+
+  test("editing a Recipe records when it was edited in Mise", async () => {
+    const household = await setUpHousehold();
+    await household.callTool("create_recipe", pancakes);
+
+    const updated = recipeOf(await household.callTool("update_recipe", { id: 1, notes: "Use buttermilk." }));
+
+    expect(updated).toMatchObject({ notes: "Use buttermilk.", editedInAppAt: updated.updatedAt });
   });
 
   test("editing a Recipe that doesn't exist is refused", async () => {

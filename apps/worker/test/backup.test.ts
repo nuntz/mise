@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { exportKey, localDate, nextOccurrence } from "@mise/domain";
 import { describe, expect, onTestFinished, test } from "vitest";
+import { paprikaExport, SAMPLE_PAPRIKA_RECIPES } from "../../../fixtures/paprika";
 import sampleHousehold from "../../../fixtures/sample-household.json";
 
 const householdUrl = "http://mise.example.com/agents/household/household";
@@ -77,6 +78,29 @@ describe("export and restore", () => {
     expect(await fresh.callTool("list_items", {})).toEqual(await original.callTool("list_items", {}));
   });
 
+  test("imported Recipes, their import runs and flags survive a restore", async () => {
+    const original = freshHousehold();
+    await original.callTool("setup_household", sampleHousehold);
+    await original.callTool("create_recipe", { ...recipe, title: "Weeknight Dal" });
+    const [dal] = SAMPLE_PAPRIKA_RECIPES;
+    // No photo: photos stay in R2, outside the export.
+    const upload = await original.fetch(`${householdUrl}/imports/paprika`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: await paprikaExport([{ ...dal, photo_data: null }]),
+    });
+    await original.callTool("run_paprika_import", { upload: ((await upload.json()) as { upload: string }).upload });
+    const exported = await exportOf(original);
+
+    const fresh = freshHousehold();
+    expect((await restore(fresh, exported)).status).toBe(200);
+
+    expect(await exportOf(fresh)).toBe(exported);
+    expect(await fresh.callTool("get_recipe", { id: 2 })).toEqual(await original.callTool("get_recipe", { id: 2 }));
+    expect(await fresh.callTool("list_import_runs", {})).toEqual(await original.callTool("list_import_runs", {}));
+    expect(await fresh.callTool("list_import_flags", {})).toMatchObject({ ok: true, value: [{ kind: "duplicate" }] });
+  });
+
   test("a removed Member's id is not handed out again after a restore", async () => {
     const original = freshHousehold();
     await original.callTool("setup_household", sampleHousehold);
@@ -115,7 +139,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 4,
+      schemaVersion: 5,
       tables: {
         household: [
           {
@@ -141,6 +165,9 @@ describe("export and restore", () => {
         item: [],
         item_alias: [],
         item_allergen: [],
+        import_error: [],
+        import_flag: [],
+        import_run: [],
         recipe: [],
         recipe_ingredient: [],
         recipe_step: [],
@@ -233,6 +260,21 @@ describe("export and restore", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "invalid_export" });
+  });
+
+  test("restore rejects a row that refers to one the export does not have", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    await source.callTool("create_recipe", recipe);
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.recipe_step[0].recipe_id = 9;
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+    expect(await target.callTool("get_household", {})).toEqual({ ok: true, value: null });
   });
 
   test("restore rejects an Ingredient naming an Item the catalogue does not have", async () => {

@@ -63,6 +63,13 @@ An Ingredient not yet matched to an Item; its Allergens are unknown and treated 
 **Imported Preference**:
 How much the Household liked a Recipe before Mise, carried over from its source; separate from Ratings made in Mise.
 
+**Import Run**:
+One import of a source's export, logged with how many Recipes it created, updated, skipped and flagged, and what it could not read.
+
+**Import Flag**:
+A Recipe an Import Run left for someone to look at: changed in the source after it was edited in Mise, so not overwritten; or possibly the same dish as a Recipe from another source, so kept beside it.
+_Avoid_: Conflict, review item
+
 **Rating**:
 A verdict on a Recipe after cooking it: again, meh or never.
 

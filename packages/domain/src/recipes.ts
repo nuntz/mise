@@ -44,7 +44,7 @@ const lines = (max: number, length: number) =>
     .array(z.string().max(length))
     .max(max)
     .transform((all) => all.map((line) => line.trim()).filter(Boolean));
-const IngredientLines = lines(200, 500);
+export const IngredientLines = lines(200, 500);
 const Steps = lines(100, 5000);
 /** Tags in lower case, each once. */
 const Tags = z
@@ -52,7 +52,7 @@ const Tags = z
   .max(30)
   .transform((tags) => [...new Set(tags)]);
 
-const RecipeFields = {
+export const RecipeFields = {
   title: Title,
   baseServings: z.number().int().min(1).max(100),
   steps: Steps,
@@ -70,7 +70,31 @@ const RecipeFields = {
   yieldsLeftovers: z.boolean(),
   /** What to do the day before, such as "soak the beans". */
   prepAhead: z.string().trim().min(1).max(500).nullable(),
+  /** Anything else worth keeping: a description, tips, where it came from. */
+  notes: z.string().trim().min(1).max(20_000).nullable(),
 };
+
+/**
+ * How much the Household liked a Recipe before Mise, carried over from its source. Never "never":
+ * only a Rating made in Mise can rule a Recipe out.
+ */
+export const ImportedPreference = z.enum(["positive", "negative"]);
+export type ImportedPreference = z.infer<typeof ImportedPreference>;
+
+/** Where a Recipe came from: typed into Mise, or imported, and then from which Recipe of the source. */
+export const RecipeSource = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("manual") }),
+  z.object({
+    kind: z.literal("paprika"),
+    /** Paprika's `uid`; importing again updates this Recipe rather than adding another. */
+    externalId: z.string(),
+    url: z.string().nullable(),
+    author: z.string().nullable(),
+    /** When the import last wrote it. */
+    importedAt: z.iso.datetime(),
+  }),
+]);
+export type RecipeSource = z.infer<typeof RecipeSource>;
 
 export const Recipe = z.object({
   id: RecipeId,
@@ -79,8 +103,12 @@ export const Recipe = z.object({
   allergens: RecipeAllergens,
   /** The R2 key of its photo, if it has one. */
   photoKey: z.string().nullable(),
+  source: RecipeSource,
+  importedPreference: ImportedPreference.nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  /** When someone last changed it in Mise; an import never overwrites a Recipe changed since. */
+  editedInAppAt: z.iso.datetime().nullable(),
 });
 export type Recipe = z.infer<typeof Recipe>;
 
@@ -111,6 +139,7 @@ export const NewRecipe = z
     recurring: RecipeFields.recurring.default(null),
     yieldsLeftovers: RecipeFields.yieldsLeftovers.default(false),
     prepAhead: RecipeFields.prepAhead.default(null),
+    notes: RecipeFields.notes.default(null),
   })
   .strict();
 export type NewRecipe = z.output<typeof NewRecipe>;
@@ -130,6 +159,7 @@ export const UpdateRecipeInput = z
     recurring: RecipeFields.recurring.optional(),
     yieldsLeftovers: RecipeFields.yieldsLeftovers.optional(),
     prepAhead: RecipeFields.prepAhead.optional(),
+    notes: RecipeFields.notes.optional(),
   })
   .strict();
 

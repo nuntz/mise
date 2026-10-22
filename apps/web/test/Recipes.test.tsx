@@ -38,10 +38,14 @@ const toast: Recipe = {
   recurring: "weekly",
   yieldsLeftovers: false,
   prepAhead: null,
+  notes: null,
   photoKey: null,
   allergens: { kind: "unknown", atLeast: ["milk"], unresolved: 1 },
+  source: { kind: "manual" },
+  importedPreference: null,
   createdAt: "2026-10-21T12:00:00.000Z",
   updatedAt: "2026-10-21T12:00:00.000Z",
+  editedInAppAt: null,
 };
 
 const rice: Recipe = {
@@ -96,6 +100,7 @@ function fakeClient(recipes: Recipe[]) {
     photoUrl: (id, key) => `/photos/${id}?v=${key}`,
     uploadPhoto: async () => true,
     removePhoto: async () => true,
+    uploadExport: async () => null,
     close() {},
   };
   return { client, calls };
@@ -158,6 +163,7 @@ test("a new Recipe is created from its lines and fields", async () => {
   await user.type(screen.getByRole("spinbutton", { name: "Effort (minutes)" }), "40");
   await user.selectOptions(screen.getByRole("combobox", { name: "Recurring" }), "monday");
   await user.click(screen.getByRole("checkbox", { name: "Yields Leftovers" }));
+  await user.type(screen.getByRole("textbox", { name: "Notes" }), "From a friend.");
   await user.click(screen.getByRole("button", { name: "Save Recipe" }));
 
   expect(calls.find((call) => call.name === "create_recipe")?.input).toEqual({
@@ -172,7 +178,29 @@ test("a new Recipe is created from its lines and fields", async () => {
     recurring: { weekday: "monday" },
     yieldsLeftovers: true,
     prepAhead: null,
+    notes: "From a friend.",
   });
+});
+
+test("an imported Recipe shows its notes and where it came from", async () => {
+  const imported: Recipe = {
+    ...toast,
+    notes: "A pot of comfort.\n\nDouble the garlic.",
+    source: {
+      kind: "paprika",
+      externalId: "6F1B2A44",
+      url: "https://recipes.example.com/toast",
+      author: "The Example Kitchen",
+      importedAt: "2026-10-21T12:00:00.000Z",
+    },
+  };
+  const { client } = fakeClient([imported]);
+  render(() => <App client={client} />);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
+
+  expect((await screen.findByText(/A pot of comfort/)).textContent).toBe("A pot of comfort.\n\nDouble the garlic.");
+  expect(screen.getByText("Imported from Paprika; source: The Example Kitchen.")).toBeTruthy();
 });
 
 test("editing a Recipe starts from what it has and saves the changes", async () => {

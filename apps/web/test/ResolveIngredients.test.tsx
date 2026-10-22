@@ -78,6 +78,7 @@ function fakeClient() {
     photoUrl: (id, key) => `/photos/${id}?v=${key}`,
     uploadPhoto: async () => true,
     removePhoto: async () => true,
+    uploadExport: async () => null,
     close() {},
   };
   return { client, calls };

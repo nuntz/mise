@@ -233,6 +233,16 @@ function RecipeDetail(props: {
               <For each={current().steps}>{(step) => <li>{step}</li>}</For>
             </ol>
 
+            <Show when={current().notes}>
+              {(notes) => (
+                <>
+                  <h3>{t("recipeForm.notes")}</h3>
+                  <p style={{ "white-space": "pre-line" }}>{notes()}</p>
+                </>
+              )}
+            </Show>
+            <Show when={sourceText(current())}>{(text) => <p>{text()}</p>}</Show>
+
             <button type="button" onClick={() => props.onEdit(current())}>
               {t("recipe.edit")}
             </button>
@@ -295,6 +305,13 @@ function allergenNames(allergens: Allergen[]): string {
 
 function effortText(minutes: number | null): string {
   return minutes === null ? t("recipe.effortUnknown") : t("recipe.effort", { minutes: String(minutes) });
+}
+
+/** Where an imported Recipe came from; nothing for one typed into Mise. */
+function sourceText(recipe: Recipe): string | null {
+  if (recipe.source.kind === "manual") return null;
+  const from = recipe.source.author ?? recipe.source.url;
+  return from ? t("recipe.importedFrom", { from }) : t("recipe.imported");
 }
 
 function recurrenceText(recurring: Recurrence): string {

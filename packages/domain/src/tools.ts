@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Caller, ResolvedCaller } from "./caller";
 import { Household, SetupHouseholdInput } from "./household";
+import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 import {
@@ -16,7 +17,8 @@ import {
 
 /**
  * Topics a change notice can name; clients refetch the matching tools. Items are announced as
- * "recipes": a change to one changes the Recipes that resolve to it.
+ * "recipes": a change to one changes the Recipes that resolve to it. So are imports: a run changes
+ * Recipes, and its log and flags are read beside them.
  */
 export const ChangeTopic = z.enum(["household", "recipes"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
@@ -116,6 +118,25 @@ export const tools = {
   list_items: defineTool({
     input: z.object({}).strict(),
     output: z.array(Item),
+  }),
+  /**
+   * Imports the export uploaded with `PUT …/imports/paprika` (ADR 0011), then deletes the upload.
+   * Upserts each Recipe on its Paprika uid and never deletes one.
+   */
+  run_paprika_import: defineTool({
+    input: RunPaprikaImportInput,
+    output: ImportRun,
+    changes: "recipes",
+  }),
+  /** Import runs, newest first. */
+  list_import_runs: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(ImportRun),
+  }),
+  /** Recipes imports flagged for a merge or as possible duplicates, newest first. */
+  list_import_flags: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(ImportFlag),
   }),
   get_caller: defineTool({
     input: z.object({}).strict(),
