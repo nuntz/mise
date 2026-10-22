@@ -118,7 +118,7 @@ describe("Item matching", () => {
     ["2 cups baby spinach", 2, "cup", "baby spinach", null, "spinach"],
     ["4 scallions", 4, null, "scallions", null, "green_onion"],
     ["2 tomatoes", 2, null, "tomatoes", null, "tomato"],
-    ["1 cup blueberries", 1, "cup", "blueberries", null, null],
+    ["1 cup blueberries", 1, "cup", "blueberries", null, "blueberry"],
     ["2 cups fresh cherry tomatoes", 2, "cup", "fresh cherry tomatoes", null, "cherry_tomato"],
     ["1 lb boneless skinless chicken breasts", 1, "lb", "boneless skinless chicken breasts", null, "chicken_breast"],
     ["1 tbsp freshly grated ginger", 1, "tbsp", "freshly grated ginger", null, "ginger"],
