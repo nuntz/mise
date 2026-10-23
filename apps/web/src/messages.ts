@@ -212,6 +212,7 @@ const en = {
 
   "reason.locked": "Locked, so kept as it was.",
   "reason.kept": "Decided by hand, so kept as it was.",
+  "reason.cooked": "Already cooked, so kept as it was.",
   "reason.nobodyEating": "Nobody's eating, so nothing was planned.",
   "reason.recurringWeekly": "A Recurring Recipe, every week.",
   "reason.recurringWeekday": "A Recurring Recipe, every {weekday}.",
@@ -266,6 +267,18 @@ const en = {
   "slot.guestCount": "1 Guest",
   "slot.guestCountMany": "{count} Guests",
   "slot.notFound": "That Recipe or Member no longer exists.",
+  "cooking.mark": "Mark cooked",
+  "cooking.cooked": "Cooked",
+  "cooking.unmark": "Not cooked after all",
+  "cooking.prompt": "How was it?",
+  "cooking.note": "Note (optional)",
+  "cooking.rate": "Rate",
+  "cooking.rated": "{who}: {rating}",
+  "cooking.ratedNote": "{who}: {rating}. {note}",
+  "cooking.someone": "Someone",
+  "rating.again": "Again",
+  "rating.meh": "Meh",
+  "rating.never": "Never again",
 
   "conflict.contains": "Not safe for {who} ({allergen}, {constraint}): {title} contains it.",
   "conflict.unknown":

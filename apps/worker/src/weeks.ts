@@ -5,6 +5,7 @@ import {
   currentWeekStart,
   type HouseholdSettings,
   type LocalDate,
+  localDate,
   MEALS,
   type Meal,
   type Member,
@@ -16,11 +17,13 @@ import {
   type ProposerDinner,
   type ProposerInput,
   proposeWeek,
+  Rating,
   type RecipeAllergens,
   type RecipeId,
   type RefusedConflict,
   rerollWeek,
   Slot,
+  SlotRating,
   sameConflict,
   slotConflicts,
   type ToolResult,
@@ -35,6 +38,7 @@ import {
   constraintOf,
   type Handlers,
   memberNotFound,
+  memberSignedInAs,
   notSetUp,
   readEffortBudgets,
   readMembers,
@@ -50,6 +54,7 @@ type SlotRow = {
   diners_chosen: number;
   guests: number;
   locked: number;
+  cooked_at: string | null;
   title: string | null;
   base_servings: number | null;
   photo_key: string | null;
@@ -68,6 +73,13 @@ const WeekRecord = Week.pick({
 }).extend({ proposalChoice: ProposalChoice.nullable() });
 type WeekRecord = ReturnType<typeof WeekRecord.parse>;
 
+type RatingRow = SlotKey & {
+  member_id: number | null;
+  rating: string;
+  note: string | null;
+  rated_at: string;
+};
+
 type OverrideRow = SlotKey & { member_id: number | null; allergen: string; cause: string; reason: string };
 
 /** An Override as stored: for the cause its Conflict had when it was given. */
@@ -83,7 +95,9 @@ type WeekTools =
   | "clear_week"
   | "propose_week"
   | "set_week_effort_budgets"
-  | "review_week";
+  | "review_week"
+  | "mark_cooked"
+  | "rate_recipe";
 
 /** The seed a Week is first proposed with. */
 const FIRST_SEED = 1;
@@ -191,8 +205,13 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     if (!settings) return notSetUp();
     const dates = weekDates(weekStartOf(input.date, settings.weekStartsOn));
     const range = [dates[0], dates.at(-1)];
+    // A cooked Slot is history, not a plan: it stays, with its Ratings.
     for (const table of ["slot_diner", "slot_guest_constraint", "slot_override", "slot_reason", "slot"]) {
-      sql.exec(`DELETE FROM ${table} WHERE date BETWEEN ? AND ?`, ...range);
+      sql.exec(
+        `DELETE FROM ${table} WHERE (date, meal) IN
+           (SELECT date, meal FROM slot WHERE date BETWEEN ? AND ? AND cooked_at IS NULL)`,
+        ...range,
+      );
     }
     return { ok: true, value: readWeek(sql, dates[0] as LocalDate) };
   },
@@ -207,6 +226,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const week = readWeek(sql, start);
     const stored = readWeekRecords(sql, start)[0];
     const members = readMembers(sql);
+    const ratings = readRatingsByRecipe(sql);
     const proposerInput: ProposerInput = {
       dinners: week.slots
         .filter((slot) => slot.meal === "dinner")
@@ -216,13 +236,13 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
             kind: slot.kind,
             recipeId: slot.recipe?.id ?? null,
             locked: slot.locked,
+            cooked: slot.cookedAt !== null,
             diners: slot.diners.flatMap((id) => members.filter((member) => member.id === id)),
             guests: slot.guests,
             guestConstraints: slot.guestConstraints,
           }),
         ),
-      // No Ratings are recorded yet.
-      recipes: readRecipes(sql).map((recipe) => ({ ...recipe, ratings: [] })),
+      recipes: readRecipes(sql).map((recipe) => ({ ...recipe, ratings: ratings.get(recipe.id) ?? [] })),
       history: plannedAround(sql, start),
       effortBudgets: week.effortBudgets,
       useUp: input.useUp,
@@ -235,7 +255,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     for (const dinner of proposal.dinners) {
       const slot = { date: dinner.date, meal: "dinner" } as const;
       storeSlot(sql, settings, dinner.date, "dinner");
-      if (!["locked", "kept"].includes(dinner.reason.kind)) {
+      if (!["locked", "cooked", "kept"].includes(dinner.reason.kind)) {
         sql.exec(
           "UPDATE slot SET kind = ?, recipe_id = ? WHERE date = ? AND meal = ?",
           dinner.kind,
@@ -290,7 +310,83 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     sql.exec("UPDATE week SET reviewed = ? WHERE start_date = ?", Number(input.reviewed), start);
     return { ok: true, value: readWeek(sql, start) };
   },
+
+  mark_cooked: (sql, input) => {
+    const settings = readSettings(sql);
+    if (!settings) return notSetUp();
+    const slot = readSlot(sql, input.date, input.meal);
+    if (!slot.recipe) {
+      return { ok: false, error: { code: "no_recipe", message: `${input.date} ${input.meal} has no Recipe to cook` } };
+    }
+    if (input.cooked && input.date > localDate(new Date(), settings.timezone)) {
+      return { ok: false, error: { code: "not_yet", message: `${input.date} is after today, so not cooked yet` } };
+    }
+    if (input.cooked) {
+      // Marking it again keeps when it was first marked.
+      sql.exec(
+        "UPDATE slot SET cooked_at = coalesce(cooked_at, ?) WHERE date = ? AND meal = ?",
+        new Date().toISOString(),
+        input.date,
+        input.meal,
+      );
+    } else {
+      clearCooking(sql, input);
+    }
+    return { ok: true, value: readSlot(sql, input.date, input.meal) };
+  },
+
+  rate_recipe: (sql, input, { caller }) => {
+    if (!readSettings(sql)) return notSetUp();
+    if (readSlot(sql, input.date, input.meal).cookedAt === null) {
+      return {
+        ok: false,
+        error: { code: "not_cooked", message: `Mark ${input.date} ${input.meal} cooked before rating it` },
+      };
+    }
+    const member = caller ? memberSignedInAs(sql, caller.email) : null;
+    if (member) {
+      sql.exec(
+        "DELETE FROM slot_rating WHERE date = ? AND meal = ? AND member_id = ?",
+        input.date,
+        input.meal,
+        member.id,
+      );
+    }
+    sql.exec(
+      "INSERT INTO slot_rating (date, meal, member_id, rating, note, rated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      input.date,
+      input.meal,
+      member?.id ?? null,
+      input.rating,
+      input.note,
+      new Date().toISOString(),
+    );
+    return { ok: true, value: readSlot(sql, input.date, input.meal) };
+  },
 };
+
+/** Forgets that the Slot was cooked, and so its Ratings. */
+function clearCooking(sql: SqlStorage, { date, meal }: SlotKey): void {
+  sql.exec("UPDATE slot SET cooked_at = NULL WHERE date = ? AND meal = ?", date, meal);
+  sql.exec("DELETE FROM slot_rating WHERE date = ? AND meal = ?", date, meal);
+}
+
+/** Each Recipe's Ratings, from every Slot cooked with it, oldest first. */
+function readRatingsByRecipe(sql: SqlStorage): Map<RecipeId, Rating[]> {
+  const rows = sql
+    .exec<{ recipe_id: number; rating: string }>(
+      `SELECT s.recipe_id, r.rating FROM slot_rating AS r JOIN slot AS s ON s.date = r.date AND s.meal = r.meal
+       WHERE s.recipe_id IS NOT NULL ORDER BY r.rated_at, r.id`,
+    )
+    .toArray();
+  const ratings = new Map<RecipeId, Rating[]>();
+  for (const row of rows) {
+    const recipe = ratings.get(row.recipe_id) ?? [];
+    recipe.push(Rating.parse(row.rating));
+    ratings.set(row.recipe_id, recipe);
+  }
+  return ratings;
+}
 
 /** The start of the Week `date` is in; without one, of the Week the Household is in today. */
 function weekNamedBy(settings: HouseholdSettings, date: LocalDate | undefined): LocalDate {
@@ -300,8 +396,8 @@ function weekNamedBy(settings: HouseholdSettings, date: LocalDate | undefined): 
 }
 
 /**
- * The Recipes planned for dinners within 6 weeks of the Week, before or after it. Cooking is not
- * recorded yet, so a Recipe planned counts as cooked on its date.
+ * The Recipes planned for dinners within 6 weeks of the Week, before or after it, cooked or not:
+ * a cooked one counts on its own date, and a past one nobody marked cooked most likely was (ADR 0014).
  */
 function plannedAround(sql: SqlStorage, start: LocalDate): { recipeId: RecipeId; date: LocalDate }[] {
   const end = addDays(start, 6);
@@ -344,6 +440,8 @@ function editSlot(
   const after = readSlot(sql, date, meal);
   const sameRecipe = before.recipe?.id === after.recipe?.id;
   const known = sameRecipe ? before.conflicts : [];
+  // What was cooked, and rated, was the Recipe it had.
+  if (!sameRecipe) clearCooking(sql, { date, meal });
 
   const overrides: StoredOverride[] = [];
   const refused: RefusedConflict[] = [];
@@ -519,6 +617,8 @@ function unplannedSlot(date: LocalDate, meal: Meal, diners: MemberId[]): Slot {
     locked: false,
     conflicts: [],
     reason: null,
+    cookedAt: null,
+    ratings: [],
   };
 }
 
@@ -549,6 +649,13 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
     .exec<OverrideRow>(
       `SELECT date, meal, member_id, allergen, cause, reason FROM slot_override
        WHERE date BETWEEN ? AND ? ORDER BY date, meal, position`,
+      ...range,
+    )
+    .toArray();
+  const ratings = sql
+    .exec<RatingRow>(
+      `SELECT date, meal, member_id, rating, note, rated_at FROM slot_rating
+       WHERE date BETWEEN ? AND ? ORDER BY rated_at, id`,
       ...range,
     )
     .toArray();
@@ -617,6 +724,15 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
             null,
         })),
         reason: reason ? ProposalReason.parse(JSON.parse(reason.reason)) : null,
+        cookedAt: row.cooked_at,
+        ratings: of(ratings, row).map((rating) =>
+          SlotRating.parse({
+            memberId: rating.member_id,
+            rating: rating.rating,
+            note: rating.note,
+            at: rating.rated_at,
+          }),
+        ),
       });
     })
     .sort((a, b) => a.date.localeCompare(b.date) || MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal));

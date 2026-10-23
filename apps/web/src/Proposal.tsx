@@ -185,6 +185,8 @@ export function reasonText(
   switch (reason.kind) {
     case "locked":
       return t("reason.locked");
+    case "cooked":
+      return t("reason.cooked");
     case "kept":
       return t("reason.kept");
     case "nobody_eating":

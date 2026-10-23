@@ -109,6 +109,8 @@ export const handlers: Handlers = {
     // Slots they were chosen to eat go on without them, and need no Override for them.
     sql.exec("DELETE FROM slot_diner WHERE member_id = ?", member.id);
     sql.exec("DELETE FROM slot_override WHERE member_id = ?", member.id);
+    // What they thought of what they ate still counts, without their name.
+    sql.exec("UPDATE slot_rating SET member_id = NULL WHERE member_id = ?", member.id);
     sql.exec("DELETE FROM member WHERE id = ?", member.id);
     return { ok: true, value: member };
   },
@@ -171,7 +173,7 @@ function writeConstraints(sql: SqlStorage, memberId: MemberId, constraints: Cons
 }
 
 /** The Member who signs in as `email`; Caller and Member emails are both lower case. */
-function memberSignedInAs(sql: SqlStorage, email: string): Member | null {
+export function memberSignedInAs(sql: SqlStorage, email: string): Member | null {
   const [row] = sql.exec<{ id: number }>("SELECT id FROM member WHERE email = ?", email).toArray();
   return row ? readMember(sql, row.id) : null;
 }

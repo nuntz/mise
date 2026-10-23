@@ -241,6 +241,26 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 9,
+    statements: [
+      // When a Slot was marked cooked, null until it is; it counts for its Recipe on the Slot's date.
+      "ALTER TABLE slot ADD COLUMN cooked_at TEXT",
+      // A Rating of a cooked Slot: member_id is the Member who gave it, NULL when none did. One per
+      // Member and Slot; those without a Member are each kept.
+      `CREATE TABLE slot_rating (
+        id INTEGER PRIMARY KEY,
+        date TEXT NOT NULL,
+        meal TEXT NOT NULL,
+        member_id INTEGER REFERENCES member (id),
+        rating TEXT NOT NULL,
+        note TEXT,
+        rated_at TEXT NOT NULL,
+        FOREIGN KEY (date, meal) REFERENCES slot (date, meal)
+      )`,
+      "CREATE UNIQUE INDEX slot_rating_member ON slot_rating (date, meal, member_id) WHERE member_id IS NOT NULL",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

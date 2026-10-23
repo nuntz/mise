@@ -123,14 +123,17 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     }
     sql.exec("DELETE FROM import_flag WHERE recipe_id = ?1 OR duplicate_of = ?1", recipe.id);
     // Slots planned with it are unplanned again, and no longer Locked: there is no Recipe to keep,
-    // nor any Conflict to override, nor a reason it was proposed.
-    for (const table of ["slot_override", "slot_reason"]) {
+    // nor any Conflict to override, nor a reason it was proposed, nor cooking to rate.
+    for (const table of ["slot_override", "slot_reason", "slot_rating"]) {
       sql.exec(
         `DELETE FROM ${table} WHERE (date, meal) IN (SELECT date, meal FROM slot WHERE recipe_id = ?)`,
         recipe.id,
       );
     }
-    sql.exec("UPDATE slot SET kind = 'unplanned', recipe_id = NULL, locked = 0 WHERE recipe_id = ?", recipe.id);
+    sql.exec(
+      "UPDATE slot SET kind = 'unplanned', recipe_id = NULL, locked = 0, cooked_at = NULL WHERE recipe_id = ?",
+      recipe.id,
+    );
     sql.exec("DELETE FROM recipe WHERE id = ?", recipe.id);
     return { ok: true, value: recipe };
   },
@@ -252,6 +255,16 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       )
       .toArray(),
   );
+  const cooked = new Map(
+    sql
+      .exec<{ recipe_id: number; last_cooked_at: string; cook_count: number }>(
+        `SELECT recipe_id, max(date) AS last_cooked_at, count(*) AS cook_count FROM slot
+         WHERE cooked_at IS NOT NULL AND (? IS NULL OR recipe_id = ?) GROUP BY recipe_id`,
+        ...only,
+      )
+      .toArray()
+      .map((row) => [row.recipe_id, row]),
+  );
   const catalogue = readCatalogue(sql);
   // Refuses an Item the Household's catalogue does not have.
   const StoredIngredient = Ingredient.extend({ item: catalogue.knownItemId.nullable() });
@@ -281,6 +294,8 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       editedInAppAt: row.edited_in_app_at,
+      lastCookedAt: cooked.get(row.id)?.last_cooked_at ?? null,
+      cookCount: cooked.get(row.id)?.cook_count ?? 0,
     });
   });
 }

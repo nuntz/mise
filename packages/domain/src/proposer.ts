@@ -12,6 +12,8 @@ export type ProposerDinner = {
   kind: SlotKind;
   recipeId: RecipeId | null;
   locked: boolean;
+  /** Marked cooked: what was eaten stays as it was. */
+  cooked: boolean;
   diners: Pick<Member, "id" | "constraints">[];
   guests: number;
   guestConstraints: Constraint[];
@@ -80,10 +82,11 @@ const KEPT_KINDS: readonly SlotKind[] = ["leftovers", "eat_out", "skip"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Proposes the Week's dinners. Locked Slots, and dinners decided by hand as Leftovers, eating out or
- * no meal, are kept. Recurring Recipes are pinned first. Every other dinner gets a Recipe that no
- * Hard Constraint of anyone eating it rules out (unknown Allergens fail closed), not rated "never",
- * not planned within 2 weeks of it and within the day's Effort Budget (an unknown effort passes).
+ * Proposes the Week's dinners. Locked Slots, cooked dinners, and dinners decided by hand as Leftovers,
+ * eating out or no meal, are kept. Recurring Recipes are pinned first. Every other dinner gets a
+ * Recipe that no Hard Constraint of anyone eating it rules out (unknown Allergens fail closed), not
+ * rated "never", not planned within 2 weeks of it and within the day's Effort Budget (an unknown
+ * effort passes).
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
  * The same input, seed and choice always give the same Proposal.
@@ -194,6 +197,7 @@ function settled(dinner: ProposerDinner): ProposedDinner | undefined {
     recipeId: dinner.recipeId,
     reason,
   });
+  if (dinner.cooked) return as({ kind: "cooked" });
   if (dinner.locked) return as({ kind: "locked" });
   if (KEPT_KINDS.includes(dinner.kind)) return as({ kind: "kept" });
   if (dinner.diners.length + dinner.guests === 0) {

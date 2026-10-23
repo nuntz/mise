@@ -3,7 +3,7 @@ import { Overrides, SlotConflict } from "./conflicts";
 import { EffortBudgets, Minutes, WEEKDAYS, Weekday } from "./household";
 import { ItemId } from "./items";
 import { Constraint, MemberId } from "./members";
-import { ProposalReason } from "./proposals";
+import { ProposalReason, Rating } from "./proposals";
 import { Recipe, RecipeId } from "./recipes";
 import { localDate } from "./time";
 
@@ -53,6 +53,18 @@ const SlotNote = z.string().trim().min(1).max(500);
 const Guests = z.number().int().min(0).max(50);
 const GuestConstraints = z.array(Constraint).max(50);
 
+const RatingNote = z.string().trim().min(1).max(500);
+
+/** A Rating given to a Slot once it was cooked, by the Member the Caller signed in as, if any. */
+export const SlotRating = z.object({
+  /** Null when no Member gave it: the Caller signed in as nobody's email, or the Member was removed. */
+  memberId: MemberId.nullable(),
+  rating: Rating,
+  note: RatingNote.nullable(),
+  at: z.iso.datetime(),
+});
+export type SlotRating = z.infer<typeof SlotRating>;
+
 /** What a Slot shows of its Recipe. */
 export const SlotRecipe = Recipe.pick({ id: true, title: true, baseServings: true, photoKey: true });
 export type SlotRecipe = z.infer<typeof SlotRecipe>;
@@ -77,6 +89,10 @@ export const Slot = z.object({
   conflicts: z.array(SlotConflict),
   /** Why the latest Proposal left it as it did; null once edited by hand, or if never proposed. */
   reason: ProposalReason.nullable(),
+  /** When it was marked cooked; null until it is. Only a Slot with a Recipe can be. */
+  cookedAt: z.iso.datetime().nullable(),
+  /** The Ratings it was given once cooked, oldest first: one per Member, and any no Member gave. */
+  ratings: z.array(SlotRating),
 });
 export type Slot = z.infer<typeof Slot>;
 
@@ -197,3 +213,17 @@ export const SetWeekEffortBudgetsInput = z
   .strict();
 
 export const ReviewWeekInput = z.object({ date: LocalDate, reviewed: z.boolean() }).strict();
+
+/**
+ * Marks a Slot with a Recipe as cooked, or not (which drops its Ratings). Cooking counts for its
+ * Recipe on the Slot's date. A Slot loses its cooking and Ratings when its Recipe changes.
+ */
+export const MarkCookedInput = z.object({ ...SlotRef, cooked: z.boolean().default(true) }).strict();
+
+/**
+ * Rates the Recipe of a cooked Slot, for the Member the Caller signs in as: their Rating replaces
+ * the one they gave the Slot before. A Caller who is no Member rates without a name.
+ */
+export const RateRecipeInput = z
+  .object({ ...SlotRef, rating: Rating, note: RatingNote.nullable().default(null) })
+  .strict();

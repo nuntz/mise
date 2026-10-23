@@ -21,8 +21,10 @@ import {
   GetWeekInput,
   type LocalDate,
   LockSlotInput,
+  MarkCookedInput,
   type Meal,
   ProposeWeekInput,
+  RateRecipeInput,
   ReviewWeekInput,
   SetDinersInput,
   SetGuestsInput,
@@ -195,7 +197,10 @@ export const tools = {
     output: Slot,
     changes: "plan",
   }),
-  /** Requires `confirm: true`. Puts every Slot of the Week back as it starts, Locked ones too; returns the Week. */
+  /**
+   * Requires `confirm: true`. Puts every Slot of the Week back as it starts, Locked ones too, but
+   * leaves cooked ones as they were; returns the Week.
+   */
   clear_week: defineTool({
     input: ClearWeekInput,
     output: Week,
@@ -220,6 +225,18 @@ export const tools = {
   review_week: defineTool({
     input: ReviewWeekInput,
     output: Week,
+    changes: "plan",
+  }),
+  /** Refuses a Slot without a Recipe (`no_recipe`), or dated after today (`not_yet`). Returns the Slot. */
+  mark_cooked: defineTool({
+    input: MarkCookedInput,
+    output: Slot,
+    changes: "plan",
+  }),
+  /** Refuses a Slot not marked cooked (`not_cooked`). Returns the Slot. */
+  rate_recipe: defineTool({
+    input: RateRecipeInput,
+    output: Slot,
     changes: "plan",
   }),
   get_caller: defineTool({
@@ -250,7 +267,10 @@ export type ToolErrorCode =
   | "not_found"
   | "email_in_use"
   | "name_in_use"
-  | "constraint_conflict";
+  | "constraint_conflict"
+  | "no_recipe"
+  | "not_yet"
+  | "not_cooked";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */
 export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };

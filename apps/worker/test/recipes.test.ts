@@ -73,6 +73,8 @@ describe("hand-entered Recipes", () => {
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
       editedInAppAt: null,
+      lastCookedAt: null,
+      cookCount: 0,
     };
     expect(created).toEqual({ ok: true, value: expected });
     expect(read).toEqual({ ok: true, value: expected });

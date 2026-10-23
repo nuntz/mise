@@ -46,6 +46,7 @@ function dinners(): ProposerDinner[] {
     kind: "unplanned",
     recipeId: null,
     locked: false,
+    cooked: false,
     diners: [robin, alex],
     guests: 0,
     guestConstraints: [],
@@ -140,6 +141,7 @@ function randomWeek(seed: number): ProposerInput {
       ...(roll < 0.15 && { kind: "recipe", recipeId: planned.id, locked: true }),
       ...(roll >= 0.15 && roll < 0.25 && { kind: random.one(["leftovers", "eat_out", "skip"] as const) }),
       ...(roll >= 0.25 && roll < 0.35 && { kind: "recipe", recipeId: planned.id }),
+      ...(roll >= 0.35 && roll < 0.45 && { kind: "recipe", recipeId: planned.id, cooked: true }),
     };
   });
   const history = Array.from({ length: random.int(10) }, () => ({
@@ -168,12 +170,12 @@ describe("proposeWeek, over random Weeks", () => {
     }
   });
 
-  test("keeps Locked Slots, and dinners decided as Leftovers, eating out or no meal, as they were", () => {
+  test("keeps Locked Slots, cooked dinners, and those decided as Leftovers, eating out or no meal", () => {
     for (const seed of WEEKS) {
       const week = randomWeek(seed);
       const proposal = proposeWeek(week);
       week.dinners.forEach((before, index) => {
-        if (!before.locked && !["leftovers", "eat_out", "skip"].includes(before.kind)) return;
+        if (!before.locked && !before.cooked && !["leftovers", "eat_out", "skip"].includes(before.kind)) return;
         expect(proposal.dinners[index]).toMatchObject({ kind: before.kind, recipeId: before.recipeId });
       });
     }

@@ -63,6 +63,21 @@ describe("export and restore", () => {
       await original.callTool("set_week_effort_budgets", { date: "2026-11-02", budgets: { friday: 15 } }),
       await original.callTool("propose_week", { date: "2026-11-02" }),
       await original.callTool("review_week", { date: "2026-11-02", reviewed: true }),
+      // A dinner already eaten, cooked and rated.
+      await original.callTool("set_slot", {
+        date: "2026-10-05",
+        meal: "dinner",
+        kind: "recipe",
+        recipeId: 1,
+        diners: [1],
+      }),
+      await original.callTool("mark_cooked", { date: "2026-10-05", meal: "dinner" }),
+      await original.callTool("rate_recipe", {
+        date: "2026-10-05",
+        meal: "dinner",
+        rating: "again",
+        note: "Do it again",
+      }),
     ];
     expect(planned.every((result) => result.ok)).toBe(true);
     const exported = await exportOf(original);
@@ -79,6 +94,9 @@ describe("export and restore", () => {
     expect(await fresh.callTool("get_recipe", { id: 1 })).toEqual(await original.callTool("get_recipe", { id: 1 }));
     expect(await fresh.callTool("get_week", { date: "2026-10-26" })).toEqual(
       await original.callTool("get_week", { date: "2026-10-26" }),
+    );
+    expect(await fresh.callTool("get_week", { date: "2026-10-05" })).toEqual(
+      await original.callTool("get_week", { date: "2026-10-05" }),
     );
     expect(await fresh.callTool("get_week", { date: "2026-11-02" })).toEqual(
       await original.callTool("get_week", { date: "2026-11-02" }),
@@ -171,7 +189,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 8,
+      schemaVersion: 9,
       tables: {
         household: [
           {
@@ -208,6 +226,7 @@ describe("export and restore", () => {
         slot_diner: [],
         slot_guest_constraint: [],
         slot_override: [],
+        slot_rating: [],
         slot_reason: [],
         effort_budget: [],
         week: [],

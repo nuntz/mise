@@ -62,6 +62,8 @@ function emptyWeek(startDate: string): Week {
           locked: false,
           conflicts: [],
           reason: null,
+          cookedAt: null,
+          ratings: [],
         }),
       ),
     ),
@@ -140,6 +142,9 @@ function fakeClient(answers: Record<string, Answer> = {}) {
           return { ok: true, value: tuesdayDinner };
         case "set_diners":
           return { ok: true, value: [tuesdayDinner] };
+        case "mark_cooked":
+        case "rate_recipe":
+          return { ok: true, value: tuesdayDinner };
         case "list_items":
           return { ok: true, value: ITEMS };
         case "propose_week":
@@ -524,4 +529,55 @@ test("Effort Budgets are set for this Week, or for every Week", async () => {
       { name: "set_effort_budgets", input: { budgets: { saturday: 150 } } },
     ]),
   );
+});
+
+test("a dinner with a Recipe can be marked cooked; one without has nothing to cook", async () => {
+  const { client, calls } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  const monday = screen.getByRole("region", { name: "Monday, October 26" });
+
+  expect(within(monday).queryByRole("button", { name: "Mark cooked" })).toBeNull();
+  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+  await user.click(within(dinner).getByRole("button", { name: "Mark cooked" }));
+
+  expect(writes(calls)).toEqual([{ name: "mark_cooked", input: { date: "2026-10-27", meal: "dinner" } }]);
+});
+
+test("a cooked dinner shows its Ratings, asks for one, and can be unmarked", async () => {
+  const cooked = emptyWeek("2026-10-26");
+  Object.assign(cooked.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T02:00:00.000Z",
+    ratings: [
+      { memberId: 1, rating: "meh", note: "Too salty", at: "2026-10-27T02:10:00.000Z" },
+      { memberId: null, rating: "again", note: null, at: "2026-10-27T02:20:00.000Z" },
+    ],
+  });
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: cooked }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+
+  expect(within(dinner).getByText("Cooked")).toBeTruthy();
+  expect(within(dinner).getByText("Robin: Meh. Too salty")).toBeTruthy();
+  expect(within(dinner).getByText("Someone: Again")).toBeTruthy();
+  expect(within(dinner).queryByRole("button", { name: "Mark cooked" })).toBeNull();
+
+  const form = within(dinner).getByRole("form", { name: "How was it?" });
+  await user.click(within(form).getByRole("radio", { name: "Never again" }));
+  await user.type(within(form).getByRole("textbox", { name: "Note (optional)" }), "Nobody ate it");
+  await user.click(within(form).getByRole("button", { name: "Rate" }));
+  await user.click(within(dinner).getByRole("button", { name: "Not cooked after all" }));
+
+  expect(writes(calls)).toEqual([
+    {
+      name: "rate_recipe",
+      input: { date: "2026-10-27", meal: "dinner", rating: "never", note: "Nobody ate it" },
+    },
+    { name: "mark_cooked", input: { date: "2026-10-27", meal: "dinner", cooked: false } },
+  ]);
 });

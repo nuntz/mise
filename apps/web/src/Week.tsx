@@ -9,6 +9,8 @@ import {
   type Member,
   type MemberId,
   type Override,
+  RATINGS,
+  type Rating,
   type RecipeSummary,
   type RefusedConflict,
   SLOT_KINDS,
@@ -207,6 +209,9 @@ function SlotView(props: {
       <Show when={props.slot.locked}>
         <p>{t("slot.locked")}</p>
       </Show>
+      <Show when={props.slot.recipe}>
+        <Cooking client={props.client} household={props.household} slot={props.slot} />
+      </Show>
       <Show
         when={editing()}
         fallback={
@@ -223,6 +228,93 @@ function SlotView(props: {
         />
       </Show>
     </section>
+  );
+}
+
+/** Marking a Slot with a Recipe cooked; once it is, its Ratings and a prompt for one more. */
+function Cooking(props: { client: MiseClient; household: Household; slot: Slot }) {
+  const [rating, setRating] = createSignal<Rating>();
+  const [note, setNote] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const where = () => ({ date: props.slot.date, meal: props.slot.meal });
+
+  const call = async (write: () => Promise<ToolResult<unknown>>): Promise<boolean> => {
+    setBusy(true);
+    const outcome = await outcomeOf(write);
+    setBusy(false);
+    setError(outcome.failure);
+    return !outcome.failure;
+  };
+
+  const rate = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const chosen = rating();
+    if (!chosen) return;
+    const typed = note().trim() || null;
+    if (await call(() => props.client.call("rate_recipe", { ...where(), rating: chosen, note: typed }))) {
+      setRating(undefined);
+      setNote("");
+    }
+  };
+
+  const ratedText = (given: Slot["ratings"][number]) => {
+    const params = {
+      who: given.memberId === null ? t("cooking.someone") : whoName(given.memberId, props.household),
+      rating: t(`rating.${given.rating}`),
+    };
+    return given.note ? t("cooking.ratedNote", { ...params, note: given.note }) : t("cooking.rated", params);
+  };
+
+  return (
+    <>
+      <Show when={error()}>
+        <p role="alert">{error()}</p>
+      </Show>
+      <Show
+        when={props.slot.cookedAt}
+        fallback={
+          <button type="button" disabled={busy()} onClick={() => call(() => props.client.call("mark_cooked", where()))}>
+            {t("cooking.mark")}
+          </button>
+        }
+      >
+        <p>{t("cooking.cooked")}</p>
+        <For each={props.slot.ratings}>{(given) => <p>{ratedText(given)}</p>}</For>
+        <form aria-label={t("cooking.prompt")} onSubmit={rate}>
+          <fieldset>
+            <legend>{t("cooking.prompt")}</legend>
+            <For each={RATINGS}>
+              {(option) => (
+                <label>
+                  <input
+                    type="radio"
+                    name={`rating-${props.slot.date}-${props.slot.meal}`}
+                    checked={rating() === option}
+                    onChange={() => setRating(option)}
+                  />
+                  {t(`rating.${option}`)}
+                </label>
+              )}
+            </For>
+          </fieldset>
+          <label>
+            {t("cooking.note")}
+            <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
+          </label>
+          <button type="submit" disabled={busy() || !rating()}>
+            {t("cooking.rate")}
+          </button>
+        </form>
+        <button
+          type="button"
+          disabled={busy()}
+          onClick={() => call(() => props.client.call("mark_cooked", { ...where(), cooked: false }))}
+        >
+          {t("cooking.unmark")}
+        </button>
+      </Show>
+    </>
   );
 }
 

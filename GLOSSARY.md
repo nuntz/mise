@@ -71,7 +71,7 @@ A Recipe an Import Run left for someone to look at: changed in the source after 
 _Avoid_: Conflict, review item
 
 **Rating**:
-A verdict on a Recipe after cooking it: again, meh or never.
+A verdict on a Recipe after cooking it for a Slot: again, meh or never, with an optional note, given by a Member or by someone unnamed.
 
 ## Planning
 

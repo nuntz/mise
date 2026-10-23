@@ -58,12 +58,12 @@ Allergen    = peanut|tree_nut|milk|egg|wheat|soy|fish|shellfish|sesame|mustard|s
 Ingredient  { raw, item, qty?, unit?, note?, section, allergens: Allergen[] }   // allergens tagged at import; see §4.2
 Recipe      { id, title, lang, baseServings, ingredients[], steps[], tags[], effortMinutes, photoKey?,
               yieldsLeftovers: bool, prepAhead?: string, recurring?: "weekly"|{weekday},
-              lastCookedAt?, cookCount, ratings[], source, createdAt, updatedAt, editedInAppAt? }
+              lastCookedAt?, cookCount, source, createdAt, updatedAt, editedInAppAt? }
 Source      { kind: paprika|gdrive|url|tiktok|instagram|manual, externalId?, externalRevision?, url?, author?, importedAt, confidence? }
 WeekPlan    { id, startDate, slots[], groceryListId?, instacartUrl? }
 Slot        { date, meal: breakfast|lunch|dinner, kind: recipe|leftovers|eat_out|unplanned|skip,
               recipeId?, leftoversOf?: slotId, diners: memberId[], guests: int, guestConstraints: Constraint[],
-              locked: bool, note?, cookedAt?, rating?, overrides: { who: memberId|"guests", allergen, reason }[] }
+              locked: bool, note?, cookedAt?, ratings: Rating[], overrides: { who: memberId|"guests", allergen, reason }[] }
               // servings = diners.length + guests
 Staple      { id, item, location: pantry|fridge|freezer, checkEvery: duration | "every_shop", alwaysBuy: bool,
               status: stocked|low|out, lastChecked, unit?, qtyPerShop? }

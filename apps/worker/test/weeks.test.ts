@@ -61,6 +61,8 @@ describe("a Week", () => {
       locked: false,
       conflicts: [],
       reason: null,
+      cookedAt: null,
+      ratings: [],
     });
   });
 });
@@ -94,6 +96,8 @@ describe("setting a Slot", () => {
       locked: false,
       conflicts: [],
       reason: null,
+      cookedAt: null,
+      ratings: [],
     };
     expect(set).toEqual({ ok: true, value: slot });
     expect(slotOf(weekOf(await household.callTool("get_week", { date: MONDAY })), TUESDAY, "dinner")).toEqual(slot);

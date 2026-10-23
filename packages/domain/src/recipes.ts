@@ -112,6 +112,10 @@ export const Recipe = z.object({
   updatedAt: z.iso.datetime(),
   /** When someone last changed it in Mise; an import never overwrites a Recipe changed since. */
   editedInAppAt: z.iso.datetime().nullable(),
+  /** The date of the latest Slot it was cooked for; null if it never was. */
+  lastCookedAt: z.iso.date().nullable(),
+  /** How many Slots it was cooked for. */
+  cookCount: z.number().int().nonnegative(),
 });
 export type Recipe = z.infer<typeof Recipe>;
 
