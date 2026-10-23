@@ -897,7 +897,7 @@ function ConflictOverrides(props: {
 }
 
 /** Tab and Shift+Tab go round the sheet's controls, not out to the page under it. */
-function keepFocusIn(sheet: HTMLElement, event: KeyboardEvent) {
+export function keepFocusIn(sheet: HTMLElement, event: KeyboardEvent) {
   const controls = [...sheet.querySelectorAll<HTMLElement>("input, button:not(:disabled)")];
   const [first, last] = [controls[0], controls.at(-1)];
   if (event.shiftKey && document.activeElement === first) {
