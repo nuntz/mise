@@ -10,10 +10,11 @@ import {
   type UnitFamily,
   type UnresolvedGroup,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { keepFresh } from "./fresh";
 import { createItems } from "./items";
 import { t } from "./messages";
 
@@ -24,16 +25,16 @@ export function ResolveIngredients(props: { client: MiseClient }) {
   const [failed, setFailed] = createSignal(false);
   const items = createItems(props.client);
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("list_unresolved_ingredients", {});
+  keepFresh(
+    props.client,
+    ["recipes"],
+    () => props.client.call("list_unresolved_ingredients", {}),
+    (result) => {
       setFailed(!result.ok);
       if (result.ok) setLoaded("groups", reconcile(result.value, { key: "text" }));
-    } catch {
-      setFailed(true);
-    }
-  };
-  onCleanup(props.client.subscribe("recipes", refetch));
+    },
+    () => setFailed(true),
+  );
 
   return (
     <section>

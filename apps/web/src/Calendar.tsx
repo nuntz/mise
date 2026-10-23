@@ -1,6 +1,7 @@
 import { type CalendarToken, calendarFeedPath } from "@mise/domain";
-import { createSignal, Match, onCleanup, Show, Switch } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
+import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
 /** Settings: the calendar feed's subscribe URL, and rotating it when it has gone too far. */
@@ -10,24 +11,27 @@ export function CalendarSettings(props: { client: MiseClient }) {
   const [confirming, setConfirming] = createSignal(false);
   const [rotating, setRotating] = createSignal(false);
 
-  /** Shows the token a call returns, or that it failed. */
-  const load = async (tool: "get_calendar_token" | "rotate_calendar_token") => {
-    try {
-      const result = await props.client.call(tool, {});
+  // Another device rotating the token announces it as a household change.
+  const refetch = keepFresh(
+    props.client,
+    ["household"],
+    () => props.client.call("get_calendar_token", {}),
+    (result) => {
       if (result.ok) setToken(result.value);
       setFailed(!result.ok);
-    } catch {
-      setFailed(true);
-    }
-  };
-  const refetch = () => load("get_calendar_token");
-  // Another device rotating the token announces it as a household change.
-  onCleanup(props.client.subscribe("household", refetch));
-  void refetch();
+    },
+    () => setFailed(true),
+  );
 
   const rotate = async () => {
     setRotating(true);
-    await load("rotate_calendar_token");
+    try {
+      // Loaded again rather than shown, so an older answer still on its way can't replace it.
+      if ((await props.client.call("rotate_calendar_token", {})).ok) await refetch();
+      else setFailed(true);
+    } catch {
+      setFailed(true);
+    }
     setRotating(false);
     setConfirming(false);
   };

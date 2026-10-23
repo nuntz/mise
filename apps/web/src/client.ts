@@ -16,10 +16,11 @@ export type MiseClient = {
   /** Calls a tool through the household's single entry point. */
   call<N extends ToolName>(name: N, input: ToolInput<N>): Promise<ToolResult<ToolOutput<N>>>;
   /**
-   * Runs `refetch` whenever `topic` changes, and on every (re)connect so nothing missed
-   * while offline goes stale. Returns an unsubscribe function.
+   * Runs `refetch` straight away if connected (else once the connection opens), whenever any of
+   * `topics` changes, and once on every reconnect so nothing missed while offline goes stale. Use
+   * `keepFresh` rather than calling this directly. Returns an unsubscribe function.
    */
-  subscribe(topic: ChangeTopic, refetch: () => void): () => void;
+  subscribe(topics: readonly ChangeTopic[], refetch: () => void): () => void;
   /**
    * Calls `listener` with whether the household is reachable: now, and whenever that changes. Until
    * the first attempt to connect fails, it counts as reachable. Returns an unsubscribe function.
@@ -41,19 +42,7 @@ export function createMiseClient(host = window.location.host): MiseClient {
   return {
     call: (name, input) => agent.call("callTool", [name, input]),
 
-    subscribe(topic, refetch) {
-      const onMessage = (event: MessageEvent) => {
-        if (typeof event.data !== "string") return;
-        const notice = ChangeNotice.safeParse(safeJson(event.data));
-        if (notice.success && notice.data.topic === topic) refetch();
-      };
-      agent.addEventListener("message", onMessage);
-      agent.addEventListener("open", refetch);
-      return () => {
-        agent.removeEventListener("message", onMessage);
-        agent.removeEventListener("open", refetch);
-      };
-    },
+    subscribe: (topics, refetch) => subscribeTo(agent, topics, refetch),
 
     onConnection(listener) {
       // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".
@@ -98,6 +87,28 @@ export function createMiseClient(host = window.location.host): MiseClient {
     },
 
     close: () => agent.close(),
+  };
+}
+
+/** Where change notices arrive: the household's socket. */
+export type ChangeSource = Pick<EventTarget, "addEventListener" | "removeEventListener"> & { readyState: number };
+
+/** `MiseClient.subscribe`, over `socket`. */
+export function subscribeTo(socket: ChangeSource, topics: readonly ChangeTopic[], refetch: () => void): () => void {
+  const onMessage = (event: Event) => {
+    const { data } = event as MessageEvent;
+    if (typeof data !== "string") return;
+    const notice = ChangeNotice.safeParse(safeJson(data));
+    if (notice.success && topics.includes(notice.data.topic)) refetch();
+  };
+  const onOpen = () => refetch();
+  socket.addEventListener("message", onMessage);
+  socket.addEventListener("open", onOpen);
+  // Opened before this subscribed, so the open above won't come: fetch now. Connecting, it will.
+  if (socket.readyState === WebSocket.OPEN) refetch();
+  return () => {
+    socket.removeEventListener("message", onMessage);
+    socket.removeEventListener("open", onOpen);
   };
 }
 

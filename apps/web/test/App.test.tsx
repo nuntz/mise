@@ -3,7 +3,7 @@ import { render, screen } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
-import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const alex: Member = { id: 1, name: "Alex", email: "alex@example.com", constraints: [] };
 const sam: Member = { id: 2, name: "Sam", email: null, constraints: [] };
@@ -27,38 +27,24 @@ const household = (overrides: Partial<Household> = {}): Household => ({
  */
 function fakeClient(initial: Household) {
   let current: Household | Error = initial;
-  const listeners = new Set<() => void>();
-  const client: MiseClient = {
-    call: (async (name: string) => {
-      if (name === "get_household") {
-        if (current instanceof Error) throw current;
-        return { ok: true, value: current };
-      }
-      if (name === "get_caller") return { ok: true, value: null };
-      if (name === "search_recipes") return { ok: true, value: [] };
-      throw new Error(`Unexpected tool ${name}`);
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      listeners.add(refetch);
-      // The real client refetches on connect.
-      queueMicrotask(refetch);
-      return () => listeners.delete(refetch);
-    },
-    photoUrl: () => "",
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
+  const fake = createFakeClient((name) => {
+    if (name === "get_household") {
+      if (current instanceof Error) throw current;
+      return { ok: true, value: current };
+    }
+    if (name === "get_caller") return { ok: true, value: null };
+    if (name === "get_week") return { ok: false, error: { code: "not_found", message: "" } };
+    if (name === "get_grocery_list") return { ok: true, value: null };
+    if (name === "list_items") return { ok: true, value: [] };
+    if (name === "list_due_staples") return { ok: true, value: { due: 0, staples: [] } };
+    if (name === "search_recipes") return { ok: true, value: [] };
+    throw new Error(`Unexpected tool ${name}`);
+  });
   const notify = (next: Household | Error) => {
     current = next;
-    for (const listener of listeners) listener();
+    fake.notify("household");
   };
-  return { client, notify };
+  return { client: fake.client, notify };
 }
 
 test("a household change notice keeps unsaved Member input and shows the new data", async () => {

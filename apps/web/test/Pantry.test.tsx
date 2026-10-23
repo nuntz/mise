@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
   name: "The Tremblays",
@@ -54,44 +55,29 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefine
 /** A client with rice and eggs due, unless `answers` say otherwise; it records every call. */
 function fakeClient(answers: Record<string, Answer> = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
-  const client: MiseClient = {
-    call: (async (name: string, input: Record<string, unknown>) => {
-      calls.push({ name, input });
-      const answer = answers[name]?.(input);
-      if (answer) return answer;
-      switch (name) {
-        case "get_household":
-          return { ok: true, value: household };
-        case "get_week":
-          return { ok: false, error: { code: "not_found", message: "" } };
-        case "list_items":
-          return { ok: true, value: ITEMS };
-        case "list_due_staples":
-          return { ok: true, value: { due: 2, staples: [rice, egg] } satisfies DueStaples };
-        case "list_staples":
-          return { ok: true, value: [rice, egg, milk] };
-        case "record_staple_status":
-        case "upsert_staple":
-        case "remove_staple":
-          return { ok: true, value: rice };
-        default:
-          throw new Error(`Unexpected tool ${name}`);
-      }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      queueMicrotask(refetch);
-      return () => {};
-    },
-    photoUrl: (id, key) => `/photos/${id}?v=${key}`,
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
+  const { client } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
+    calls.push({ name, input });
+    const answer = answers[name]?.(input);
+    if (answer) return answer;
+    switch (name) {
+      case "get_household":
+        return { ok: true, value: household };
+      case "get_week":
+        return { ok: false, error: { code: "not_found", message: "" } };
+      case "list_items":
+        return { ok: true, value: ITEMS };
+      case "list_due_staples":
+        return { ok: true, value: { due: 2, staples: [rice, egg] } satisfies DueStaples };
+      case "list_staples":
+        return { ok: true, value: [rice, egg, milk] };
+      case "record_staple_status":
+      case "upsert_staple":
+      case "remove_staple":
+        return { ok: true, value: rice };
+      default:
+        throw new Error(`Unexpected tool ${name}`);
+    }
+  });
   return { client, calls };
 }
 

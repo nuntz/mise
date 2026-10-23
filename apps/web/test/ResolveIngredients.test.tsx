@@ -10,7 +10,7 @@ import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
-import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
   name: "The Tremblays",
@@ -54,46 +54,31 @@ const untagged: RecipeSummary[] = [
 /** A client with fixed Unresolved Ingredients and untagged Recipes that records every tool call made. */
 function fakeClient() {
   const calls: { name: string; input: unknown }[] = [];
-  const client: MiseClient = {
-    call: (async (name: string, input: Record<string, unknown>) => {
-      calls.push({ name, input });
-      switch (name) {
-        case "get_household":
-          return { ok: true, value: household };
-        case "search_recipes":
-          return { ok: true, value: [] };
-        case "list_items":
-          return { ok: true, value: ITEMS };
-        case "list_unresolved_ingredients":
-          return { ok: true, value: groups };
-        case "list_untagged_recipes":
-          return { ok: true, value: untagged };
-        case "resolve_ingredient":
-          return { ok: true, value: { item: ITEMS[0], resolved: 1 } };
-        case "create_item":
-          return input.name === "eggs"
-            ? { ok: false, error: { code: "name_in_use", message: "" } }
-            : { ok: true, value: { ...ITEMS[0], ...input, id: "household:1" } };
-        case "update_recipe":
-          return { ok: true, value: {} };
-        default:
-          throw new Error(`Unexpected tool ${name}`);
-      }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      queueMicrotask(refetch);
-      return () => {};
-    },
-    photoUrl: (id, key) => `/photos/${id}?v=${key}`,
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
+  const { client } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
+    calls.push({ name, input });
+    switch (name) {
+      case "get_household":
+        return { ok: true, value: household };
+      case "search_recipes":
+        return { ok: true, value: [] };
+      case "list_items":
+        return { ok: true, value: ITEMS };
+      case "list_unresolved_ingredients":
+        return { ok: true, value: groups };
+      case "list_untagged_recipes":
+        return { ok: true, value: untagged };
+      case "resolve_ingredient":
+        return { ok: true, value: { item: ITEMS[0], resolved: 1 } };
+      case "create_item":
+        return input.name === "eggs"
+          ? { ok: false, error: { code: "name_in_use", message: "" } }
+          : { ok: true, value: { ...ITEMS[0], ...input, id: "household:1" } };
+      case "update_recipe":
+        return { ok: true, value: {} };
+      default:
+        throw new Error(`Unexpected tool ${name}`);
+    }
+  });
   return { client, calls };
 }
 

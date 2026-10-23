@@ -1,7 +1,8 @@
 import { type Constraint, constraintSeverity, type Member, type MemberId, type ToolError } from "@mise/domain";
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { keepFresh } from "./fresh";
 import { draftOf, emptyMember, type MemberDraft, MemberFields, memberOf } from "./MemberFields";
 import { t } from "./messages";
 
@@ -9,16 +10,13 @@ import { t } from "./messages";
 export function MembersSettings(props: { client: MiseClient; members: Member[] }) {
   // Which Member the Caller is, so they can find themselves.
   const [callerMemberId, setCallerMemberId] = createSignal<MemberId>();
-  const refetchCaller = async () => {
-    try {
-      const result = await props.client.call("get_caller", {});
-      setCallerMemberId(result.ok ? result.value?.member?.id : undefined);
-    } catch {
-      setCallerMemberId(undefined);
-    }
-  };
-  onCleanup(props.client.subscribe("household", refetchCaller));
-  void refetchCaller();
+  keepFresh(
+    props.client,
+    ["household"],
+    () => props.client.call("get_caller", {}),
+    (result) => setCallerMemberId(result.ok ? result.value?.member?.id : undefined),
+    () => setCallerMemberId(undefined),
+  );
 
   return (
     <section>

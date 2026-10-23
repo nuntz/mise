@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
   name: "The Tremblays",
@@ -75,9 +76,8 @@ const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, aller
 /** A client over a fixed set of Recipes that records every tool call made; offline, every call fails. */
 function fakeClient(recipes: Recipe[], { online = true } = {}) {
   const calls: { name: string; input: unknown }[] = [];
-  const client: MiseClient = {
-    call: (async (name: string, input: Record<string, unknown>) => {
-      if (!online) throw new Error("Connection closed");
+  const { client } = createFakeClient(
+    async (name: string, input: Record<string, unknown>) => {
       calls.push({ name, input });
       switch (name) {
         case "get_household":
@@ -104,21 +104,9 @@ function fakeClient(recipes: Recipe[], { online = true } = {}) {
         default:
           throw new Error(`Unexpected tool ${name}`);
       }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      queueMicrotask(refetch);
-      return () => {};
     },
-    photoUrl: (id, key) => `/photos/${id}?v=${key}`,
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(online);
-      return () => {};
-    },
-    close() {},
-  };
+    { online },
+  );
   return { client, calls };
 }
 

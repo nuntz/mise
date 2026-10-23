@@ -17,6 +17,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const robin: Member = { id: 1, name: "Robin", email: null, constraints: [] };
 const alex: Member = { id: 2, name: "Alex", email: null, constraints: [] };
@@ -130,56 +131,41 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     servings: 4,
     locked: true,
   });
-  const client: MiseClient = {
-    call: (async (name: string, input: Record<string, unknown>) => {
-      calls.push({ name, input });
-      const answer = answers[name]?.(input);
-      if (answer) return answer;
-      switch (name) {
-        case "get_household":
-          return { ok: true, value: household };
-        case "get_week":
-          return { ok: true, value: input.date === "2026-11-02" ? emptyWeek("2026-11-02") : thisWeek };
-        case "search_recipes":
-          return { ok: true, value: [curry, pasta] };
-        case "set_slot":
-        case "set_guests":
-        case "lock_slot":
-          return { ok: true, value: tuesdayDinner };
-        case "set_diners":
-          return { ok: true, value: [tuesdayDinner] };
-        case "mark_cooked":
-        case "rate_recipe":
-          return { ok: true, value: tuesdayDinner };
-        case "list_items":
-          return { ok: true, value: ITEMS };
-        case "propose_week":
-        case "review_week":
-        case "set_week_effort_budgets":
-          return { ok: true, value: thisWeek };
-        case "set_effort_budgets":
-          return { ok: true, value: DEFAULT_EFFORT_BUDGETS };
-        case "clear_week":
-          return { ok: true, value: emptyWeek("2026-10-26") };
-        default:
-          throw new Error(`Unexpected tool ${name}`);
-      }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      queueMicrotask(refetch);
-      return () => {};
-    },
-    photoUrl: (id, key) => `/photos/${id}?v=${key}`,
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
-  return { client, calls };
+  const { client, notify } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
+    calls.push({ name, input });
+    const answer = answers[name]?.(input);
+    if (answer) return answer;
+    switch (name) {
+      case "get_household":
+        return { ok: true, value: household };
+      case "get_week":
+        return { ok: true, value: input.date === "2026-11-02" ? emptyWeek("2026-11-02") : thisWeek };
+      case "search_recipes":
+        return { ok: true, value: [curry, pasta] };
+      case "set_slot":
+      case "set_guests":
+      case "lock_slot":
+        return { ok: true, value: tuesdayDinner };
+      case "set_diners":
+        return { ok: true, value: [tuesdayDinner] };
+      case "mark_cooked":
+      case "rate_recipe":
+        return { ok: true, value: tuesdayDinner };
+      case "list_items":
+        return { ok: true, value: ITEMS };
+      case "propose_week":
+      case "review_week":
+      case "set_week_effort_budgets":
+        return { ok: true, value: thisWeek };
+      case "set_effort_budgets":
+        return { ok: true, value: DEFAULT_EFFORT_BUDGETS };
+      case "clear_week":
+        return { ok: true, value: emptyWeek("2026-10-26") };
+      default:
+        throw new Error(`Unexpected tool ${name}`);
+    }
+  });
+  return { client, calls, notify };
 }
 
 const writes = (calls: { name: string; input: unknown }[]) =>
@@ -663,6 +649,47 @@ test("a cooked dinner asks whether any Staple its Recipe uses has run out", asyn
   expect(writes(calls)).toEqual([
     { name: "record_staple_status", input: { item: "olive_oil", status: "out", at: expect.any(String) } },
   ]);
+});
+
+test("marking a dinner cooked asks at once whether any Staple its Recipe uses has run out", async () => {
+  const cooked = emptyWeek("2026-10-26");
+  Object.assign(cooked.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T02:00:00.000Z",
+  });
+  const salt: Staple = {
+    item: "salt",
+    name: "salt",
+    location: "pantry",
+    checkEvery: 30,
+    alwaysBuy: false,
+    qtyPerShop: null,
+    status: "stocked",
+    lastChecked: null,
+    outInARow: 0,
+    suggestAlwaysBuy: false,
+  };
+  let isCooked = false;
+  const fake = fakeClient({
+    get_week: () => (isCooked ? { ok: true, value: cooked } : undefined),
+    list_staples: (input) => ({ ok: true, value: input.usedBy === 1 ? [salt] : [] }),
+    mark_cooked: () => {
+      isCooked = true;
+      // The change notice that follows, as the household sends it.
+      queueMicrotask(() => fake.notify("plan"));
+      return undefined;
+    },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={fake.client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+
+  await user.click(within(dinner).getByRole("button", { name: "Mark cooked" }));
+
+  const runOut = await within(dinner).findByRole("group", { name: "Anything run out?" });
+  expect(within(runOut).getByRole("button", { name: "salt: Out" })).toBeTruthy();
 });
 
 test("offline, the Week last loaded opens read-only: it can be cooked from, not changed", async () => {

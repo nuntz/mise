@@ -14,6 +14,7 @@ import {
 import { onCleanup } from "solid-js";
 import { z } from "zod";
 import type { MiseClient } from "./client";
+import { keepFresh } from "./fresh";
 
 /*
  * What Mise keeps on this device for when the household can't be reached: the Household, the
@@ -78,27 +79,24 @@ export function keepGroceryLists(
   client: MiseClient,
   household: () => Pick<Household, "timezone" | "weekStartsOn">,
 ): void {
-  // A connect refetches once per topic; only the latest may save, whatever order the answers arrive in.
-  let latest = 0;
-  const refetch = async () => {
-    const fetch = ++latest;
-    const start = currentWeekStart(new Date(), household().timezone, household().weekStartsOn);
-    const weeks = [start, addDays(start, 7)];
-    try {
-      const results = await Promise.all(weeks.map((date) => client.call("get_grocery_list", { date })));
-      if (fetch !== latest) return;
+  // Offline, what was saved is kept.
+  keepFresh(
+    client,
+    ["grocery", "plan", "recipes", "household"],
+    async () => {
+      const start = currentWeekStart(new Date(), household().timezone, household().weekStartsOn);
+      return Promise.all(
+        [start, addDays(start, 7)].map(
+          async (date) => [date, await client.call("get_grocery_list", { date })] as const,
+        ),
+      );
+    },
+    (results) => {
       const lists: Record<string, GroceryList | null> = {};
-      results.forEach((result, index) => {
-        if (result.ok) lists[weeks[index] as LocalDate] = result.value;
-      });
+      for (const [date, result] of results) if (result.ok) lists[date] = result.value;
       write(KEYS.groceryLists, lists);
-    } catch {
-      // Offline: keep what was saved.
-    }
-  };
-  for (const topic of ["grocery", "plan", "recipes", "household"] as const) {
-    onCleanup(client.subscribe(topic, refetch));
-  }
+    },
+  );
 }
 
 /**

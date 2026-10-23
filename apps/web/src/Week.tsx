@@ -25,10 +25,11 @@ import {
   weekDates,
   weekdayOf,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { formatDate, shortDate } from "./dates";
 import { errorText } from "./errors";
+import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
 import { type ConstraintDraft, ConstraintFields, constraintDraftsOf, constraintsOf } from "./MemberFields";
@@ -68,16 +69,17 @@ export function WeekPage(props: {
   const [error, setError] = createSignal<string>();
   // Names the "use it up" Items a Proposal gives as reasons.
   const items = createItems(props.client);
-  // Only the latest fetch may show its Week, whatever order the answers arrive in.
-  let latest = 0;
   const readOnly = () => !props.online;
 
-  const refetch = async () => {
-    const fetch = ++latest;
-    const start = currentStart();
-    try {
-      const result = await props.client.call("get_week", next() && start ? { date: addDays(start, 7) } : {});
-      if (fetch !== latest) return;
+  // Slots show their Recipes' titles and photos, and follow the default Diners: every Member.
+  const refetch = keepFresh(
+    props.client,
+    ["plan", "recipes", "household"],
+    () => {
+      const start = currentStart();
+      return props.client.call("get_week", next() && start ? { date: addDays(start, 7) } : {});
+    },
+    (result) => {
       setError(result.ok ? undefined : t("app.error"));
       if (!result.ok) return;
       if (!next()) {
@@ -85,15 +87,12 @@ export function WeekPage(props: {
         saveWeek(result.value);
       }
       setWeek(result.value);
-    } catch {
-      // Offline, the Week shown stands; the open notice on reconnect fetches it again.
-      if (fetch === latest && props.online) setError(t("app.error"));
-    }
-  };
-  onCleanup(props.client.subscribe("plan", refetch));
-  // Slots show their Recipes' titles and photos, and follow the default Diners: every Member.
-  onCleanup(props.client.subscribe("recipes", refetch));
-  onCleanup(props.client.subscribe("household", refetch));
+    },
+    // Offline, the Week shown stands; reconnecting fetches it again.
+    () => {
+      if (props.online) setError(t("app.error"));
+    },
+  );
 
   const show = (showNext: boolean) => {
     setNext(showNext);

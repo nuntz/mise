@@ -1,7 +1,8 @@
 import type { ImportError, ImportFlag, ImportRun } from "@mise/domain";
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
 /** Import a Paprika export, and see past imports and the Recipes they flagged. */
@@ -12,21 +13,18 @@ export function ImportPage(props: { client: MiseClient }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
 
-  const refetch = async () => {
-    try {
-      const [listedRuns, listedFlags] = await Promise.all([
-        props.client.call("list_import_runs", {}),
-        props.client.call("list_import_flags", {}),
-      ]);
+  // A run changes Recipes, and is announced as such.
+  keepFresh(
+    props.client,
+    ["recipes"],
+    () => Promise.all([props.client.call("list_import_runs", {}), props.client.call("list_import_flags", {})]),
+    ([listedRuns, listedFlags]) => {
       if (listedRuns.ok) setRuns(listedRuns.value);
       if (listedFlags.ok) setFlags(listedFlags.value);
       if (!listedRuns.ok || !listedFlags.ok) setError(t("app.error"));
-    } catch {
-      setError(t("app.error"));
-    }
-  };
-  // A run changes Recipes, and is announced as such.
-  onCleanup(props.client.subscribe("recipes", refetch));
+    },
+    () => setError(t("app.error")),
+  );
 
   const importFile = async (file: File) => {
     setBusy(true);

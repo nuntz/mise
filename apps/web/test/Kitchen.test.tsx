@@ -14,6 +14,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { saveRecipe } from "../src/offline";
+import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
   name: "The Tremblays",
@@ -99,35 +101,20 @@ function week(): Week {
 }
 
 function fakeClient(): MiseClient {
-  return {
-    call: (async (name: string) => {
-      switch (name) {
-        case "get_household":
-          return { ok: true, value: household };
-        case "get_week":
-          return { ok: true, value: week() };
-        case "get_recipe":
-          return { ok: true, value: curry };
-        case "search_recipes":
-          return { ok: true, value: [] };
-        default:
-          throw new Error(`Unexpected tool ${name}`);
-      }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      queueMicrotask(refetch);
-      return () => {};
-    },
-    photoUrl: () => "",
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
+  return createFakeClient(async (name: string) => {
+    switch (name) {
+      case "get_household":
+        return { ok: true, value: household };
+      case "get_week":
+        return { ok: true, value: week() };
+      case "get_recipe":
+        return { ok: true, value: curry };
+      case "search_recipes":
+        return { ok: true, value: [] };
+      default:
+        throw new Error(`Unexpected tool ${name}`);
+    }
+  }).client;
 }
 
 /** A screen wake lock the test can watch. */
@@ -151,6 +138,13 @@ async function cookMonday() {
   await within(kitchen).findByRole("heading", { name: "Curry" });
   return { user, kitchen };
 }
+
+test("kitchen mode loads its Recipe when another was the last one viewed", async () => {
+  saveRecipe({ ...curry, id: 7, title: "Toast", steps: ["Butter it."] });
+  const { kitchen } = await cookMonday();
+
+  expect(within(kitchen).getByText("Fry the garlic.")).toBeTruthy();
+});
 
 test("kitchen mode walks the Recipe one step at a time", async () => {
   const { user, kitchen } = await cookMonday();

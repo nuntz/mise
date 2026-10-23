@@ -3,34 +3,21 @@ import { render, screen } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { CalendarSettings } from "../src/Calendar";
-import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 /** A client holding `token` (none when null); rotating hands out `next`. It records every call. */
 function fakeClient(token: string | null, next = "rotated-token") {
   let current: CalendarToken | null = token === null ? null : { token };
   const calls: string[] = [];
-  const client: MiseClient = {
-    call: (async (name: string): Promise<ToolResult<unknown>> => {
-      calls.push(name);
-      if (name === "get_calendar_token") return { ok: true, value: current };
-      if (name === "rotate_calendar_token") {
-        current = { token: next };
-        return { ok: true, value: current };
-      }
-      throw new Error(`Unexpected tool ${name}`);
-    }) as MiseClient["call"],
-    // Already connected, as when someone opens the page: no reconnect, so no refetch from here.
-    subscribe: () => () => {},
-    photoUrl: () => "",
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
+  const { client } = createFakeClient(async (name: string): Promise<ToolResult<unknown>> => {
+    calls.push(name);
+    if (name === "get_calendar_token") return { ok: true, value: current };
+    if (name === "rotate_calendar_token") {
+      current = { token: next };
+      return { ok: true, value: current };
+    }
+    throw new Error(`Unexpected tool ${name}`);
+  });
   return { client, calls };
 }
 

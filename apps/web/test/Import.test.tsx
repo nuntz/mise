@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
   name: "The Tremblays",
@@ -63,9 +64,8 @@ function fakeClient(options: { upload?: string | null } = {}) {
   const calls: { name: string; input: unknown }[] = [];
   const uploads: Blob[] = [];
   let runs = [lastWeek];
-  const listeners = new Set<() => void>();
-  const client: MiseClient = {
-    call: (async (name: string, input: unknown) => {
+  const { client, notify } = createFakeClient(
+    async (name: string, input: unknown) => {
       calls.push({ name, input });
       switch (name) {
         case "get_household":
@@ -79,32 +79,19 @@ function fakeClient(options: { upload?: string | null } = {}) {
         case "run_paprika_import":
           runs = [today, lastWeek];
           // The change notice that follows a run.
-          queueMicrotask(() => {
-            for (const listener of listeners) listener();
-          });
+          queueMicrotask(() => notify("recipes"));
           return { ok: true, value: today };
         default:
           throw new Error(`Unexpected tool ${name}`);
       }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      listeners.add(refetch);
-      queueMicrotask(refetch);
-      return () => listeners.delete(refetch);
     },
-    photoUrl: () => "",
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    async uploadExport(file) {
-      uploads.push(file);
-      return options.upload === undefined ? "4b0c6a62-6f1e-4c1a-9d43-2f4d8e5a7b10" : options.upload;
+    {
+      async uploadExport(file) {
+        uploads.push(file);
+        return options.upload === undefined ? "4b0c6a62-6f1e-4c1a-9d43-2f4d8e5a7b10" : options.upload;
+      },
     },
-    onConnection(listener) {
-      listener(true);
-      return () => {};
-    },
-    close() {},
-  };
+  );
   return { client, calls, uploads };
 }
 

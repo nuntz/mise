@@ -10,9 +10,10 @@ import {
   type StoreSection,
   type TickQueue,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { shortDate } from "./dates";
+import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { savedGroceryList } from "./offline";
@@ -35,9 +36,6 @@ export function GroceryPage(props: {
   const [next, setNext] = createSignal(false);
   const [error, setError] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
-  // Only the latest fetch may show its list, whatever order the answers arrive in.
-  let latest = 0;
-
   const weekShown = (): LocalDate => {
     const start = currentWeekStart(new Date(), props.household.timezone, props.household.weekStartsOn);
     return next() ? addDays(start, 7) : start;
@@ -46,22 +44,18 @@ export function GroceryPage(props: {
   // shows until the household answers, or for as long as it can't be reached.
   const [list, setList] = createSignal<GroceryList | null | undefined>(savedGroceryList(weekShown()));
 
-  const refetch = async () => {
-    const fetch = ++latest;
-    try {
-      const result = await props.client.call("get_grocery_list", { date: weekShown() });
-      if (fetch !== latest) return;
+  // The list says whether the plan, its Recipes or the Household's Store Sections changed under it.
+  const refetch = keepFresh(
+    props.client,
+    ["grocery", "plan", "recipes", "household"],
+    () => props.client.call("get_grocery_list", { date: weekShown() }),
+    (result) => {
       setError(!result.ok);
       if (result.ok) setList(result.value);
-    } catch {
-      // Offline, the saved list stands; the open notice on reconnect fetches it again.
-      if (fetch === latest) setError(props.online);
-    }
-  };
-  // The list says whether the plan, its Recipes or the Household's Store Sections changed under it.
-  for (const topic of ["grocery", "plan", "recipes", "household"] as const) {
-    onCleanup(props.client.subscribe(topic, refetch));
-  }
+    },
+    // Offline, the saved list stands; reconnecting fetches it again.
+    () => setError(props.online),
+  );
 
   const show = (showNext: boolean) => {
     setNext(showNext);

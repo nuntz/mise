@@ -1,8 +1,9 @@
 import type { RecipeSummary } from "@mise/domain";
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
 /** Recipes missing a cuisine or main protein, each set in place; a Recipe leaves once it has both. */
@@ -11,16 +12,16 @@ export function TagRecipes(props: { client: MiseClient }) {
   const [loaded, setLoaded] = createStore<{ recipes?: RecipeSummary[] }>({});
   const [failed, setFailed] = createSignal(false);
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("list_untagged_recipes", {});
+  keepFresh(
+    props.client,
+    ["recipes"],
+    () => props.client.call("list_untagged_recipes", {}),
+    (result) => {
       setFailed(!result.ok);
       if (result.ok) setLoaded("recipes", reconcile(result.value, { key: "id" }));
-    } catch {
-      setFailed(true);
-    }
-  };
-  onCleanup(props.client.subscribe("recipes", refetch));
+    },
+    () => setFailed(true),
+  );
 
   return (
     <section>

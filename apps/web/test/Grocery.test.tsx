@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
   name: "The Tremblays",
@@ -82,14 +83,8 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefine
  */
 function fakeClient(answers: Record<string, Answer> = {}, { online = true } = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
-  const connection = { online, listeners: new Set<(online: boolean) => void>() };
-  const setOnline = (value: boolean) => {
-    connection.online = value;
-    for (const listener of connection.listeners) listener(value);
-  };
-  const client: MiseClient = {
-    call: (async (name: string, input: Record<string, unknown>) => {
-      if (!connection.online) throw new Error("Connection closed");
+  const fake = createFakeClient(
+    async (name: string, input: Record<string, unknown>) => {
       calls.push({ name, input });
       const answer = answers[name]?.(input);
       if (answer) return answer;
@@ -111,23 +106,10 @@ function fakeClient(answers: Record<string, Answer> = {}, { online = true } = {}
         default:
           throw new Error(`Unexpected tool ${name}`);
       }
-    }) as MiseClient["call"],
-    subscribe(_topic, refetch) {
-      queueMicrotask(refetch);
-      return () => {};
     },
-    photoUrl: (id, key) => `/photos/${id}?v=${key}`,
-    uploadPhoto: async () => true,
-    removePhoto: async () => true,
-    uploadExport: async () => null,
-    onConnection(listener) {
-      listener(connection.online);
-      connection.listeners.add(listener);
-      return () => connection.listeners.delete(listener);
-    },
-    close() {},
-  };
-  return { client, calls, goOnline: () => setOnline(true), goOffline: () => setOnline(false) };
+    { online },
+  );
+  return { client: fake.client, calls, goOnline: fake.goOnline, goOffline: fake.goOffline };
 }
 
 async function openGroceryList(client: MiseClient) {

@@ -1,6 +1,7 @@
 import { type Ingredient, leadingAmount, type Recipe, type RecipeId, scaleIngredient } from "@mise/domain";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { savedRecipe, saveRecipe } from "./offline";
@@ -23,17 +24,17 @@ export function KitchenMode(props: {
   const [showIngredients, setShowIngredients] = createSignal(false);
   keepScreenAwake();
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("get_recipe", { id: props.id });
+  // Offline, the saved Recipe stands.
+  keepFresh(
+    props.client,
+    ["recipes"],
+    () => props.client.call("get_recipe", { id: props.id }),
+    (result) => {
       if (!result.ok) return;
       setRecipe(result.value);
       saveRecipe(result.value);
-    } catch {
-      // Offline: the saved Recipe stands.
-    }
-  };
-  onCleanup(props.client.subscribe("recipes", refetch));
+    },
+  );
 
   return (
     <section class="kitchen" data-theme="kitchen" aria-label={t("kitchen.title")}>

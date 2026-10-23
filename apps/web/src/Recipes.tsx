@@ -9,9 +9,10 @@ import type {
   RecipeSummary,
   Recurrence,
 } from "@mise/domain";
-import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
 import { t } from "./messages";
@@ -21,7 +22,12 @@ import { RecipeForm } from "./RecipeForm";
 type View = { kind: "list" } | { kind: "recipe"; id: RecipeId } | { kind: "new" } | { kind: "edit"; recipe: Recipe };
 
 /** Recipes: list and search them, view one, create and edit them. Opens on the list, or on the Recipe `open`. */
-export function RecipesPage(props: { client: MiseClient; open?: RecipeId; onCook: (recipe: RecipeId) => void }) {
+export function RecipesPage(props: {
+  client: MiseClient;
+  online: boolean;
+  open?: RecipeId;
+  onCook: (recipe: RecipeId) => void;
+}) {
   const [view, setView] = createSignal<View>(props.open ? { kind: "recipe", id: props.open } : { kind: "list" });
   const list = () => setView({ kind: "list" });
   const show = (recipe: { id: RecipeId }) => setView({ kind: "recipe", id: recipe.id });
@@ -30,7 +36,12 @@ export function RecipesPage(props: { client: MiseClient; open?: RecipeId; onCook
     <section class="screen">
       <Switch>
         <Match when={view().kind === "list"}>
-          <RecipeList client={props.client} onOpen={show} onNew={() => setView({ kind: "new" })} />
+          <RecipeList
+            client={props.client}
+            online={props.online}
+            onOpen={show}
+            onNew={() => setView({ kind: "new" })}
+          />
         </Match>
         <Match when={view().kind === "new"}>
           <h1>{t("recipes.new")}</h1>
@@ -69,25 +80,26 @@ function narrow<K extends View["kind"]>(view: View, kind: K): Extract<View, { ki
   return view.kind === kind && (view as Extract<View, { kind: K }>);
 }
 
-function RecipeList(props: { client: MiseClient; onOpen: (recipe: { id: RecipeId }) => void; onNew: () => void }) {
+function RecipeList(props: {
+  client: MiseClient;
+  online: boolean;
+  onOpen: (recipe: { id: RecipeId }) => void;
+  onNew: () => void;
+}) {
   const [query, setQuery] = createSignal("");
   const [recipes, setRecipes] = createSignal<RecipeSummary[]>();
   const [failed, setFailed] = createSignal(false);
-  // Only the latest search may show its results, whatever order the answers arrive in.
-  let latest = 0;
 
-  const refetch = async () => {
-    const search = ++latest;
-    try {
-      const result = await props.client.call("search_recipes", { query: query() });
-      if (search !== latest) return;
+  const refetch = keepFresh(
+    props.client,
+    ["recipes"],
+    () => props.client.call("search_recipes", { query: query() }),
+    (result) => {
       setFailed(!result.ok);
       if (result.ok) setRecipes(result.value);
-    } catch {
-      if (search === latest) setFailed(true);
-    }
-  };
-  onCleanup(props.client.subscribe("recipes", refetch));
+    },
+    () => setFailed(true),
+  );
   createEffect(on(query, refetch, { defer: true }));
 
   return (
@@ -115,14 +127,14 @@ function RecipeList(props: { client: MiseClient; onOpen: (recipe: { id: RecipeId
         <p class="banner banner-warn" role="alert">
           {t("app.error")}
         </p>
-        {/* The Recipes can't be listed, but the last one viewed is kept on this device. */}
-        <Show when={lastRecipe()}>
-          {(last) => (
-            <button type="button" class="button-secondary" onClick={() => props.onOpen(last())}>
-              {t("recipes.lastViewed", { title: last().title })}
-            </button>
-          )}
-        </Show>
+      </Show>
+      {/* The Recipes can't be listed, but the last one viewed is kept on this device. */}
+      <Show when={(failed() || !props.online) && lastRecipe()}>
+        {(last) => (
+          <button type="button" class="button-secondary" onClick={() => props.onOpen(last())}>
+            {t("recipes.lastViewed", { title: last().title })}
+          </button>
+        )}
       </Show>
       <Show when={recipes()}>
         {(found) => (
@@ -172,19 +184,19 @@ function RecipeDetail(props: {
   const [busy, setBusy] = createSignal(false);
   const items = createItems(props.client);
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("get_recipe", { id: props.id });
+  keepFresh(
+    props.client,
+    ["recipes"],
+    () => props.client.call("get_recipe", { id: props.id }),
+    (result) => {
       if (result.ok) {
         setRecipe(result.value);
         saveRecipe(result.value);
       }
       setError(result.ok ? undefined : errorText(result.error, "recipe"));
-    } catch {
-      setError(t("app.error"));
-    }
-  };
-  onCleanup(props.client.subscribe("recipes", refetch));
+    },
+    () => setError(t("app.error")),
+  );
 
   const remove = async (current: Recipe) => {
     if (!window.confirm(t("recipe.deleteConfirm", { title: current.title }))) return;

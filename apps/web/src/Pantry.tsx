@@ -12,8 +12,9 @@ import {
   type StapleLocation,
   type StapleStatus,
 } from "@mise/domain";
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { keepFresh } from "./fresh";
 import { amountText } from "./Grocery";
 import { Icon, type IconName } from "./icons";
 import { createItems } from "./items";
@@ -25,15 +26,15 @@ import { t } from "./messages";
  */
 export function createDueCount(client: MiseClient): () => number {
   const [due, setDue] = createSignal(0);
-  const refetch = async () => {
-    try {
-      const result = await client.call("list_due_staples", {});
+  // On failure the banner just stays as it was; the next change or reconnect tries again.
+  keepFresh(
+    client,
+    ["grocery"],
+    () => client.call("list_due_staples", {}),
+    (result) => {
       if (result.ok) setDue(result.value.due);
-    } catch {
-      // The banner just stays as it was; the next change or reconnect tries again.
-    }
-  };
-  onCleanup(client.subscribe("grocery", refetch));
+    },
+  );
   return due;
 }
 
@@ -76,15 +77,15 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
   const [error, setError] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("list_due_staples", {});
+  keepFresh(
+    props.client,
+    ["grocery"],
+    () => props.client.call("list_due_staples", {}),
+    (result) => {
       if (result.ok) setDue(result.value);
-    } catch {
-      setError(true);
-    }
-  };
-  onCleanup(props.client.subscribe("grocery", refetch));
+    },
+    () => setError(true),
+  );
 
   const start = () => {
     setSession(due()?.staples ?? []);
@@ -386,15 +387,15 @@ function StapleList(props: { client: MiseClient; locale: string }) {
   const [draft, setDraft] = createSignal<StapleDraft>(EMPTY_DRAFT);
   const [error, setError] = createSignal<string>();
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("list_staples", {});
+  // On failure the list stays as it was; the next change or reconnect tries again.
+  keepFresh(
+    props.client,
+    ["grocery"],
+    () => props.client.call("list_staples", {}),
+    (result) => {
       if (result.ok) setStaples(result.value);
-    } catch {
-      // The list stays as it was; the next change or reconnect tries again.
-    }
-  };
-  onCleanup(props.client.subscribe("grocery", refetch));
+    },
+  );
 
   const change = (fields: Partial<StapleDraft>) => setDraft((current) => ({ ...current, ...fields }));
 
@@ -562,15 +563,15 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
   const [staples, setStaples] = createSignal<Staple[]>([]);
   const [error, setError] = createSignal(false);
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("list_staples", { usedBy: props.recipeId });
+  // On failure there's nothing to ask about until the next change or reconnect.
+  keepFresh(
+    props.client,
+    ["grocery"],
+    () => props.client.call("list_staples", { usedBy: props.recipeId }),
+    (result) => {
       if (result.ok) setStaples(result.value);
-    } catch {
-      // Nothing to ask about until the next change or reconnect.
-    }
-  };
-  onCleanup(props.client.subscribe("grocery", refetch));
+    },
+  );
 
   const record = async (staple: Staple, status: StapleStatus) => {
     try {

@@ -3,6 +3,7 @@ import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CalendarSettings } from "./Calendar";
 import type { MiseClient } from "./client";
+import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
 import { ImportPage } from "./Import";
 import { Icon, type IconName } from "./icons";
@@ -62,19 +63,19 @@ export function App(props: { client: MiseClient }) {
   const [online, setOnline] = createSignal(true);
   onCleanup(props.client.onConnection(setOnline));
 
-  const refetch = async () => {
-    try {
-      const result = await props.client.call("get_household", {});
+  keepFresh(
+    props.client,
+    ["household"],
+    () => props.client.call("get_household", {}),
+    (result) => {
       if (result.ok) {
         setLoaded("household", reconcile(result.value));
         if (result.value) saveHousehold(result.value);
       }
       setStatus(result.ok ? "ready" : "error");
-    } catch {
-      setStatus("error");
-    }
-  };
-  onCleanup(props.client.subscribe("household", refetch));
+    },
+    () => setStatus("error"),
+  );
 
   const queue = createGroceryQueue(props.client);
   const [pending, setPending] = createSignal<readonly QueuedChange[]>(queue.pending());
@@ -174,7 +175,7 @@ export function App(props: { client: MiseClient }) {
                     <PantryPage client={props.client} locale={household().locale} onWeek={() => go("week")} />
                   </Match>
                   <Match when={page() === "recipes"}>
-                    <RecipesPage client={props.client} open={openRecipe} onCook={cook} />
+                    <RecipesPage client={props.client} online={online()} open={openRecipe} onCook={cook} />
                   </Match>
                   <Match when={page() === "household"}>
                     <HouseholdPage
