@@ -1,7 +1,5 @@
 import { z } from "zod";
-import type { SlotConflict } from "./conflicts";
 import type { HouseholdSettings } from "./household";
-import type { Allergen, Member } from "./members";
 import type { RecipeId } from "./recipes";
 import { offsetTransitions, utcOffset } from "./time";
 import { addDays, type LocalDate, type Slot } from "./weeks";
@@ -30,24 +28,8 @@ const REFRESH_INTERVAL = "PT1H";
 /** How long a dinner's event lasts. */
 const DINNER_DURATION = "PT1H";
 
-/** The feed is written in English, the one locale Mise has. */
-const ALLERGEN_NAMES: Record<Allergen, string> = {
-  peanut: "peanut",
-  tree_nut: "tree nuts",
-  milk: "milk",
-  egg: "egg",
-  wheat: "wheat",
-  soy: "soy",
-  fish: "fish",
-  shellfish: "shellfish",
-  sesame: "sesame",
-  mustard: "mustard",
-  sulphite: "sulphites",
-};
-
 export type CalendarFeedInput = {
   household: Pick<HouseholdSettings, "name" | "timezone" | "dinnerTime">;
-  members: Pick<Member, "id" | "name">[];
   /** The dinner Slots to show; those planned as nothing (unplanned, skipped) get no event. */
   dinners: Slot[];
   /** The Prep-ahead note of each Recipe that has one. */
@@ -61,7 +43,7 @@ export type CalendarFeedInput = {
  * The plan as an iCalendar feed (RFC 5545): one event per planned dinner at the Household's dinner
  * time, in its timezone, and one all-day event the day before for a Recipe's Prep-ahead note.
  */
-export function calendarFeed({ household, members, dinners, prepAhead, origin, now }: CalendarFeedInput): string {
+export function calendarFeed({ household, dinners, prepAhead, origin, now }: CalendarFeedInput): string {
   const { timezone } = household;
   const host = new URL(origin).host;
   const stamp = utcStamp(now);
@@ -74,7 +56,7 @@ export function calendarFeed({ household, members, dinners, prepAhead, origin, n
       `DTSTART;TZID=${timezone}:${basicDate(slot.date)}T${household.dinnerTime.replace(":", "")}00`,
       `DURATION:${DINNER_DURATION}`,
       `SUMMARY:${escapeText(title(slot) ?? "")}`,
-      `DESCRIPTION:${escapeText(description(slot, members, origin))}`,
+      `DESCRIPTION:${escapeText(description(slot, origin))}`,
       ...linkedRecipe(slot).map((id) => `URL:${recipeLink(origin, id)}`),
       "END:VEVENT",
     ];
@@ -130,31 +112,15 @@ function linkedRecipe(slot: Slot): RecipeId[] {
   return recipe ? [recipe.id] : [];
 }
 
-function description(slot: Slot, members: CalendarFeedInput["members"], origin: string): string {
-  const nameOf = (id: number) => members.find((member) => member.id === id)?.name ?? "A former Member";
-  const eating = slot.diners.map(nameOf);
-  if (slot.guests > 0) eating.push(slot.guests === 1 ? "1 guest" : `${slot.guests} guests`);
-  const lines = [`Servings: ${slot.servings}`];
-  if (slot.cookFor > slot.servings) lines.push(`Cook for: ${slot.cookFor}, with leftovers`);
-  lines.push(`Diners: ${eating.length > 0 ? eating.join(", ") : "nobody"}`);
-  if (slot.kind === "leftovers" && slot.leftoversOf?.recipe)
-    lines.push(`Leftovers of: ${slot.leftoversOf.recipe.title}`);
-  if (slot.note) lines.push(`Note: ${slot.note}`);
-  for (const conflict of slot.conflicts) {
-    const who = conflict.who === "guests" ? "Guests" : nameOf(conflict.who);
-    lines.push(`Conflict: ${who}, ${conflictText(conflict)}`);
-  }
+/**
+ * Kept short: how many eat it and how many Conflicts it has, never who or which Allergens, since
+ * anyone with the link can read the feed. The details are in Mise, a link away.
+ */
+function description(slot: Slot, origin: string): string {
+  const lines = [`Servings: ${slot.servings}`, `Diners: ${slot.diners.length}`];
+  if (slot.conflicts.length > 0) lines.push(`Conflicts: ${slot.conflicts.length}, see Mise for details`);
   for (const id of linkedRecipe(slot)) lines.push(`Recipe: ${recipeLink(origin, id)}`);
   return lines.join("\n");
-}
-
-function conflictText(conflict: SlotConflict): string {
-  const allergen = ALLERGEN_NAMES[conflict.allergen];
-  const what =
-    conflict.cause === "contains"
-      ? `${conflict.constraint}: contains ${allergen}`
-      : `${conflict.constraint}: may contain ${allergen} (not every ingredient is known)`;
-  return conflict.override === null ? `${what}. Not overridden.` : `${what}. Overridden: ${conflict.override}`;
 }
 
 /**

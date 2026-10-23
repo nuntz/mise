@@ -1,5 +1,5 @@
 import { addDays, CalendarToken, calendarFeed, localDate, type RecipeId, type ToolResult } from "@mise/domain";
-import { type Handlers, notSetUp, readMembers, readSettings } from "./tools";
+import { type Handlers, notSetUp, readSettings } from "./tools";
 import { readSlots } from "./weeks";
 
 type CalendarTools = "get_calendar_token" | "rotate_calendar_token";
@@ -43,7 +43,6 @@ export function readCalendarFeed(sql: SqlStorage, token: string, origin: string,
   );
   return calendarFeed({
     household: settings,
-    members: readMembers(sql),
     dinners: readSlots(sql, from).filter((slot) => slot.meal === "dinner"),
     prepAhead,
     origin,

@@ -90,7 +90,7 @@ describe("the calendar feed", () => {
     expect(calendar.getFirstPropertyValue("refresh-interval")?.toString()).toBe("PT1H");
   });
 
-  test("the description gives the Servings, the Diners, any Conflicts and the Recipe's link", async () => {
+  test("the description gives the Servings, how many Diners, how many Conflicts and the Recipe's link, but no names or Allergens", async () => {
     const recipe = await createRecipe({ title: "Peanut noodles", ingredients: ["2 tbsp peanut butter"] });
     const robin = (
       await succeeded<{ members: { id: number; name: string }[] }>(await household.callTool("get_household", {}))
@@ -116,12 +116,9 @@ describe("the calendar feed", () => {
     const [event] = await eventsOn(date);
 
     expect(event?.description).toBe(
-      [
-        "Servings: 4",
-        "Diners: Robin, Alex, 2 guests",
-        "Conflict: Robin, allergy: contains peanut. Overridden: Robin's bowl without the sauce",
-        `Recipe: ${origin}/?recipe=${recipe.id}`,
-      ].join("\n"),
+      ["Servings: 4", "Diners: 2", "Conflicts: 1, see Mise for details", `Recipe: ${origin}/?recipe=${recipe.id}`].join(
+        "\n",
+      ),
     );
     expect(event?.component.getFirstPropertyValue("url")).toBe(`${origin}/?recipe=${recipe.id}`);
   });
@@ -144,7 +141,10 @@ describe("the calendar feed", () => {
     succeeded(await household.callTool("set_slot", { date: skipped, meal: "dinner", kind: "skip" }));
 
     expect((await eventsOn(leftovers)).map((event) => event.summary)).toEqual(["Leftovers"]);
-    expect((await eventsOn(leftovers))[0]?.description).toContain("Leftovers of: Chili");
+    // Leftovers link to the Recipe they were cooked from.
+    expect((await eventsOn(leftovers))[0]?.component.getFirstPropertyValue("url")).toBe(
+      `${origin}/?recipe=${recipe.id}`,
+    );
     expect((await eventsOn(out)).map((event) => event.summary)).toEqual(["Eating out"]);
     expect(await eventsOn(skipped)).toEqual([]);
   });

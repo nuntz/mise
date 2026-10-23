@@ -29,10 +29,9 @@ function dinner(date: string, title: string, fields: Partial<Slot> = {}): Slot {
 function feed(dinners: Slot[], overrides: Partial<CalendarFeedInput> = {}): string {
   return calendarFeed({
     household: { name: "The Example Family", timezone: "America/Vancouver", dinnerTime: "18:00" },
-    members: [{ id: 1, name: "Robin" }],
     dinners,
     prepAhead: new Map(),
-    origin: "https://mise.example.com",
+    origin: "https://example.com",
     now: new Date("2026-10-22T12:00:00Z"),
     ...overrides,
   });
@@ -58,11 +57,11 @@ describe("calendarFeed", () => {
   });
 
   test("escapes commas, semicolons, backslashes and line breaks in text", () => {
-    const ics = feed([dinner("2026-11-04", "Rice, beans; and a \\ slash", { note: "Line one\nline two" })]);
+    const ics = feed([dinner("2026-11-04", "Rice, beans; and a \\ slash")]);
 
     const lines = unfolded(ics);
     expect(lines).toContain("SUMMARY:Rice\\, beans\\; and a \\\\ slash");
-    expect(lines.find((line) => line.startsWith("DESCRIPTION:"))).toContain("Note: Line one\\nline two");
+    expect(lines.find((line) => line.startsWith("DESCRIPTION:"))).toContain("Servings: 1\\nDiners: 1");
   });
 
   test("a dinner on each side of a change of clocks is at dinner time, and the zone defines both offsets", () => {
@@ -84,8 +83,8 @@ describe("calendarFeed", () => {
   test("gives each dinner a UID that stays the same when the dinner changes", () => {
     const uid = (ics: string) => unfolded(ics).find((line) => line.startsWith("UID:"));
 
-    expect(uid(feed([dinner("2026-11-04", "Chili")]))).toBe("UID:2026-11-04-dinner@mise.example.com");
-    expect(uid(feed([dinner("2026-11-04", "Dal")]))).toBe("UID:2026-11-04-dinner@mise.example.com");
+    expect(uid(feed([dinner("2026-11-04", "Chili")]))).toBe("UID:2026-11-04-dinner@example.com");
+    expect(uid(feed([dinner("2026-11-04", "Dal")]))).toBe("UID:2026-11-04-dinner@example.com");
   });
 });
 
