@@ -412,6 +412,21 @@ describe("proposeWeek, rule by rule", () => {
     });
   });
 
+  test("a 'use it up' Item never brings in a Recipe that conflicts with someone eating", () => {
+    const week = dinners().slice(0, 1);
+    const ingredient = { raw: "2 tbsp peanut butter", amount: null, unit: null, name: "peanut butter", note: null };
+    const satay = recipe(1, {
+      ingredients: [{ ...ingredient, item: "peanut_butter" }],
+      allergens: { kind: "known", allergens: ["peanut"] },
+    });
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: [satay, recipe(2)], useUp: ["peanut_butter"] }));
+
+    expect(proposal.dinners[0]).toMatchObject({ recipeId: 2, reason: { kind: "chosen", candidates: 1 } });
+    const onlySatay = proposeWeek(input({ dinners: week, recipes: [satay], useUp: ["peanut_butter"] }));
+    expect(onlySatay.dinners[0]).toMatchObject({ reason: { kind: "no_candidate", excluded: { conflict: 1 } } });
+  });
+
   test("a re-roll that only differs by choosing from every Recipe that fits is proposed again the same", () => {
     // Rated again, Recipe 1 is always the best choice; only a wider choice can pick Recipe 2.
     const recipes = [recipe(1, { ratings: ["again"] }), recipe(2)];
