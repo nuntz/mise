@@ -350,6 +350,12 @@ const en = {
   "week.otherMealsNone": "Not planned",
   "week.groceryList": "Grocery List",
   "week.proposeAgain": "Propose again",
+  "useUp.title": "Use it up",
+  "useUp.hint": "Items on hand: proposing favours dinners that use them, never ones that don't suit who's eating.",
+  "useUp.item": "Item on hand",
+  "useUp.add": "Add",
+  "useUp.remove": "Remove {name}",
+  "useUp.noSuchItem": "No Item is called “{name}”.",
   "week.emptyTitle": "Nothing planned yet",
   "week.emptyBody": "Mise can pick dinners that suit everyone who is eating, or you can choose day by day.",
 

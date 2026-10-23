@@ -160,6 +160,7 @@ export function WeekPage(props: {
               <ProposalControls
                 client={props.client}
                 week={shown()}
+                items={items()}
                 readOnly={readOnly()}
                 onGrocery={() => props.onGrocery()}
               />
