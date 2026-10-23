@@ -261,6 +261,34 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE UNIQUE INDEX slot_rating_member ON slot_rating (date, meal, member_id) WHERE member_id IS NOT NULL",
     ],
   },
+  {
+    version: 10,
+    statements: [
+      // The Store Sections the Household put in walking order; the rest follow in their usual order.
+      "CREATE TABLE store_section (position INTEGER PRIMARY KEY, section TEXT NOT NULL UNIQUE)",
+      // When the Week's Grocery List was last built, null until it is, and the plan revision it was
+      // built from (ADR 0015).
+      "ALTER TABLE week ADD COLUMN grocery_built_at TEXT",
+      "ALTER TABLE week ADD COLUMN grocery_plan_revision TEXT",
+      // A line of a Week's Grocery List. origin is 'recipe' or 'manual'. A 'recipe' line has an Item,
+      // or the Unresolved Ingredient as written in text; a 'manual' one has its text as typed and the
+      // Item it names, if any. amounts and recipe_ids are JSON. have_at is when the Have Tick was last
+      // set, either way.
+      `CREATE TABLE grocery_line (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        start_date TEXT NOT NULL REFERENCES week (start_date),
+        origin TEXT NOT NULL,
+        item_id TEXT,
+        text TEXT,
+        amounts TEXT NOT NULL,
+        unmeasured INTEGER NOT NULL,
+        recipe_ids TEXT NOT NULL,
+        have INTEGER NOT NULL,
+        have_at TEXT
+      )`,
+      "CREATE INDEX grocery_line_week ON grocery_line (start_date)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

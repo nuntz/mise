@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { DEFAULT_EFFORT_BUDGETS } from "@mise/domain";
+import { DEFAULT_EFFORT_BUDGETS, STORE_SECTIONS } from "@mise/domain";
 import { describe, expect, test } from "vitest";
 import sampleHousehold from "../../../fixtures/sample-household.json";
 
@@ -29,6 +29,7 @@ describe("first-run Household setup", () => {
       locale: "en-CA",
       members: [],
       effortBudgets: DEFAULT_EFFORT_BUDGETS,
+      storeSections: [...STORE_SECTIONS],
     };
     expect(setup).toEqual({ ok: true, value: expected });
     expect(read).toEqual({ ok: true, value: expected });
@@ -119,6 +120,7 @@ function withMemberIds<T extends { members: object[] }>(input: T) {
     ...input,
     members: input.members.map((member, index) => ({ id: index + 1, ...member })),
     effortBudgets: DEFAULT_EFFORT_BUDGETS,
+    storeSections: [...STORE_SECTIONS],
   };
 }
 

@@ -1,9 +1,18 @@
 import { z } from "zod";
 import { type Caller, ResolvedCaller } from "./caller";
 import { type Conflict, SlotConflict } from "./conflicts";
+import {
+  AddGroceryLineInput,
+  BuildGroceryListInput,
+  GetGroceryListInput,
+  GroceryLine,
+  GroceryList,
+  SetHaveTickInput,
+  SetStoreSectionOrderInput,
+} from "./grocery";
 import { EffortBudgets, Household, SetEffortBudgetsInput, SetupHouseholdInput } from "./household";
 import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
-import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput } from "./items";
+import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 import {
   DeleteRecipeInput,
@@ -37,9 +46,10 @@ import {
 /**
  * Topics a change notice can name; clients refetch the matching tools. Items are announced as
  * "recipes": a change to one changes the Recipes that resolve to it. So are imports: a run changes
- * Recipes, and its log and flags are read beside them. "plan" is the Weeks and their Slots.
+ * Recipes, and its log and flags are read beside them. "plan" is the Weeks and their Slots;
+ * "grocery" their Grocery Lists, which also depend on the plan, the Recipes and the Household.
  */
-export const ChangeTopic = z.enum(["household", "recipes", "plan"]);
+export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 type ToolDefinition = {
@@ -239,6 +249,35 @@ export const tools = {
     output: Slot,
     changes: "plan",
   }),
+  /** Builds or rebuilds the Week's Grocery List; see `BuildGroceryListInput`. */
+  build_grocery_list: defineTool({
+    input: BuildGroceryListInput,
+    output: GroceryList,
+    changes: "grocery",
+  }),
+  /** The Week's Grocery List; null until it is first built. */
+  get_grocery_list: defineTool({
+    input: GetGroceryListInput,
+    output: GroceryList.nullable(),
+  }),
+  /** Returns the line. Refuses a line that doesn't exist (`not_found`). */
+  set_have_tick: defineTool({
+    input: SetHaveTickInput,
+    output: GroceryLine,
+    changes: "grocery",
+  }),
+  /** Refuses a Week whose Grocery List isn't built yet (`not_built`). Returns the line. */
+  add_grocery_line: defineTool({
+    input: AddGroceryLineInput,
+    output: GroceryLine,
+    changes: "grocery",
+  }),
+  /** Returns every Store Section in the Household's walking order. */
+  set_store_section_order: defineTool({
+    input: SetStoreSectionOrderInput,
+    output: z.array(StoreSection),
+    changes: "household",
+  }),
   get_caller: defineTool({
     input: z.object({}).strict(),
     output: ResolvedCaller.nullable(),
@@ -270,7 +309,8 @@ export type ToolErrorCode =
   | "constraint_conflict"
   | "no_recipe"
   | "not_yet"
-  | "not_cooked";
+  | "not_cooked"
+  | "not_built";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */
 export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };

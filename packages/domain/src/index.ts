@@ -1,6 +1,7 @@
 export * from "./backup";
 export * from "./caller";
 export * from "./conflicts";
+export * from "./grocery";
 export * from "./household";
 export * from "./imports";
 export * from "./ingredients";

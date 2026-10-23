@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { StoreSection } from "./items";
 import { Member, NewMember } from "./members";
 
 export const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
@@ -62,6 +63,8 @@ export const Household = HouseholdSettings.extend({
   members: z.array(Member),
   /** Its default Effort Budgets; a Week can override them. */
   effortBudgets: EffortBudgets,
+  /** Every Store Section, in the order the Household walks its store. */
+  storeSections: z.array(StoreSection),
 });
 export type Household = z.infer<typeof Household>;
 

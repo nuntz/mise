@@ -189,7 +189,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 9,
+      schemaVersion: 10,
       tables: {
         household: [
           {
@@ -231,6 +231,8 @@ describe("export and restore", () => {
         effort_budget: [],
         week: [],
         week_effort_budget: [],
+        store_section: [],
+        grocery_line: [],
       },
       sequences: { member: 3 },
       photoKeys: [],

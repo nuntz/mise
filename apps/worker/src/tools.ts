@@ -13,6 +13,7 @@ import {
   type ToolOutput,
   type ToolResult,
 } from "@mise/domain";
+import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
@@ -119,6 +120,7 @@ export const handlers: Handlers = {
   ...itemHandlers,
   ...importHandlers,
   ...weekHandlers,
+  ...groceryHandlers,
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
@@ -140,6 +142,9 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readImportFlags(sql);
   readSlots(sql);
   readWeekRecords(sql);
+  readStoreSections(sql);
+  readGroceryBuilds(sql);
+  readGroceryLines(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {
@@ -203,7 +208,12 @@ export function readSettings(sql: SqlStorage): HouseholdSettings | null {
 function readHousehold(sql: SqlStorage): Household | null {
   const settings = readSettings(sql);
   if (!settings) return null;
-  return Household.parse({ ...settings, members: readMembers(sql), effortBudgets: readEffortBudgets(sql) });
+  return Household.parse({
+    ...settings,
+    members: readMembers(sql),
+    effortBudgets: readEffortBudgets(sql),
+    storeSections: readStoreSections(sql),
+  });
 }
 
 /** The Household's default Effort Budget for every weekday: its own where it set one. */

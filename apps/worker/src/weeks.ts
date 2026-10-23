@@ -389,7 +389,7 @@ function readRatingsByRecipe(sql: SqlStorage): Map<RecipeId, Rating[]> {
 }
 
 /** The start of the Week `date` is in; without one, of the Week the Household is in today. */
-function weekNamedBy(settings: HouseholdSettings, date: LocalDate | undefined): LocalDate {
+export function weekNamedBy(settings: HouseholdSettings, date: LocalDate | undefined): LocalDate {
   return date
     ? weekStartOf(date, settings.weekStartsOn)
     : currentWeekStart(new Date(), settings.timezone, settings.weekStartsOn);
@@ -416,7 +416,7 @@ function plannedAround(sql: SqlStorage, start: LocalDate): { recipeId: RecipeId;
 }
 
 /** Stores the Week as it starts unless already stored, so that what belongs to it can be set. */
-function storeWeek(sql: SqlStorage, start: LocalDate): void {
+export function storeWeek(sql: SqlStorage, start: LocalDate): void {
   sql.exec("INSERT OR IGNORE INTO week (start_date) VALUES (?)", start);
 }
 
@@ -548,7 +548,7 @@ function writeGuestConstraints(sql: SqlStorage, { date, meal }: SlotKey, constra
   });
 }
 
-function readWeek(sql: SqlStorage, startDate: LocalDate): Week {
+export function readWeek(sql: SqlStorage, startDate: LocalDate): Week {
   const dates = weekDates(startDate);
   const stored = readSlots(sql, dates[0], dates.at(-1));
   const defaults = memberIds(sql);

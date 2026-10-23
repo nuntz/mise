@@ -7,6 +7,7 @@ import {
   type Member,
   type RecipeSummary,
   type Slot,
+  STORE_SECTIONS,
   type ToolResult,
   type Week,
 } from "@mise/domain";
@@ -29,6 +30,7 @@ const household: Household = {
   locale: "en-CA",
   members: [robin, alex, sam],
   effortBudgets: DEFAULT_EFFORT_BUDGETS,
+  storeSections: [...STORE_SECTIONS],
 };
 
 const pasta: RecipeSummary = {

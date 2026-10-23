@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Units } from "./household";
 
 /** What a unit measures. Amounts convert within a family, never across. */
 export const UNIT_FAMILIES = ["mass", "volume", "count"] as const;
@@ -92,4 +93,54 @@ export function trailingCountUnit(name: string): { unit: IngredientUnit; rest: s
   const [, rest, last] = match as unknown as [string, string, string];
   const unit = unitsByAlias.get(last.toLowerCase());
   return unit && unitFamily(unit) === "count" ? { unit, rest } : null;
+}
+
+/**
+ * What one of each unit that converts is, in grams or millilitres. A pinch or a dash is no measured
+ * amount, and counts of different things are different things, so those convert to nothing.
+ */
+const BASE_SIZES: Partial<Record<IngredientUnit, number>> = {
+  mg: 0.001,
+  g: 1,
+  kg: 1000,
+  oz: 28.349523125,
+  lb: 453.59237,
+  ml: 1,
+  cl: 10,
+  dl: 100,
+  l: 1000,
+  tsp: 4.92892159375,
+  tbsp: 14.78676478125,
+  cup: 236.5882365,
+  fl_oz: 29.5735295625,
+  pint: 473.176473,
+  quart: 946.352946,
+  gallon: 3785.411784,
+};
+
+/** How many grams or millilitres one `unit` is; null for a unit that doesn't convert. */
+export function baseSize(unit: IngredientUnit | null): number | null {
+  return unit === null ? null : (BASE_SIZES[unit] ?? null);
+}
+
+/**
+ * The units a Household shops in, smallest first, each used from its size up: grams to the kilo,
+ * millilitres to the litre; ounces to the pound, teaspoons and tablespoons to the quarter cup.
+ */
+const HOUSEHOLD_UNITS: Record<Units, Record<"mass" | "volume", IngredientUnit[]>> = {
+  metric: { mass: ["g", "kg"], volume: ["ml", "l"] },
+  imperial: { mass: ["oz", "lb"], volume: ["tsp", "tbsp", "cup"] },
+};
+const QUARTER_CUP = (BASE_SIZES.cup as number) / 4;
+
+/** The unit of the Household's to give `base` grams or millilitres in. */
+export function householdUnit(units: Units, family: "mass" | "volume", base: number): IngredientUnit {
+  const [smallest, ...larger] = HOUSEHOLD_UNITS[units][family] as [IngredientUnit, ...IngredientUnit[]];
+  let chosen = smallest;
+  for (const unit of larger) {
+    // Floating-point sums land just under a size they add up to exactly.
+    const from = unit === "cup" ? QUARTER_CUP : (BASE_SIZES[unit] as number);
+    if (base >= from - 1e-9) chosen = unit;
+  }
+  return chosen;
 }

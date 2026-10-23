@@ -1,4 +1,11 @@
-import { DEFAULT_EFFORT_BUDGETS, type Household, ITEMS, type RecipeSummary, type UnresolvedGroup } from "@mise/domain";
+import {
+  DEFAULT_EFFORT_BUDGETS,
+  type Household,
+  ITEMS,
+  type RecipeSummary,
+  STORE_SECTIONS,
+  type UnresolvedGroup,
+} from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
@@ -14,6 +21,7 @@ const household: Household = {
   locale: "en-CA",
   members: [],
   effortBudgets: DEFAULT_EFFORT_BUDGETS,
+  storeSections: [...STORE_SECTIONS],
 };
 
 const groups: UnresolvedGroup[] = [

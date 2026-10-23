@@ -158,9 +158,9 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 recipes:   search_recipes, get_recipe, create_recipe, update_recipe, delete_recipe*, rate_recipe, import_recipe_url
 plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
-grocery:   build_grocery_list, get_grocery_list, tick_line, add_line, send_to_instacart
+grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
 pantry:    list_due_staples, record_staple_status, upsert_staple
-household: get_household, update_member_constraints, set_effort_budgets, check_slot_constraints
+household: get_household, update_member_constraints, set_effort_budgets, set_store_section_order, check_slot_constraints
 imports:   run_paprika_import, list_import_runs, list_import_flags, sync_drive_folder, enqueue_video_import, list_review_queue, resolve_review_item
 calendar:  rotate_calendar_token
 * = requires confirmation

@@ -121,5 +121,9 @@ _Avoid_: Inventory, pantry item
 What to buy for a Week: Ingredients scaled to Servings and merged, plus Staples that are due to be bought.
 _Avoid_: Shopping list, cart
 
+**Plan Revision**:
+What a Week's Grocery List was built from: the Recipe and Servings of each of its Slots, and those Recipes' Ingredients. A list built from another Plan Revision is out of date.
+_Avoid_: Revision (the number change notices carry)
+
 **Have Tick**:
 A mark on a Grocery List line saying the Household already has it, so it is not bought.

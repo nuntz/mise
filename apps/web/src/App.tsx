@@ -2,6 +2,7 @@ import type { Household } from "@mise/domain";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
+import { GroceryPage } from "./Grocery";
 import { ImportPage } from "./Import";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
@@ -11,8 +12,8 @@ import { SetupForm } from "./SetupForm";
 import { TagRecipes } from "./TagRecipes";
 import { WeekPage } from "./Week";
 
-type Page = "week" | "recipes" | "import" | "resolve" | "tag" | "members";
-const PAGES: Page[] = ["week", "recipes", "import", "resolve", "tag", "members"];
+type Page = "week" | "grocery" | "recipes" | "import" | "resolve" | "tag" | "members";
+const PAGES: Page[] = ["week", "grocery", "recipes", "import", "resolve", "tag", "members"];
 
 export function App(props: { client: MiseClient }) {
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
@@ -59,6 +60,9 @@ export function App(props: { client: MiseClient }) {
               <Switch>
                 <Match when={page() === "week"}>
                   <WeekPage client={props.client} household={household()} />
+                </Match>
+                <Match when={page() === "grocery"}>
+                  <GroceryPage client={props.client} household={household()} />
                 </Match>
                 <Match when={page() === "recipes"}>
                   <RecipesPage client={props.client} />
