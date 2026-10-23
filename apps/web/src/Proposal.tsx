@@ -15,19 +15,22 @@ import {
 import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { Icon } from "./icons";
 import { t } from "./messages";
 
 /** What the Week, and proposing it, need to know of the Household. */
-export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudgets">;
+export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudgets" | "timezone">;
 
 /**
  * Proposing the Week and re-rolling it, and, while a proposed Week hasn't been looked over, a banner
- * asking for that.
+ * asking for that. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
  */
-export function ProposalControls(props: { client: MiseClient; week: Week }) {
+export function ProposalControls(props: { client: MiseClient; week: Week; readOnly: boolean; onGrocery: () => void }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const proposed = () => props.week.proposalSeed !== null;
+  const empty = () =>
+    !proposed() && props.week.slots.every((slot) => slot.meal !== "dinner" || slot.kind === "unplanned");
 
   const run = async (call: () => Promise<ToolResult<unknown>>) => {
     setBusy(true);
@@ -40,15 +43,17 @@ export function ProposalControls(props: { client: MiseClient; week: Week }) {
     setBusy(false);
   };
   const date = () => props.week.startDate;
+  const propose = () => run(() => props.client.call("propose_week", { date: date() }));
+  const disabled = () => busy() || props.readOnly;
 
   return (
-    <div>
+    <>
       <Show when={proposed() && !props.week.reviewed}>
-        <div role="status">
+        <div class="banner banner-plum" role="status">
           <p>{t("week.unreviewed")}</p>
           <button
             type="button"
-            disabled={busy()}
+            disabled={disabled()}
             onClick={() => run(() => props.client.call("review_week", { date: date(), reviewed: true }))}
           >
             {t("week.markReviewed")}
@@ -56,26 +61,55 @@ export function ProposalControls(props: { client: MiseClient; week: Week }) {
         </div>
       </Show>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
-      <button
-        type="button"
-        disabled={busy()}
-        onClick={() => run(() => props.client.call("propose_week", { date: date() }))}
+      <Show
+        when={!empty()}
+        fallback={
+          <div class="empty">
+            <Icon name="calendarPlus" />
+            <p class="empty-title">{t("week.emptyTitle")}</p>
+            <p>{t("week.emptyBody")}</p>
+            <button type="button" class="button-primary" disabled={disabled()} onClick={propose}>
+              {t("week.propose")}
+            </button>
+          </div>
+        }
       >
-        {t("week.propose")}
-      </button>
-      <Show when={proposed()}>
-        <button
-          type="button"
-          disabled={busy()}
-          onClick={() => run(() => props.client.call("propose_week", { date: date(), reroll: true }))}
-        >
-          {t("week.reroll")}
-        </button>
+        <div class="actions">
+          <Show
+            when={proposed()}
+            fallback={
+              <button type="button" class="button-primary" disabled={disabled()} onClick={propose}>
+                {t("week.propose")}
+              </button>
+            }
+          >
+            <button
+              type="button"
+              class="button-primary"
+              disabled={disabled()}
+              onClick={() => run(() => props.client.call("propose_week", { date: date(), reroll: true }))}
+            >
+              <Icon name="refresh" />
+              {t("week.reroll")}
+            </button>
+          </Show>
+          <button type="button" class="button-secondary" onClick={() => props.onGrocery()}>
+            <Icon name="basket" />
+            {t("week.groceryList")}
+          </button>
+        </div>
+        <Show when={proposed()}>
+          <button type="button" class="button-link" disabled={disabled()} onClick={propose}>
+            {t("week.proposeAgain")}
+          </button>
+        </Show>
+        <small>{t("week.proposeHint")}</small>
       </Show>
-      <small>{t("week.proposeHint")}</small>
-    </div>
+    </>
   );
 }
 
@@ -84,28 +118,30 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
   return (
     <details>
       <summary>{t("effort.title")}</summary>
-      <p>{t("effort.hint")}</p>
-      <BudgetsForm
-        label={t("effort.thisWeek")}
-        budgets={props.week.effortBudgets}
-        save={(changed) =>
-          props.client.call("set_week_effort_budgets", {
-            date: props.week.startDate,
-            // The Household's own budget is no override.
-            budgets: Object.fromEntries(
-              Object.entries(changed).map(([weekday, minutes]) => [
-                weekday,
-                minutes === props.household.effortBudgets[weekday as Weekday] ? null : minutes,
-              ]),
-            ),
-          })
-        }
-      />
-      <BudgetsForm
-        label={t("effort.everyWeek")}
-        budgets={props.household.effortBudgets}
-        save={(changed) => props.client.call("set_effort_budgets", { budgets: changed })}
-      />
+      <div class="stack">
+        <p class="meta">{t("effort.hint")}</p>
+        <BudgetsForm
+          label={t("effort.thisWeek")}
+          budgets={props.week.effortBudgets}
+          save={(changed) =>
+            props.client.call("set_week_effort_budgets", {
+              date: props.week.startDate,
+              // The Household's own budget is no override.
+              budgets: Object.fromEntries(
+                Object.entries(changed).map(([weekday, minutes]) => [
+                  weekday,
+                  minutes === props.household.effortBudgets[weekday as Weekday] ? null : minutes,
+                ]),
+              ),
+            })
+          }
+        />
+        <BudgetsForm
+          label={t("effort.everyWeek")}
+          budgets={props.household.effortBudgets}
+          save={(changed) => props.client.call("set_effort_budgets", { budgets: changed })}
+        />
+      </div>
     </details>
   );
 }
@@ -162,7 +198,7 @@ function BudgetsForm(props: {
             </label>
           )}
         </For>
-        <button type="submit" disabled={busy()}>
+        <button type="submit" class="button-secondary" disabled={busy()}>
           {busy() ? t("slot.saving") : t("slot.save")}
         </button>
       </fieldset>

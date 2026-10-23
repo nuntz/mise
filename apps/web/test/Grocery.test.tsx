@@ -133,7 +133,7 @@ function fakeClient(answers: Record<string, Answer> = {}, { online = true } = {}
 async function openGroceryList(client: MiseClient) {
   const user = userEvent.setup();
   render(() => <App client={client} />);
-  await user.click(await screen.findByRole("button", { name: "Grocery List" }));
+  await user.click(await screen.findByRole("button", { name: "Groceries" }));
   return user;
 }
 
@@ -152,21 +152,21 @@ test("lines are grouped by Store Section, with what they're for, and say when th
   const user = await openGroceryList(client);
 
   const produce = await screen.findByRole("region", { name: "Produce" });
-  expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+  expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual([
     "Produce",
     "Spices",
     "Other",
   ]);
-  expect(within(produce).getByRole("checkbox", { name: "garlic: 3 clove" })).toBeTruthy();
+  expect(within(produce).getByRole("checkbox", { name: "3 clove garlic" })).toBeTruthy();
   expect(within(produce).getAllByText("For Dal, Tacos")).toHaveLength(1);
   expect(within(screen.getByRole("region", { name: "Other" })).getByText(/not scaled to who's eating/)).toBeTruthy();
   const salt = within(screen.getByRole("region", { name: "Spices" })).getByRole("checkbox", {
-    name: "salt: 2–3 ml, and some to taste",
+    name: "2–3 ml salt and some to taste",
   }) as HTMLInputElement;
   expect(salt.checked).toBe(true);
 
   expect(screen.getByRole("alert").textContent).toContain("The plan changed since this list was built.");
-  await user.click(screen.getByRole("button", { name: "Rebuild the Grocery List" }));
+  await user.click(screen.getByRole("button", { name: "Rebuild" }));
   expect(calls.filter((call) => call.name === "build_grocery_list")).toHaveLength(1);
 });
 
@@ -175,7 +175,7 @@ test("ticking a line sets its Have Tick, as of now", async () => {
   const user = await openGroceryList(client);
 
   const before = Date.now();
-  await user.click(await screen.findByRole("checkbox", { name: "garlic: 3 clove" }));
+  await user.click(await screen.findByRole("checkbox", { name: "3 clove garlic" }));
 
   await waitFor(() => expect(calls.some((call) => call.name === "set_have_tick")).toBe(true));
   const tick = calls.find((call) => call.name === "set_have_tick")?.input;
@@ -187,7 +187,8 @@ test("lines can be added by hand", async () => {
   const { client, calls } = fakeClient();
   const user = await openGroceryList(client);
 
-  await user.type(await screen.findByLabelText("Add a line"), "2 lemons");
+  await user.click(await screen.findByRole("button", { name: "Add a line" }));
+  await user.type(screen.getByLabelText("Add a line"), "2 lemons");
   await user.click(screen.getByRole("button", { name: "Add" }));
 
   await waitFor(() =>
@@ -202,11 +203,12 @@ test("lines can be added by hand", async () => {
 test("offline, ticks and added lines show at once, wait as changes to sync, and are sent on reconnect", async () => {
   const { client, calls, goOnline, goOffline } = fakeClient();
   const user = await openGroceryList(client);
-  const garlicBox = (await screen.findByRole("checkbox", { name: "garlic: 3 clove" })) as HTMLInputElement;
+  const garlicBox = (await screen.findByRole("checkbox", { name: "3 clove garlic" })) as HTMLInputElement;
 
   goOffline();
   expect(await screen.findByText(/Offline/)).toBeTruthy();
   await user.click(garlicBox);
+  await user.click(screen.getByRole("button", { name: "Add a line" }));
   await user.type(screen.getByLabelText("Add a line"), "2 lemons");
   await user.click(screen.getByRole("button", { name: "Add" }));
 
@@ -215,7 +217,7 @@ test("offline, ticks and added lines show at once, wait as changes to sync, and 
   await user.click(within(waiting).getByRole("checkbox", { name: "2 lemons" }));
   expect(screen.getByText("3 changes waiting to sync")).toBeTruthy();
   // Rebuilding needs the household, so it waits for the connection.
-  expect((screen.getByRole("button", { name: "Rebuild the Grocery List" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Rebuild" }) as HTMLButtonElement).disabled).toBe(true);
   const writes = () => calls.filter((call) => call.name === "set_have_tick" || call.name === "add_grocery_line");
   expect(writes()).toEqual([]);
 
@@ -238,7 +240,7 @@ test("the Household and both Weeks' Grocery Lists open offline from what was las
   };
   const online = fakeClient(answers);
   render(() => <App client={online.client} />);
-  await screen.findByRole("heading", { name: "The Tremblays" });
+  await screen.findByRole("button", { name: "Groceries" });
   await waitFor(() =>
     expect(online.calls.filter((call) => call.name === "get_grocery_list").map((call) => call.input.date)).toEqual(
       expect.arrayContaining([thisWeek, addDays(thisWeek, 7)]),
@@ -250,18 +252,21 @@ test("the Household and both Weeks' Grocery Lists open offline from what was las
   cleanup();
 
   const user = await openGroceryList(fakeClient(answers, { online: false }).client);
-  expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
-  expect(await screen.findByRole("checkbox", { name: "garlic: 3 clove" })).toBeTruthy();
+  expect(await screen.findByRole("checkbox", { name: "3 clove garlic" })).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Next Week" }));
   expect(await screen.findByRole("checkbox", { name: "8 corn tortillas" })).toBeTruthy();
-  expect(screen.queryByRole("checkbox", { name: "garlic: 3 clove" })).toBeNull();
+  expect(screen.queryByRole("checkbox", { name: "3 clove garlic" })).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "Week" }));
+  await user.click(screen.getByRole("button", { name: "Household" }));
+  expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
 });
 
 test("the Store Sections can be put in walking order", async () => {
   const { client, calls } = fakeClient();
   const user = await openGroceryList(client);
 
-  await user.click(await screen.findByText("Walking order"));
+  await user.click(await screen.findByRole("button", { name: "Walking order" }));
   await user.click(screen.getByRole("button", { name: "Move Bakery up" }));
 
   expect(calls.find((call) => call.name === "set_store_section_order")?.input).toEqual({

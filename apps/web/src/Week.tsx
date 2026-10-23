@@ -5,12 +5,14 @@ import {
   type ItemId,
   type LocalDate,
   type Locale,
+  localDate,
   type Meal,
   type Member,
   type MemberId,
   type Override,
   RATINGS,
   type Rating,
+  type RecipeId,
   type RecipeSummary,
   type RefusedConflict,
   SLOT_KINDS,
@@ -23,12 +25,15 @@ import {
   weekDates,
   weekdayOf,
 } from "@mise/domain";
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { formatDate, shortDate } from "./dates";
 import { errorText } from "./errors";
+import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
 import { type ConstraintDraft, ConstraintFields, constraintDraftsOf, constraintsOf } from "./MemberFields";
 import { t } from "./messages";
+import { savedWeek, saveWeek } from "./offline";
 import { RunOut } from "./Pantry";
 import {
   EffortBudgetsEditor,
@@ -38,16 +43,34 @@ import {
   whoName,
 } from "./Proposal";
 
-/** The current and next Week, each day's dinner first, with every Slot editable by hand. */
-export function WeekPage(props: { client: MiseClient; household: Household }) {
+/**
+ * The current and next Week, each day's dinner first, with every Slot editable by hand. Offline it is
+ * read-only: the Week can be looked at and cooked from, not changed.
+ */
+export function WeekPage(props: {
+  client: MiseClient;
+  household: Household;
+  online: boolean;
+  onHousehold: () => void;
+  onGrocery: () => void;
+  onCook: (recipe: RecipeId, servings: number) => void;
+}) {
   const [next, setNext] = createSignal(false);
-  const [week, setWeek] = createSignal<Week>();
+  // The current Week kept on this device shows at once, and for as long as the household can't be
+  // reached; not once it has ended, when it no longer is the current Week.
+  const kept = () => {
+    const saved = savedWeek();
+    const today = localDate(new Date(), props.household.timezone);
+    return saved && addDays(saved.startDate, 7) > today ? saved : undefined;
+  };
+  const [week, setWeek] = createSignal<Week | undefined>(kept());
   const [currentStart, setCurrentStart] = createSignal<LocalDate>();
   const [error, setError] = createSignal<string>();
   // Names the "use it up" Items a Proposal gives as reasons.
   const items = createItems(props.client);
   // Only the latest fetch may show its Week, whatever order the answers arrive in.
   let latest = 0;
+  const readOnly = () => !props.online;
 
   const refetch = async () => {
     const fetch = ++latest;
@@ -57,10 +80,14 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
       if (fetch !== latest) return;
       setError(result.ok ? undefined : t("app.error"));
       if (!result.ok) return;
-      if (!next()) setCurrentStart(result.value.startDate);
+      if (!next()) {
+        setCurrentStart(result.value.startDate);
+        saveWeek(result.value);
+      }
       setWeek(result.value);
     } catch {
-      if (fetch === latest) setError(t("app.error"));
+      // Offline, the Week shown stands; the open notice on reconnect fetches it again.
+      if (fetch === latest && props.online) setError(t("app.error"));
     }
   };
   onCleanup(props.client.subscribe("plan", refetch));
@@ -70,6 +97,7 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
 
   const show = (showNext: boolean) => {
     setNext(showNext);
+    setWeek(showNext ? undefined : kept());
     void refetch();
   };
 
@@ -80,42 +108,133 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
     );
   };
 
+  const today = () => localDate(new Date(), props.household.timezone);
+  const jump = (date: LocalDate) => document.getElementById(dayId(date))?.scrollIntoView?.({ block: "start" });
+
   return (
-    <section>
-      <nav>
-        <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
-          {t("week.this")}
-        </button>
-        <button type="button" aria-pressed={next()} disabled={!currentStart()} onClick={() => show(true)}>
-          {t("week.next")}
-        </button>
-      </nav>
+    <section class="screen" aria-labelledby="week-title">
+      <header class="page-header">
+        <div class="page-header-row">
+          <div class="page-heading">
+            <p class="overline">{next() ? t("week.overlineNext") : t("week.overline")}</p>
+            <h1 id="week-title">
+              {week() ? weekRange(week()?.startDate as LocalDate, props.household.locale) : t("week.title")}
+            </h1>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            aria-label={t("week.household")}
+            onClick={() => props.onHousehold()}
+          >
+            <Icon name="people" />
+          </button>
+        </div>
+        <div class="segmented">
+          <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
+            {t("week.this")}
+          </button>
+          <button type="button" aria-pressed={next()} disabled={!currentStart()} onClick={() => show(true)}>
+            {t("week.next")}
+          </button>
+        </div>
+        <Show when={week()}>
+          {(shown) => (
+            <>
+              <nav class="day-rail" aria-label={t("week.jump")}>
+                <For each={weekDates(shown().startDate)}>
+                  {(date) => (
+                    <button
+                      type="button"
+                      aria-label={t("week.jumpTo", { day: dayTitle(date, props.household.locale) })}
+                      aria-current={date === today() ? "date" : undefined}
+                      onClick={() => jump(date)}
+                    >
+                      <span aria-hidden="true">{dayInitial(date, props.household.locale)}</span>
+                      <span class="numeral" aria-hidden="true">
+                        {Number(date.slice(8))}
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </nav>
+              <ProposalControls
+                client={props.client}
+                week={shown()}
+                readOnly={readOnly()}
+                onGrocery={() => props.onGrocery()}
+              />
+            </>
+          )}
+        </Show>
+      </header>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
-      <Show when={week()}>
+      <Show when={week()} fallback={<WeekLoading />}>
         {(shown) => (
           <>
-            <ProposalControls client={props.client} week={shown()} />
-            <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
-            <For each={weekDates(shown().startDate)}>
-              {(date) => (
-                <Day
-                  client={props.client}
-                  household={props.household}
-                  items={items()}
-                  date={date}
-                  slots={shown().slots.filter((slot) => slot.date === date)}
-                />
-              )}
-            </For>
-            <button type="button" onClick={() => clear(shown())}>
-              {t("week.clear")}
-            </button>
+            <div class="days">
+              <For each={weekDates(shown().startDate)}>
+                {(date) => (
+                  <Day
+                    client={props.client}
+                    household={props.household}
+                    items={items()}
+                    date={date}
+                    today={date === today()}
+                    readOnly={readOnly()}
+                    onCook={props.onCook}
+                    slots={shown().slots.filter((slot) => slot.date === date)}
+                  />
+                )}
+              </For>
+            </div>
+            <Show when={!readOnly()}>
+              <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
+              <button type="button" class="button-quiet" onClick={() => clear(shown())}>
+                {t("week.clear")}
+              </button>
+            </Show>
           </>
         )}
       </Show>
     </section>
+  );
+}
+
+/** The Week's shape in still blocks while it loads: photo cards and compact rows, as they will land. */
+function WeekLoading() {
+  const full = [true, false, true, true, false, true, true];
+  return (
+    <div class="days" aria-busy="true">
+      <p class="visually-hidden">{t("week.loading")}</p>
+      <For each={full}>
+        {(isFull) => (
+          <div class="day" aria-hidden="true">
+            <Show
+              when={isFull}
+              fallback={
+                <div class="compact">
+                  <span class="skeleton thumb" />
+                  <div class="stack">
+                    <span class="skeleton sk-title-sm" />
+                    <span class="skeleton sk-meta" />
+                  </div>
+                </div>
+              }
+            >
+              <span class="skeleton skeleton-photo" />
+              <span class="skeleton sk-title" />
+              <span class="skeleton sk-meta" />
+            </Show>
+            <span class="skeleton sk-strip" />
+          </div>
+        )}
+      </For>
+    </div>
   );
 }
 
@@ -124,27 +243,59 @@ function Day(props: {
   household: Household;
   items: Map<ItemId, Item>;
   date: LocalDate;
+  today: boolean;
+  readOnly: boolean;
+  onCook: (recipe: RecipeId, servings: number) => void;
   slots: Slot[];
 }) {
   const title = () => dayTitle(props.date, props.household.locale);
   const slot = (meal: Meal) => props.slots.find((s) => s.meal === meal) as Slot;
   const [editingDiners, setEditingDiners] = createSignal(false);
+  const view = (meal: Meal, prominent = false) => (
+    <SlotView
+      client={props.client}
+      household={props.household}
+      items={props.items}
+      slot={slot(meal)}
+      day={dayLabel(props.date, props.household.locale, props.today)}
+      today={props.today}
+      readOnly={props.readOnly}
+      onCook={props.onCook}
+      prominent={prominent}
+    />
+  );
+  // Breakfast and lunch, folded: what's planned for them, if anything.
+  const otherPlans = () =>
+    (["breakfast", "lunch"] as const)
+      .filter((meal) => !["unplanned", "skip"].includes(slot(meal).kind))
+      .map((meal) => `${t(`meal.${meal}`)}: ${slotTitle(slot(meal))}`)
+      .join(" · ") || t("week.otherMealsNone");
 
   return (
-    <section aria-label={title()}>
-      <h3>{title()}</h3>
-      <SlotView client={props.client} household={props.household} items={props.items} slot={slot("dinner")} prominent />
-      <details open={["breakfast", "lunch"].some((meal) => blocking(slot(meal as Meal)))}>
-        <summary>{t("week.otherMeals")}</summary>
-        <SlotView client={props.client} household={props.household} items={props.items} slot={slot("breakfast")} />
-        <SlotView client={props.client} household={props.household} items={props.items} slot={slot("lunch")} />
+    <section class="day" id={dayId(props.date)} aria-label={title()}>
+      <h2 class="visually-hidden">{title()}</h2>
+      {view("dinner", true)}
+      <details class="strip" open={["breakfast", "lunch"].some((meal) => blocking(slot(meal as Meal)))}>
+        <summary>
+          <span>{t("week.otherMeals")}</span>
+          <span class="strip-plan">{otherPlans()}</span>
+        </summary>
+        <div class="strip-meals">
+          {view("breakfast")}
+          {view("lunch")}
+        </div>
       </details>
       <Show
         when={editingDiners()}
         fallback={
-          <button type="button" onClick={() => setEditingDiners(true)}>
-            {t("week.dayDiners")}
-          </button>
+          <Show when={!props.readOnly}>
+            <div class="slot-actions">
+              <button type="button" class="button-small" onClick={() => setEditingDiners(true)}>
+                <Icon name="people" />
+                {t("week.dayDiners")}
+              </button>
+            </div>
+          </Show>
         }
       >
         <DayDinersForm
@@ -164,13 +315,24 @@ function SlotView(props: {
   household: Household;
   items: Map<ItemId, Item>;
   slot: Slot;
+  /** The day as its pill says it, such as "Tonight · Mon 26". */
+  day: string;
+  today: boolean;
+  readOnly: boolean;
+  onCook: (recipe: RecipeId, servings: number) => void;
   prominent?: boolean;
 }) {
   const [editing, setEditing] = createSignal(false);
   const meal = () => t(`meal.${props.slot.meal}`);
+  const unsafe = () => props.slot.conflicts.find((conflict) => conflict.override === null);
+  const flag = (): Flag | undefined => {
+    const conflict = unsafe();
+    if (conflict) return { kind: "warn", text: conflictChip(conflict, props.household) };
+    return props.slot.locked ? { kind: "lock", text: t("slot.locked") } : undefined;
+  };
 
   return (
-    <section aria-label={meal()}>
+    <section class="slot" aria-label={meal()}>
       <Show
         when={props.prominent}
         fallback={
@@ -179,50 +341,107 @@ function SlotView(props: {
           </p>
         }
       >
-        <Show when={props.slot.recipe}>
+        <Show
+          when={props.slot.kind === "recipe" && props.slot.recipe}
+          fallback={
+            <div class="compact">
+              <SlotThumb client={props.client} slot={props.slot} />
+              <div class="dish">
+                <p class="overline">{props.day}</p>
+                <h3 class="dish-title">{slotTitle(props.slot)}</h3>
+                <p class="meta">{servingsText(props.slot, props.household)}</p>
+                <Show when={flag()}>
+                  {(shown) => (
+                    <p class="chips">
+                      <span class={`chip ${FLAG_CLASS[shown().kind].chip}`}>{shown().text}</span>
+                    </p>
+                  )}
+                </Show>
+              </div>
+            </div>
+          }
+        >
           {(recipe) => (
-            <Show when={recipe().photoKey}>
-              {(key) => (
-                <img
-                  src={props.client.photoUrl(recipe().id, key())}
-                  alt={t("recipe.photoAlt", { title: recipe().title })}
-                />
-              )}
-            </Show>
+            <>
+              <div class="photo">
+                <Show when={recipe().photoKey} fallback={<PlateGlyph size={64} />}>
+                  {(key) => (
+                    <img
+                      src={props.client.photoUrl(recipe().id, key())}
+                      alt={t("recipe.photoAlt", { title: recipe().title })}
+                    />
+                  )}
+                </Show>
+                <span class={props.today ? "pill pill-today" : "pill"}>{props.day}</span>
+                <Show when={flag()}>
+                  {(shown) => <span class={`pill pill-status ${FLAG_CLASS[shown().kind].pill}`}>{shown().text}</span>}
+                </Show>
+              </div>
+              <div class="dish">
+                <h3 class="dish-title">{slotTitle(props.slot)}</h3>
+                <p class="meta">{servingsText(props.slot, props.household)}</p>
+              </div>
+            </>
           )}
         </Show>
-        <h4>{slotTitle(props.slot)}</h4>
       </Show>
-      <p>{servingsText(props.slot, props.household)}</p>
+      <Show when={!props.prominent}>
+        <p class="meta">{servingsText(props.slot, props.household)}</p>
+      </Show>
       <Show when={props.slot.recipe && props.slot.leftovers.length > 0}>
-        <p>{cookForText(props.slot, props.household)}</p>
+        <p class="chips">
+          <span class="chip">{cookForText(props.slot, props.household)}</span>
+        </p>
       </Show>
-      <Show when={props.slot.reason}>{(reason) => <p>{reasonText(reason(), props.household, props.items)}</p>}</Show>
+      <Show when={props.slot.reason}>
+        {(reason) => <p class="meta">{reasonText(reason(), props.household, props.items)}</p>}
+      </Show>
       <For each={props.slot.conflicts}>
         {(conflict) => (
           <Show
             when={conflict.override}
-            fallback={<p role="alert">{conflictText(conflict, props.household, slotTitle(props.slot))}</p>}
+            fallback={
+              <p class="alert" role="alert">
+                {conflictText(conflict, props.household, slotTitle(props.slot))}
+              </p>
+            }
           >
             {(reason) => (
-              <p>{t("conflict.overridden", { ...conflictParams(conflict, props.household), reason: reason() })}</p>
+              <p class="chips">
+                <span class="chip chip-warn">
+                  {t("conflict.overridden", { ...conflictParams(conflict, props.household), reason: reason() })}
+                </span>
+              </p>
             )}
           </Show>
         )}
       </For>
       <Show when={props.slot.note}>{(note) => <p>{note()}</p>}</Show>
-      <Show when={props.slot.locked}>
-        <p>{t("slot.locked")}</p>
-      </Show>
-      <Show when={props.slot.recipe}>
-        <Cooking client={props.client} household={props.household} slot={props.slot} />
-      </Show>
       <Show
         when={editing()}
         fallback={
-          <button type="button" onClick={() => setEditing(true)}>
-            {t("slot.edit", { meal: meal() })}
-          </button>
+          <div class="slot-actions">
+            <Show when={props.slot.recipe}>
+              {(recipe) => (
+                <button
+                  type="button"
+                  class="button-primary"
+                  onClick={() => props.onCook(recipe().id, props.slot.cookFor || recipe().baseServings)}
+                >
+                  <Icon name="pot" />
+                  {t("kitchen.cook")}
+                </button>
+              )}
+            </Show>
+            <Show when={props.slot.recipe}>
+              <Cooking client={props.client} household={props.household} slot={props.slot} readOnly={props.readOnly} />
+            </Show>
+            <Show when={!props.readOnly}>
+              <button type="button" class="button-small" onClick={() => setEditing(true)}>
+                {t("slot.edit", { meal: meal() })}
+              </button>
+            </Show>
+          </div>
         }
       >
         <SlotForm
@@ -236,8 +455,40 @@ function SlotView(props: {
   );
 }
 
+/** A compact row's square: the dish's photo with a Leftovers band, or a dashed box for no cooking. */
+function SlotThumb(props: { client: MiseClient; slot: Slot }) {
+  return (
+    <Show
+      when={props.slot.kind === "leftovers"}
+      fallback={
+        <span class="thumb thumb-dashed" aria-hidden="true">
+          <Icon name={props.slot.kind === "eat_out" ? "eatOut" : "calendarPlus"} />
+        </span>
+      }
+    >
+      <span class="thumb" aria-hidden="true">
+        <Show when={props.slot.leftoversOf?.recipe} fallback={<PlateGlyph size={30} />}>
+          {(recipe) => (
+            <Show when={recipe().photoKey} fallback={<PlateGlyph size={30} />}>
+              {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
+            </Show>
+          )}
+        </Show>
+        <span class="thumb-band">{t("slotKind.leftovers")}</span>
+      </span>
+    </Show>
+  );
+}
+
+/** What a dinner is flagged with: a Conflict nobody has overridden, or that it is Locked. */
+type Flag = { kind: "warn" | "lock"; text: string };
+const FLAG_CLASS = {
+  warn: { pill: "pill-warn", chip: "chip-warn" },
+  lock: { pill: "pill-lock", chip: "chip-plum" },
+} satisfies Record<Flag["kind"], { pill: string; chip: string }>;
+
 /** Marking a Slot with a Recipe cooked; once it is, its Ratings and a prompt for one more. */
-function Cooking(props: { client: MiseClient; household: Household; slot: Slot }) {
+function Cooking(props: { client: MiseClient; household: Household; slot: Slot; readOnly: boolean }) {
   const [rating, setRating] = createSignal<Rating>();
   const [note, setNote] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -279,18 +530,31 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot }
       <Show
         when={props.slot.cookedAt}
         fallback={
-          <button type="button" disabled={busy()} onClick={() => call(() => props.client.call("mark_cooked", where()))}>
-            {t("cooking.mark")}
-          </button>
+          <Show when={!props.readOnly}>
+            <button
+              type="button"
+              class="button-small"
+              disabled={busy()}
+              onClick={() => call(() => props.client.call("mark_cooked", where()))}
+            >
+              <Icon name="check" />
+              {t("cooking.mark")}
+            </button>
+          </Show>
         }
       >
-        <p>{t("cooking.cooked")}</p>
+        <p class="chips">
+          <span class="chip chip-plum">
+            <Icon name="check" size={16} />
+            {t("cooking.cooked")}
+          </span>
+        </p>
         <Show when={props.slot.meal === "dinner" && props.slot.recipe}>
           {(recipe) => <RunOut client={props.client} recipeId={recipe().id} />}
         </Show>
-        <For each={props.slot.ratings}>{(given) => <p>{ratedText(given)}</p>}</For>
-        <form aria-label={t("cooking.prompt")} onSubmit={rate}>
-          <fieldset>
+        <For each={props.slot.ratings}>{(given) => <p class="meta">{ratedText(given)}</p>}</For>
+        <form class="slot-form" aria-label={t("cooking.prompt")} onSubmit={rate}>
+          <fieldset class="rating">
             <legend>{t("cooking.prompt")}</legend>
             <For each={RATINGS}>
               {(option) => (
@@ -310,13 +574,14 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot }
             {t("cooking.note")}
             <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
           </label>
-          <button type="submit" disabled={busy() || !rating()}>
+          <button type="submit" class="button-secondary" disabled={busy() || !rating() || props.readOnly}>
             {t("cooking.rate")}
           </button>
         </form>
         <button
           type="button"
-          disabled={busy()}
+          class="button-quiet"
+          disabled={busy() || props.readOnly}
           onClick={() => call(() => props.client.call("mark_cooked", { ...where(), cooked: false }))}
         >
           {t("cooking.unmark")}
@@ -412,7 +677,7 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
     recipes().find((recipe) => String(recipe.id) === recipeId())?.title ?? slot.recipe?.title ?? "";
 
   return (
-    <form aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
+    <form class="slot-form" aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
       <Show when={error()}>
         <p role="alert">{error()}</p>
       </Show>
@@ -460,12 +725,15 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         conflicts={refused()}
         describe={(conflict) => conflictText(conflict, props.household, recipeTitle())}
         reasons={reasons()}
+        busy={busy()}
         onChange={setReasons}
+        onChangeIt={() => {
+          setRefused([]);
+          setReasons({});
+        }}
+        onCancel={() => props.onDone()}
       />
-      <SaveButton busy={busy()} refused={refused().length > 0} />
-      <button type="button" onClick={() => props.onDone()}>
-        {t("slot.cancel")}
-      </button>
+      <FormButtons busy={busy()} refused={refused().length > 0} onCancel={() => props.onDone()} />
     </form>
   );
 }
@@ -520,7 +788,7 @@ function DayDinersForm(props: {
   };
 
   return (
-    <form aria-label={t("week.dayDiners")} onSubmit={save}>
+    <form class="slot-form" aria-label={t("week.dayDiners")} onSubmit={save}>
       <Show when={error()}>
         <p role="alert">{error()}</p>
       </Show>
@@ -530,55 +798,130 @@ function DayDinersForm(props: {
         conflicts={refused()}
         describe={describe}
         reasons={reasons()}
+        busy={busy()}
         onChange={setReasons}
+        onChangeIt={() => {
+          setRefused([]);
+          setReasons({});
+        }}
+        onCancel={() => props.onDone()}
       />
-      <SaveButton busy={busy()} refused={refused().length > 0} />
-      <button type="button" onClick={() => props.onDone()}>
-        {t("slot.cancel")}
-      </button>
+      <FormButtons busy={busy()} refused={refused().length > 0} onCancel={() => props.onDone()} />
     </form>
   );
 }
 
 /**
- * What a refused change says: each Conflict, naming the person and the Allergen, and a
- * reason to give for each person and Allergen before saving anyway.
+ * What a refused change says, as a sheet that blocks the page: each Conflict, naming the person and
+ * the Allergen, and a reason to give for each person and Allergen before saving anyway. Rendered in
+ * the form it refuses, so saving anyway submits it.
  */
 function ConflictOverrides(props: {
   household: Household;
   conflicts: RefusedConflict[];
   describe: (conflict: RefusedConflict) => string;
   reasons: Record<string, string>;
+  busy: boolean;
   onChange: (reasons: Record<string, string>) => void;
+  /** Back to the form, to change what was refused. */
+  onChangeIt: () => void;
+  onCancel: () => void;
 }) {
+  const titleId = createUniqueId();
+  const title = () => {
+    const people = overridable(props.conflicts);
+    const [only] = people;
+    if (people.length !== 1 || !only) return t("conflict.sheetTitleMany");
+    const who = whoName(only.who, props.household);
+    return t(only.cause === "contains" ? "conflict.sheetTitle" : "conflict.sheetTitleMaybe", { who });
+  };
+  const focusFirst = (sheet: HTMLElement) => queueMicrotask(() => sheet.querySelector("input")?.focus());
+
   return (
     <Show when={props.conflicts.length > 0}>
-      <div role="alert">
-        <p>{t("conflict.refused")}</p>
-        <For each={props.conflicts}>{(conflict) => <p>{props.describe(conflict)}</p>}</For>
-        <For each={overridable(props.conflicts)}>
-          {(conflict) => (
-            <label>
-              {t("conflict.reason", conflictParams(conflict, props.household))}
-              <input
-                required
-                maxLength={500}
-                value={props.reasons[overrideKey(conflict)] ?? ""}
-                onInput={(e) => props.onChange({ ...props.reasons, [overrideKey(conflict)]: e.currentTarget.value })}
-              />
-            </label>
-          )}
-        </For>
+      <div class="sheet-backdrop">
+        <div
+          class="sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          ref={focusFirst}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") props.onChangeIt();
+            if (event.key === "Tab") keepFocusIn(event.currentTarget, event);
+          }}
+        >
+          <div class="sheet-header sheet-header-warn">
+            <Icon name="warning" />
+            <div class="page-heading">
+              <p class="overline">{t("conflict.overline")}</p>
+              <h2 id={titleId} class="dish-title">
+                {title()}
+              </h2>
+            </div>
+          </div>
+          <div class="sheet-body">
+            <div class="stack" role="alert">
+              <p>{t("conflict.refused")}</p>
+              <For each={props.conflicts}>{(conflict) => <p>{props.describe(conflict)}</p>}</For>
+            </div>
+            <For each={overridable(props.conflicts)}>
+              {(conflict) => (
+                <label>
+                  {t("conflict.reason", conflictParams(conflict, props.household))}
+                  <input
+                    required
+                    maxLength={500}
+                    value={props.reasons[overrideKey(conflict)] ?? ""}
+                    onInput={(e) =>
+                      props.onChange({ ...props.reasons, [overrideKey(conflict)]: e.currentTarget.value })
+                    }
+                  />
+                </label>
+              )}
+            </For>
+            <button type="button" class="button-primary" onClick={() => props.onChangeIt()}>
+              {t("conflict.changeIt")}
+            </button>
+            <button type="submit" class="button-secondary" disabled={props.busy}>
+              {props.busy ? t("slot.saving") : t("conflict.saveAnyway")}
+            </button>
+            <button type="button" class="button-quiet" onClick={() => props.onCancel()}>
+              {t("slot.cancel")}
+            </button>
+          </div>
+        </div>
       </div>
     </Show>
   );
 }
 
-function SaveButton(props: { busy: boolean; refused: boolean }) {
+/** Tab and Shift+Tab go round the sheet's controls, not out to the page under it. */
+function keepFocusIn(sheet: HTMLElement, event: KeyboardEvent) {
+  const controls = [...sheet.querySelectorAll<HTMLElement>("input, button:not(:disabled)")];
+  const [first, last] = [controls[0], controls.at(-1)];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+
+/** Save and Cancel; while a refusal's sheet is up, it has them instead. */
+function FormButtons(props: { busy: boolean; refused: boolean; onCancel: () => void }) {
   return (
-    <button type="submit" disabled={props.busy}>
-      {props.busy ? t("slot.saving") : props.refused ? t("conflict.saveAnyway") : t("slot.save")}
-    </button>
+    <Show when={!props.refused}>
+      <div class="actions">
+        <button type="submit" class="button-primary" disabled={props.busy}>
+          {props.busy ? t("slot.saving") : t("slot.save")}
+        </button>
+        <button type="button" class="button-secondary" onClick={() => props.onCancel()}>
+          {t("slot.cancel")}
+        </button>
+      </div>
+    </Show>
   );
 }
 
@@ -684,11 +1027,35 @@ function servingsText(slot: Slot, household: Household): string {
     : t("slot.serves", params);
 }
 
+/** Where the day rail jumps to. */
+function dayId(date: LocalDate): string {
+  return `day-${date}`;
+}
+
+/** The day as a pill over its photo says it: "Mon 26", or "Tonight · Mon 26". */
+function dayLabel(date: LocalDate, locale: Locale, today: boolean): string {
+  const day = formatDate(date, locale, { weekday: "short", day: "numeric" });
+  return today ? t("week.tonight", { day }) : day;
+}
+
+/** The weekday's initial, as the day rail shows it. */
+function dayInitial(date: LocalDate, locale: Locale): string {
+  return formatDate(date, locale, { weekday: "narrow" });
+}
+
+/** The Week as its title says it, such as "Oct 26 to Nov 1". */
+function weekRange(startDate: LocalDate, locale: Locale): string {
+  return t("week.range", { from: shortDate(startDate, locale), to: shortDate(addDays(startDate, 6), locale) });
+}
+
+/** A Conflict nobody has overridden, as the flag on its dinner: "Robin · Peanut". */
+function conflictChip(conflict: Conflict, household: Household): string {
+  return t("conflict.chip", conflictParams(conflict, household));
+}
+
 /** A date as the Household reads it, such as "Tuesday, October 27". */
 function dayTitle(date: LocalDate, locale: Locale): string {
-  return new Intl.DateTimeFormat(locale, { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(
-    new Date(`${date}T00:00:00Z`),
-  );
+  return formatDate(date, locale, { weekday: "long", month: "long", day: "numeric" });
 }
 
 /** Whether the Slot has a Conflict nobody has overridden. */

@@ -12,7 +12,7 @@ import {
   type ToolResult,
   type Week,
 } from "@mise/domain";
-import { render, screen, within } from "@solidjs/testing-library";
+import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "../src/App";
@@ -663,4 +663,56 @@ test("a cooked dinner asks whether any Staple its Recipe uses has run out", asyn
   expect(writes(calls)).toEqual([
     { name: "record_staple_status", input: { item: "olive_oil", status: "out", at: expect.any(String) } },
   ]);
+});
+
+test("offline, the Week last loaded opens read-only: it can be cooked from, not changed", async () => {
+  const online = fakeClient();
+  render(() => <App client={online.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  cleanup();
+
+  const offline: MiseClient = {
+    ...online.client,
+    call: (async () => {
+      throw new Error("Connection closed");
+    }) as MiseClient["call"],
+    onConnection(listener) {
+      listener(false);
+      return () => {};
+    },
+  };
+  render(() => <App client={offline} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  expect(within(tuesday).getByRole("heading", { name: "Pasta" })).toBeTruthy();
+  expect(within(tuesday).getByRole("button", { name: "Cook" })).toBeTruthy();
+  expect(within(tuesday).queryByRole("button", { name: "Edit Dinner" })).toBeNull();
+  expect(within(tuesday).queryByRole("button", { name: "Mark cooked" })).toBeNull();
+  expect((screen.getByRole("button", { name: "Propose dinners" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("offline, a Week kept from before that has ended isn't shown as this one", async () => {
+  const online = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2025-01-06") }) });
+  render(() => <App client={online.client} />);
+  await screen.findByRole("region", { name: "Monday, January 6" });
+  cleanup();
+
+  render(() => (
+    <App
+      client={{
+        ...online.client,
+        call: (async () => {
+          throw new Error("Connection closed");
+        }) as MiseClient["call"],
+        onConnection(listener) {
+          listener(false);
+          return () => {};
+        },
+      }}
+    />
+  ));
+
+  await screen.findByRole("button", { name: "Household" });
+  expect(screen.queryByRole("region", { name: "Monday, January 6" })).toBeNull();
 });

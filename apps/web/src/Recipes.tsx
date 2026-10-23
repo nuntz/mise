@@ -12,6 +12,7 @@ import type {
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
 import { t } from "./messages";
 import { lastRecipe, savedRecipe, saveRecipe } from "./offline";
@@ -20,25 +21,25 @@ import { RecipeForm } from "./RecipeForm";
 type View = { kind: "list" } | { kind: "recipe"; id: RecipeId } | { kind: "new" } | { kind: "edit"; recipe: Recipe };
 
 /** Recipes: list and search them, view one, create and edit them. Opens on the list, or on the Recipe `open`. */
-export function RecipesPage(props: { client: MiseClient; open?: RecipeId }) {
+export function RecipesPage(props: { client: MiseClient; open?: RecipeId; onCook: (recipe: RecipeId) => void }) {
   const [view, setView] = createSignal<View>(props.open ? { kind: "recipe", id: props.open } : { kind: "list" });
   const list = () => setView({ kind: "list" });
   const show = (recipe: { id: RecipeId }) => setView({ kind: "recipe", id: recipe.id });
 
   return (
-    <section>
+    <section class="screen">
       <Switch>
         <Match when={view().kind === "list"}>
           <RecipeList client={props.client} onOpen={show} onNew={() => setView({ kind: "new" })} />
         </Match>
         <Match when={view().kind === "new"}>
-          <h2>{t("recipes.new")}</h2>
+          <h1>{t("recipes.new")}</h1>
           <RecipeForm client={props.client} onSaved={show} onCancel={list} />
         </Match>
         <Match when={narrow(view(), "edit")}>
           {(edit) => (
             <>
-              <h2>{edit().recipe.title}</h2>
+              <h1>{edit().recipe.title}</h1>
               <RecipeForm
                 client={props.client}
                 recipe={edit().recipe}
@@ -54,6 +55,7 @@ export function RecipesPage(props: { client: MiseClient; open?: RecipeId }) {
               client={props.client}
               id={open().id}
               onBack={list}
+              onCook={props.onCook}
               onEdit={(recipe) => setView({ kind: "edit", recipe })}
             />
           )}
@@ -90,7 +92,12 @@ function RecipeList(props: { client: MiseClient; onOpen: (recipe: { id: RecipeId
 
   return (
     <>
-      <h2>{t("recipes.title")}</h2>
+      <header class="page-header-row">
+        <div class="page-heading">
+          <p class="overline">{t("recipes.overline")}</p>
+          <h1>{t("recipes.title")}</h1>
+        </div>
+      </header>
       <label>
         {t("recipes.search")}
         <input
@@ -100,15 +107,18 @@ function RecipeList(props: { client: MiseClient; onOpen: (recipe: { id: RecipeId
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
       </label>
-      <button type="button" onClick={() => props.onNew()}>
+      <button type="button" class="button-secondary" onClick={() => props.onNew()}>
+        <Icon name="plus" />
         {t("recipes.new")}
       </button>
       <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
         {/* The Recipes can't be listed, but the last one viewed is kept on this device. */}
         <Show when={lastRecipe()}>
           {(last) => (
-            <button type="button" onClick={() => props.onOpen(last())}>
+            <button type="button" class="button-secondary" onClick={() => props.onOpen(last())}>
               {t("recipes.lastViewed", { title: last().title })}
             </button>
           )}
@@ -116,16 +126,28 @@ function RecipeList(props: { client: MiseClient; onOpen: (recipe: { id: RecipeId
       </Show>
       <Show when={recipes()}>
         {(found) => (
-          <Show when={found().length > 0} fallback={<p>{query().trim() ? t("recipes.noMatch") : t("recipes.none")}</p>}>
-            <ul>
+          <Show
+            when={found().length > 0}
+            fallback={<p class="empty">{query().trim() ? t("recipes.noMatch") : t("recipes.none")}</p>}
+          >
+            <ul class="recipe-rows">
               <For each={found()}>
                 {(recipe) => (
                   <li>
-                    <button type="button" onClick={() => props.onOpen(recipe)}>
-                      {recipe.title}
-                    </button>{" "}
-                    <span>{[...recipe.tags, effortText(recipe.effortMinutes)].join(" · ")}</span>
-                    <p>{allergensText(recipe.allergens)}</p>
+                    <button type="button" class="recipe-row" onClick={() => props.onOpen(recipe)}>
+                      <span class="thumb" aria-hidden="true">
+                        <Show when={recipe.photoKey} fallback={<PlateGlyph size={30} />}>
+                          {(key) => <img src={props.client.photoUrl(recipe.id, key())} alt="" />}
+                        </Show>
+                      </span>
+                      <span class="dish">
+                        <span class="dish-title">{recipe.title}</span>
+                      </span>
+                    </button>
+                    <div class="stack recipe-row-meta">
+                      <span class="meta">{[...recipe.tags, effortText(recipe.effortMinutes)].join(" · ")}</span>
+                      <p class="meta">{allergensText(recipe.allergens)}</p>
+                    </div>
                   </li>
                 )}
               </For>
@@ -141,6 +163,7 @@ function RecipeDetail(props: {
   client: MiseClient;
   id: RecipeId;
   onBack: () => void;
+  onCook: (recipe: RecipeId) => void;
   onEdit: (recipe: Recipe) => void;
 }) {
   // The last Recipe viewed is kept on this device, so it stays readable if the connection drops mid-cook.
@@ -191,78 +214,112 @@ function RecipeDetail(props: {
 
   return (
     <>
-      <button type="button" onClick={() => props.onBack()}>
+      <button type="button" class="button-link back" onClick={() => props.onBack()}>
+        <Icon name="chevronLeft" />
         {t("recipe.back")}
       </button>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={recipe()}>
         {(current) => (
-          <article>
-            <h2>{current().title}</h2>
-            <Show when={current().photoKey}>
-              {(key) => (
-                <img
-                  src={props.client.photoUrl(current().id, key())}
-                  alt={t("recipe.photoAlt", { title: current().title })}
-                />
-              )}
-            </Show>
-            <p>
-              {[
-                t("recipe.servings", { count: String(current().baseServings) }),
-                effortText(current().effortMinutes),
-                current().cuisine,
-                current().mainProtein,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            <Show when={current().recurring}>{(recurring) => <p>{recurrenceText(recurring())}</p>}</Show>
-            <Show when={current().yieldsLeftovers}>
-              <p>{t("recipe.yieldsLeftovers")}</p>
-            </Show>
-            <Show when={current().prepAhead}>{(note) => <p>{t("recipe.prepAhead", { note: note() })}</p>}</Show>
-            <Show when={current().tags.length > 0}>
-              <p>{current().tags.join(", ")}</p>
-            </Show>
-
-            <p>{allergensText(current().allergens)}</p>
-
-            <h3 id="ingredients">{t("recipe.ingredients")}</h3>
-            <ul aria-labelledby="ingredients">
-              <For each={current().ingredients}>
-                {(ingredient) => (
-                  <li>
-                    {ingredient.raw} — {resolutionText(ingredient, items())}
-                  </li>
+          <article class="screen" aria-labelledby="recipe-title">
+            <div class="photo hero">
+              <Show when={current().photoKey} fallback={<PlateGlyph size={72} />}>
+                {(key) => (
+                  <img
+                    src={props.client.photoUrl(current().id, key())}
+                    alt={t("recipe.photoAlt", { title: current().title })}
+                  />
                 )}
-              </For>
-            </ul>
+              </Show>
+            </div>
+            <div class="page-heading">
+              <p class="overline">{t("recipe.overline")}</p>
+              <h1 id="recipe-title">{current().title}</h1>
+              <p class="meta">
+                {[
+                  t("recipe.servings", { count: String(current().baseServings) }),
+                  effortText(current().effortMinutes),
+                  current().cuisine,
+                  current().mainProtein,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            <div class="chips">
+              <Show when={current().recurring}>
+                {(recurring) => <span class="chip">{recurrenceText(recurring())}</span>}
+              </Show>
+              <Show when={current().yieldsLeftovers}>
+                <span class="chip">{t("recipe.yieldsLeftovers")}</span>
+              </Show>
+              <For each={current().tags}>{(tag) => <span class="chip">{tag}</span>}</For>
+            </div>
+            <Show when={current().prepAhead}>
+              {(note) => <p class="banner banner-plum">{t("recipe.prepAhead", { note: note() })}</p>}
+            </Show>
+            <p class={current().allergens.kind === "unknown" ? "banner banner-amber" : "meta"}>
+              {allergensText(current().allergens)}
+            </p>
+            <Show when={current().steps.length > 0}>
+              <button type="button" class="button-primary" onClick={() => props.onCook(current().id)}>
+                <Icon name="pot" />
+                {t("recipe.cook")}
+              </button>
+            </Show>
 
-            <h3>{t("recipe.steps")}</h3>
-            <ol>
-              <For each={current().steps}>{(step) => <li>{step}</li>}</For>
-            </ol>
+            <section class="stack" aria-labelledby="ingredients">
+              <h2 id="ingredients">{t("recipe.ingredients")}</h2>
+              <ul class="ingredients" aria-labelledby="ingredients">
+                <For each={current().ingredients}>
+                  {(ingredient) => (
+                    <li>
+                      <span>{ingredient.raw}</span> <span class="meta">— {resolutionText(ingredient, items())}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </section>
+
+            <section class="stack" aria-labelledby="steps">
+              <h2 id="steps">{t("recipe.steps")}</h2>
+              <ol class="steps">
+                <For each={current().steps}>{(step) => <li>{step}</li>}</For>
+              </ol>
+            </section>
 
             <Show when={current().notes}>
               {(notes) => (
-                <>
-                  <h3>{t("recipeForm.notes")}</h3>
-                  <p style={{ "white-space": "pre-line" }}>{notes()}</p>
-                </>
+                <section class="stack">
+                  <h2>{t("recipeForm.notes")}</h2>
+                  <p class="pre-line">{notes()}</p>
+                </section>
               )}
             </Show>
-            <Show when={sourceText(current())}>{(text) => <p>{text()}</p>}</Show>
+            <Show when={sourceText(current())}>{(text) => <p class="meta">{text()}</p>}</Show>
 
-            <button type="button" onClick={() => props.onEdit(current())}>
-              {t("recipe.edit")}
-            </button>
-            <button type="button" disabled={busy()} onClick={() => remove(current())}>
-              {t("recipe.delete")}
-            </button>
-
+            <div class="slot-actions">
+              <button type="button" class="button-small" onClick={() => props.onEdit(current())}>
+                {t("recipe.edit")}
+              </button>
+              <button type="button" class="button-small" disabled={busy()} onClick={() => remove(current())}>
+                {t("recipe.delete")}
+              </button>
+              <Show when={current().photoKey}>
+                <button
+                  type="button"
+                  class="button-small"
+                  disabled={busy()}
+                  onClick={() => changePhoto(() => props.client.removePhoto(current().id))}
+                >
+                  {t("recipe.photoRemove")}
+                </button>
+              </Show>
+            </div>
             <label>
               {t("recipe.photoUpload")}
               <input
@@ -275,15 +332,6 @@ function RecipeDetail(props: {
                 }}
               />
             </label>
-            <Show when={current().photoKey}>
-              <button
-                type="button"
-                disabled={busy()}
-                onClick={() => changePhoto(() => props.client.removePhoto(current().id))}
-              >
-                {t("recipe.photoRemove")}
-              </button>
-            </Show>
           </article>
         )}
       </Show>

@@ -107,7 +107,7 @@ test("a banner says when a pantry check is due, and opens it", async () => {
   expect(banner.textContent).toContain("Pantry check: 2 Staples");
   await user.click(within(banner).getByRole("button", { name: "Check now" }));
 
-  expect(await screen.findByRole("heading", { name: "Pantry check" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
 });
 
 test("no banner when nothing is due", async () => {

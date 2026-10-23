@@ -101,6 +101,7 @@ async function openPage(name: string) {
   const user = userEvent.setup();
   const fake = fakeClient();
   render(() => <App client={fake.client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
   await user.click(await screen.findByRole("button", { name }));
   return { user, ...fake };
 }

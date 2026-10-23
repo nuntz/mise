@@ -66,6 +66,7 @@ test("a household change notice keeps unsaved Member input and shows the new dat
   const { client, notify } = fakeClient(household());
   render(() => <App client={client} />);
 
+  await user.click(await screen.findByRole("button", { name: "Household" }));
   await screen.findByRole("heading", { name: "The Tremblays" });
   await user.click(screen.getByRole("button", { name: "Members" }));
   // Half-edit Sam, and half-add a new Member.
@@ -97,6 +98,7 @@ test("a refresh that fails keeps the settings and their unsaved input, and says 
   const { client, notify } = fakeClient(household());
   render(() => <App client={client} />);
 
+  await user.click(await screen.findByRole("button", { name: "Household" }));
   await screen.findByRole("heading", { name: "The Tremblays" });
   await user.click(screen.getByRole("button", { name: "Members" }));
   await user.click(screen.getByRole("button", { name: "Add a Member" }));

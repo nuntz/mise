@@ -67,14 +67,28 @@ const en = {
   "allergen.sulphite": "Sulphites",
 
   "nav.week": "Week",
+  "nav.label": "Main",
+  "nav.household": "Household",
   "nav.recipes": "Recipes",
   "nav.import": "Import",
   "nav.resolve": "Resolve Ingredients",
   "nav.tag": "Tag Recipes",
   "nav.members": "Members",
-  "nav.grocery": "Grocery List",
+  "nav.grocery": "Groceries",
   "nav.pantry": "Pantry",
   "nav.calendar": "Calendar",
+
+  "kitchen.title": "Kitchen mode",
+  "kitchen.cook": "Cook",
+  "kitchen.leave": "Leave kitchen mode",
+  "kitchen.step": "Step {index} of {count}",
+  "kitchen.previous": "Previous step",
+  "kitchen.next": "Next step",
+  "kitchen.finish": "Finish",
+  "kitchen.backToSteps": "Back to the steps",
+  "kitchen.scaled": "For {count}. The Recipe makes {base}.",
+  "kitchen.asWritten": "For {count}, as the Recipe is written.",
+  "kitchen.noSteps": "This Recipe has no steps written down.",
 
   "calendar.title": "Calendar",
   "calendar.intro":
@@ -101,17 +115,28 @@ const en = {
   "grocery.notSaved": "This Week's list wasn't loaded on this device before going offline.",
   "grocery.none": "No Grocery List for this Week yet.",
   "grocery.build": "Build the Grocery List",
-  "grocery.rebuild": "Rebuild the Grocery List",
+  "grocery.rebuild": "Rebuild",
   "grocery.planChanged":
     "The plan changed since this list was built. Rebuild it to catch up; your ticks and added lines stay.",
   "grocery.for": "For {recipes}",
-  "grocery.andSome": "{amounts}, and some to taste",
-  "grocery.someOf": "{name}: some, to taste",
+  "grocery.andSome": "and some to taste",
+  "grocery.some": "some, to taste",
   "grocery.other": "Other",
   "grocery.asWritten": "As the Recipe writes it, not scaled to who's eating. Resolve the Ingredient to scale it.",
   "grocery.addLine": "Add a line",
   "grocery.add": "Add",
   "grocery.walkingOrder": "Walking order",
+  "grocery.walkingOrderHint": "The order you walk the store in. The list follows it.",
+  "grocery.overline": "Mise · Groceries",
+  "grocery.weekOf": "Week of {date}",
+  "grocery.counts": "{lines} lines · {sections} sections",
+  "grocery.emptyBody":
+    "Mise builds it from the Week's dinners, scaled to who is eating, plus the Staples that are due.",
+  "grocery.reviewWeek": "Review the Week first",
+  "grocery.loading": "Loading the Grocery List…",
+  "grocery.progress": "{done} of {total} in the basket",
+  "grocery.left": "{count} to get",
+  "grocery.progressLabel": "Lines ticked",
   "grocery.moveUp": "Move {section} up",
   "grocery.moveDown": "Move {section} down",
   "grocery.staplesChanged": "Some Staples have run low or out since this list was built. Rebuild it to add them.",
@@ -124,7 +149,7 @@ const en = {
   "pantry.check": "Pantry check",
   "pantry.dueOne": "1 Staple is due for a check.",
   "pantry.due": "{count} Staples are due for a check.",
-  "pantry.nothingDue": "Nothing to check right now.",
+  "pantry.nothingDue": "Nothing to check today",
   "pantry.start": "Start the pantry check",
   "pantry.progress": "{index} of {count} · {location}",
   "pantry.done": "All checked.",
@@ -150,6 +175,28 @@ const en = {
   "pantry.save": "Save",
   "pantry.noSuchItem": "No Item is called “{name}”. Add it as an Item first.",
   "pantry.runOut": "Anything run out?",
+  "pantry.overline": "Mise · Pantry",
+  "pantry.toCheck": "{count} to check",
+  "pantry.walk": "Pantry, then fridge, then freezer. About a minute.",
+  "pantry.allDone": "All done",
+  "pantry.doneSub": "Low and out Staples go on the next Grocery List.",
+  "pantry.nothingDueTitle": "Nothing due",
+  "pantry.nothingDueBody": "Every Staple is within its check interval. Mise asks again when one is due.",
+  "pantry.loading": "Finding what is due…",
+  "pantry.dots": "{index} of {count}",
+  "pantry.skip": "Skip for now",
+  "pantry.nextUp": "Next: {name}, {location}",
+  "pantry.checkedEvery": "Checked every {days} days",
+  "pantry.checkedEveryShop": "Checked every shop",
+  "pantry.lastChecked": "Last checked {when}: {status}.",
+  "pantry.neverChecked": "Not checked before.",
+  "pantry.suggestion": "Suggestion",
+  "pantry.suggestTitle": "{name} keeps running out",
+  "pantry.keepChecking": "Keep checking",
+  "pantry.summary.stocked": "{count} stocked",
+  "pantry.summary.low": "{count} low",
+  "pantry.summary.out": "{count} out",
+  "pantry.backToWeek": "Back to the Week",
 
   "staple.stocked": "Stocked",
   "staple.low": "Low",
@@ -230,6 +277,9 @@ const en = {
   "recipes.noMatch": "No Recipes match.",
   "recipes.new": "New Recipe",
   "recipe.back": "All Recipes",
+  "recipe.overline": "Recipe",
+  "recipe.cook": "Cook in kitchen mode",
+  "recipes.overline": "Mise · Recipes",
   "recipe.edit": "Edit Recipe",
   "recipe.delete": "Delete Recipe",
   "recipe.deleteConfirm": "Delete {title}? This cannot be undone.",
@@ -288,6 +338,20 @@ const en = {
   "week.proposeHint": "Fills the dinners that aren't Locked or decided by hand. Re-roll for a different Proposal.",
   "week.unreviewed": "This Week was proposed and hasn't been reviewed yet.",
   "week.markReviewed": "Mark as reviewed",
+  "week.overline": "Mise · This week",
+  "week.overlineNext": "Mise · Next week",
+  "week.title": "The Week",
+  "week.range": "{from} to {to}",
+  "week.household": "Household",
+  "week.jump": "Jump to a day",
+  "week.jumpTo": "Jump to {day}",
+  "week.tonight": "Tonight · {day}",
+  "week.loading": "Loading the Week…",
+  "week.otherMealsNone": "Not planned",
+  "week.groceryList": "Grocery List",
+  "week.proposeAgain": "Propose again",
+  "week.emptyTitle": "Nothing planned yet",
+  "week.emptyBody": "Mise can pick dinners that suit everyone who is eating, or you can choose day by day.",
 
   "effort.title": "Effort Budgets",
   "effort.hint":
@@ -379,10 +443,20 @@ const en = {
   "conflict.refused": "This isn't safe for everyone eating. Change it, or say why it's safe and save anyway.",
   "conflict.reason": "Why it's safe for {who} ({allergen})",
   "conflict.saveAnyway": "Save anyway",
+  "conflict.chip": "{who} · {allergen}",
+  "conflict.overline": "Not safe",
+  "conflict.sheetTitle": "{who} can't eat this",
+  "conflict.sheetTitleMaybe": "{who} may not be able to eat this",
+  "conflict.sheetTitleMany": "Not safe for everyone eating",
+  "conflict.changeIt": "Change it",
 
   "household.title": "{name}",
   "household.summary": "Week starts on {weekday}. Dinner at {dinnerTime}, {timezone}.",
   "household.units": "Units: {units}. Language: {locale}.",
+  "household.overline": "Mise · Household",
+  "household.kitchenMode": "Kitchen mode on this device",
+  "household.kitchenModeHint": "Near-black with bigger type, for reading at arm's length with busy hands.",
+  "household.settings": "Household settings",
 
   "weekday.monday": "Monday",
   "weekday.tuesday": "Tuesday",
@@ -400,7 +474,35 @@ const en = {
 
 export type MessageKey = keyof typeof en;
 
+let pseudo = false;
+
+/**
+ * Turns the pseudo-locale on or off: every message accented, bracketed and made 40% longer, to check
+ * layouts for long translations and spot text that isn't a message. `?pseudo` in the address turns it on.
+ */
+export function setPseudoLocale(on: boolean): void {
+  pseudo = on;
+}
+
 /** Looks up a message and fills `{placeholders}` from `params`. */
 export function t(key: MessageKey, params: Record<string, string> = {}): string {
-  return en[key].replace(/\{(\w+)\}/g, (match, name: string) => params[name] ?? match);
+  const template = pseudo ? pseudoText(en[key]) : en[key];
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => params[name] ?? match);
+}
+
+const ACCENTED: Record<string, string> = Object.fromEntries(
+  [..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"].map((letter, index) => [
+    letter,
+    [..."àƀçđéƒĝĥîĵķĺɱñöþǫŕšţûṽŵẋýžÀƁÇĐÉƑĜĤÎĴĶĹṀÑÖÞǪŔŠŢÛṼŴẊÝŽ"][index] as string,
+  ]),
+);
+
+/** The message accented letter by letter, `{placeholders}` left alone, padded to 140%. */
+function pseudoText(message: string): string {
+  const accented = message
+    .split(/(\{\w+\})/)
+    .map((part) => (part.startsWith("{") ? part : [...part].map((char) => ACCENTED[char] ?? char).join("")))
+    .join("");
+  const padding = "·".repeat(Math.ceil(message.length * 0.4));
+  return `[${accented} ${padding}]`;
 }

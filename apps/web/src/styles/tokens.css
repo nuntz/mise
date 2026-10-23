@@ -1,0 +1,150 @@
+/*
+ * The Mise Design System's tokens (Direction B, "Bistro"), named as in its tokens.json. Screens use
+ * these, never a hex. Daylight is the default; kitchen mode is the `kitchen` theme, set as
+ * data-theme="kitchen" on any element (the root, for the whole app). The kitchen theme changes
+ * colour and size only, never layout.
+ */
+
+:root {
+  /* Colour */
+  --surface: #fffdf9;
+  --surface-raised: #f4efe7;
+  --line: #e8e2d9;
+  --line-dashed: #d6cec3;
+  --ink: #1a1714;
+  --ink-muted: #6b645c;
+  --plum: #7a1f3d;
+  --plum-ink: #6a1534;
+  --plum-soft: #f7e4ea;
+  --on-plum: #ffffff;
+  --chip: #f1ebe2;
+  --chip-ink: #3a332c;
+  --warn: #a4201a;
+  --warn-soft: #fce8e6;
+  --amber: #7a4b00;
+  --amber-soft: #fff3d6;
+  --leaf: #2e6b33;
+  --leaf-soft: #e3f2e4;
+  --on-leaf: #ffffff;
+  --badge: #ffffff;
+  --badge-ink: #1a1714;
+  --scrim: #000000c7;
+  --photo-placeholder: #c8a98a;
+  /* Text and glyphs on a photo or its placeholder, and on the scrim: white in both themes. */
+  --on-photo: #ffffff;
+  --link: var(--plum);
+  --backdrop: #1a171473;
+
+  /* Type: families */
+  --font-display: "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Type: styles, as `font` shorthands (weight size/line-height family) */
+  --type-display: 600 34px / 36px var(--font-display);
+  --type-title: 600 24px / 28px var(--font-display);
+  --type-title-sm: 600 20px / 24px var(--font-display);
+  --type-numeral: 600 18px / 20px var(--font-display);
+  --type-body: 400 15px / 22px var(--font-sans);
+  --type-button: 700 15px / 20px var(--font-sans);
+  --type-meta: 400 14px / 19px var(--font-sans);
+  --type-label: 800 12px / 16px var(--font-sans);
+  --type-chip: 700 12px / 16px var(--font-sans);
+  --type-strip: 600 13px / 18px var(--font-sans);
+  /* A step being cooked: read at arm's length, so bigger than body in both themes. */
+  --type-step: 500 22px / 32px var(--font-sans);
+
+  /* Spacing: a 4px scale; the phone gutter is space-4 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Sizes */
+  --touch-min: 44px;
+  --control: 52px;
+  --day-rail: 56px;
+  --nav: 64px;
+  --photo: 176px;
+  --thumb: 64px;
+  --avatar: 40px;
+  --icon: 24px;
+  --icon-button: 20px;
+  --hairline: 1px;
+
+  /* Radius */
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Shadow: hairlines separate; only a sheet and the focus ring float */
+  --focus-ring: 0 0 0 2px #fffdf9, 0 0 0 4px #7a1f3d;
+  --sheet: 0 -8px 24px #1a171433;
+
+  /* Motion */
+  --duration-control: 120ms;
+  --duration-sheet: 200ms;
+  --duration-screen: 320ms;
+  --ease-in: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.4, 0, 1, 1);
+}
+
+[data-theme="kitchen"] {
+  --surface: #0f0d0b;
+  --surface-raised: #1e1b18;
+  --line: #3b3631;
+  --line-dashed: #6b645c;
+  --ink: #ffffff;
+  --ink-muted: #d2cbc2;
+  --plum: #ff9ebb;
+  --plum-ink: #ffc9da;
+  --plum-soft: #3a1522;
+  --on-plum: #1a0a10;
+  --chip: #2c2825;
+  --chip-ink: #ffffff;
+  --warn: #ffb4ab;
+  --warn-soft: #4a110c;
+  --amber: #ffd27a;
+  --amber-soft: #3d2a00;
+  --leaf: #9fe0a4;
+  --leaf-soft: #11311a;
+  --on-leaf: #0f0d0b;
+  --badge: #000000;
+  --badge-ink: #ffffff;
+  --photo-placeholder: #4a3b2e;
+  --backdrop: #000000b3;
+  --link: var(--plum);
+
+  /* The kitchen- twins: about 1.15x for display, 1.2x and one weight heavier for text */
+  --type-display: 600 38px / 40px var(--font-display);
+  --type-title: 600 28px / 32px var(--font-display);
+  --type-title-sm: 600 22px / 26px var(--font-display);
+  --type-numeral: 600 20px / 22px var(--font-display);
+  --type-body: 400 17px / 25px var(--font-sans);
+  --type-button: 800 16px / 20px var(--font-sans);
+  --type-meta: 400 17px / 23px var(--font-sans);
+  --type-label: 800 13px / 16px var(--font-sans);
+  --type-chip: 800 14px / 18px var(--font-sans);
+  --type-strip: 800 14px / 18px var(--font-sans);
+  --type-step: 600 28px / 38px var(--font-sans);
+
+  --control: 56px;
+  --day-rail: 60px;
+  --nav: 72px;
+  --thumb: 72px;
+  --icon: 26px;
+  --hairline: 2px;
+
+  --focus-ring: 0 0 0 2px #0f0d0b, 0 0 0 4px #ff9ebb;
+  --sheet: 0 -8px 24px #000000b3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-control: 0ms;
+    --duration-sheet: 0ms;
+    --duration-screen: 0ms;
+  }
+}

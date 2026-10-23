@@ -9,6 +9,7 @@ import {
   Recipe,
   type RecipeId,
   type TickQueue,
+  Week,
 } from "@mise/domain";
 import { onCleanup } from "solid-js";
 import { z } from "zod";
@@ -16,8 +17,8 @@ import type { MiseClient } from "./client";
 
 /*
  * What Mise keeps on this device for when the household can't be reached: the Household, the
- * current and next Week's Grocery Lists, the last Recipe viewed, and the Grocery List changes not
- * yet sent. The service worker caches the app itself; the data comes over the WebSocket, which it
+ * current Week, the current and next Week's Grocery Lists, the last Recipe viewed, and the Grocery
+ * List changes not yet sent. The service worker caches the app itself; the data comes over the WebSocket, which it
  * can't see, so the page keeps it here. Each is checked against its schema when read, so one saved
  * by an older version of Mise is ignored rather than shown wrong.
  */
@@ -26,6 +27,7 @@ const GroceryLists = z.record(z.string(), GroceryList.nullable());
 
 const KEYS = {
   household: "mise.household",
+  week: "mise.week",
   groceryLists: "mise.groceryLists",
   recipe: "mise.recipe",
   changes: "mise.changes",
@@ -52,6 +54,10 @@ function write(key: string, value: unknown): void {
 
 export const savedHousehold = () => read(KEYS.household, Household);
 export const saveHousehold = (household: Household) => write(KEYS.household, household);
+
+/** The current Week as last loaded, shown read-only while the household can't be reached. */
+export const savedWeek = () => read(KEYS.week, Week);
+export const saveWeek = (week: Week) => write(KEYS.week, week);
 
 /** The Grocery List last loaded for the Week starting `date`: null if it had none, undefined if unknown. */
 export const savedGroceryList = (date: LocalDate) => read(KEYS.groceryLists, GroceryLists)?.[date];

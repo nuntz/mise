@@ -10,8 +10,10 @@ import {
   type StoreSection,
   type TickQueue,
 } from "@mise/domain";
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { shortDate } from "./dates";
+import { Icon } from "./icons";
 import { t } from "./messages";
 import { savedGroceryList } from "./offline";
 
@@ -28,6 +30,7 @@ export function GroceryPage(props: {
   queue: TickQueue;
   pending: readonly QueuedChange[];
   online: boolean;
+  onWeek: () => void;
 }) {
   const [next, setNext] = createSignal(false);
   const [error, setError] = createSignal(false);
@@ -79,116 +82,263 @@ export function GroceryPage(props: {
   };
   const build = () => run(() => props.client.call("build_grocery_list", { date: weekShown() }));
 
+  const [adding, setAdding] = createSignal(false);
+  const [reordering, setReordering] = createSignal(false);
+  const counts = (shown: GroceryList) => {
+    const lines = shown.sections.flatMap((group) => group.lines.map((line) => withPendingTick(line, props.pending)));
+    return { total: lines.length, done: lines.filter((line) => line.have).length };
+  };
+
   return (
-    <section>
-      <h2>{t("grocery.title")}</h2>
-      <nav>
-        <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
-          {t("week.this")}
-        </button>
-        <button type="button" aria-pressed={next()} onClick={() => show(true)}>
-          {t("week.next")}
-        </button>
-      </nav>
-      <Show when={error()}>
-        <p role="alert">{t("app.error")}</p>
+    <section class="screen" aria-labelledby="grocery-title">
+      <header class="page-header">
+        <div class="page-header-row">
+          <div class="page-heading">
+            <p class="overline">{t("grocery.overline")}</p>
+            <h1 id="grocery-title">{t("grocery.weekOf", { date: shortDate(weekShown(), props.household.locale) })}</h1>
+            <Show when={list()}>
+              {(shown) => (
+                <p class="meta">
+                  {t("grocery.counts", {
+                    lines: String(counts(shown()).total),
+                    sections: String(shown().sections.length),
+                  })}
+                </p>
+              )}
+            </Show>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            aria-label={t("grocery.walkingOrder")}
+            aria-expanded={reordering()}
+            onClick={() => setReordering(!reordering())}
+          >
+            <Icon name="sort" />
+          </button>
+        </div>
+        <div class="segmented">
+          <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
+            {t("week.this")}
+          </button>
+          <button type="button" aria-pressed={next()} onClick={() => show(true)}>
+            {t("week.next")}
+          </button>
+        </div>
+        <Show when={list()}>
+          <div class="actions">
+            <button type="button" class="button-primary" aria-expanded={adding()} onClick={() => setAdding(!adding())}>
+              <Icon name="plus" />
+              {t("grocery.addLine")}
+            </button>
+            <button type="button" class="button-secondary" disabled={busy() || !props.online} onClick={build}>
+              <Icon name="refresh" />
+              {t("grocery.rebuild")}
+            </button>
+          </div>
+        </Show>
+      </header>
+      <Show when={reordering()}>
+        <WalkingOrder client={props.client} sections={props.household.storeSections} online={props.online} />
       </Show>
-      <Show when={list() === undefined && !props.online}>
-        <p>{t("grocery.notSaved")}</p>
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
+      </Show>
+      <Show when={list() === undefined}>
+        <Show when={props.online} fallback={<p class="empty">{t("grocery.notSaved")}</p>}>
+          <GroceryLoading />
+        </Show>
       </Show>
       <Show when={list() === null}>
-        <p>{t("grocery.none")}</p>
-        <button type="button" disabled={busy() || !props.online} onClick={build}>
-          {t("grocery.build")}
-        </button>
+        <div class="empty">
+          <Icon name="basket" />
+          <p class="empty-title">{t("grocery.none")}</p>
+          <p>{t("grocery.emptyBody")}</p>
+          <button type="button" class="button-primary" disabled={busy() || !props.online} onClick={build}>
+            {t("grocery.build")}
+          </button>
+          <button type="button" class="button-link" onClick={() => props.onWeek()}>
+            {t("grocery.reviewWeek")}
+          </button>
+        </div>
       </Show>
       <Show when={list()}>
         {(shown) => (
           <>
+            <Show when={adding()}>
+              <AddLine onAdd={(text) => props.queue.add(shown().startDate, text)} />
+            </Show>
             <Show when={shown().planChanged}>
-              <p role="alert">{t("grocery.planChanged")}</p>
+              <p class="banner banner-amber" role="alert">
+                {t("grocery.planChanged")}
+              </p>
             </Show>
             <Show when={shown().staplesChanged}>
-              <p role="alert">{t("grocery.staplesChanged")}</p>
+              <p class="banner banner-amber" role="alert">
+                {t("grocery.staplesChanged")}
+              </p>
             </Show>
-            <button type="button" disabled={busy() || !props.online} onClick={build}>
-              {t("grocery.rebuild")}
-            </button>
-            <For each={shown().sections}>
-              {(group) => (
-                <section aria-label={sectionName(group.section)}>
-                  <h3>{sectionName(group.section)}</h3>
-                  <ul>
-                    <For each={group.lines}>
-                      {(line) => (
-                        <li>
+            <div>
+              <For each={shown().sections}>
+                {(group) => (
+                  <section class="store-section" aria-label={sectionName(group.section)}>
+                    <div class="section-head">
+                      <h2>{sectionName(group.section)}</h2>
+                      <span class="chip">{group.lines.length}</span>
+                    </div>
+                    <ul class="tick-list">
+                      <For each={group.lines}>
+                        {(line) => (
                           <LineView
                             line={withPendingTick(line, props.pending)}
+                            pending={hasPendingTick(line, props.pending)}
                             locale={props.household.locale}
                             onTick={(have) => props.queue.tick(line.id, have)}
                           />
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </section>
-              )}
-            </For>
-            <Show when={addedOffline(props.pending, shown().startDate)}>
-              {(added) => (
-                <section aria-label={t("offline.waiting")}>
-                  <h3>{t("offline.waiting")}</h3>
-                  <ul>
-                    <For each={added()}>
-                      {(line) => (
-                        <li>
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={line.have}
-                              onChange={(event) => props.queue.tickAdded(line.key, event.currentTarget.checked)}
-                            />
-                            {line.text}
-                          </label>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </section>
-              )}
-            </Show>
-            <AddLine onAdd={(text) => props.queue.add(shown().startDate, text)} />
+                        )}
+                      </For>
+                    </ul>
+                  </section>
+                )}
+              </For>
+              <Show when={addedOffline(props.pending, shown().startDate)}>
+                {(added) => (
+                  <section class="store-section" aria-label={t("offline.waiting")}>
+                    <div class="section-head">
+                      <h2>{t("offline.waiting")}</h2>
+                    </div>
+                    <ul class="tick-list">
+                      <For each={added()}>
+                        {(line) => (
+                          <li class="tick-row">
+                            <label>
+                              <span class="tick tick-pending">
+                                <input
+                                  type="checkbox"
+                                  checked={line.have}
+                                  onChange={(event) => props.queue.tickAdded(line.key, event.currentTarget.checked)}
+                                />
+                                <Icon name="clock" class="icon-pending" />
+                              </span>
+                              <span class="qty" />
+                              <span class="item-name">{line.text}</span>
+                            </label>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </section>
+                )}
+              </Show>
+            </div>
+            <Progress count={counts(shown())} />
           </>
         )}
       </Show>
-      <WalkingOrder client={props.client} sections={props.household.storeSections} online={props.online} />
     </section>
   );
 }
 
-function LineView(props: { line: GroceryLine; locale: string; onTick: (have: boolean) => void }) {
+/** How many lines are in the basket, kept in view at the bottom while shopping. */
+function Progress(props: { count: { done: number; total: number } }) {
+  const percent = () => (props.count.total ? (props.count.done / props.count.total) * 100 : 0);
   return (
-    <>
-      <label>
-        <input
-          type="checkbox"
-          checked={props.line.have}
-          // Set to what the box now shows; the queue stamps it with the time.
-          onChange={(event) => props.onTick(event.currentTarget.checked)}
-        />
-        {lineText(props.line, props.locale)}
-      </label>
-      <Show when={props.line.origin === "staple"}>
-        <small>{t("grocery.staple")}</small>
-      </Show>
-      <Show when={props.line.origin === "recipe" && props.line.item === null}>
-        <small>{t("grocery.asWritten")}</small>
-      </Show>
-      <Show when={props.line.recipes.length > 0}>
-        <small>{t("grocery.for", { recipes: props.line.recipes.map((recipe) => recipe.title).join(", ") })}</small>
-      </Show>
-    </>
+    <div class="progress">
+      <p class="progress-label">
+        <span>{t("grocery.progress", { done: String(props.count.done), total: String(props.count.total) })}</span>
+        <span>{t("grocery.left", { count: String(props.count.total - props.count.done) })}</span>
+      </p>
+      <div
+        class="bar"
+        role="progressbar"
+        aria-label={t("grocery.progressLabel")}
+        aria-valuemin={0}
+        aria-valuemax={props.count.total}
+        aria-valuenow={props.count.done}
+      >
+        {/* The one inline style: a width that is data, not design. */}
+        <div style={{ width: `${percent()}%` }} />
+      </div>
+    </div>
   );
+}
+
+/** The list's shape in still blocks while it loads. */
+function GroceryLoading() {
+  return (
+    <div aria-busy="true">
+      <p class="visually-hidden">{t("grocery.loading")}</p>
+      <For each={[4, 3, 1, 2]}>
+        {(rows) => (
+          <div aria-hidden="true">
+            <div class="section-head">
+              <span class="skeleton sk-section" />
+            </div>
+            <div class="tick-list">
+              <For each={Array.from({ length: rows })}>
+                {() => (
+                  <div class="tick-row">
+                    <span class="skeleton sk-tick" />
+                    <span class="skeleton sk-qty" />
+                    <span class="skeleton sk-item" />
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
+function LineView(props: { line: GroceryLine; pending: boolean; locale: string; onTick: (have: boolean) => void }) {
+  const detailsId = createUniqueId();
+  const amounts = () => props.line.amounts.map((amount) => amountText(amount, props.locale)).join(" + ");
+  const details = () =>
+    [
+      props.line.recipes.length > 0 &&
+        t("grocery.for", { recipes: props.line.recipes.map((recipe) => recipe.title).join(", ") }),
+      props.line.origin === "recipe" && props.line.item === null && t("grocery.asWritten"),
+    ].filter((detail): detail is string => typeof detail === "string");
+  return (
+    <li class="tick-row">
+      <label>
+        <span class={props.pending ? "tick tick-pending" : "tick"}>
+          <input
+            type="checkbox"
+            checked={props.line.have}
+            aria-describedby={detailsId}
+            // Set to what the box now shows; the queue stamps it with the time.
+            onChange={(event) => props.onTick(event.currentTarget.checked)}
+          />
+          <Icon name="check" class="icon-check" />
+          <Icon name="clock" class="icon-pending" />
+        </span>
+        <span class="qty">{amounts()}</span>{" "}
+        <span class="item-name">
+          {props.line.name}
+          <Show when={props.line.unmeasured}>
+            {" "}
+            <span class="line-meta">{amounts() ? t("grocery.andSome") : t("grocery.some")}</span>
+          </Show>
+        </span>
+      </label>
+      <span class="tick-details" id={detailsId}>
+        <For each={details()}>{(detail) => <span class="line-meta">{detail}</span>}</For>
+        <Show when={props.line.origin === "staple"}>
+          <span class="chip">{t("grocery.staple")}</span>
+        </Show>
+      </span>
+    </li>
+  );
+}
+
+/** Whether a tick of the line is waiting to sync. */
+function hasPendingTick(line: GroceryLine, pending: readonly QueuedChange[]): boolean {
+  return pending.some((change) => change.kind === "tick" && change.line === line.id);
 }
 
 /** The line as its latest tick not yet sent leaves it. */
@@ -209,13 +359,6 @@ function addedOffline(pending: readonly QueuedChange[], startDate: LocalDate) {
     if (line) line.have = change.have;
   }
   return added.length > 0 && added;
-}
-
-/** "salt: 2–3 ml, and some to taste"; a line with nothing measured is just its name. */
-function lineText(line: GroceryLine, locale: string): string {
-  const amounts = line.amounts.map((amount) => amountText(amount, locale)).join(" + ");
-  if (!amounts) return line.unmeasured ? t("grocery.someOf", { name: line.name }) : line.name;
-  return `${line.name}: ${line.unmeasured ? t("grocery.andSome", { amounts }) : amounts}`;
 }
 
 export function amountText({ amount, unit }: GroceryAmount, locale: string): string {
@@ -241,12 +384,19 @@ function AddLine(props: { onAdd: (text: string) => void }) {
   };
 
   return (
-    <form onSubmit={add}>
+    <form class="slot-form" onSubmit={add}>
       <label>
         {t("grocery.addLine")}
-        <input value={text()} onInput={(event) => setText(event.currentTarget.value)} maxLength={200} />
+        <input
+          ref={(input) => queueMicrotask(() => input.focus())}
+          value={text()}
+          onInput={(event) => setText(event.currentTarget.value)}
+          maxLength={200}
+        />
       </label>
-      <button type="submit">{t("grocery.add")}</button>
+      <button type="submit" class="button-primary">
+        {t("grocery.add")}
+      </button>
     </form>
   );
 }
@@ -261,33 +411,36 @@ function WalkingOrder(props: { client: MiseClient; sections: StoreSection[]; onl
   };
 
   return (
-    <details>
-      <summary>{t("grocery.walkingOrder")}</summary>
-      <ol>
+    <section class="slot-form stack" aria-labelledby="walking-order">
+      <h2 id="walking-order">{t("grocery.walkingOrder")}</h2>
+      <p class="meta">{t("grocery.walkingOrderHint")}</p>
+      <ol class="reorder">
         <For each={props.sections}>
           {(section, index) => (
             <li>
-              {sectionName(section)}
+              <span>{sectionName(section)}</span>
               <button
                 type="button"
+                class="icon-button"
                 disabled={index() === 0 || !props.online}
                 aria-label={t("grocery.moveUp", { section: sectionName(section) })}
                 onClick={() => move(index(), -1)}
               >
-                ↑
+                <Icon name="arrowUp" />
               </button>
               <button
                 type="button"
+                class="icon-button"
                 disabled={index() === props.sections.length - 1 || !props.online}
                 aria-label={t("grocery.moveDown", { section: sectionName(section) })}
                 onClick={() => move(index(), 1)}
               >
-                ↓
+                <Icon name="arrowDown" />
               </button>
             </li>
           )}
         </For>
       </ol>
-    </details>
+    </section>
   );
 }

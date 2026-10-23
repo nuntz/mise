@@ -1,7 +1,14 @@
+import "@fontsource-variable/fraunces";
+import "@fontsource-variable/inter";
+import "./styles/tokens.css";
+import "./styles/app.css";
 import { render } from "solid-js/web";
 import { App } from "./App";
 import { createMiseClient } from "./client";
-import { t } from "./messages";
+import { setPseudoLocale, t } from "./messages";
+
+// `?pseudo` shows every message in the long pseudo-locale, for checking layouts.
+setPseudoLocale(new URLSearchParams(window.location.search).has("pseudo"));
 
 document.title = t("app.name");
 

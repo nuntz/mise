@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type ItemCatalogue, ItemId, SHIPPED_ITEMS } from "./items";
-import { IngredientUnit, readUnit, trailingCountUnit } from "./units";
+import { IngredientUnit, readUnit, trailingCountUnit, unitFamily } from "./units";
 
 /** How much of something: a single number has `min` equal to `max`; "2–3" is a range. */
 export const Amount = z.object({ min: z.number().positive(), max: z.number().positive() });
@@ -72,6 +72,51 @@ export function parseIngredient(raw: string, catalogue: ItemCatalogue = SHIPPED_
     note: notes.length > 0 ? notes.join("; ") : null,
     item: catalogue.match(name),
   };
+}
+
+/**
+ * The Ingredient with its amount scaled `by` (cooked for 6 from a Recipe for 4 is 1.5), rounded the
+ * way a cook measures: metric weights and volumes to whole numbers (fives from 100; one decimal for
+ * kilos and litres), whole things (eggs, cloves, cans) to halves, everything else to quarters or
+ * thirds. Scaled by 1 it is unchanged.
+ */
+export function scaleIngredient(ingredient: Ingredient, by: number): Ingredient {
+  const { amount, unit } = ingredient;
+  if (!amount || by === 1) return ingredient;
+  const round = (value: number) => kitchenRound(value, unit);
+  return { ...ingredient, amount: { min: round(amount.min * by), max: round(amount.max * by) } };
+}
+
+/**
+ * A line split at the end of the amount it starts with ("2 cloves garlic" → "2", "cloves garlic";
+ * "an onion" → "an", "onion"), so a scaled amount can replace it and keep the rest as written. Null
+ * when the line doesn't start with one.
+ */
+export function leadingAmount(raw: string): { amount: string; rest: string } | null {
+  const text = raw.trim();
+  const match = AMOUNT.exec(text) ?? /^an?\s+/i.exec(text);
+  if (!match) return null;
+  return { amount: match[0].trim(), rest: text.slice(match[0].length) };
+}
+
+const WHOLE_METRIC = new Set<IngredientUnit>(["mg", "g", "ml", "cl", "dl"]);
+const DECIMAL_METRIC = new Set<IngredientUnit>(["kg", "l"]);
+/** Below 1, an eighth is the smallest step; above it, quarters and thirds. */
+const SMALL_STEPS = [1 / 8, 1 / 4, 1 / 3, 1 / 2, 2 / 3, 3 / 4, 1];
+const STEPS = [0, 1 / 4, 1 / 3, 1 / 2, 2 / 3, 3 / 4, 1];
+/** Nobody cuts a quarter of a pepper; half an onion, though. */
+const WHOLE_STEPS = [0, 1 / 2, 1];
+
+function kitchenRound(value: number, unit: IngredientUnit | null): number {
+  if (unit && WHOLE_METRIC.has(unit)) return Math.max(1, value >= 100 ? Math.round(value / 5) * 5 : Math.round(value));
+  if (unit && DECIMAL_METRIC.has(unit)) return Math.max(0.1, Math.round(value * 10) / 10);
+  if (value >= 10) return Math.round(value);
+  const whole = Math.floor(value);
+  const counted = unit === null || unitFamily(unit) === "count";
+  const steps = counted ? (whole === 0 ? WHOLE_STEPS.slice(1) : WHOLE_STEPS) : whole === 0 ? SMALL_STEPS : STEPS;
+  const part = value - whole;
+  const nearest = steps.reduce((best, step) => (Math.abs(step - part) < Math.abs(best - part) ? step : best));
+  return whole + nearest;
 }
 
 const UNICODE_FRACTIONS: Record<string, number> = {

@@ -118,6 +118,10 @@ What a Recipe needs doing the day before, such as soaking beans; the Calendar Fe
 The plan's dinners as an iCalendar subscription, read without signing in by whoever has its token; read-only.
 _Avoid_: Calendar sync, export
 
+**Kitchen mode**:
+A Recipe cooked one step at a time in the high-contrast theme, with the screen kept awake and the Ingredients a tap away, scaled to what its Slot is cooked for (its Leftovers included). Also the name of that theme, which a device can use everywhere.
+_Avoid_: Cooking mode, dark mode
+
 ## Groceries and pantry
 
 **Staple**:

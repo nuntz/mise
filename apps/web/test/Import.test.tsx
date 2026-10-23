@@ -110,6 +110,7 @@ function fakeClient(options: { upload?: string | null } = {}) {
 
 async function openImport(client: MiseClient) {
   render(() => <App client={client} />);
+  await userEvent.click(await screen.findByRole("button", { name: "Household" }));
   await userEvent.click(await screen.findByRole("button", { name: "Import" }));
 }
 

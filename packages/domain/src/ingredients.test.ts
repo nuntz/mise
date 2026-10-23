@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseIngredient } from "./ingredients";
+import { parseIngredient, scaleIngredient } from "./ingredients";
 
 /** raw line → [amount (a number or [min, max]), unit, name, note, item]. */
 type Row = [string, number | [number, number] | null, string | null, string, string | null, string | null];
@@ -134,4 +134,48 @@ describe("Item matching", () => {
     ["1 tsp crushed red pepper", 1, "tsp", "crushed red pepper", null, "chili_flakes"],
     ["", null, null, "", null, null],
   ]);
+});
+
+describe("scaling for the amount cooked", () => {
+  const scaled = (raw: string, by: number) => scaleIngredient(parseIngredient(raw), by).amount;
+
+  test("by 1 the amount stays exactly as written", () => {
+    expect(scaled("0.3 cup milk", 1)).toEqual({ min: 0.3, max: 0.3 });
+  });
+
+  test("cups and spoons round to the nearest quarter or third", () => {
+    expect(scaled("1 cup rice", 1.5)).toEqual({ min: 1.5, max: 1.5 });
+    expect(scaled("1 cup rice", 4 / 3)).toEqual({ min: 4 / 3, max: 4 / 3 });
+    expect(scaled("1 tsp cumin", 0.7)).toEqual({ min: 2 / 3, max: 2 / 3 });
+  });
+
+  test("whole things, counted or in pieces, round to halves", () => {
+    expect(scaled("3 eggs", 1.5)).toEqual({ min: 4.5, max: 4.5 });
+    expect(scaled("3 bell peppers", 1.75)).toEqual({ min: 5, max: 5 });
+    expect(scaled("2 cloves garlic", 0.7)).toEqual({ min: 1.5, max: 1.5 });
+    expect(scaled("1 onion", 0.3)).toEqual({ min: 0.5, max: 0.5 });
+  });
+
+  test("a small amount never rounds away to nothing", () => {
+    expect(scaled("1 pinch salt", 0.1)).toEqual({ min: 0.125, max: 0.125 });
+  });
+
+  test("grams and millilitres round to whole numbers, and to fives from 100", () => {
+    expect(scaled("250 g flour", 1.5)).toEqual({ min: 375, max: 375 });
+    expect(scaled("400 ml stock", 1.33)).toEqual({ min: 530, max: 530 });
+    expect(scaled("15 g butter", 1.5)).toEqual({ min: 23, max: 23 });
+  });
+
+  test("kilos and litres keep one decimal", () => {
+    expect(scaled("1.5 kg pork shoulder", 1.5)).toEqual({ min: 2.3, max: 2.3 });
+  });
+
+  test("a range scales both ends", () => {
+    expect(scaled("2-3 tbsp soy sauce", 2)).toEqual({ min: 4, max: 6 });
+  });
+
+  test("a line with no amount is left as it is", () => {
+    const ingredient = parseIngredient("salt to taste");
+    expect(scaleIngredient(ingredient, 2)).toEqual(ingredient);
+  });
 });

@@ -274,5 +274,5 @@ test("a link to a Recipe, as the calendar feed gives, opens it", async () => {
   render(() => <App client={fakeClient([toast, rice]).client} />);
 
   expect(await screen.findByRole("heading", { name: "Toast" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Recipes" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "Recipes" }).getAttribute("aria-current")).toBe("page");
 });

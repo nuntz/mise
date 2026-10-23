@@ -15,6 +15,7 @@ import {
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { amountText } from "./Grocery";
+import { Icon, type IconName } from "./icons";
 import { createItems } from "./items";
 import { t } from "./messages";
 
@@ -41,35 +42,36 @@ export function PantryBanner(props: { client: MiseClient; onOpen: () => void }) 
   const due = createDueCount(props.client);
   return (
     <Show when={due() > 0}>
-      <p role="status">
-        {due() === 1 ? t("pantry.bannerOne") : t("pantry.banner", { count: String(due()) })}{" "}
+      <div class="banner banner-plum" role="status">
+        <p>{due() === 1 ? t("pantry.bannerOne") : t("pantry.banner", { count: String(due()) })}</p>
         <button type="button" onClick={() => props.onOpen()}>
           {t("pantry.checkNow")}
         </button>
-      </p>
+      </div>
     </Show>
   );
 }
 
 /** The pantry check-in, then every Staple and a form to add or change one. */
-export function PantryPage(props: { client: MiseClient; locale: string }) {
+export function PantryPage(props: { client: MiseClient; locale: string; onWeek: () => void }) {
   return (
-    <section>
-      <h2>{t("pantry.title")}</h2>
-      <CheckIn client={props.client} />
+    <section class="screen" aria-labelledby="pantry-title">
+      <CheckIn client={props.client} locale={props.locale} onWeek={props.onWeek} />
       <StapleList client={props.client} locale={props.locale} />
     </section>
   );
 }
 
 /**
- * The Staples due, one card at a time. The session asks about the Staples due when it started, so
- * answering one doesn't reshuffle the rest.
+ * The Staples due, one card at a time, each answered Stocked, Low or Out. The session asks about the
+ * Staples due when it started, so answering one doesn't reshuffle the rest. A Staple found out three
+ * times running is suggested for always buying before the next card.
  */
-function CheckIn(props: { client: MiseClient }) {
+function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void }) {
   const [due, setDue] = createSignal<DueStaples>();
   const [session, setSession] = createSignal<Staple[]>();
   const [index, setIndex] = createSignal(0);
+  const [answers, setAnswers] = createSignal<{ staple: Staple; status: StapleStatus }[]>([]);
   const [suggested, setSuggested] = createSignal<Staple[]>([]);
   const [error, setError] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
@@ -87,6 +89,7 @@ function CheckIn(props: { client: MiseClient }) {
   const start = () => {
     setSession(due()?.staples ?? []);
     setIndex(0);
+    setAnswers([]);
     setSuggested([]);
   };
 
@@ -101,6 +104,7 @@ function CheckIn(props: { client: MiseClient }) {
       setError(!result.ok);
       if (!result.ok) return;
       if (result.value.suggestAlwaysBuy) setSuggested((all) => [...all, result.value]);
+      setAnswers((all) => [...all, { staple, status }]);
       setIndex((at) => at + 1);
     } catch {
       setError(true);
@@ -113,26 +117,59 @@ function CheckIn(props: { client: MiseClient }) {
     try {
       const result = await props.client.call("upsert_staple", { item: staple.item, alwaysBuy: true });
       setError(!result.ok);
-      if (result.ok) setSuggested((all) => all.filter((one) => one.item !== staple.item));
+      if (result.ok) dismiss(staple);
     } catch {
       setError(true);
     }
   };
+  const dismiss = (staple: Staple) => setSuggested((all) => all.filter((one) => one.item !== staple.item));
+
+  const done = () => {
+    const staples = session();
+    return staples !== undefined && index() >= staples.length && suggested().length === 0;
+  };
+  const title = () => {
+    const staples = session();
+    if (done()) return t("pantry.allDone");
+    const count = staples?.length ?? due()?.due;
+    if (count === undefined) return t("pantry.check");
+    if (count === 0) return t("pantry.nothingDueTitle");
+    return t("pantry.toCheck", { count: String(count) });
+  };
 
   return (
-    <section>
-      <h3>{t("pantry.check")}</h3>
+    <>
+      <header class="page-header">
+        <div class="page-heading">
+          <p class="overline">{t("pantry.overline")}</p>
+          <h1 id="pantry-title">{title()}</h1>
+          <Show when={done() || (session()?.length ?? due()?.due) !== 0}>
+            <p class="meta">{done() ? t("pantry.doneSub") : t("pantry.walk")}</p>
+          </Show>
+        </div>
+      </header>
       <Show when={error()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
       </Show>
       <Show
         when={session()}
         fallback={
-          <Show when={due()}>
+          <Show when={due()} fallback={<Show when={!error()}>{<CheckInLoading />}</Show>}>
             {(shown) => (
-              <Show when={shown().due > 0} fallback={<p>{t("pantry.nothingDue")}</p>}>
+              <Show
+                when={shown().due > 0}
+                fallback={
+                  <div class="empty">
+                    <Icon name="jar" />
+                    <p class="empty-title">{t("pantry.nothingDue")}</p>
+                    <p>{t("pantry.nothingDueBody")}</p>
+                  </div>
+                }
+              >
                 <p>{shown().due === 1 ? t("pantry.dueOne") : t("pantry.due", { count: String(shown().due) })}</p>
-                <button type="button" onClick={start}>
+                <button type="button" class="button-primary" onClick={start}>
                   {t("pantry.start")}
                 </button>
               </Show>
@@ -141,41 +178,166 @@ function CheckIn(props: { client: MiseClient }) {
         }
       >
         {(staples) => (
-          <Show when={staples()[index()]} fallback={<p>{t("pantry.done")}</p>}>
-            {(staple) => (
-              <fieldset aria-label={staple().name}>
-                <legend>{staple().name}</legend>
-                <p>
-                  {t("pantry.progress", {
-                    index: String(index() + 1),
-                    count: String(staples().length),
-                    location: t(`location.${staple().location}`),
-                  })}
-                </p>
-                <For each={STAPLE_STATUSES}>
-                  {(status) => (
-                    <button type="button" disabled={busy()} onClick={() => answer(staple(), status)}>
-                      {t(`staple.${status}`)}
+          <Show
+            when={suggested()[0]}
+            fallback={
+              <Show when={staples()[index()]} fallback={<CheckInDone answers={answers()} onWeek={props.onWeek} />}>
+                {(staple) => (
+                  <fieldset class="answers" aria-label={staple().name}>
+                    <Dots done={index()} count={staples().length} />
+                    <p class="visually-hidden">
+                      {t("pantry.progress", {
+                        index: String(index() + 1),
+                        count: String(staples().length),
+                        location: t(`location.${staple().location}`),
+                      })}
+                    </p>
+                    <div class="check-card">
+                      <div class="check-card-head">
+                        <p class="overline">{t(`location.${staple().location}`)}</p>
+                        <span class="chip">{intervalText(staple())}</span>
+                      </div>
+                      <h2 class="check-card-title">{staple().name}</h2>
+                      <p>{lastCheckedText(staple(), props.locale)}</p>
+                    </div>
+                    <For each={STAPLE_STATUSES}>
+                      {(status) => (
+                        <button
+                          type="button"
+                          class={`answer answer-${status}`}
+                          disabled={busy()}
+                          onClick={() => answer(staple(), status)}
+                        >
+                          <Icon name={STATUS_ICON[status]} />
+                          {t(`staple.${status}`)}
+                        </button>
+                      )}
+                    </For>
+                    <button
+                      type="button"
+                      class="button-quiet"
+                      disabled={busy()}
+                      onClick={() => setIndex((at) => at + 1)}
+                    >
+                      {t("pantry.skip")}
                     </button>
-                  )}
-                </For>
-              </fieldset>
+                    <Show when={staples()[index() + 1]}>
+                      {(next) => (
+                        <p class="next-up">
+                          {t("pantry.nextUp", { name: next().name, location: t(`location.${next().location}`) })}
+                        </p>
+                      )}
+                    </Show>
+                  </fieldset>
+                )}
+              </Show>
+            }
+          >
+            {(staple) => (
+              <div class="stack">
+                <section class="check-card suggest-card" aria-labelledby="suggestion-title">
+                  <p class="overline">{t("pantry.suggestion")}</p>
+                  <h2 id="suggestion-title" class="check-card-title">
+                    {t("pantry.suggestTitle", { name: staple().name })}
+                  </h2>
+                  <p>{t("pantry.suggestAlwaysBuy", { name: staple().name })}</p>
+                </section>
+                <button type="button" class="button-primary" onClick={() => alwaysBuy(staple())}>
+                  {t("pantry.alwaysBuyIt", { name: staple().name })}
+                </button>
+                <button type="button" class="button-secondary" onClick={() => dismiss(staple())}>
+                  {t("pantry.keepChecking")}
+                </button>
+              </div>
             )}
           </Show>
         )}
       </Show>
-      <For each={suggested()}>
-        {(staple) => (
-          <p>
-            {t("pantry.suggestAlwaysBuy", { name: staple.name })}{" "}
-            <button type="button" onClick={() => alwaysBuy(staple)}>
-              {t("pantry.alwaysBuyIt", { name: staple.name })}
-            </button>
-          </p>
-        )}
-      </For>
-    </section>
+    </>
   );
+}
+
+const STATUS_ICON = { stocked: "check", low: "low", out: "close" } as const satisfies Record<StapleStatus, IconName>;
+
+/** How far through the check-in: done in leaf, the one being asked in plum. */
+function Dots(props: { done: number; count: number }) {
+  return (
+    <div class="dots">
+      <div aria-hidden="true">
+        <For each={Array.from({ length: props.count })}>
+          {(_, at) => <span class={at() < props.done ? "dot-done" : at() === props.done ? "dot-now" : ""} />}
+        </For>
+      </div>
+      <p aria-hidden="true">
+        {t("pantry.dots", { index: String(Math.min(props.done + 1, props.count)), count: String(props.count) })}
+      </p>
+    </div>
+  );
+}
+
+function CheckInLoading() {
+  return (
+    <div class="stack" aria-busy="true">
+      <p class="visually-hidden">{t("pantry.loading")}</p>
+      <div class="check-card" aria-hidden="true">
+        <span class="skeleton sk-label" />
+        <span class="skeleton sk-card-title" />
+        <span class="skeleton sk-body" />
+      </div>
+      <For each={STAPLE_STATUSES}>{() => <span class="skeleton answer" aria-hidden="true" />}</For>
+    </div>
+  );
+}
+
+/** The check-in answered: how many of each, by name. */
+function CheckInDone(props: { answers: { staple: Staple; status: StapleStatus }[]; onWeek: () => void }) {
+  const of = (status: StapleStatus) => props.answers.filter((answer) => answer.status === status);
+  return (
+    <div class="stack">
+      <div class="done-mark">
+        <Icon name="check" />
+      </div>
+      <h2 class="check-card-title center">{t("pantry.done")}</h2>
+      <ul class="summary-list">
+        <For each={STAPLE_STATUSES.filter((status) => of(status).length > 0)}>
+          {(status) => (
+            <li>
+              <span class={`status-mark status-${status}`}>
+                <Icon name={STATUS_ICON[status]} />
+              </span>
+              <span>
+                <strong>{t(`pantry.summary.${status}`, { count: String(of(status).length) })}</strong>{" "}
+                <span class="body-muted">
+                  ·{" "}
+                  {of(status)
+                    .map((answer) => answer.staple.name)
+                    .join(", ")}
+                </span>
+              </span>
+            </li>
+          )}
+        </For>
+      </ul>
+      <button type="button" class="button-primary" onClick={() => props.onWeek()}>
+        {t("pantry.backToWeek")}
+      </button>
+    </div>
+  );
+}
+
+function intervalText(staple: Staple): string {
+  return staple.checkEvery === "every_shop"
+    ? t("pantry.checkedEveryShop")
+    : t("pantry.checkedEvery", { days: String(staple.checkEvery) });
+}
+
+/** "Last checked 3 weeks ago: Stocked." */
+function lastCheckedText(staple: Staple, locale: string): string {
+  if (staple.lastChecked === null) return t("pantry.neverChecked");
+  const days = Math.round((Date.now() - Date.parse(staple.lastChecked)) / (24 * 60 * 60 * 1000));
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const when = days < 14 ? relative.format(-days, "day") : relative.format(-Math.round(days / 7), "week");
+  return t("pantry.lastChecked", { when, status: t(`staple.${staple.status}`) });
 }
 
 /** What the Staple form holds while it is filled in. */
@@ -286,15 +448,16 @@ function StapleList(props: { client: MiseClient; locale: string }) {
     ].join(" · ");
 
   return (
-    <section aria-label={t("pantry.staples")}>
-      <h3>{t("pantry.staples")}</h3>
-      <ul>
+    <section class="stack" aria-label={t("pantry.staples")}>
+      <h2>{t("pantry.staples")}</h2>
+      <ul class="rows">
         <For each={staples()} fallback={<li>{t("pantry.noStaples")}</li>}>
           {(staple) => (
             <li>
               <span>{summary(staple)}</span>
               <button
                 type="button"
+                class="button-small"
                 aria-label={t("pantry.edit", { name: staple.name })}
                 onClick={() => setDraft(draftOf(staple))}
               >
@@ -302,6 +465,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
               </button>
               <button
                 type="button"
+                class="button-small"
                 aria-label={t("pantry.remove", { name: staple.name })}
                 onClick={() => remove(staple)}
               >
@@ -311,7 +475,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
           )}
         </For>
       </ul>
-      <form aria-label={t("pantry.form")} onSubmit={save}>
+      <form class="slot-form" aria-label={t("pantry.form")} onSubmit={save}>
         <label>
           {t("pantry.item")}
           <input
@@ -382,7 +546,9 @@ function StapleList(props: { client: MiseClient; locale: string }) {
             <For each={INGREDIENT_UNITS}>{(unit) => <option value={unit}>{unit.replace("_", " ")}</option>}</For>
           </select>
         </label>
-        <button type="submit">{t("pantry.save")}</button>
+        <button type="submit" class="button-primary">
+          {t("pantry.save")}
+        </button>
         <Show when={error()}>
           <p role="alert">{error()}</p>
         </Show>
@@ -425,12 +591,13 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
         <legend>{t("pantry.runOut")}</legend>
         <For each={staples()}>
           {(staple) => (
-            <p>
+            <p class="slot-actions">
               {staple.name}: {t(`staple.${staple.status}`)}
               <For each={["low", "out"] as const}>
                 {(status) => (
                   <button
                     type="button"
+                    class="button-small"
                     aria-label={`${staple.name}: ${t(`staple.${status}`)}`}
                     aria-pressed={staple.status === status}
                     onClick={() => record(staple, status)}
