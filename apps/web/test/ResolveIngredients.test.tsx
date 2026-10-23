@@ -88,6 +88,10 @@ function fakeClient() {
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    onConnection(listener) {
+      listener(true);
+      return () => {};
+    },
     close() {},
   };
   return { client, calls };

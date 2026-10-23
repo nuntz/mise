@@ -20,6 +20,11 @@ export type MiseClient = {
    * while offline goes stale. Returns an unsubscribe function.
    */
   subscribe(topic: ChangeTopic, refetch: () => void): () => void;
+  /**
+   * Calls `listener` with whether the household is reachable: now, and whenever that changes. Until
+   * the first attempt to connect fails, it counts as reachable. Returns an unsubscribe function.
+   */
+  onConnection(listener: (online: boolean) => void): () => void;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
   photoUrl(recipeId: RecipeId, photoKey: string): string;
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
@@ -47,6 +52,22 @@ export function createMiseClient(host = window.location.host): MiseClient {
       return () => {
         agent.removeEventListener("message", onMessage);
         agent.removeEventListener("open", refetch);
+      };
+    },
+
+    onConnection(listener) {
+      // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".
+      listener(agent.readyState !== WebSocket.CLOSED);
+      const open = () => listener(true);
+      const close = () => listener(false);
+      agent.addEventListener("open", open);
+      agent.addEventListener("close", close);
+      // A socket can stay open for minutes after the signal goes; the browser often knows sooner.
+      window.addEventListener("offline", close);
+      return () => {
+        agent.removeEventListener("open", open);
+        agent.removeEventListener("close", close);
+        window.removeEventListener("offline", close);
       };
     },
 

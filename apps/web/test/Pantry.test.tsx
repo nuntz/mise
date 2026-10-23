@@ -86,6 +86,10 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    onConnection(listener) {
+      listener(true);
+      return () => {};
+    },
     close() {},
   };
   return { client, calls };

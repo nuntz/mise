@@ -75,7 +75,16 @@ const en = {
   "nav.grocery": "Grocery List",
   "nav.pantry": "Pantry",
 
+  "offline.notice":
+    "Offline: showing what was last loaded. Ticks and lines you add are kept and sync when the connection comes back.",
+  "offline.pendingOne": "1 change waiting to sync",
+  "offline.pending": "{count} changes waiting to sync",
+  "offline.refused": "A change made offline couldn't be saved. Its line may have gone when the list was rebuilt.",
+  "offline.dismiss": "Dismiss",
+  "offline.waiting": "Waiting to sync",
+  "recipes.lastViewed": "Last viewed: {title}",
   "grocery.title": "Grocery List",
+  "grocery.notSaved": "This Week's list wasn't loaded on this device before going offline.",
   "grocery.none": "No Grocery List for this Week yet.",
   "grocery.build": "Build the Grocery List",
   "grocery.rebuild": "Rebuild the Grocery List",

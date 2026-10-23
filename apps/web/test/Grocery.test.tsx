@@ -1,4 +1,6 @@
 import {
+  addDays,
+  currentWeekStart,
   DEFAULT_EFFORT_BUDGETS,
   type GroceryLine,
   type GroceryList,
@@ -6,7 +8,7 @@ import {
   STORE_SECTIONS,
   type ToolResult,
 } from "@mise/domain";
-import { render, screen, within } from "@solidjs/testing-library";
+import { cleanup, render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
@@ -73,11 +75,21 @@ const list: GroceryList = {
 
 type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefined;
 
-/** A client with `list` as this Week's Grocery List, unless `answers` say otherwise; it records every call. */
-function fakeClient(answers: Record<string, Answer> = {}) {
+/**
+ * A client with `list` as this Week's Grocery List, unless `answers` say otherwise; it records every
+ * call that reaches the household. `goOnline` and `goOffline` stand in for the connection; offline,
+ * every call fails.
+ */
+function fakeClient(answers: Record<string, Answer> = {}, { online = true } = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
+  const connection = { online, listeners: new Set<(online: boolean) => void>() };
+  const setOnline = (value: boolean) => {
+    connection.online = value;
+    for (const listener of connection.listeners) listener(value);
+  };
   const client: MiseClient = {
     call: (async (name: string, input: Record<string, unknown>) => {
+      if (!connection.online) throw new Error("Connection closed");
       calls.push({ name, input });
       const answer = answers[name]?.(input);
       if (answer) return answer;
@@ -108,9 +120,14 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    onConnection(listener) {
+      listener(connection.online);
+      connection.listeners.add(listener);
+      return () => connection.listeners.delete(listener);
+    },
     close() {},
   };
-  return { client, calls };
+  return { client, calls, goOnline: () => setOnline(true), goOffline: () => setOnline(false) };
 }
 
 async function openGroceryList(client: MiseClient) {
@@ -160,6 +177,7 @@ test("ticking a line sets its Have Tick, as of now", async () => {
   const before = Date.now();
   await user.click(await screen.findByRole("checkbox", { name: "garlic: 3 clove" }));
 
+  await waitFor(() => expect(calls.some((call) => call.name === "set_have_tick")).toBe(true));
   const tick = calls.find((call) => call.name === "set_have_tick")?.input;
   expect(tick).toMatchObject({ line: 1, have: true });
   expect(Date.parse(String(tick?.at))).toBeGreaterThanOrEqual(before);
@@ -172,10 +190,71 @@ test("lines can be added by hand", async () => {
   await user.type(await screen.findByLabelText("Add a line"), "2 lemons");
   await user.click(screen.getByRole("button", { name: "Add" }));
 
-  expect(calls.find((call) => call.name === "add_grocery_line")?.input).toEqual({
-    date: "2026-10-26",
-    text: "2 lemons",
-  });
+  await waitFor(() =>
+    expect(calls.find((call) => call.name === "add_grocery_line")?.input).toEqual({
+      date: "2026-10-26",
+      text: "2 lemons",
+      key: expect.any(String),
+    }),
+  );
+});
+
+test("offline, ticks and added lines show at once, wait as changes to sync, and are sent on reconnect", async () => {
+  const { client, calls, goOnline, goOffline } = fakeClient();
+  const user = await openGroceryList(client);
+  const garlicBox = (await screen.findByRole("checkbox", { name: "garlic: 3 clove" })) as HTMLInputElement;
+
+  goOffline();
+  expect(await screen.findByText(/Offline/)).toBeTruthy();
+  await user.click(garlicBox);
+  await user.type(screen.getByLabelText("Add a line"), "2 lemons");
+  await user.click(screen.getByRole("button", { name: "Add" }));
+
+  expect(garlicBox.checked).toBe(true);
+  const waiting = screen.getByRole("region", { name: "Waiting to sync" });
+  await user.click(within(waiting).getByRole("checkbox", { name: "2 lemons" }));
+  expect(screen.getByText("3 changes waiting to sync")).toBeTruthy();
+  // Rebuilding needs the household, so it waits for the connection.
+  expect((screen.getByRole("button", { name: "Rebuild the Grocery List" }) as HTMLButtonElement).disabled).toBe(true);
+  const writes = () => calls.filter((call) => call.name === "set_have_tick" || call.name === "add_grocery_line");
+  expect(writes()).toEqual([]);
+
+  goOnline();
+  await waitFor(() => expect(screen.queryByText(/waiting to sync/)).toBeNull());
+  expect(calls.find((call) => call.name === "add_grocery_line")?.input).toMatchObject({ text: "2 lemons" });
+  // The garlic tick, then the lemons' tick on the line the household added (`garlic` stands in for it).
+  expect(calls.filter((call) => call.name === "set_have_tick").map((call) => call.input)).toMatchObject([
+    { line: 1, have: true },
+    { line: 1, have: true },
+  ]);
+});
+
+test("the Household and both Weeks' Grocery Lists open offline from what was last loaded", async () => {
+  const thisWeek = currentWeekStart(new Date(), household.timezone, household.weekStartsOn);
+  const nextWeek: GroceryList = { ...list, sections: list.sections.slice(2) };
+  const answers = {
+    get_grocery_list: (input: Record<string, unknown>) =>
+      ({ ok: true, value: input.date === thisWeek ? list : nextWeek }) as const,
+  };
+  const online = fakeClient(answers);
+  render(() => <App client={online.client} />);
+  await screen.findByRole("heading", { name: "The Tremblays" });
+  await waitFor(() =>
+    expect(online.calls.filter((call) => call.name === "get_grocery_list").map((call) => call.input.date)).toEqual(
+      expect.arrayContaining([thisWeek, addDays(thisWeek, 7)]),
+    ),
+  );
+
+  // Let the answers arrive before the app closes.
+  await new Promise((resolve) => setTimeout(resolve));
+  cleanup();
+
+  const user = await openGroceryList(fakeClient(answers, { online: false }).client);
+  expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+  expect(await screen.findByRole("checkbox", { name: "garlic: 3 clove" })).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  expect(await screen.findByRole("checkbox", { name: "8 corn tortillas" })).toBeTruthy();
+  expect(screen.queryByRole("checkbox", { name: "garlic: 3 clove" })).toBeNull();
 });
 
 test("the Store Sections can be put in walking order", async () => {

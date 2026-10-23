@@ -173,6 +173,10 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    onConnection(listener) {
+      listener(true);
+      return () => {};
+    },
     close() {},
   };
   return { client, calls };
@@ -181,9 +185,15 @@ function fakeClient(answers: Record<string, Answer> = {}) {
 const writes = (calls: { name: string; input: unknown }[]) =>
   calls.filter(
     (call) =>
-      !["get_household", "get_week", "search_recipes", "list_items", "list_staples", "list_due_staples"].includes(
-        call.name,
-      ),
+      ![
+        "get_household",
+        "get_week",
+        "get_grocery_list",
+        "search_recipes",
+        "list_items",
+        "list_staples",
+        "list_due_staples",
+      ].includes(call.name),
   );
 
 test("the Week opens first: each day's dinner with its photo, breakfast and lunch tucked away", async () => {

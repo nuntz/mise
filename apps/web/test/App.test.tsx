@@ -48,6 +48,10 @@ function fakeClient(initial: Household) {
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    onConnection(listener) {
+      listener(true);
+      return () => {};
+    },
     close() {},
   };
   const notify = (next: Household | Error) => {

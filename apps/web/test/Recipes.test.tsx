@@ -6,7 +6,7 @@ import {
   type RecipeSummary,
   STORE_SECTIONS,
 } from "@mise/domain";
-import { render, screen, within } from "@solidjs/testing-library";
+import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
@@ -72,11 +72,12 @@ const rice: Recipe = {
 const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }: Recipe) =>
   ({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }) satisfies RecipeSummary;
 
-/** A client over a fixed set of Recipes that records every tool call made. */
-function fakeClient(recipes: Recipe[]) {
+/** A client over a fixed set of Recipes that records every tool call made; offline, every call fails. */
+function fakeClient(recipes: Recipe[], { online = true } = {}) {
   const calls: { name: string; input: unknown }[] = [];
   const client: MiseClient = {
     call: (async (name: string, input: Record<string, unknown>) => {
+      if (!online) throw new Error("Connection closed");
       calls.push({ name, input });
       switch (name) {
         case "get_household":
@@ -112,6 +113,10 @@ function fakeClient(recipes: Recipe[]) {
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    onConnection(listener) {
+      listener(online);
+      return () => {};
+    },
     close() {},
   };
   return { client, calls };
@@ -249,3 +254,16 @@ async function waitForGone(query: () => HTMLElement | null) {
   for (let i = 0; i < 50 && query(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
   expect(query()).toBeNull();
 }
+
+test("the last Recipe viewed stays readable offline", async () => {
+  const user = userEvent.setup();
+  await openRecipes(fakeClient([toast, rice]).client);
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+  await screen.findByText("Butter it.");
+  cleanup();
+
+  await openRecipes(fakeClient([toast, rice], { online: false }).client);
+  await user.click(await screen.findByRole("button", { name: "Last viewed: Toast" }));
+  expect(await screen.findByRole("heading", { name: "Toast" })).toBeTruthy();
+  expect(screen.getByText("Butter it.")).toBeTruthy();
+});

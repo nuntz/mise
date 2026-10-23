@@ -6,22 +6,30 @@ import {
   type GroceryList,
   type Household,
   type LocalDate,
+  type QueuedChange,
   type StoreSection,
+  type TickQueue,
 } from "@mise/domain";
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { t } from "./messages";
+import { savedGroceryList } from "./offline";
 
 type GroceryHousehold = Pick<Household, "timezone" | "weekStartsOn" | "locale" | "storeSections">;
 
 /**
  * The Week's Grocery List, by Store Section in walking order, with Have Ticks, the Staples due to be
- * bought and lines added by hand.
+ * bought and lines added by hand. Ticks and added lines go through `queue`, so they work offline;
+ * the changes still `pending` show on the list as made.
  */
-export function GroceryPage(props: { client: MiseClient; household: GroceryHousehold }) {
+export function GroceryPage(props: {
+  client: MiseClient;
+  household: GroceryHousehold;
+  queue: TickQueue;
+  pending: readonly QueuedChange[];
+  online: boolean;
+}) {
   const [next, setNext] = createSignal(false);
-  // Undefined until loaded; null while the Week has no Grocery List.
-  const [list, setList] = createSignal<GroceryList | null>();
   const [error, setError] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   // Only the latest fetch may show its list, whatever order the answers arrive in.
@@ -31,6 +39,9 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
     const start = currentWeekStart(new Date(), props.household.timezone, props.household.weekStartsOn);
     return next() ? addDays(start, 7) : start;
   };
+  // Undefined until loaded; null while the Week has no Grocery List. The one saved on this device
+  // shows until the household answers, or for as long as it can't be reached.
+  const [list, setList] = createSignal<GroceryList | null | undefined>(savedGroceryList(weekShown()));
 
   const refetch = async () => {
     const fetch = ++latest;
@@ -40,7 +51,8 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
       setError(!result.ok);
       if (result.ok) setList(result.value);
     } catch {
-      if (fetch === latest) setError(true);
+      // Offline, the saved list stands; the open notice on reconnect fetches it again.
+      if (fetch === latest) setError(props.online);
     }
   };
   // The list says whether the plan, its Recipes or the Household's Store Sections changed under it.
@@ -50,7 +62,7 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
 
   const show = (showNext: boolean) => {
     setNext(showNext);
-    setList(undefined);
+    setList(savedGroceryList(weekShown()));
     void refetch();
   };
 
@@ -81,9 +93,12 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
       <Show when={error()}>
         <p role="alert">{t("app.error")}</p>
       </Show>
+      <Show when={list() === undefined && !props.online}>
+        <p>{t("grocery.notSaved")}</p>
+      </Show>
       <Show when={list() === null}>
         <p>{t("grocery.none")}</p>
-        <button type="button" disabled={busy()} onClick={build}>
+        <button type="button" disabled={busy() || !props.online} onClick={build}>
           {t("grocery.build")}
         </button>
       </Show>
@@ -96,7 +111,7 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
             <Show when={shown().staplesChanged}>
               <p role="alert">{t("grocery.staplesChanged")}</p>
             </Show>
-            <button type="button" disabled={busy()} onClick={build}>
+            <button type="button" disabled={busy() || !props.online} onClick={build}>
               {t("grocery.rebuild")}
             </button>
             <For each={shown().sections}>
@@ -107,7 +122,11 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
                     <For each={group.lines}>
                       {(line) => (
                         <li>
-                          <LineView client={props.client} line={line} locale={props.household.locale} />
+                          <LineView
+                            line={withPendingTick(line, props.pending)}
+                            locale={props.household.locale}
+                            onTick={(have) => props.queue.tick(line.id, have)}
+                          />
                         </li>
                       )}
                     </For>
@@ -115,30 +134,47 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
                 </section>
               )}
             </For>
-            <AddLine client={props.client} startDate={shown().startDate} />
+            <Show when={addedOffline(props.pending, shown().startDate)}>
+              {(added) => (
+                <section aria-label={t("offline.waiting")}>
+                  <h3>{t("offline.waiting")}</h3>
+                  <ul>
+                    <For each={added()}>
+                      {(line) => (
+                        <li>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={line.have}
+                              onChange={(event) => props.queue.tickAdded(line.key, event.currentTarget.checked)}
+                            />
+                            {line.text}
+                          </label>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </section>
+              )}
+            </Show>
+            <AddLine onAdd={(text) => props.queue.add(shown().startDate, text)} />
           </>
         )}
       </Show>
-      <WalkingOrder client={props.client} sections={props.household.storeSections} />
+      <WalkingOrder client={props.client} sections={props.household.storeSections} online={props.online} />
     </section>
   );
 }
 
-function LineView(props: { client: MiseClient; line: GroceryLine; locale: string }) {
+function LineView(props: { line: GroceryLine; locale: string; onTick: (have: boolean) => void }) {
   return (
     <>
       <label>
         <input
           type="checkbox"
           checked={props.line.have}
-          onChange={(event) =>
-            // Set to what the box now shows, as of now, so a tick synced late never undoes a later one.
-            void props.client.call("set_have_tick", {
-              line: props.line.id,
-              have: event.currentTarget.checked,
-              at: new Date().toISOString(),
-            })
-          }
+          // Set to what the box now shows; the queue stamps it with the time.
+          onChange={(event) => props.onTick(event.currentTarget.checked)}
         />
         {lineText(props.line, props.locale)}
       </label>
@@ -153,6 +189,26 @@ function LineView(props: { client: MiseClient; line: GroceryLine; locale: string
       </Show>
     </>
   );
+}
+
+/** The line as its latest tick not yet sent leaves it. */
+function withPendingTick(line: GroceryLine, pending: readonly QueuedChange[]): GroceryLine {
+  let have = line.have;
+  for (const change of pending) if (change.kind === "tick" && change.line === line.id) have = change.have;
+  return have === line.have ? line : { ...line, have };
+}
+
+/** The lines added to the Week of `startDate` and not sent yet, each as its latest tick leaves it; false if none. */
+function addedOffline(pending: readonly QueuedChange[], startDate: LocalDate) {
+  const added = pending.flatMap((change) =>
+    change.kind === "add" && change.date === startDate ? [{ key: change.key, text: change.text, have: false }] : [],
+  );
+  for (const change of pending) {
+    if (change.kind !== "tickAdded") continue;
+    const line = added.find((each) => each.key === change.key);
+    if (line) line.have = change.have;
+  }
+  return added.length > 0 && added;
 }
 
 /** "salt: 2–3 ml, and some to taste"; a line with nothing measured is just its name. */
@@ -173,20 +229,15 @@ function sectionName(section: StoreSection | "other"): string {
   return section === "other" ? t("grocery.other") : t(`section.${section}`);
 }
 
-function AddLine(props: { client: MiseClient; startDate: LocalDate }) {
+/** Adds a line by hand; it is queued like a tick, so it can be added offline. */
+function AddLine(props: { onAdd: (text: string) => void }) {
   const [text, setText] = createSignal("");
-  const [failed, setFailed] = createSignal(false);
 
-  const add = async (event: SubmitEvent) => {
+  const add = (event: SubmitEvent) => {
     event.preventDefault();
     if (!text().trim()) return;
-    try {
-      const result = await props.client.call("add_grocery_line", { date: props.startDate, text: text() });
-      setFailed(!result.ok);
-      if (result.ok) setText("");
-    } catch {
-      setFailed(true);
-    }
+    props.onAdd(text().trim());
+    setText("");
   };
 
   return (
@@ -196,15 +247,12 @@ function AddLine(props: { client: MiseClient; startDate: LocalDate }) {
         <input value={text()} onInput={(event) => setText(event.currentTarget.value)} maxLength={200} />
       </label>
       <button type="submit">{t("grocery.add")}</button>
-      <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
-      </Show>
     </form>
   );
 }
 
 /** The Household's Store Sections in the order it walks its store, each movable up or down. */
-function WalkingOrder(props: { client: MiseClient; sections: StoreSection[] }) {
+function WalkingOrder(props: { client: MiseClient; sections: StoreSection[]; online: boolean }) {
   const move = (index: number, by: -1 | 1) => {
     const sections = [...props.sections];
     const [section] = sections.splice(index, 1) as [StoreSection];
@@ -222,7 +270,7 @@ function WalkingOrder(props: { client: MiseClient; sections: StoreSection[] }) {
               {sectionName(section)}
               <button
                 type="button"
-                disabled={index() === 0}
+                disabled={index() === 0 || !props.online}
                 aria-label={t("grocery.moveUp", { section: sectionName(section) })}
                 onClick={() => move(index(), -1)}
               >
@@ -230,7 +278,7 @@ function WalkingOrder(props: { client: MiseClient; sections: StoreSection[] }) {
               </button>
               <button
                 type="button"
-                disabled={index() === props.sections.length - 1}
+                disabled={index() === props.sections.length - 1 || !props.online}
                 aria-label={t("grocery.moveDown", { section: sectionName(section) })}
                 onClick={() => move(index(), 1)}
               >

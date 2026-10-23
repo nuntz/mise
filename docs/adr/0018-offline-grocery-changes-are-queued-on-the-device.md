@@ -1,0 +1,12 @@
+# Offline Grocery List changes are queued on the device, and the page keeps the data it shows offline
+
+A shopper with no signal can tick lines and add lines; nothing else is written offline in Drop 1. Each change goes into a queue on the device (`createTickQueue` in `packages/domain`, kept in `localStorage`) before anything is sent: a Have Tick set to a value as of the time it was made, or a line added under a key the device makes up. The queue sends its changes in order whenever the connection is open, and again on every reconnect. A change that doesn't get through, or whose answer is lost, stays queued and is sent again. That is safe because both are set operations. A tick sent twice sets the same value as of the same time, and the latest time wins (ADR 0015), so two shoppers' offline ticks reconcile per line, however late each syncs. `add_grocery_line` takes the key, and adding again under a key it has seen returns that line rather than a second one. A tick on a line added offline waits for its line to be added, then becomes a tick on that line. A change the household refuses, such as a tick on a line a rebuild removed, is dropped and the page says so.
+
+The service worker caches only the app shell: the page, the built files and the icons, precached at install under a name that changes with every build. Tools are called over the WebSocket, which a service worker can't see, so the page keeps the data it needs offline in `localStorage`: the Household, the current and next Week's Grocery Lists (loaded again on every connect and change notice, whichever page is open), and the last Recipe viewed. Each is checked against its schema when read, so one saved by an older build is ignored rather than shown wrong. Adding HTTP routes for the service worker to cache would have been a second way to read the same data, which ADR 0002 rules out.
+
+## Consequences
+
+- Navigations go to the network first and fall back to the cached shell only without a connection, so a deploy shows at once and an expired Access session still goes to sign-in.
+- The manifest is fetched with credentials, since Cloudflare Access covers it like every other path.
+- The queue lives on one device. Changes queued on a device that never reconnects are never sent.
+- Every other tool needs the connection. The Grocery List page disables rebuilding and reordering Store Sections offline; elsewhere a call waits for the connection, and the page shows that it is offline.

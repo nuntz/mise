@@ -215,6 +215,22 @@ describe("Have Ticks", () => {
     expect(await tick(household, garlic, false, "2026-10-24T10:02:00Z")).toMatchObject({ have: false });
   });
 
+  test("a line added again under the same key is the same line, so a retried add adds it once", async () => {
+    const household = await setUpHousehold();
+    await plan(household, MONDAY, DAL);
+    await build(household);
+    const key = "6f1c1e0a-2b1d-4c55-9a43-6b9e2d0c7a11";
+
+    const added = succeeded<GroceryLine>(
+      await household.callTool("add_grocery_line", { date: MONDAY, text: "2 lemons", key }),
+    );
+    expect(
+      succeeded<GroceryLine>(await household.callTool("add_grocery_line", { date: MONDAY, text: "2 lemons", key })),
+    ).toEqual(added);
+    const lines = (await current(household)).sections.flatMap((section) => section.lines);
+    expect(lines.filter((line) => line.name === "2 lemons")).toHaveLength(1);
+  });
+
   test("refuse a line that doesn't exist, and a line added to a list not yet built", async () => {
     const household = await setUpHousehold();
     expect(

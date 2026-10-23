@@ -317,6 +317,14 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 13,
+    statements: [
+      // The key a device added a line under, so adding it again under that key is the same line.
+      "ALTER TABLE grocery_line ADD COLUMN client_key TEXT",
+      "CREATE UNIQUE INDEX grocery_line_client_key ON grocery_line (client_key)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

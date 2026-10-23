@@ -1,4 +1,4 @@
-import type { Household } from "@mise/domain";
+import type { Household, QueuedChange } from "@mise/domain";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
@@ -6,6 +6,7 @@ import { GroceryPage } from "./Grocery";
 import { ImportPage } from "./Import";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
+import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
 import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
@@ -17,22 +18,39 @@ type Page = "week" | "grocery" | "pantry" | "recipes" | "import" | "resolve" | "
 const PAGES: Page[] = ["week", "grocery", "pantry", "recipes", "import", "resolve", "tag", "members"];
 
 export function App(props: { client: MiseClient }) {
-  const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
+  // The Household saved on this device, if any, shows at once: the household may be out of reach.
+  const saved = savedHousehold();
+  const [status, setStatus] = createSignal<"loading" | "error" | "ready">(saved ? "ready" : "loading");
   const [page, setPage] = createSignal<Page>("week");
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
   // refresh updates the settings without remounting them and throwing away a form someone is filling in.
-  const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: null });
+  const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: saved ?? null });
+  const [online, setOnline] = createSignal(true);
+  onCleanup(props.client.onConnection(setOnline));
 
   const refetch = async () => {
     try {
       const result = await props.client.call("get_household", {});
-      if (result.ok) setLoaded("household", reconcile(result.value));
+      if (result.ok) {
+        setLoaded("household", reconcile(result.value));
+        if (result.value) saveHousehold(result.value);
+      }
       setStatus(result.ok ? "ready" : "error");
     } catch {
       setStatus("error");
     }
   };
   onCleanup(props.client.subscribe("household", refetch));
+
+  const queue = createGroceryQueue(props.client);
+  const [pending, setPending] = createSignal<readonly QueuedChange[]>(queue.pending());
+  const [refused, setRefused] = createSignal(queue.refused().length);
+  onCleanup(
+    queue.subscribe(() => {
+      setPending(queue.pending());
+      setRefused(queue.refused().length);
+    }),
+  );
 
   return (
     <main>
@@ -44,9 +62,28 @@ export function App(props: { client: MiseClient }) {
         <Match when={loaded.household}>
           {(household) => (
             <>
-              {/* A failed refresh keeps the last Household on screen, and any forms with it. */}
-              <Show when={status() === "error"}>
+              <OfflineGroceryLists client={props.client} household={household()} />
+              {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}
+              <Show when={status() === "error" && online()}>
                 <p role="alert">{t("app.error")}</p>
+              </Show>
+              <Show when={!online()}>
+                <p role="status">{t("offline.notice")}</p>
+              </Show>
+              <Show when={pending().length > 0}>
+                <p role="status">
+                  {pending().length === 1
+                    ? t("offline.pendingOne")
+                    : t("offline.pending", { count: String(pending().length) })}
+                </p>
+              </Show>
+              <Show when={refused() > 0}>
+                <p role="alert">
+                  {t("offline.refused")}{" "}
+                  <button type="button" onClick={() => queue.dismissRefused()}>
+                    {t("offline.dismiss")}
+                  </button>
+                </p>
               </Show>
               <HouseholdSummary household={household()} />
               <PantryBanner client={props.client} onOpen={() => setPage("pantry")} />
@@ -64,7 +101,13 @@ export function App(props: { client: MiseClient }) {
                   <WeekPage client={props.client} household={household()} />
                 </Match>
                 <Match when={page() === "grocery"}>
-                  <GroceryPage client={props.client} household={household()} />
+                  <GroceryPage
+                    client={props.client}
+                    household={household()}
+                    queue={queue}
+                    pending={pending()}
+                    online={online()}
+                  />
                 </Match>
                 <Match when={page() === "pantry"}>
                   <PantryPage client={props.client} locale={household().locale} />
@@ -97,6 +140,12 @@ export function App(props: { client: MiseClient }) {
       </Switch>
     </main>
   );
+}
+
+/** Keeps both Weeks' Grocery Lists on this device; shows nothing. */
+function OfflineGroceryLists(props: { client: MiseClient; household: Household }) {
+  keepGroceryLists(props.client, () => props.household);
+  return null;
 }
 
 function HouseholdSummary(props: { household: Household }) {

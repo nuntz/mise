@@ -270,8 +270,14 @@ export const SetHaveTickInput = z
   .object({ line: z.number().int().positive(), have: z.boolean(), at: z.iso.datetime() })
   .strict();
 
-/** Adds a line by hand, such as "2 lemons"; it goes in the section of the Item it names, if any. */
-export const AddGroceryLineInput = z.object({ date: LocalDate, text: z.string().trim().min(1).max(200) }).strict();
+/**
+ * Adds a line by hand, such as "2 lemons"; it goes in the section of the Item it names, if any.
+ * Added again under the same `key`, it is the same line, so a device retrying an add made offline
+ * doesn't add it twice.
+ */
+export const AddGroceryLineInput = z
+  .object({ date: LocalDate, text: z.string().trim().min(1).max(200), key: z.uuid().optional() })
+  .strict();
 
 /** Puts the Store Sections given first, in that order; the rest follow in their usual order. */
 export const SetStoreSectionOrderInput = z

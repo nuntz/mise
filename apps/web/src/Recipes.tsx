@@ -14,6 +14,7 @@ import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { createItems } from "./items";
 import { t } from "./messages";
+import { lastRecipe, savedRecipe, saveRecipe } from "./offline";
 import { RecipeForm } from "./RecipeForm";
 
 type View = { kind: "list" } | { kind: "recipe"; id: RecipeId } | { kind: "new" } | { kind: "edit"; recipe: Recipe };
@@ -66,7 +67,7 @@ function narrow<K extends View["kind"]>(view: View, kind: K): Extract<View, { ki
   return view.kind === kind && (view as Extract<View, { kind: K }>);
 }
 
-function RecipeList(props: { client: MiseClient; onOpen: (recipe: RecipeSummary) => void; onNew: () => void }) {
+function RecipeList(props: { client: MiseClient; onOpen: (recipe: { id: RecipeId }) => void; onNew: () => void }) {
   const [query, setQuery] = createSignal("");
   const [recipes, setRecipes] = createSignal<RecipeSummary[]>();
   const [failed, setFailed] = createSignal(false);
@@ -104,6 +105,14 @@ function RecipeList(props: { client: MiseClient; onOpen: (recipe: RecipeSummary)
       </button>
       <Show when={failed()}>
         <p role="alert">{t("app.error")}</p>
+        {/* The Recipes can't be listed, but the last one viewed is kept on this device. */}
+        <Show when={lastRecipe()}>
+          {(last) => (
+            <button type="button" onClick={() => props.onOpen(last())}>
+              {t("recipes.lastViewed", { title: last().title })}
+            </button>
+          )}
+        </Show>
       </Show>
       <Show when={recipes()}>
         {(found) => (
@@ -134,7 +143,8 @@ function RecipeDetail(props: {
   onBack: () => void;
   onEdit: (recipe: Recipe) => void;
 }) {
-  const [recipe, setRecipe] = createSignal<Recipe>();
+  // The last Recipe viewed is kept on this device, so it stays readable if the connection drops mid-cook.
+  const [recipe, setRecipe] = createSignal<Recipe | undefined>(savedRecipe(props.id));
   const [error, setError] = createSignal<string>();
   const [busy, setBusy] = createSignal(false);
   const items = createItems(props.client);
@@ -142,7 +152,10 @@ function RecipeDetail(props: {
   const refetch = async () => {
     try {
       const result = await props.client.call("get_recipe", { id: props.id });
-      if (result.ok) setRecipe(result.value);
+      if (result.ok) {
+        setRecipe(result.value);
+        saveRecipe(result.value);
+      }
       setError(result.ok ? undefined : errorText(result.error, "recipe"));
     } catch {
       setError(t("app.error"));

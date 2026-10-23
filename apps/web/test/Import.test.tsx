@@ -99,6 +99,10 @@ function fakeClient(options: { upload?: string | null } = {}) {
       uploads.push(file);
       return options.upload === undefined ? "4b0c6a62-6f1e-4c1a-9d43-2f4d8e5a7b10" : options.upload;
     },
+    onConnection(listener) {
+      listener(true);
+      return () => {};
+    },
     close() {},
   };
   return { client, calls, uploads };

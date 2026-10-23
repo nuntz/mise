@@ -144,14 +144,24 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
         error: { code: "not_built", message: `Build the Grocery List of the Week of ${start} first` },
       };
     }
+    if (input.key !== undefined) {
+      const [added] = sql
+        .exec<{ id: number; start_date: LocalDate }>(
+          "SELECT id, start_date FROM grocery_line WHERE client_key = ?",
+          input.key,
+        )
+        .toArray();
+      if (added) return { ok: true, value: shownLine(sql, settings, added.start_date, added.id) };
+    }
     const { item } = parseIngredient(input.text, readCatalogue(sql));
     const { id } = sql
       .exec<{ id: number }>(
-        `INSERT INTO grocery_line (start_date, origin, item_id, text, amounts, unmeasured, recipe_ids, have)
-         VALUES (?, 'manual', ?, ?, '[]', 0, '[]', 0) RETURNING id`,
+        `INSERT INTO grocery_line (start_date, origin, item_id, text, amounts, unmeasured, recipe_ids, have, client_key)
+         VALUES (?, 'manual', ?, ?, '[]', 0, '[]', 0, ?) RETURNING id`,
         start,
         item,
         input.text,
+        input.key ?? null,
       )
       .one();
     return { ok: true, value: shownLine(sql, settings, start, id) };

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mise">
+  <!-- Full-bleed background with the bowl inside the maskable safe zone, so one drawing serves both purposes. -->
+  <rect width="512" height="512" fill="#2f5d3a"/>
+  <path d="M136 236h240c0 72-54 124-120 124s-120-52-120-124z" fill="#f5efe0"/>
+  <rect x="196" y="360" width="120" height="20" rx="10" fill="#f5efe0"/>
+  <path d="M220 200c-14-18 14-30 0-52M256 200c-14-18 14-30 0-52M292 200c-14-18 14-30 0-52" fill="none" stroke="#f5efe0" stroke-width="12" stroke-linecap="round"/>
+</svg>
