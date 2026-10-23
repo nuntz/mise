@@ -1,0 +1,13 @@
+# Staples are checked by status, adapt how often they're asked about, and are bought when the list is built
+
+A Staple is an Item the Household keeps on hand, one Staple per Item, identified by the Item. It has no quantity, only a status (stocked, low or out), when that was last recorded, and how often to check it: every so many days, or at every check-in ("every shop"). A new Staple is checked every 14 days. Each answer adapts the interval, so Staples that stay stocked stop being asked about: stocked stretches it by half (rounded, to 60 days at most), out halves it (rounded, to 3 days at least), low leaves it. Three 'out' in a row suggests always buying it; any other answer starts the count again. An always-bought Staple is never asked about.
+
+A check-in asks about the Staples due: their interval has passed since the last check, by the Household's calendar, or they were never checked, or they are low or checked every shop and weren't checked yet today. That last condition lets a finished check-in, and the banner announcing it, clear for the day. A Staple never checked is due from today but not overdue, so adding many at once doesn't push genuinely overdue ones out of the next check-in. It asks about at most 10, the most overdue, so a long pantry can't keep the freezer from ever being asked about; it then asks them pantry first, then fridge, then freezer, the most overdue first within each. A status is recorded with the time it was made, and one older than the last recorded changes nothing, as Have Ticks do (ADR 0015).
+
+The Grocery List buys Staples that are low, out or always bought, at their usual quantity (or none). When the Week's Recipes need an amount of the Item, that demand replaces the usual quantity. An Ingredient of a Staple's Item without an amount ("salt to taste") adds nothing to the list: the Household keeps it on hand. Staples join the list when it is built and are not part of its plan revision, as ADR 0015 expected; reading the list says `staplesChanged` when a Staple is due to be bought that the list has no line for, so rebuilding adds it. Have-ticking a line of a Staple's Item sets the Staple to stocked as of the tick: the Household has it. That is not a check-in's answer, so the interval and the count of 'out' stay. Unticking says nothing about how the Staple stands.
+
+## Consequences
+
+- Staples are announced on the "grocery" topic: they change what the list buys, and Have Ticks change them.
+- Rebuilding matches a Staple's line with a Recipe's line for the same Item and units, so a tick carries over when Recipe demand replaces the usual quantity, or the other way round.
+- A Staple bought and ticked is stocked, so the next rebuild drops its line, unless it is always bought.

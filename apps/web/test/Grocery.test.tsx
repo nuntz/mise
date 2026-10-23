@@ -43,6 +43,7 @@ const list: GroceryList = {
   startDate: "2026-10-26",
   builtAt: "2026-10-24T10:00:00.000Z",
   planChanged: true,
+  staplesChanged: false,
   sections: [
     {
       section: "produce",
@@ -187,4 +188,24 @@ test("the Store Sections can be put in walking order", async () => {
   expect(calls.find((call) => call.name === "set_store_section_order")?.input).toEqual({
     sections: ["bakery", "produce", ...STORE_SECTIONS.slice(2)],
   });
+});
+
+test("a Staple's line says so, and the list says when Staples have run low since it was built", async () => {
+  const withStaple: GroceryList = {
+    ...list,
+    planChanged: false,
+    staplesChanged: true,
+    sections: [
+      {
+        section: "pantry",
+        lines: [{ ...garlic, id: 5, origin: "staple", item: "rice", name: "rice", amounts: [], recipes: [] }],
+      },
+    ],
+  };
+  const { client } = fakeClient({ get_grocery_list: () => ({ ok: true, value: withStaple }) });
+  await openGroceryList(client);
+
+  const pantry = await screen.findByRole("region", { name: "Pantry" });
+  expect(within(pantry).getByText("Staple")).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toContain("Some Staples have run low or out");
 });

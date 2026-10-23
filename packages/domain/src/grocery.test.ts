@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { buildGroceryList, type GroceryDemand, type GroceryRecipe } from "./grocery";
+import { buildGroceryList, type GroceryDemand, type GroceryRecipe, type GroceryStaple } from "./grocery";
 import { parseIngredient } from "./ingredients";
+import type { ItemId } from "./items";
 import type { IngredientUnit } from "./units";
 
 /** A Recipe whose Ingredients are read from the lines given, as a hand-entered one's are. */
@@ -9,8 +10,10 @@ function recipe(id: number, baseServings: number, lines: string[]): GroceryRecip
 }
 
 function demand(fields: Partial<GroceryDemand>): GroceryDemand {
-  return { slots: [], recipes: [], units: "metric", ...fields };
+  return { slots: [], recipes: [], staples: [], units: "metric", ...fields };
 }
+
+const exactly = (value: number, unit: IngredientUnit | null) => ({ amount: { min: value, max: value }, unit });
 
 describe("buildGroceryList", () => {
   test("scales each Recipe to the Servings it is cooked for, and merges the same Item", () => {
@@ -26,6 +29,7 @@ describe("buildGroceryList", () => {
 
     expect(lines).toEqual([
       {
+        origin: "recipe",
         item: "rice",
         text: null,
         amounts: [{ amount: { min: 400, max: 400 }, unit: "g" }],
@@ -43,7 +47,6 @@ describe("buildGroceryList", () => {
       buildGroceryList(demand({ recipes, slots, units })).map((need) => [need.item ?? need.text, need.amounts]),
     );
   }
-  const exactly = (value: number, unit: IngredientUnit | null) => ({ amount: { min: value, max: value }, unit });
 
   test("converts mass and volume into metric units, in grams and millilitres up to a kilo or a litre", () => {
     expect(
@@ -102,9 +105,9 @@ describe("buildGroceryList", () => {
     );
 
     expect(lines).toEqual([
-      { item: null, text: "2 tbsp gochujang", amounts: [], unmeasured: false, recipeIds: [1, 2] },
-      { item: "salt", text: null, amounts: [exactly(5, "ml")], unmeasured: true, recipeIds: [1, 2] },
-      { item: null, text: "3 tbsp Gochujang", amounts: [], unmeasured: false, recipeIds: [2] },
+      { origin: "recipe", item: null, text: "2 tbsp gochujang", amounts: [], unmeasured: false, recipeIds: [1, 2] },
+      { origin: "recipe", item: "salt", text: null, amounts: [exactly(5, "ml")], unmeasured: true, recipeIds: [1, 2] },
+      { origin: "recipe", item: null, text: "3 tbsp Gochujang", amounts: [], unmeasured: false, recipeIds: [2] },
     ]);
   });
 
@@ -113,5 +116,73 @@ describe("buildGroceryList", () => {
       egg: [{ amount: { min: 3, max: 4 }, unit: null }],
       chickpeas: [exactly(3, "can")],
     });
+  });
+});
+
+describe("buildGroceryList with Staples", () => {
+  const staple = (item: ItemId, fields: Partial<GroceryStaple> = {}): GroceryStaple => ({
+    item,
+    status: "stocked",
+    alwaysBuy: false,
+    qtyPerShop: null,
+    ...fields,
+  });
+  const dozen = { amount: { min: 12, max: 12 }, unit: null };
+
+  test("adds those low, out or always bought, at their usual quantity", () => {
+    const lines = buildGroceryList(
+      demand({
+        staples: [
+          staple("egg", { status: "low", qtyPerShop: dozen }),
+          staple("rice", { status: "out" }),
+          staple("milk", { alwaysBuy: true, qtyPerShop: exactly(2, "l") }),
+          staple("flour"),
+        ],
+      }),
+    );
+
+    expect(lines).toEqual([
+      { origin: "staple", item: "egg", text: null, amounts: [dozen], unmeasured: false, recipeIds: [] },
+      { origin: "staple", item: "rice", text: null, amounts: [], unmeasured: false, recipeIds: [] },
+      { origin: "staple", item: "milk", text: null, amounts: [exactly(2, "l")], unmeasured: false, recipeIds: [] },
+    ]);
+  });
+
+  test("the Recipes' demand for the Item replaces the usual quantity", () => {
+    const lines = buildGroceryList(
+      demand({
+        recipes: [recipe(1, 2, ["3 eggs"])],
+        slots: [{ recipeId: 1, servings: 4 }],
+        staples: [staple("egg", { alwaysBuy: true, qtyPerShop: dozen })],
+      }),
+    );
+
+    expect(lines).toEqual([
+      { origin: "recipe", item: "egg", text: null, amounts: [exactly(6, null)], unmeasured: false, recipeIds: [1] },
+    ]);
+  });
+
+  test("Ingredients of a Staple's Item without an amount add nothing", () => {
+    const lines = buildGroceryList(
+      demand({
+        recipes: [recipe(1, 1, ["salt to taste", "olive oil, for drizzling", "1 tbsp olive oil", "black pepper"])],
+        slots: [{ recipeId: 1, servings: 1 }],
+        staples: [staple("salt"), staple("olive_oil"), staple("black_pepper", { status: "out", qtyPerShop: dozen })],
+      }),
+    );
+
+    expect(lines).toEqual([
+      // What it measures is still needed, but no longer "and some to taste": the Staple covers that.
+      {
+        origin: "recipe",
+        item: "olive_oil",
+        text: null,
+        amounts: [exactly(15, "ml")],
+        unmeasured: false,
+        recipeIds: [1],
+      },
+      // Out, so bought at its usual quantity.
+      { origin: "staple", item: "black_pepper", text: null, amounts: [dozen], unmeasured: false, recipeIds: [] },
+    ]);
   });
 });

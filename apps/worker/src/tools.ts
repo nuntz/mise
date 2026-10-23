@@ -17,6 +17,7 @@ import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
+import { readStaples, stapleHandlers } from "./staples";
 import { readSlots, readWeekRecords, weekHandlers } from "./weeks";
 
 type HouseholdRow = {
@@ -121,6 +122,7 @@ export const handlers: Handlers = {
   ...importHandlers,
   ...weekHandlers,
   ...groceryHandlers,
+  ...stapleHandlers,
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
@@ -145,6 +147,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readStoreSections(sql);
   readGroceryBuilds(sql);
   readGroceryLines(sql);
+  readStaples(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {

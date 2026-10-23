@@ -16,6 +16,7 @@ import {
   parseIngredient,
   RecipeId,
   StoreSection,
+  stapleToBuy,
   storeSectionOrder,
   type ToolResult,
   weekStartOf,
@@ -23,6 +24,7 @@ import {
 import { z } from "zod";
 import { readCatalogue } from "./items";
 import { readRecipes } from "./recipes";
+import { readStaples, restockStaple } from "./staples";
 import { type Handlers, notSetUp, readSettings } from "./tools";
 import { readWeek, storeWeek, weekNamedBy } from "./weeks";
 
@@ -65,7 +67,7 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
     // A line still needed keeps its id, and so its Have Tick: matched by Item and units, or by text.
     const previous = new Map(
       readGroceryLines(sql, start)
-        .filter((line) => line.origin === "recipe")
+        .filter((line) => line.origin !== "manual")
         .map((line) => [groceryLineKey(line), line]),
     );
     const kept: number[] = [];
@@ -74,7 +76,7 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
       previous.delete(groceryLineKey(need));
       if (match) {
         sql.exec(
-          "UPDATE grocery_line SET item_id = ?, text = ?, amounts = ?, unmeasured = ?, recipe_ids = ? WHERE id = ?",
+          "UPDATE grocery_line SET origin = ?, item_id = ?, text = ?, amounts = ?, unmeasured = ?, recipe_ids = ? WHERE id = ?",
           ...needColumns(need),
           match.id,
         );
@@ -83,7 +85,7 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
         const { id } = sql
           .exec<{ id: number }>(
             `INSERT INTO grocery_line (start_date, origin, item_id, text, amounts, unmeasured, recipe_ids, have)
-             VALUES (?, 'recipe', ?, ?, ?, ?, ?, 0) RETURNING id`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING id`,
             start,
             ...needColumns(need),
           )
@@ -91,9 +93,9 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
         kept.push(id);
       }
     }
-    // Lines no Recipe needs any more go; those added by hand stay.
+    // Lines no Recipe or Staple needs any more go; those added by hand stay.
     sql.exec(
-      `DELETE FROM grocery_line WHERE start_date = ? AND origin = 'recipe'
+      `DELETE FROM grocery_line WHERE start_date = ? AND origin != 'manual'
        AND id NOT IN (SELECT value FROM json_each(?))`,
       start,
       JSON.stringify(kept),
@@ -126,6 +128,8 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
         new Date(input.at).toISOString(),
         line.id,
       );
+      // Had, so a Staple of its Item is stocked; not having it says nothing about how it stands.
+      if (input.have && line.item !== null) restockStaple(sql, line.item, input.at);
     }
     return { ok: true, value: shownLine(sql, settings, line.startDate, line.id) };
   },
@@ -171,18 +175,30 @@ export function readStoreSections(sql: SqlStorage): StoreSection[] {
 
 /**
  * What the Week's Grocery List is built from: its Slots with a Recipe, each for what it is cooked for
- * (its Leftovers too, even those in the next Week), and those Recipes.
+ * (its Leftovers too, even those in the next Week), those Recipes, and the Household's Staples.
  */
 function readDemand(sql: SqlStorage, settings: HouseholdSettings, start: LocalDate): GroceryDemand {
   const slots = readWeek(sql, start).slots.flatMap((slot) =>
     slot.recipe ? [{ recipeId: slot.recipe.id, servings: slot.cookFor }] : [],
   );
   const used = new Set(slots.map((slot) => slot.recipeId));
-  return { slots, recipes: readRecipes(sql).filter((recipe) => used.has(recipe.id)), units: settings.units };
+  return {
+    slots,
+    recipes: readRecipes(sql).filter((recipe) => used.has(recipe.id)),
+    staples: readStaples(sql),
+    units: settings.units,
+  };
 }
 
-function needColumns(need: GroceryNeed): [string | null, string | null, string, number, string] {
-  return [need.item, need.text, JSON.stringify(need.amounts), Number(need.unmeasured), JSON.stringify(need.recipeIds)];
+function needColumns(need: GroceryNeed): [string, string | null, string | null, string, number, string] {
+  return [
+    need.origin,
+    need.item,
+    need.text,
+    JSON.stringify(need.amounts),
+    Number(need.unmeasured),
+    JSON.stringify(need.recipeIds),
+  ];
 }
 
 /** What a Week stores about its Grocery List, once built. */
@@ -213,11 +229,15 @@ function readGroceryList(sql: SqlStorage, settings: HouseholdSettings, start: Lo
   const [built] = readGroceryBuilds(sql, start);
   if (!built) return null;
   const catalogue = readCatalogue(sql);
+  const demand = readDemand(sql, settings, start);
+  const lines = readGroceryLines(sql, start);
+  const listed = new Set(lines.map((line) => line.item));
   return {
     startDate: start,
     builtAt: built.builtAt,
-    planChanged: built.planRevision !== groceryPlanRevision(readDemand(sql, settings, start)),
-    sections: groupGroceryLines(shownLines(sql, catalogue, readGroceryLines(sql, start)), readStoreSections(sql)),
+    planChanged: built.planRevision !== groceryPlanRevision(demand),
+    staplesChanged: demand.staples.some((staple) => stapleToBuy(staple) && !listed.has(staple.item)),
+    sections: groupGroceryLines(shownLines(sql, catalogue, lines), readStoreSections(sql)),
   };
 }
 

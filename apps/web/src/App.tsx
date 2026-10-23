@@ -6,14 +6,15 @@ import { GroceryPage } from "./Grocery";
 import { ImportPage } from "./Import";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
+import { PantryBanner, PantryPage } from "./Pantry";
 import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
 import { SetupForm } from "./SetupForm";
 import { TagRecipes } from "./TagRecipes";
 import { WeekPage } from "./Week";
 
-type Page = "week" | "grocery" | "recipes" | "import" | "resolve" | "tag" | "members";
-const PAGES: Page[] = ["week", "grocery", "recipes", "import", "resolve", "tag", "members"];
+type Page = "week" | "grocery" | "pantry" | "recipes" | "import" | "resolve" | "tag" | "members";
+const PAGES: Page[] = ["week", "grocery", "pantry", "recipes", "import", "resolve", "tag", "members"];
 
 export function App(props: { client: MiseClient }) {
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">("loading");
@@ -48,6 +49,7 @@ export function App(props: { client: MiseClient }) {
                 <p role="alert">{t("app.error")}</p>
               </Show>
               <HouseholdSummary household={household()} />
+              <PantryBanner client={props.client} onOpen={() => setPage("pantry")} />
               <nav>
                 <For each={PAGES}>
                   {(name) => (
@@ -63,6 +65,9 @@ export function App(props: { client: MiseClient }) {
                 </Match>
                 <Match when={page() === "grocery"}>
                   <GroceryPage client={props.client} household={household()} />
+                </Match>
+                <Match when={page() === "pantry"}>
+                  <PantryPage client={props.client} locale={household().locale} />
                 </Match>
                 <Match when={page() === "recipes"}>
                   <RecipesPage client={props.client} />

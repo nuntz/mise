@@ -3,6 +3,7 @@ import type { Units } from "./household";
 import { Amount, type Ingredient } from "./ingredients";
 import { ItemId, STORE_SECTIONS, StoreSection } from "./items";
 import { Recipe, RecipeId } from "./recipes";
+import type { StapleStatus } from "./staples";
 import { baseSize, householdUnit, IngredientUnit, unitFamily } from "./units";
 import { LocalDate } from "./weeks";
 
@@ -10,8 +11,12 @@ import { LocalDate } from "./weeks";
 export const GroceryAmount = z.object({ amount: Amount, unit: IngredientUnit.nullable() });
 export type GroceryAmount = z.infer<typeof GroceryAmount>;
 
-/** What the Week's Recipes need of one Item, or one Unresolved Ingredient as written. */
+/** Where a line came from: the Week's Recipes, a Staple due to be bought, or added by hand. */
+export const GroceryOrigin = z.enum(["recipe", "staple", "manual"]);
+
+/** What the Week's Recipes need of one Item, one Unresolved Ingredient as written, or a Staple to buy. */
 export const GroceryNeed = z.object({
+  origin: GroceryOrigin.exclude(["manual"]),
   /** Null for an Unresolved Ingredient. */
   item: ItemId.nullable(),
   /** The Unresolved Ingredient as written; null when there is an Item. */
@@ -20,7 +25,7 @@ export const GroceryNeed = z.object({
   amounts: z.array(GroceryAmount),
   /** Some Recipe uses it without saying how much ("salt to taste"). */
   unmeasured: z.boolean(),
-  /** The Recipes that need it, each once, in the order first needed. */
+  /** The Recipes that need it, each once, in the order first needed; none for a Staple. */
   recipeIds: z.array(RecipeId),
 });
 export type GroceryNeed = z.infer<typeof GroceryNeed>;
@@ -30,12 +35,27 @@ export type GroceryRecipe = Pick<Recipe, "id" | "title" | "baseServings"> & {
   ingredients: Pick<Ingredient, "raw" | "amount" | "unit" | "item">[];
 };
 
+/** What the builder reads of a Staple. */
+export type GroceryStaple = {
+  item: ItemId;
+  status: StapleStatus;
+  alwaysBuy: boolean;
+  qtyPerShop: GroceryAmount | null;
+};
+
+/** Whether a Staple is due to be bought: it is low or out, or always bought. */
+export function stapleToBuy(staple: Pick<GroceryStaple, "status" | "alwaysBuy">): boolean {
+  return staple.alwaysBuy || staple.status !== "stocked";
+}
+
 /** What a Week's Grocery List is built from. */
 export type GroceryDemand = {
   /** Each Slot of the Week that holds a Recipe, and the Servings it is cooked for. */
   slots: { recipeId: RecipeId; servings: number }[];
   /** At least every Recipe the Slots hold. */
   recipes: GroceryRecipe[];
+  /** Every Staple of the Household. */
+  staples: GroceryStaple[];
   units: Units;
 };
 
@@ -45,18 +65,25 @@ export type GroceryDemand = {
  * Household's units; they never convert into each other, and counts add up only when they count
  * the same thing (cloves with cloves). What can't be combined stays on the line as its own amount.
  * Unresolved Ingredients can't be merged or scaled, so each is a line as written.
+ *
+ * Staples low, out or always bought are added at their usual quantity, unless the Recipes need an
+ * amount of the Item, which replaces it. An Ingredient of a Staple's Item without an amount ("salt
+ * to taste") adds nothing: the Household keeps it on hand.
  */
-export function buildGroceryList({ slots, recipes, units }: GroceryDemand): GroceryNeed[] {
+export function buildGroceryList({ slots, recipes, staples, units }: GroceryDemand): GroceryNeed[] {
   type Adding = GroceryNeed & { totals: Map<string, Total> };
   const needs = new Map<string, Adding>();
+  const stapleItems = new Set<string>(staples.map((staple) => staple.item));
   for (const slot of slots) {
     if (slot.servings === 0) continue;
     const recipe = recipes.find((other) => other.id === slot.recipeId);
     if (!recipe) throw new Error(`No Recipe ${slot.recipeId}`);
     const scale = slot.servings / recipe.baseServings;
     for (const ingredient of recipe.ingredients) {
+      if (ingredient.item && !ingredient.amount && stapleItems.has(ingredient.item)) continue;
       const key = ingredient.item ?? `raw:${ingredient.raw}`;
       const need: Adding = needs.get(key) ?? {
+        origin: "recipe",
         item: ingredient.item,
         text: ingredient.item ? null : ingredient.raw,
         amounts: [],
@@ -80,10 +107,25 @@ export function buildGroceryList({ slots, recipes, units }: GroceryDemand): Groc
       total.max += ingredient.amount.max * scale * (size ?? 1);
     }
   }
-  return [...needs.values()].map(({ totals, ...need }) => ({
+  const recipeNeeds = [...needs.values()].map(({ totals, ...need }) => ({
     ...need,
     amounts: [...totals].map(([measure, total]) => inHouseholdUnits(units, measure, total)),
   }));
+  const stapleNeeds = staples.flatMap((staple): GroceryNeed[] =>
+    stapleToBuy(staple) && !needs.has(staple.item)
+      ? [
+          {
+            origin: "staple",
+            item: staple.item,
+            text: null,
+            amounts: staple.qtyPerShop ? [staple.qtyPerShop] : [],
+            unmeasured: false,
+            recipeIds: [],
+          },
+        ]
+      : [],
+  );
+  return [...recipeNeeds, ...stapleNeeds];
 }
 
 /** An amount being added up: in grams or millilitres when its unit converts, else in that unit. */
@@ -159,9 +201,6 @@ export function groceryLineKey(line: Pick<GroceryNeed, "item" | "text" | "amount
 export const GrocerySection = z.union([StoreSection, z.literal("other")]);
 export type GrocerySection = z.infer<typeof GrocerySection>;
 
-/** Where a line came from: the Week's Recipes, or added by hand. */
-export const GroceryOrigin = z.enum(["recipe", "manual"]);
-
 export const GroceryLine = z.object({
   id: z.number().int().positive(),
   origin: GroceryOrigin,
@@ -170,7 +209,7 @@ export const GroceryLine = z.object({
   name: z.string(),
   amounts: z.array(GroceryAmount),
   unmeasured: z.boolean(),
-  /** The Recipes that need it; none for a line added by hand. */
+  /** The Recipes that need it; none for a Staple's line or one added by hand. */
   recipes: z.array(Recipe.pick({ id: true, title: true })),
   /** Its Have Tick: the Household already has it. */
   have: z.boolean(),
@@ -184,6 +223,8 @@ export const GroceryList = z.object({
   builtAt: z.iso.datetime(),
   /** The plan has changed since the list was built; rebuilding brings it up to date. */
   planChanged: z.boolean(),
+  /** A Staple has become due to be bought that the list has no line for; rebuilding adds it. */
+  staplesChanged: z.boolean(),
   /** Sections with lines, in the Household's walking order, then "other"; lines by name. */
   sections: z.array(z.object({ section: GrocerySection, lines: z.array(GroceryLine) })),
 });
@@ -222,7 +263,8 @@ export const GetGroceryListInput = z.object({ date: LocalDate.optional() }).stri
 
 /**
  * Sets a line's Have Tick to `have`, as of `at`: a tick set at or after `at` wins, so ticks made
- * offline and synced late never undo a later one.
+ * offline and synced late never undo a later one. Ticking a line of a Staple's Item sets the Staple
+ * to stocked, as of `at`, unless its status was recorded later.
  */
 export const SetHaveTickInput = z
   .object({ line: z.number().int().positive(), have: z.boolean(), at: z.iso.datetime() })

@@ -14,7 +14,10 @@ import { t } from "./messages";
 
 type GroceryHousehold = Pick<Household, "timezone" | "weekStartsOn" | "locale" | "storeSections">;
 
-/** The Week's Grocery List, by Store Section in walking order, with Have Ticks and lines added by hand. */
+/**
+ * The Week's Grocery List, by Store Section in walking order, with Have Ticks, the Staples due to be
+ * bought and lines added by hand.
+ */
 export function GroceryPage(props: { client: MiseClient; household: GroceryHousehold }) {
   const [next, setNext] = createSignal(false);
   // Undefined until loaded; null while the Week has no Grocery List.
@@ -90,6 +93,9 @@ export function GroceryPage(props: { client: MiseClient; household: GroceryHouse
             <Show when={shown().planChanged}>
               <p role="alert">{t("grocery.planChanged")}</p>
             </Show>
+            <Show when={shown().staplesChanged}>
+              <p role="alert">{t("grocery.staplesChanged")}</p>
+            </Show>
             <button type="button" disabled={busy()} onClick={build}>
               {t("grocery.rebuild")}
             </button>
@@ -136,6 +142,9 @@ function LineView(props: { client: MiseClient; line: GroceryLine; locale: string
         />
         {lineText(props.line, props.locale)}
       </label>
+      <Show when={props.line.origin === "staple"}>
+        <small>{t("grocery.staple")}</small>
+      </Show>
       <Show when={props.line.origin === "recipe" && props.line.item === null}>
         <small>{t("grocery.asWritten")}</small>
       </Show>
@@ -153,7 +162,7 @@ function lineText(line: GroceryLine, locale: string): string {
   return `${line.name}: ${line.unmeasured ? t("grocery.andSome", { amounts }) : amounts}`;
 }
 
-function amountText({ amount, unit }: GroceryAmount, locale: string): string {
+export function amountText({ amount, unit }: GroceryAmount, locale: string): string {
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const value =
     amount.min === amount.max ? number.format(amount.min) : `${number.format(amount.min)}–${number.format(amount.max)}`;

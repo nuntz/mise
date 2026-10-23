@@ -117,6 +117,13 @@ _Avoid_: Shuffle, regenerate
 An Item the Household keeps on hand and checks by status (stocked, low, out) rather than by quantity.
 _Avoid_: Inventory, pantry item
 
+**Check-in**:
+A short pantry check that asks how the Staples that are due stand, at most 10 at a time; each answer adapts how often that Staple is asked about.
+_Avoid_: Inventory count, stocktake
+
+**Always-buy**:
+A Staple bought every shop at its usual quantity, and so never asked about in a Check-in.
+
 **Grocery List**:
 What to buy for a Week: Ingredients scaled to what each Slot is cooked for (its Servings and its Leftovers') and merged, plus Staples that are due to be bought.
 _Avoid_: Shopping list, cart

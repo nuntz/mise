@@ -29,6 +29,7 @@ import { errorText } from "./errors";
 import { createItems } from "./items";
 import { type ConstraintDraft, ConstraintFields, constraintDraftsOf, constraintsOf } from "./MemberFields";
 import { t } from "./messages";
+import { RunOut } from "./Pantry";
 import {
   EffortBudgetsEditor,
   type WeekHousehold as Household,
@@ -284,6 +285,9 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot }
         }
       >
         <p>{t("cooking.cooked")}</p>
+        <Show when={props.slot.meal === "dinner" && props.slot.recipe}>
+          {(recipe) => <RunOut client={props.client} recipeId={recipe().id} />}
+        </Show>
         <For each={props.slot.ratings}>{(given) => <p>{ratedText(given)}</p>}</For>
         <form aria-label={t("cooking.prompt")} onSubmit={rate}>
           <fieldset>

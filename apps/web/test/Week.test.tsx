@@ -8,6 +8,7 @@ import {
   type RecipeSummary,
   type Slot,
   STORE_SECTIONS,
+  type Staple,
   type ToolResult,
   type Week,
 } from "@mise/domain";
@@ -178,7 +179,12 @@ function fakeClient(answers: Record<string, Answer> = {}) {
 }
 
 const writes = (calls: { name: string; input: unknown }[]) =>
-  calls.filter((call) => !["get_household", "get_week", "search_recipes", "list_items"].includes(call.name));
+  calls.filter(
+    (call) =>
+      !["get_household", "get_week", "search_recipes", "list_items", "list_staples", "list_due_staples"].includes(
+        call.name,
+      ),
+  );
 
 test("the Week opens first: each day's dinner with its photo, breakfast and lunch tucked away", async () => {
   const { client } = fakeClient();
@@ -609,5 +615,42 @@ test("a cooked dinner shows its Ratings, asks for one, and can be unmarked", asy
       input: { date: "2026-10-27", meal: "dinner", rating: "never", note: "Nobody ate it" },
     },
     { name: "mark_cooked", input: { date: "2026-10-27", meal: "dinner", cooked: false } },
+  ]);
+});
+
+test("a cooked dinner asks whether any Staple its Recipe uses has run out", async () => {
+  const cooked = emptyWeek("2026-10-26");
+  Object.assign(cooked.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T02:00:00.000Z",
+  });
+  const oil: Staple = {
+    item: "olive_oil",
+    name: "olive oil",
+    location: "pantry",
+    checkEvery: 14,
+    alwaysBuy: false,
+    qtyPerShop: null,
+    status: "stocked",
+    lastChecked: null,
+    outInARow: 0,
+    suggestAlwaysBuy: false,
+  };
+  const { client, calls } = fakeClient({
+    get_week: () => ({ ok: true, value: cooked }),
+    list_staples: (input) => ({ ok: true, value: input.usedBy === 1 ? [oil] : [] }),
+    record_staple_status: () => ({ ok: true, value: { ...oil, status: "out" } }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+
+  const runOut = await within(dinner).findByRole("group", { name: "Anything run out?" });
+  await user.click(within(runOut).getByRole("button", { name: "olive oil: Out" }));
+
+  expect(writes(calls)).toEqual([
+    { name: "record_staple_status", input: { item: "olive_oil", status: "out", at: expect.any(String) } },
   ]);
 });

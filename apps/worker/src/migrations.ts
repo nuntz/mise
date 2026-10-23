@@ -299,6 +299,24 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE INDEX slot_leftovers_of ON slot (leftovers_of_date, leftovers_of_meal)",
     ],
   },
+  {
+    version: 12,
+    statements: [
+      // A Staple, one per Item. check_every_days is NULL when it is checked every shop; qty_per_shop
+      // is a JSON amount, or NULL for none. last_checked is when its status was last recorded, NULL
+      // if never; out_in_a_row counts the check-ins in a row that found it out.
+      `CREATE TABLE staple (
+        item_id TEXT PRIMARY KEY,
+        location TEXT NOT NULL,
+        check_every_days INTEGER,
+        always_buy INTEGER NOT NULL,
+        qty_per_shop TEXT,
+        status TEXT NOT NULL,
+        last_checked TEXT,
+        out_in_a_row INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

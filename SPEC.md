@@ -65,8 +65,8 @@ Slot        { date, meal: breakfast|lunch|dinner, kind: recipe|leftovers|eat_out
               recipeId?, leftoversOf?: slotId, diners: memberId[], guests: int, guestConstraints: Constraint[],
               locked: bool, note?, cookedAt?, ratings: Rating[], overrides: { who: memberId|"guests", allergen, reason }[] }
               // servings = diners.length + guests
-Staple      { id, item, location: pantry|fridge|freezer, checkEvery: duration | "every_shop", alwaysBuy: bool,
-              status: stocked|low|out, lastChecked, unit?, qtyPerShop? }
+Staple      { item, location: pantry|fridge|freezer, checkEvery: days | "every_shop", alwaysBuy: bool,
+              status: stocked|low|out, lastChecked, outInARow, qtyPerShop? }   // one per Item (ADR 0017)
 GroceryList { id, weekPlanId, lines[]: { item, qty, unit, section, origin: recipe|staple|manual, have: bool, recipeIds[] }, cachedForOffline }
 ImportRun   { id, source, startedAt, created, updated, skipped, flagged, errors[] }
 Rating      { slotId, memberId?, value: again|meh|never, note?, at }
@@ -130,7 +130,8 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 ### 4.5 Pantry check-in (staples)
 - No quantities. Status + `lastChecked` + adaptive `checkEvery`.
 - Session asks only items **due** (`lastChecked + checkEvery` passed, or `low`), capped at ~10, ordered by location (pantry → fridge → freezer). Saturday nudge: "pantry check: 6 items".
-- Adaptive interval: repeated `stocked` stretches it; `out` shortens it. After a few `out`, suggest flipping to `alwaysBuy` (e.g. eggs), which then never asks.
+- Adaptive interval (ADR 0017): starts at 14 days; `stocked` ×1.5 (max 60), `out` ÷2 (min 3), `low` unchanged. After three `out` in a row, suggest flipping to `alwaysBuy` (e.g. eggs), which then never asks.
+- After marking a dinner cooked: "anything run out?" for the Staples its Recipe uses.
 - Nudge off-cycle when the week's recipes lean on a staple.
 - Ad-hoc updates from anywhere: `record_staple_status("soy sauce", "out")`.
 - Same tool whether tapped in the PWA or spoken in voice mode. Photo-of-shelf recognition explicitly out of scope.
@@ -159,7 +160,7 @@ recipes:   search_recipes, get_recipe, create_recipe, update_recipe, delete_reci
 plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
-pantry:    list_due_staples, record_staple_status, upsert_staple
+pantry:    list_staples, list_due_staples, record_staple_status, upsert_staple, remove_staple
 household: get_household, update_member_constraints, set_effort_budgets, set_store_section_order, check_slot_constraints
 imports:   run_paprika_import, list_import_runs, list_import_flags, sync_drive_folder, enqueue_video_import, list_review_queue, resolve_review_item
 calendar:  rotate_calendar_token

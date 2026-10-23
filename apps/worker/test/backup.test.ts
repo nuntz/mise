@@ -78,6 +78,13 @@ describe("export and restore", () => {
         rating: "again",
         note: "Do it again",
       }),
+      await original.callTool("upsert_staple", {
+        item: "egg",
+        location: "fridge",
+        qtyPerShop: { amount: { min: 12, max: 12 }, unit: null },
+      }),
+      await original.callTool("upsert_staple", { item: "milk", checkEvery: "every_shop", alwaysBuy: true }),
+      await original.callTool("record_staple_status", { item: "egg", status: "out" }),
     ];
     expect(planned.every((result) => result.ok)).toBe(true);
     const exported = await exportOf(original);
@@ -102,6 +109,7 @@ describe("export and restore", () => {
       await original.callTool("get_week", { date: "2026-11-02" }),
     );
     expect(await fresh.callTool("get_household", {})).toEqual(await original.callTool("get_household", {}));
+    expect(await fresh.callTool("list_staples", {})).toEqual(await original.callTool("list_staples", {}));
   });
 
   test("the Household's own Items and aliases survive a restore, and its Recipes still resolve to them", async () => {
@@ -189,7 +197,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 11,
+      schemaVersion: 12,
       tables: {
         household: [
           {
@@ -233,6 +241,7 @@ describe("export and restore", () => {
         week_effort_budget: [],
         store_section: [],
         grocery_line: [],
+        staple: [],
       },
       sequences: { member: 3 },
       photoKeys: [],

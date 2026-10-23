@@ -25,6 +25,14 @@ import {
   UpdateRecipeInput,
 } from "./recipes";
 import {
+  DueStaples,
+  ListStaplesInput,
+  RecordStapleStatusInput,
+  RemoveStapleInput,
+  Staple,
+  UpsertStapleInput,
+} from "./staples";
+import {
   CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
@@ -48,7 +56,8 @@ import {
  * Topics a change notice can name; clients refetch the matching tools. Items are announced as
  * "recipes": a change to one changes the Recipes that resolve to it. So are imports: a run changes
  * Recipes, and its log and flags are read beside them. "plan" is the Weeks and their Slots;
- * "grocery" their Grocery Lists, which also depend on the plan, the Recipes and the Household.
+ * "grocery" their Grocery Lists and the Household's Staples, which the lists buy and their Have Ticks
+ * restock; the lists also depend on the plan, the Recipes and the Household.
  */
 export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
@@ -280,6 +289,33 @@ export const tools = {
   add_grocery_line: defineTool({
     input: AddGroceryLineInput,
     output: GroceryLine,
+    changes: "grocery",
+  }),
+  /** Refuses an Item that doesn't exist (`not_found`). Returns the Staple. */
+  upsert_staple: defineTool({
+    input: UpsertStapleInput,
+    output: Staple,
+    changes: "grocery",
+  }),
+  /** Refuses an Item that is no Staple (`not_found`). Returns the Staple as it was. */
+  remove_staple: defineTool({
+    input: RemoveStapleInput,
+    output: Staple,
+    changes: "grocery",
+  }),
+  list_staples: defineTool({
+    input: ListStaplesInput,
+    output: z.array(Staple),
+  }),
+  /** The Staples a pantry check-in asks about today; see `dueStaples`. */
+  list_due_staples: defineTool({
+    input: z.object({}).strict(),
+    output: DueStaples,
+  }),
+  /** Refuses an Item that is no Staple (`not_found`). Returns the Staple. */
+  record_staple_status: defineTool({
+    input: RecordStapleStatusInput,
+    output: Staple,
     changes: "grocery",
   }),
   /** Returns every Store Section in the Household's walking order. */
