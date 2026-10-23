@@ -1,7 +1,8 @@
 import {
   addDays,
   type Conflict,
-  type Household as HouseholdData,
+  type Item,
+  type ItemId,
   type LocalDate,
   type Locale,
   type Meal,
@@ -22,11 +23,16 @@ import {
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { createItems } from "./items";
 import { type ConstraintDraft, ConstraintFields, constraintDraftsOf, constraintsOf } from "./MemberFields";
 import { t } from "./messages";
-
-/** What the Week needs to know of the Household. */
-type Household = Pick<HouseholdData, "members" | "locale">;
+import {
+  EffortBudgetsEditor,
+  type WeekHousehold as Household,
+  ProposalControls,
+  reasonText,
+  whoName,
+} from "./Proposal";
 
 /** The current and next Week, each day's dinner first, with every Slot editable by hand. */
 export function WeekPage(props: { client: MiseClient; household: Household }) {
@@ -34,6 +40,8 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
   const [week, setWeek] = createSignal<Week>();
   const [currentStart, setCurrentStart] = createSignal<LocalDate>();
   const [error, setError] = createSignal<string>();
+  // Names the "use it up" Items a Proposal gives as reasons.
+  const items = createItems(props.client);
   // Only the latest fetch may show its Week, whatever order the answers arrive in.
   let latest = 0;
 
@@ -84,11 +92,14 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
       <Show when={week()}>
         {(shown) => (
           <>
+            <ProposalControls client={props.client} week={shown()} />
+            <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
             <For each={weekDates(shown().startDate)}>
               {(date) => (
                 <Day
                   client={props.client}
                   household={props.household}
+                  items={items()}
                   date={date}
                   slots={shown().slots.filter((slot) => slot.date === date)}
                 />
@@ -104,7 +115,13 @@ export function WeekPage(props: { client: MiseClient; household: Household }) {
   );
 }
 
-function Day(props: { client: MiseClient; household: Household; date: LocalDate; slots: Slot[] }) {
+function Day(props: {
+  client: MiseClient;
+  household: Household;
+  items: Map<ItemId, Item>;
+  date: LocalDate;
+  slots: Slot[];
+}) {
   const title = () => dayTitle(props.date, props.household.locale);
   const slot = (meal: Meal) => props.slots.find((s) => s.meal === meal) as Slot;
   const [editingDiners, setEditingDiners] = createSignal(false);
@@ -112,11 +129,11 @@ function Day(props: { client: MiseClient; household: Household; date: LocalDate;
   return (
     <section aria-label={title()}>
       <h3>{title()}</h3>
-      <SlotView client={props.client} household={props.household} slot={slot("dinner")} prominent />
+      <SlotView client={props.client} household={props.household} items={props.items} slot={slot("dinner")} prominent />
       <details open={["breakfast", "lunch"].some((meal) => blocking(slot(meal as Meal)))}>
         <summary>{t("week.otherMeals")}</summary>
-        <SlotView client={props.client} household={props.household} slot={slot("breakfast")} />
-        <SlotView client={props.client} household={props.household} slot={slot("lunch")} />
+        <SlotView client={props.client} household={props.household} items={props.items} slot={slot("breakfast")} />
+        <SlotView client={props.client} household={props.household} items={props.items} slot={slot("lunch")} />
       </details>
       <Show
         when={editingDiners()}
@@ -138,7 +155,13 @@ function Day(props: { client: MiseClient; household: Household; date: LocalDate;
   );
 }
 
-function SlotView(props: { client: MiseClient; household: Household; slot: Slot; prominent?: boolean }) {
+function SlotView(props: {
+  client: MiseClient;
+  household: Household;
+  items: Map<ItemId, Item>;
+  slot: Slot;
+  prominent?: boolean;
+}) {
   const [editing, setEditing] = createSignal(false);
   const meal = () => t(`meal.${props.slot.meal}`);
 
@@ -167,6 +190,7 @@ function SlotView(props: { client: MiseClient; household: Household; slot: Slot;
         <h4>{slotTitle(props.slot)}</h4>
       </Show>
       <p>{servingsText(props.slot, props.household)}</p>
+      <Show when={props.slot.reason}>{(reason) => <p>{reasonText(reason(), props.household, props.items)}</p>}</Show>
       <For each={props.slot.conflicts}>
         {(conflict) => (
           <Show
@@ -557,11 +581,11 @@ function blocking(slot: Slot): boolean {
 }
 
 function conflictParams(conflict: Conflict, household: Household): Record<string, string> {
-  const who =
-    conflict.who === "guests"
-      ? t("conflict.guests")
-      : (household.members.find((member) => member.id === conflict.who)?.name ?? String(conflict.who));
-  return { who, allergen: t(`allergen.${conflict.allergen}`), constraint: t(`constraint.${conflict.constraint}`) };
+  return {
+    who: whoName(conflict.who, household),
+    allergen: t(`allergen.${conflict.allergen}`),
+    constraint: t(`constraint.${conflict.constraint}`),
+  };
 }
 
 /** A Conflict of `title` with someone's Hard Constraint, naming them and the Allergen. */

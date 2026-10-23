@@ -7,6 +7,8 @@ export * from "./ingredients";
 export * from "./items";
 export * from "./members";
 export * from "./paprika";
+export * from "./proposals";
+export * from "./proposer";
 export * from "./recipes";
 export * from "./time";
 export * from "./tools";

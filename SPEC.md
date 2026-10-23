@@ -109,7 +109,7 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 ### 4.3 Weekly plan
 - Week view: dinner row prominent with photo; breakfast/lunch collapsed strip. One or two weeks ahead (`planHorizonWeeks`).
 - Manual edit: drag/replace recipe, set kind, set diners/guests per slot or per day, lock, note.
-- **Proposer (deterministic, no LLM):** `propose_week(weekId, constraints?)`
+- **Proposer (deterministic, no LLM):** `propose_week(date?, useUp?, reroll?)` (ADR 0013)
   1. Pin recurring favourites and locked slots.
   2. Apply per-weekday effort budget (default per household, editable per week).
   3. Apply constraints for that slot's diners + guests: **hard** constraints (allergy, intolerance, diet) exclude recipes outright; **soft** ones (dislikes) only score down.
@@ -156,10 +156,11 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 
 ```
 recipes:   search_recipes, get_recipe, create_recipe, update_recipe, delete_recipe*, rate_recipe, import_recipe_url
-plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*
+plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*,
+           set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, tick_line, add_line, send_to_instacart
 pantry:    list_due_staples, record_staple_status, upsert_staple
-household: get_household, update_member_constraints, set_effort_budget, check_slot_constraints
+household: get_household, update_member_constraints, set_effort_budgets, check_slot_constraints
 imports:   run_paprika_import, list_import_runs, list_import_flags, sync_drive_folder, enqueue_video_import, list_review_queue, resolve_review_item
 calendar:  rotate_calendar_token
 * = requires confirmation

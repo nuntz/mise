@@ -1,5 +1,7 @@
 import {
   type Constraint,
+  DEFAULT_EFFORT_BUDGETS,
+  EffortBudgets,
   Household,
   HouseholdSettings,
   Member,
@@ -14,7 +16,7 @@ import {
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
-import { readSlots, weekHandlers } from "./weeks";
+import { readSlots, readWeekRecords, weekHandlers } from "./weeks";
 
 type HouseholdRow = {
   name: string;
@@ -66,6 +68,14 @@ export const handlers: Handlers = {
       if (!added.ok) return added;
     }
     return { ok: true, value: readHousehold(sql) as Household };
+  },
+
+  set_effort_budgets: (sql, input) => {
+    if (!readSettings(sql)) return notSetUp();
+    for (const [weekday, minutes] of Object.entries(input.budgets)) {
+      sql.exec("INSERT OR REPLACE INTO effort_budget (weekday, minutes) VALUES (?, ?)", weekday, minutes);
+    }
+    return { ok: true, value: readEffortBudgets(sql) };
   },
 
   add_member: (sql, input) => {
@@ -120,12 +130,14 @@ export const handlers: Handlers = {
  */
 export function parseStoredHousehold(sql: SqlStorage): void {
   readSettings(sql);
+  readEffortBudgets(sql);
   readMembers(sql);
   readCatalogue(sql);
   readRecipes(sql);
   readImportRuns(sql);
   readImportFlags(sql);
   readSlots(sql);
+  readWeekRecords(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {
@@ -189,7 +201,16 @@ export function readSettings(sql: SqlStorage): HouseholdSettings | null {
 function readHousehold(sql: SqlStorage): Household | null {
   const settings = readSettings(sql);
   if (!settings) return null;
-  return Household.parse({ ...settings, members: readMembers(sql) });
+  return Household.parse({ ...settings, members: readMembers(sql), effortBudgets: readEffortBudgets(sql) });
+}
+
+/** The Household's default Effort Budget for every weekday: its own where it set one. */
+export function readEffortBudgets(sql: SqlStorage): EffortBudgets {
+  const rows = sql.exec<{ weekday: string; minutes: number }>("SELECT weekday, minutes FROM effort_budget").toArray();
+  return EffortBudgets.parse({
+    ...DEFAULT_EFFORT_BUDGETS,
+    ...Object.fromEntries(rows.map((row) => [row.weekday, row.minutes])),
+  });
 }
 
 function readMember(sql: SqlStorage, id: MemberId): Member | null {

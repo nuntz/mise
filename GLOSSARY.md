@@ -107,6 +107,10 @@ A Slot filled by food cooked for an earlier Slot; the earlier Slot is cooked for
 **Proposal**:
 A suggested set of Recipes for a Week's dinners, with a reason for each choice.
 
+**Re-roll**:
+Proposing a Week again from a new seed, for a different Proposal that keeps its Locked Slots.
+_Avoid_: Shuffle, regenerate
+
 ## Groceries and pantry
 
 **Staple**:

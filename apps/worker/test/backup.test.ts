@@ -59,6 +59,10 @@ describe("export and restore", () => {
         guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
         overrides: [{ who: "guests", allergen: "sesame", reason: "The masala is ours, no sesame" }],
       }),
+      await original.callTool("set_effort_budgets", { budgets: { monday: 30 } }),
+      await original.callTool("set_week_effort_budgets", { date: "2026-11-02", budgets: { friday: 15 } }),
+      await original.callTool("propose_week", { date: "2026-11-02" }),
+      await original.callTool("review_week", { date: "2026-11-02", reviewed: true }),
     ];
     expect(planned.every((result) => result.ok)).toBe(true);
     const exported = await exportOf(original);
@@ -76,6 +80,10 @@ describe("export and restore", () => {
     expect(await fresh.callTool("get_week", { date: "2026-10-26" })).toEqual(
       await original.callTool("get_week", { date: "2026-10-26" }),
     );
+    expect(await fresh.callTool("get_week", { date: "2026-11-02" })).toEqual(
+      await original.callTool("get_week", { date: "2026-11-02" }),
+    );
+    expect(await fresh.callTool("get_household", {})).toEqual(await original.callTool("get_household", {}));
   });
 
   test("the Household's own Items and aliases survive a restore, and its Recipes still resolve to them", async () => {
@@ -163,7 +171,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 7,
+      schemaVersion: 8,
       tables: {
         household: [
           {
@@ -200,7 +208,10 @@ describe("export and restore", () => {
         slot_diner: [],
         slot_guest_constraint: [],
         slot_override: [],
+        slot_reason: [],
+        effort_budget: [],
         week: [],
+        week_effort_budget: [],
       },
       sequences: { member: 3 },
       photoKeys: [],

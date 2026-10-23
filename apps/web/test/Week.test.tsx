@@ -1,6 +1,8 @@
 import {
   addDays,
+  DEFAULT_EFFORT_BUDGETS,
   type Household,
+  ITEMS,
   MEALS,
   type Member,
   type RecipeSummary,
@@ -26,6 +28,7 @@ const household: Household = {
   units: "metric",
   locale: "en-CA",
   members: [robin, alex, sam],
+  effortBudgets: DEFAULT_EFFORT_BUDGETS,
 };
 
 const pasta: RecipeSummary = {
@@ -58,9 +61,46 @@ function emptyWeek(startDate: string): Week {
           servings: 3,
           locked: false,
           conflicts: [],
+          reason: null,
         }),
       ),
     ),
+    effortBudgets: DEFAULT_EFFORT_BUDGETS,
+    effortBudgetOverrides: {},
+    proposalSeed: null,
+    reviewed: false,
+  };
+}
+
+/**
+ * This Week as proposed with seed 7 and not yet reviewed, with Monday's Effort Budget overridden:
+ * Monday's dinner chosen, and no Recipe fitting Tuesday's.
+ */
+function proposedWeek(): Week {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[2] as Slot, {
+    kind: "recipe",
+    recipe: { id: 2, title: "Curry", baseServings: 4, photoKey: null },
+    reason: {
+      kind: "chosen",
+      candidates: 12,
+      factors: [
+        { kind: "recency", daysApart: null },
+        { kind: "effort", minutes: 30, budget: 45 },
+        { kind: "uses_up", items: ["spinach"] },
+        { kind: "disliked", by: [2] },
+      ],
+    },
+  });
+  Object.assign(week.slots[5] as Slot, {
+    reason: { kind: "no_candidate", excluded: { conflict: 3, never: 0, recent: 2, effort: 1 } },
+  });
+  return {
+    ...week,
+    proposalSeed: 7,
+    reviewed: false,
+    effortBudgetOverrides: { monday: 30 },
+    effortBudgets: { ...DEFAULT_EFFORT_BUDGETS, monday: 30 },
   };
 }
 
@@ -100,6 +140,14 @@ function fakeClient(answers: Record<string, Answer> = {}) {
           return { ok: true, value: tuesdayDinner };
         case "set_diners":
           return { ok: true, value: [tuesdayDinner] };
+        case "list_items":
+          return { ok: true, value: ITEMS };
+        case "propose_week":
+        case "review_week":
+        case "set_week_effort_budgets":
+          return { ok: true, value: thisWeek };
+        case "set_effort_budgets":
+          return { ok: true, value: DEFAULT_EFFORT_BUDGETS };
         case "clear_week":
           return { ok: true, value: emptyWeek("2026-10-26") };
         default:
@@ -120,7 +168,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
 }
 
 const writes = (calls: { name: string; input: unknown }[]) =>
-  calls.filter((call) => !["get_household", "get_week", "search_recipes"].includes(call.name));
+  calls.filter((call) => !["get_household", "get_week", "search_recipes", "list_items"].includes(call.name));
 
 test("the Week opens first: each day's dinner with its photo, breakfast and lunch tucked away", async () => {
   const { client } = fakeClient();
@@ -406,4 +454,74 @@ test("changing the Slot after a refusal takes the warning away, and its reasons 
     name: "set_slot",
     input: { date: "2026-10-26", meal: "dinner", kind: "recipe", recipeId: 1, note: null },
   });
+});
+
+test("a Week not yet proposed can be proposed, with nothing to re-roll yet", async () => {
+  const { client, calls } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+  expect(screen.queryByRole("button", { name: "Re-roll" })).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "Propose dinners" }));
+
+  await vi.waitFor(() => expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26" } }]));
+});
+
+test("a proposed Week shows why each dinner was chosen, and asks to be reviewed", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  const dinner = within(monday).getByRole("region", { name: "Dinner" });
+  await within(dinner).findByText(
+    "Chosen from 12 Recipes that fit: not planned in the last 6 weeks; 30 of 45 minutes; uses up spinach; disliked by Alex.",
+  );
+  const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
+  expect(
+    within(tuesday).getByText(
+      "No Recipe fits: 3 conflict with someone eating, 2 planned within 2 weeks, 1 over the Effort Budget.",
+    ),
+  ).toBeTruthy();
+
+  expect(screen.getByRole("status").textContent).toContain("This Week was proposed and hasn't been reviewed yet.");
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+  await user.click(screen.getByRole("button", { name: "Mark as reviewed" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      { name: "propose_week", input: { date: "2026-10-26", reroll: true } },
+      { name: "review_week", input: { date: "2026-10-26", reviewed: true } },
+    ]),
+  );
+});
+
+test("Effort Budgets are set for this Week, or for every Week", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(screen.getByText("Effort Budgets"));
+  const thisWeek = screen.getByRole("form", { name: "This Week's Effort Budgets" });
+  expect((within(thisWeek).getByRole("spinbutton", { name: "Monday" }) as HTMLInputElement).value).toBe("30");
+  // Back to the default on Monday, and a lighter Friday.
+  await user.clear(within(thisWeek).getByRole("spinbutton", { name: "Monday" }));
+  await user.type(within(thisWeek).getByRole("spinbutton", { name: "Monday" }), "45");
+  await user.clear(within(thisWeek).getByRole("spinbutton", { name: "Friday" }));
+  await user.type(within(thisWeek).getByRole("spinbutton", { name: "Friday" }), "20");
+  await user.click(within(thisWeek).getByRole("button", { name: "Save" }));
+
+  const everyWeek = screen.getByRole("form", { name: "Every Week's Effort Budgets" });
+  await user.clear(within(everyWeek).getByRole("spinbutton", { name: "Saturday" }));
+  await user.type(within(everyWeek).getByRole("spinbutton", { name: "Saturday" }), "150");
+  await user.click(within(everyWeek).getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      { name: "set_week_effort_budgets", input: { date: "2026-10-26", budgets: { monday: null, friday: 20 } } },
+      { name: "set_effort_budgets", input: { budgets: { saturday: 150 } } },
+    ]),
+  );
 });

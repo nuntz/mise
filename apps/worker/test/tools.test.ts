@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { DEFAULT_EFFORT_BUDGETS } from "@mise/domain";
 import { describe, expect, test } from "vitest";
 import sampleHousehold from "../../../fixtures/sample-household.json";
 
@@ -27,6 +28,7 @@ describe("first-run Household setup", () => {
       units: "metric",
       locale: "en-CA",
       members: [],
+      effortBudgets: DEFAULT_EFFORT_BUDGETS,
     };
     expect(setup).toEqual({ ok: true, value: expected });
     expect(read).toEqual({ ok: true, value: expected });
@@ -113,7 +115,11 @@ describe("change notices", () => {
 
 /** A Household as set up from `input`: its Members numbered in the order given. */
 function withMemberIds<T extends { members: object[] }>(input: T) {
-  return { ...input, members: input.members.map((member, index) => ({ id: index + 1, ...member })) };
+  return {
+    ...input,
+    members: input.members.map((member, index) => ({ id: index + 1, ...member })),
+    effortBudgets: DEFAULT_EFFORT_BUDGETS,
+  };
 }
 
 /** Opens a WebSocket to the household and collects the change notices it receives. */

@@ -45,9 +45,7 @@ export const itemHandlers: Pick<Handlers, ItemTools> = {
 
   resolve_ingredient: (sql, input) => {
     const catalogue = readCatalogue(sql);
-    if (!catalogue.item(input.item)) {
-      return { ok: false, error: { code: "not_found", message: `No Item ${input.item}` } };
-    }
+    if (!catalogue.item(input.item)) return itemNotFound(input.item);
     const named = catalogue.named(input.text);
     if (named !== null && named !== input.item) return nameInUse(input.text);
     if (named === null) sql.exec("INSERT INTO item_alias (item_id, alias) VALUES (?, ?)", input.item, input.text);
@@ -90,6 +88,10 @@ export const itemHandlers: Pick<Handlers, ItemTools> = {
  * The Household's Item catalogue: the shipped Items plus its own and the aliases it added. Parsed, so
  * bad rows throw (a `ZodError`), such as an alias of an Item the catalogue does not have.
  */
+export function itemNotFound<T>(id: ItemId): ToolResult<T> {
+  return { ok: false, error: { code: "not_found", message: `No Item ${id}` } };
+}
+
 export function readCatalogue(sql: SqlStorage): ItemCatalogue {
   const allergens = sql
     .exec<AllergenRow>("SELECT item_id, allergen FROM item_allergen ORDER BY item_id, position")

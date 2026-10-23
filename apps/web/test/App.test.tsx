@@ -1,4 +1,4 @@
-import type { Household, Member } from "@mise/domain";
+import { DEFAULT_EFFORT_BUDGETS, type Household, type Member } from "@mise/domain";
 import { render, screen } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
@@ -16,6 +16,7 @@ const household = (overrides: Partial<Household> = {}): Household => ({
   units: "metric",
   locale: "en-CA",
   members: [alex, sam],
+  effortBudgets: DEFAULT_EFFORT_BUDGETS,
   ...overrides,
 });
 

@@ -215,6 +215,32 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 8,
+    statements: [
+      // The Household's own Effort Budgets; a weekday without a row has the default one.
+      "CREATE TABLE effort_budget (weekday TEXT PRIMARY KEY, minutes INTEGER NOT NULL)",
+      // The seed and choice ('best' or 'any') the Week was last proposed with, null until it is;
+      // reviewed is 1 once someone has looked it over since.
+      "ALTER TABLE week ADD COLUMN proposal_seed INTEGER",
+      "ALTER TABLE week ADD COLUMN proposal_choice TEXT",
+      "ALTER TABLE week ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0",
+      `CREATE TABLE week_effort_budget (
+        start_date TEXT NOT NULL REFERENCES week (start_date),
+        weekday TEXT NOT NULL,
+        minutes INTEGER NOT NULL,
+        PRIMARY KEY (start_date, weekday)
+      )`,
+      // Why the latest Proposal left a Slot as it did, as JSON; dropped once the Slot is set by hand.
+      `CREATE TABLE slot_reason (
+        date TEXT NOT NULL,
+        meal TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        PRIMARY KEY (date, meal),
+        FOREIGN KEY (date, meal) REFERENCES slot (date, meal)
+      )`,
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

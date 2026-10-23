@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Caller, ResolvedCaller } from "./caller";
 import { type Conflict, SlotConflict } from "./conflicts";
-import { Household, SetupHouseholdInput } from "./household";
+import { EffortBudgets, Household, SetEffortBudgetsInput, SetupHouseholdInput } from "./household";
 import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
@@ -22,9 +22,12 @@ import {
   type LocalDate,
   LockSlotInput,
   type Meal,
+  ProposeWeekInput,
+  ReviewWeekInput,
   SetDinersInput,
   SetGuestsInput,
   SetSlotInput,
+  SetWeekEffortBudgetsInput,
   Slot,
   Week,
 } from "./weeks";
@@ -58,6 +61,12 @@ export const tools = {
   get_household: defineTool({
     input: z.object({}).strict(),
     output: Household.nullable(),
+  }),
+  /** Returns every weekday's default Effort Budget. */
+  set_effort_budgets: defineTool({
+    input: SetEffortBudgetsInput,
+    output: EffortBudgets,
+    changes: "household",
   }),
   add_member: defineTool({
     input: NewMember,
@@ -189,6 +198,27 @@ export const tools = {
   /** Requires `confirm: true`. Puts every Slot of the Week back as it starts, Locked ones too; returns the Week. */
   clear_week: defineTool({
     input: ClearWeekInput,
+    output: Week,
+    changes: "plan",
+  }),
+  /**
+   * Fills the Week's dinners that aren't Locked or decided by hand, with a reason for each; see
+   * `ProposeWeekInput`. Returns the Week.
+   */
+  propose_week: defineTool({
+    input: ProposeWeekInput,
+    output: Week,
+    changes: "plan",
+  }),
+  /** Returns the Week, with its Effort Budgets as they now are. */
+  set_week_effort_budgets: defineTool({
+    input: SetWeekEffortBudgetsInput,
+    output: Week,
+    changes: "plan",
+  }),
+  /** Marks the Week as looked over since it was proposed, or not. */
+  review_week: defineTool({
+    input: ReviewWeekInput,
     output: Week,
     changes: "plan",
   }),

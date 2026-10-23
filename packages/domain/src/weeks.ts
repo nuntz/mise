@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { Overrides, SlotConflict } from "./conflicts";
-import { WEEKDAYS, type Weekday } from "./household";
+import { EffortBudgets, Minutes, WEEKDAYS, Weekday } from "./household";
+import { ItemId } from "./items";
 import { Constraint, MemberId } from "./members";
+import { ProposalReason } from "./proposals";
 import { Recipe, RecipeId } from "./recipes";
 import { localDate } from "./time";
 
@@ -73,6 +75,8 @@ export const Slot = z.object({
   locked: z.boolean(),
   /** Every Conflict of its Recipe with a Hard Constraint of someone eating it, overridden or not. */
   conflicts: z.array(SlotConflict),
+  /** Why the latest Proposal left it as it did; null once edited by hand, or if never proposed. */
+  reason: ProposalReason.nullable(),
 });
 export type Slot = z.infer<typeof Slot>;
 
@@ -80,6 +84,14 @@ export const Week = z.object({
   startDate: LocalDate,
   /** Every meal of every day, by date and then breakfast, lunch, dinner. */
   slots: z.array(Slot),
+  /** Each weekday's Effort Budget for this Week: the Household's default, or this Week's override. */
+  effortBudgets: EffortBudgets,
+  /** The weekdays whose Effort Budget this Week overrides, and by what. */
+  effortBudgetOverrides: z.partialRecord(Weekday, Minutes),
+  /** The seed of the latest Proposal; null until the Week is first proposed. */
+  proposalSeed: z.number().int().nonnegative().nullable(),
+  /** Whether someone has looked the Week over since it was last proposed. */
+  reviewed: z.boolean(),
 });
 export type Week = z.infer<typeof Week>;
 
@@ -160,3 +172,28 @@ export const LockSlotInput = z.object({ ...SlotRef, locked: z.boolean() }).stric
 
 /** Clearing is destructive, so the caller must say they confirmed it. */
 export const ClearWeekInput = z.object({ date: LocalDate, confirm: z.literal(true) }).strict();
+
+/**
+ * Proposes the Week's dinners (see `proposeWeek`). The same Week, unchanged, gets the same Proposal
+ * from the seed it was last proposed with; a re-roll moves on to a new seed and a different Proposal.
+ * Either way the Week is marked as not reviewed.
+ */
+export const ProposeWeekInput = z
+  .object({
+    date: LocalDate.optional(),
+    /** Items on hand: Recipes that use them are favoured. */
+    useUp: z
+      .array(ItemId)
+      .max(50)
+      .default([])
+      .transform((items) => [...new Set(items)]),
+    reroll: z.boolean().default(false),
+  })
+  .strict();
+
+/** Overrides the Effort Budgets of the weekdays given for one Week; null goes back to the Household's. */
+export const SetWeekEffortBudgetsInput = z
+  .object({ date: LocalDate, budgets: z.partialRecord(Weekday, Minutes.nullable()) })
+  .strict();
+
+export const ReviewWeekInput = z.object({ date: LocalDate, reviewed: z.boolean() }).strict();
