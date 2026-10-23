@@ -82,10 +82,25 @@ export const Slot = z.object({
   dinersAreDefault: z.boolean(),
   guests: Guests,
   guestConstraints: GuestConstraints,
-  /** Diners plus Guests: how many the Recipe is scaled to. */
+  /** Diners plus Guests: how many eat it. */
   servings: z.number().int().nonnegative(),
+  /**
+   * How many its Recipe is cooked for, and so scaled to: its Servings plus those of every Slot linked
+   * as its Leftovers. 0 without a Recipe.
+   */
+  cookFor: z.number().int().nonnegative(),
+  /**
+   * Only when the kind is "leftovers": the earlier Slot whose cooking it eats, with that Slot's Recipe
+   * (null if it holds none now). Null when it is Leftovers of nothing in particular.
+   */
+  leftoversOf: z.object({ date: LocalDate, meal: Meal, recipe: SlotRecipe.nullable() }).nullable(),
+  /** The Slots linked as its Leftovers, by date and meal. */
+  leftovers: z.array(z.object({ date: LocalDate, meal: Meal })),
   locked: z.boolean(),
-  /** Every Conflict of its Recipe with a Hard Constraint of someone eating it, overridden or not. */
+  /**
+   * Every Conflict of its Recipe, or for Leftovers of the Recipe they were cooked from, with a Hard
+   * Constraint of someone eating it, overridden or not.
+   */
   conflicts: z.array(SlotConflict),
   /** Why the latest Proposal left it as it did; null once edited by hand, or if never proposed. */
   reason: ProposalReason.nullable(),
@@ -137,7 +152,9 @@ const SlotChange = {
 };
 
 /**
- * Sets what a Slot holds. A Recipe is given exactly when the kind is "recipe". The note is kept
+ * Sets what a Slot holds. A Recipe is given exactly when the kind is "recipe". Leftovers stay linked
+ * to the Slot they were cooked for while the kind stays "leftovers"; `link_leftovers` links them.
+ * The note is kept
  * when left out and cleared by null. Diners and Guests can be set in the same change, so that their
  * Conflicts are checked once, against the Slot as it ends up; the Lock is left as it is.
  */
@@ -182,6 +199,15 @@ export const CheckSlotConstraintsInput = z
     guests: Guests.optional(),
     guestConstraints: GuestConstraints.optional(),
   })
+  .strict();
+
+/**
+ * Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. Null
+ * unlinks it: it stays Leftovers, of nothing in particular, and the earlier Slot is cooked for its own
+ * Servings again. Refuses new Conflicts as `set_slot` does: those eating the Leftovers eat its Recipe.
+ */
+export const LinkLeftoversInput = z
+  .object({ ...SlotRef, of: z.object(SlotRef).strict().nullable(), overrides: Overrides.optional() })
   .strict();
 
 export const LockSlotInput = z.object({ ...SlotRef, locked: z.boolean() }).strict();

@@ -33,6 +33,7 @@ function recipe(id: number, fields: Partial<ProposerRecipe> = {}): ProposerRecip
     cuisine: null,
     mainProtein: null,
     recurring: null,
+    yieldsLeftovers: false,
     importedPreference: null,
     ratings: [],
     ...fields,
@@ -50,6 +51,9 @@ function dinners(): ProposerDinner[] {
     diners: [robin, alex],
     guests: 0,
     guestConstraints: [],
+    leftoversOf: null,
+    leftoversProposed: false,
+    keptLeftovers: [],
   }));
 }
 
@@ -124,6 +128,7 @@ function randomWeek(seed: number): ProposerInput {
       cuisine: random.one(CUISINES),
       mainProtein: random.one(PROTEINS),
       recurring: random.next() < 0.05 ? "weekly" : random.next() < 0.05 ? { weekday: random.one(WEEKDAYS) } : null,
+      yieldsLeftovers: random.next() < 0.3,
       importedPreference: random.one(["positive", "negative", null] as const),
       ratings: random.some(["again", "meh", "never"] as Rating[], 0.15),
     }),
@@ -181,6 +186,25 @@ describe("proposeWeek, over random Weeks", () => {
     }
   });
 
+  test("places Leftovers only after a Recipe that yields them, within two days, for the same Diners", () => {
+    for (const seed of WEEKS) {
+      const week = randomWeek(seed);
+      const proposal = proposeWeek(week);
+      for (const dinner of proposal.dinners.filter((other) => other.reason.kind === "leftovers")) {
+        const at = week.dinners.find((other) => other.date === dinner.date) as ProposerDinner;
+        const source = week.dinners.find((other) => other.date === dinner.leftoversOf) as ProposerDinner;
+        const cooked = proposal.dinners.find((other) => other.date === dinner.leftoversOf);
+        const recipe = week.recipes.find((other) => other.id === cooked?.recipeId) as ProposerRecipe;
+        expect(recipe.yieldsLeftovers).toBe(true);
+        expect(Date.parse(at.date) - Date.parse(source.date)).toBeGreaterThan(0);
+        expect(Date.parse(at.date) - Date.parse(source.date)).toBeLessThanOrEqual(2 * 86_400_000);
+        expect(at.diners.map((diner) => diner.id).sort()).toEqual(source.diners.map((diner) => diner.id).sort());
+        expect(slotConflicts({ allergens: recipe.allergens, ...at })).toEqual([]);
+        expect(at.locked || at.cooked).toBe(false);
+      }
+    }
+  });
+
   test("the same input and seed always give the same Proposal", () => {
     for (const seed of WEEKS) {
       expect(proposeWeek(randomWeek(seed))).toEqual(proposeWeek(randomWeek(seed)));
@@ -217,6 +241,8 @@ describe("proposeWeek, over random Weeks", () => {
         ...dinner,
         kind: first.dinners[index]?.kind ?? dinner.kind,
         recipeId: first.dinners[index]?.recipeId ?? null,
+        leftoversOf: first.dinners[index]?.leftoversOf ?? null,
+        leftoversProposed: first.dinners[index]?.reason.kind === "leftovers",
       }));
       // Only a Week with room to choose can come out differently.
       const roomToChoose = first.dinners.some(
@@ -411,7 +437,77 @@ describe("proposeWeek, rule by rule", () => {
       date: addDays(MONDAY, 2),
       kind: "unplanned",
       recipeId: null,
+      leftoversOf: null,
       reason: { kind: "nobody_eating" },
+    });
+  });
+});
+
+describe("proposeWeek, Leftovers", () => {
+  const chili = recipe(1, { yieldsLeftovers: true, recurring: { weekday: "monday" } });
+  const plain = Array.from({ length: 10 }, (_, index) => recipe(index + 2));
+
+  test("Leftovers of a Recipe that yields them fill the next free dinner, for the same Diners", () => {
+    const proposal = proposeWeek(input({ recipes: [chili, ...plain] }));
+
+    expect(proposal.dinners[0]).toMatchObject({ recipeId: 1 });
+    expect(proposal.dinners[1]).toEqual({
+      date: addDays(MONDAY, 1),
+      kind: "leftovers",
+      recipeId: null,
+      leftoversOf: MONDAY,
+      reason: { kind: "leftovers", of: MONDAY },
+    });
+    expect(proposal.dinners.filter((dinner) => dinner.kind === "leftovers")).toHaveLength(1);
+  });
+
+  test("they skip a Locked dinner, one eaten by other Diners, and anything over two days later", () => {
+    const week = dinners();
+    week[1] = { ...(week[1] as ProposerDinner), kind: "recipe", recipeId: 2, locked: true };
+    week[2] = { ...(week[2] as ProposerDinner), diners: [alex] };
+    expect(proposeWeek(input({ dinners: week, recipes: [chili, ...plain] })).dinners.map((d) => d.kind)).not.toContain(
+      "leftovers",
+    );
+
+    week[2] = { ...(week[2] as ProposerDinner), diners: [alex, robin] };
+    expect(proposeWeek(input({ dinners: week, recipes: [chili, ...plain] })).dinners[2]).toMatchObject({
+      kind: "leftovers",
+      leftoversOf: MONDAY,
+    });
+  });
+
+  test("a dinner already cooked gets no Leftovers afterwards", () => {
+    const week = dinners();
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1, cooked: true };
+
+    expect(proposeWeek(input({ dinners: week, recipes: [chili, ...plain] })).dinners[1]).toMatchObject({
+      kind: "recipe",
+    });
+  });
+
+  test("Leftovers it placed before are proposed again; those linked by hand are kept", () => {
+    const week = dinners();
+    week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY, leftoversProposed: true };
+    week[3] = { ...(week[3] as ProposerDinner), kind: "leftovers", leftoversOf: addDays(MONDAY, 2) };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: plain }));
+
+    expect(proposal.dinners[1]).toMatchObject({ kind: "recipe", leftoversOf: null, reason: { kind: "chosen" } });
+    expect(proposal.dinners[3]).toMatchObject({ kind: "leftovers", leftoversOf: addDays(MONDAY, 2) });
+  });
+
+  test("a dinner's Recipe is safe for whoever eats its Leftovers kept by hand", () => {
+    const satay = recipe(2, { allergens: { kind: "known", allergens: ["peanut"] } });
+    const week = dinners().slice(0, 1);
+    week[0] = {
+      ...(week[0] as ProposerDinner),
+      diners: [alex],
+      keptLeftovers: [{ diners: [robin], guests: 0, guestConstraints: [] }],
+    };
+
+    expect(proposeWeek(input({ dinners: week, recipes: [satay] })).dinners[0]).toMatchObject({
+      kind: "unplanned",
+      reason: { kind: "no_candidate", excluded: { conflict: 1 } },
     });
   });
 });

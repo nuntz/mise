@@ -21,6 +21,7 @@ import {
   type ToolResult,
   type Week,
   weekDates,
+  weekdayOf,
 } from "@mise/domain";
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
@@ -192,6 +193,9 @@ function SlotView(props: {
         <h4>{slotTitle(props.slot)}</h4>
       </Show>
       <p>{servingsText(props.slot, props.household)}</p>
+      <Show when={props.slot.recipe && props.slot.leftovers.length > 0}>
+        <p>{cookForText(props.slot, props.household)}</p>
+      </Show>
       <Show when={props.slot.reason}>{(reason) => <p>{reasonText(reason(), props.household, props.items)}</p>}</Show>
       <For each={props.slot.conflicts}>
         {(conflict) => (
@@ -641,7 +645,23 @@ function dinersChanged(diners: MemberId[] | null, slot: Slot): boolean {
 }
 
 function slotTitle(slot: Slot): string {
+  const cooked = slot.leftoversOf?.recipe;
+  if (cooked) return t("slot.leftoversOf", { title: cooked.title });
   return slot.recipe?.title ?? t(`slotKind.${slot.kind}`);
+}
+
+/** How many a Slot's Recipe is cooked for, and which Leftovers that includes. */
+function cookForText(slot: Slot, household: Household): string {
+  const which = slot.leftovers.map(({ date, meal }) => {
+    const day = t(`weekday.${weekdayOf(date)}`);
+    return meal === "dinner"
+      ? t("slot.leftoversDay", { day })
+      : t("slot.leftoversDayMeal", { day, meal: t(`meal.${meal}`).toLowerCase() });
+  });
+  return t("slot.cookFor", {
+    count: String(slot.cookFor),
+    which: new Intl.ListFormat(household.locale, { type: "conjunction" }).format(which),
+  });
 }
 
 /** Who a Slot feeds, and how that compares with what its Recipe makes. */

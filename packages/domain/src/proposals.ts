@@ -55,12 +55,14 @@ export const ProposalReason = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("locked") }),
   /** Already cooked: kept as it was. */
   z.object({ kind: z.literal("cooked") }),
-  /** Leftovers, eating out or no meal, decided by hand: kept as it was. */
+  /** Leftovers, eating out or no meal, decided by hand: kept as it was. Leftovers a Proposal placed aren't kept. */
   z.object({ kind: z.literal("kept") }),
   /** Nobody is eating it, so nothing was planned. */
   z.object({ kind: z.literal("nobody_eating") }),
   /** A Recurring Recipe, pinned before anything was chosen. */
   z.object({ kind: z.literal("recurring"), recurrence: Recurrence }),
+  /** Leftovers of the dinner on `of`, whose Recipe yields them, for the same Diners. */
+  z.object({ kind: z.literal("leftovers"), of: z.iso.date() }),
   /** Chosen from `candidates` Recipes that passed every rule. */
   z.object({ kind: z.literal("chosen"), candidates: z.number().int().positive(), factors: z.array(ReasonFactor) }),
   /** No Recipe passed every rule, so it was left unplanned. */

@@ -169,10 +169,13 @@ export function readStoreSections(sql: SqlStorage): StoreSection[] {
   return storeSectionOrder(rows.map((row) => StoreSection.parse(row.section)));
 }
 
-/** What the Week's Grocery List is built from: its Slots with a Recipe, and those Recipes. */
+/**
+ * What the Week's Grocery List is built from: its Slots with a Recipe, each for what it is cooked for
+ * (its Leftovers too, even those in the next Week), and those Recipes.
+ */
 function readDemand(sql: SqlStorage, settings: HouseholdSettings, start: LocalDate): GroceryDemand {
   const slots = readWeek(sql, start).slots.flatMap((slot) =>
-    slot.recipe ? [{ recipeId: slot.recipe.id, servings: slot.servings }] : [],
+    slot.recipe ? [{ recipeId: slot.recipe.id, servings: slot.cookFor }] : [],
   );
   const used = new Set(slots.map((slot) => slot.recipeId));
   return { slots, recipes: readRecipes(sql).filter((recipe) => used.has(recipe.id)), units: settings.units };

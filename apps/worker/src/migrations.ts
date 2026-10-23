@@ -289,6 +289,16 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE INDEX grocery_line_week ON grocery_line (start_date)",
     ],
   },
+  {
+    version: 11,
+    statements: [
+      // The earlier Slot a 'leftovers' Slot eats the cooking of; both NULL when not linked. Not a
+      // foreign key: clearing a Week deletes Slots that Leftovers in the next one may still name.
+      "ALTER TABLE slot ADD COLUMN leftovers_of_date TEXT",
+      "ALTER TABLE slot ADD COLUMN leftovers_of_meal TEXT",
+      "CREATE INDEX slot_leftovers_of ON slot (leftovers_of_date, leftovers_of_meal)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

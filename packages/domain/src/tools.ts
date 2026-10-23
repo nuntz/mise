@@ -28,6 +28,7 @@ import {
   CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
+  LinkLeftoversInput,
   type LocalDate,
   LockSlotInput,
   MarkCookedInput,
@@ -196,6 +197,15 @@ export const tools = {
     output: Slot,
     changes: "plan",
   }),
+  /**
+   * Refuses a Slot to link to that is not earlier (`not_earlier`) or holds no Recipe (`no_recipe`),
+   * and new Conflicts as `set_slot` does. Returns the Slot.
+   */
+  link_leftovers: defineTool({
+    input: LinkLeftoversInput,
+    output: Slot,
+    changes: "plan",
+  }),
   /** Read-only: what a change would conflict with, before making it. */
   check_slot_constraints: defineTool({
     input: CheckSlotConstraintsInput,
@@ -310,7 +320,8 @@ export type ToolErrorCode =
   | "no_recipe"
   | "not_yet"
   | "not_cooked"
-  | "not_built";
+  | "not_built"
+  | "not_earlier";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */
 export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };

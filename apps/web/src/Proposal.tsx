@@ -10,6 +10,7 @@ import {
   WEEKDAYS,
   type Week,
   type Weekday,
+  weekdayOf,
 } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
@@ -191,6 +192,8 @@ export function reasonText(
       return t("reason.kept");
     case "nobody_eating":
       return t("reason.nobodyEating");
+    case "leftovers":
+      return t("reason.leftovers", { day: t(`weekday.${weekdayOf(reason.of)}`) });
     case "recurring":
       return reason.recurrence === "weekly"
         ? t("reason.recurringWeekly")

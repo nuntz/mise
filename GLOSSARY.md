@@ -118,11 +118,11 @@ An Item the Household keeps on hand and checks by status (stocked, low, out) rat
 _Avoid_: Inventory, pantry item
 
 **Grocery List**:
-What to buy for a Week: Ingredients scaled to Servings and merged, plus Staples that are due to be bought.
+What to buy for a Week: Ingredients scaled to what each Slot is cooked for (its Servings and its Leftovers') and merged, plus Staples that are due to be bought.
 _Avoid_: Shopping list, cart
 
 **Plan Revision**:
-What a Week's Grocery List was built from: the Recipe and Servings of each of its Slots, and those Recipes' Ingredients. A list built from another Plan Revision is out of date.
+What a Week's Grocery List was built from: the Recipe of each of its Slots and how many it is cooked for, and those Recipes' Ingredients. A list built from another Plan Revision is out of date.
 _Avoid_: Revision (the number change notices carry)
 
 **Have Tick**:

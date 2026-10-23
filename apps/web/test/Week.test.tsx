@@ -61,6 +61,9 @@ function emptyWeek(startDate: string): Week {
           guests: 0,
           guestConstraints: [],
           servings: 3,
+          cookFor: 0,
+          leftoversOf: null,
+          leftovers: [],
           locked: false,
           conflicts: [],
           reason: null,
@@ -473,6 +476,31 @@ test("a Week not yet proposed can be proposed, with nothing to re-roll yet", asy
   await user.click(screen.getByRole("button", { name: "Propose dinners" }));
 
   await vi.waitFor(() => expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26" } }]));
+});
+
+test("a dinner cooked for its Leftovers says how many to cook for, and the Leftovers what they're of", async () => {
+  const week = emptyWeek("2026-10-26");
+  const curryRecipe = { id: 2, title: "Curry", baseServings: 4, photoKey: null };
+  Object.assign(week.slots[2] as Slot, {
+    kind: "recipe",
+    recipe: curryRecipe,
+    cookFor: 6,
+    leftovers: [{ date: "2026-10-27", meal: "dinner" }],
+  });
+  Object.assign(week.slots[5] as Slot, {
+    kind: "leftovers",
+    leftoversOf: { date: "2026-10-26", meal: "dinner", recipe: curryRecipe },
+    reason: { kind: "leftovers", of: "2026-10-26" },
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  expect(within(monday).getByText("Cook for 6, with Tuesday's Leftovers.")).toBeTruthy();
+  const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
+  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+  expect(within(dinner).getByRole("heading", { name: "Leftovers of Curry" })).toBeTruthy();
+  expect(within(dinner).getByText("Leftovers of Monday's dinner, cooked for both.")).toBeTruthy();
 });
 
 test("a proposed Week shows why each dinner was chosen, and asks to be reviewed", async () => {

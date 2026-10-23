@@ -6,17 +6,30 @@ import type { Exclusions, ProposalChoice, ProposalReason, Rating, ReasonFactor }
 import type { Recipe, RecipeId } from "./recipes";
 import { type LocalDate, type SlotKind, weekdayOf } from "./weeks";
 
+/** Who eats a Slot, as far as Hard Constraints go. */
+export type ProposerPeople = {
+  diners: Pick<Member, "id" | "constraints">[];
+  guests: number;
+  guestConstraints: Constraint[];
+};
+
 /** A dinner of the Week as the Proposer finds it. */
-export type ProposerDinner = {
+export type ProposerDinner = ProposerPeople & {
   date: LocalDate;
   kind: SlotKind;
   recipeId: RecipeId | null;
   locked: boolean;
   /** Marked cooked: what was eaten stays as it was. */
   cooked: boolean;
-  diners: Pick<Member, "id" | "constraints">[];
-  guests: number;
-  guestConstraints: Constraint[];
+  /** The dinner it is Leftovers of, when it is linked to one. */
+  leftoversOf: LocalDate | null;
+  /** Leftovers the latest Proposal placed, not decided by hand: proposed again like any other dinner. */
+  leftoversProposed: boolean;
+  /**
+   * Who eats the Slots kept as its Leftovers, at any meal: those linked by hand or Locked. Its Recipe
+   * must be safe for them too, and it gets no more Leftovers.
+   */
+  keptLeftovers: ProposerPeople[];
 };
 
 /** What the Proposer weighs of a Recipe, with its Ratings, oldest first. */
@@ -30,6 +43,7 @@ export type ProposerRecipe = Pick<
   | "cuisine"
   | "mainProtein"
   | "recurring"
+  | "yieldsLeftovers"
   | "importedPreference"
 > & { ratings: Rating[] };
 
@@ -48,7 +62,14 @@ export type ProposerInput = {
   choice?: ProposalChoice;
 };
 
-export type ProposedDinner = { date: LocalDate; kind: SlotKind; recipeId: RecipeId | null; reason: ProposalReason };
+export type ProposedDinner = {
+  date: LocalDate;
+  kind: SlotKind;
+  recipeId: RecipeId | null;
+  /** The dinner it is Leftovers of, when it is linked to one. */
+  leftoversOf: LocalDate | null;
+  reason: ProposalReason;
+};
 
 /** The seed and choice it was made with: given them again, with the same input, it comes out the same. */
 export type Proposal = { seed: number; choice: ProposalChoice; dinners: ProposedDinner[] };
@@ -73,6 +94,8 @@ const USE_UP_BONUS = 1.5;
 /** The choice is made among the Recipes scoring less than this below the best, at most `MOST_CHOICES` of them. */
 const CHOICE_WINDOW = 1.5;
 const MOST_CHOICES = 5;
+/** Leftovers go in a dinner at most this many days after the one cooked for them. */
+const LEFTOVERS_WITHIN_DAYS = 2;
 /** How many seeds a re-roll tries for a Proposal that differs from the Week as it is. */
 const REROLL_TRIES = 50;
 
@@ -86,9 +109,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * eating out or no meal, are kept. Recurring Recipes are pinned first. Every other dinner gets a
  * Recipe that no Hard Constraint of anyone eating it rules out (unknown Allergens fail closed), not
  * rated "never", not planned within 2 weeks of it and within the day's Effort Budget (an unknown
- * effort passes).
+ * effort passes), and safe too for whoever eats its Leftovers kept by hand.
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
+ * A dinner whose Recipe yields Leftovers, and has none kept, gets them in the next dinner within two
+ * days that is still to fill and eaten by the same Diners, if its Recipe is safe for them.
  * The same input, seed and choice always give the same Proposal.
  */
 export function proposeWeek(input: ProposerInput): Proposal {
@@ -136,7 +161,7 @@ function propose(input: ProposerInput, window: number, choice: ProposalChoice): 
     if (planned().some((other) => other.recipeId === recipe.id && weekDates.has(other.date))) continue;
     const fits = input.dinners.flatMap((dinner, index) =>
       open(index) &&
-      isSafe(recipe, dinner) &&
+      isSafeFor(recipe, dinner) &&
       (recurrence === "weekly" || weekdayOf(dinner.date) === recurrence.weekday)
         ? [index]
         : [],
@@ -148,44 +173,112 @@ function propose(input: ProposerInput, window: number, choice: ProposalChoice): 
       date: (input.dinners[index] as ProposerDinner).date,
       kind: "recipe",
       recipeId: recipe.id,
+      leftoversOf: null,
       reason: { kind: "recurring", recurrence },
     };
   }
 
-  input.dinners.forEach((dinner, index) => {
-    if (!open(index)) return;
-    const budget = budgetOf(input, index);
-    const excluded: Exclusions = { conflict: 0, never: 0, recent: 0, effort: 0 };
-    const candidates: { recipe: ProposerRecipe; score: number; factors: ReasonFactor[] }[] = [];
-    const nearby = planned();
-    for (const recipe of input.recipes) {
-      const daysApart = closestPlanned(recipe.id, dinner.date, nearby);
-      if (!isSafe(recipe, dinner)) excluded.conflict++;
-      else if (recipe.ratings.includes("never")) excluded.never++;
-      else if (daysApart !== null && daysApart < EXCLUDED_WITHIN_DAYS) excluded.recent++;
-      else if (!isWithinBudget(recipe, budget)) excluded.effort++;
-      else candidates.push({ recipe, ...scored(recipe, dinner, daysApart, budget, nearby, recipes, input.useUp) });
-    }
-    candidates.sort((a, b) => b.score - a.score || a.recipe.id - b.recipe.id);
-    const best = candidates[0]?.score ?? 0;
-    const choices = candidates.filter((candidate) => candidate.score > best - window).slice(0, MOST_CHOICES);
-    const chosen = pick(choices, random);
-    proposed[index] = chosen
-      ? {
-          date: dinner.date,
-          kind: "recipe",
-          recipeId: chosen.recipe.id,
-          reason: { kind: "chosen", candidates: candidates.length, factors: chosen.factors },
-        }
-      : { date: dinner.date, kind: "unplanned", recipeId: null, reason: { kind: "no_candidate", excluded } };
+  // In date order, so that a dinner's Leftovers are placed before the dinners after it are chosen.
+  input.dinners.forEach((_, index) => {
+    if (open(index)) proposed[index] = chosen(input, index, planned(), recipes, window, random);
+    placeLeftovers(input, index, proposed, recipes);
   });
 
   return { seed: input.seed, choice, dinners: proposed as ProposedDinner[] };
 }
 
+/** The Recipe chosen for the dinner at `index`, or none when no Recipe passes every rule. */
+function chosen(
+  input: ProposerInput,
+  index: number,
+  nearby: { recipeId: RecipeId; date: LocalDate }[],
+  recipes: Map<RecipeId, ProposerRecipe>,
+  window: number,
+  random: () => number,
+): ProposedDinner {
+  const dinner = input.dinners[index] as ProposerDinner;
+  const budget = budgetOf(input, index);
+  const excluded: Exclusions = { conflict: 0, never: 0, recent: 0, effort: 0 };
+  const candidates: { recipe: ProposerRecipe; score: number; factors: ReasonFactor[] }[] = [];
+  for (const recipe of input.recipes) {
+    const daysApart = closestPlanned(recipe.id, dinner.date, nearby);
+    if (!isSafeFor(recipe, dinner)) excluded.conflict++;
+    else if (recipe.ratings.includes("never")) excluded.never++;
+    else if (daysApart !== null && daysApart < EXCLUDED_WITHIN_DAYS) excluded.recent++;
+    else if (!isWithinBudget(recipe, budget)) excluded.effort++;
+    else candidates.push({ recipe, ...scored(recipe, dinner, daysApart, budget, nearby, recipes, input.useUp) });
+  }
+  candidates.sort((a, b) => b.score - a.score || a.recipe.id - b.recipe.id);
+  const best = candidates[0]?.score ?? 0;
+  const choices = candidates.filter((candidate) => candidate.score > best - window).slice(0, MOST_CHOICES);
+  const choice = pick(choices, random);
+  return choice
+    ? {
+        date: dinner.date,
+        kind: "recipe",
+        recipeId: choice.recipe.id,
+        leftoversOf: null,
+        reason: { kind: "chosen", candidates: candidates.length, factors: choice.factors },
+      }
+    : {
+        date: dinner.date,
+        kind: "unplanned",
+        recipeId: null,
+        leftoversOf: null,
+        reason: { kind: "no_candidate", excluded },
+      };
+}
+
+/**
+ * Places the Leftovers of the dinner at `index`, if its Recipe yields them, it is not cooked yet and it has none kept: in
+ * the first dinner within two days after it that is still to fill, eaten by the same Diners, whose
+ * Guests (if any) its Recipe is safe for.
+ */
+function placeLeftovers(
+  input: ProposerInput,
+  index: number,
+  proposed: (ProposedDinner | undefined)[],
+  recipes: Map<RecipeId, ProposerRecipe>,
+): void {
+  const source = input.dinners[index] as ProposerDinner;
+  const recipeId = proposed[index]?.recipeId;
+  const recipe = recipeId == null ? undefined : recipes.get(recipeId);
+  // What a dinner already cooked was cooked for is history.
+  if (!recipe?.yieldsLeftovers || source.cooked || source.keptLeftovers.length > 0) return;
+  const diners = dinersKey(source);
+  const at = input.dinners.findIndex(
+    (dinner, other) =>
+      other > index &&
+      proposed[other] === undefined &&
+      daysBetween(source.date, dinner.date) <= LEFTOVERS_WITHIN_DAYS &&
+      dinersKey(dinner) === diners &&
+      isSafe(recipe, dinner),
+  );
+  const dinner = input.dinners[at];
+  if (!dinner) return;
+  proposed[at] = {
+    date: dinner.date,
+    kind: "leftovers",
+    recipeId: null,
+    leftoversOf: source.date,
+    reason: { kind: "leftovers", of: source.date },
+  };
+}
+
+/** The Diners of a dinner as a key, the same for the same Diners in any order. */
+function dinersKey(dinner: ProposerDinner): string {
+  return dinner.diners
+    .map((diner) => diner.id)
+    .sort((a, b) => a - b)
+    .join();
+}
+
 function isUnchanged(proposal: Proposal, dinners: ProposerDinner[]): boolean {
   return proposal.dinners.every(
-    (dinner, index) => dinner.kind === dinners[index]?.kind && dinner.recipeId === dinners[index]?.recipeId,
+    (dinner, index) =>
+      dinner.kind === dinners[index]?.kind &&
+      dinner.recipeId === dinners[index]?.recipeId &&
+      dinner.leftoversOf === dinners[index]?.leftoversOf,
   );
 }
 
@@ -195,13 +288,22 @@ function settled(dinner: ProposerDinner): ProposedDinner | undefined {
     date: dinner.date,
     kind: dinner.kind,
     recipeId: dinner.recipeId,
+    leftoversOf: dinner.leftoversOf,
     reason,
   });
   if (dinner.cooked) return as({ kind: "cooked" });
   if (dinner.locked) return as({ kind: "locked" });
-  if (KEPT_KINDS.includes(dinner.kind)) return as({ kind: "kept" });
+  if (KEPT_KINDS.includes(dinner.kind) && !(dinner.kind === "leftovers" && dinner.leftoversProposed)) {
+    return as({ kind: "kept" });
+  }
   if (dinner.diners.length + dinner.guests === 0) {
-    return { date: dinner.date, kind: "unplanned", recipeId: null, reason: { kind: "nobody_eating" } };
+    return {
+      date: dinner.date,
+      kind: "unplanned",
+      recipeId: null,
+      leftoversOf: null,
+      reason: { kind: "nobody_eating" },
+    };
   }
   return undefined;
 }
@@ -210,9 +312,14 @@ function budgetOf(input: ProposerInput, index: number): number {
   return input.effortBudgets[weekdayOf((input.dinners[index] as ProposerDinner).date)];
 }
 
-/** No Hard Constraint of anyone eating the dinner conflicts with the Recipe, not even an Override could. */
-function isSafe(recipe: ProposerRecipe, dinner: ProposerDinner): boolean {
-  return slotConflicts({ allergens: recipe.allergens, ...dinner }).length === 0;
+/** No Hard Constraint of anyone eating the Slot conflicts with the Recipe, not even an Override could. */
+function isSafe(recipe: ProposerRecipe, people: ProposerPeople): boolean {
+  return slotConflicts({ allergens: recipe.allergens, ...people }).length === 0;
+}
+
+/** The Recipe is safe for the dinner and for whoever eats its Leftovers kept by hand. */
+function isSafeFor(recipe: ProposerRecipe, dinner: ProposerDinner): boolean {
+  return isSafe(recipe, dinner) && dinner.keptLeftovers.every((leftovers) => isSafe(recipe, leftovers));
 }
 
 function isWithinBudget(recipe: ProposerRecipe, budget: number): boolean {

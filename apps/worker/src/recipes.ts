@@ -130,6 +130,18 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
         recipe.id,
       );
     }
+    // Their Leftovers are of nothing in particular now, with no Recipe to override a Conflict of.
+    sql.exec(
+      `DELETE FROM slot_override WHERE (date, meal) IN
+         (SELECT l.date, l.meal FROM slot AS l
+          JOIN slot AS s ON s.date = l.leftovers_of_date AND s.meal = l.leftovers_of_meal WHERE s.recipe_id = ?)`,
+      recipe.id,
+    );
+    sql.exec(
+      `UPDATE slot SET leftovers_of_date = NULL, leftovers_of_meal = NULL
+       WHERE (leftovers_of_date, leftovers_of_meal) IN (SELECT date, meal FROM slot WHERE recipe_id = ?)`,
+      recipe.id,
+    );
     sql.exec(
       "UPDATE slot SET kind = 'unplanned', recipe_id = NULL, locked = 0, cooked_at = NULL WHERE recipe_id = ?",
       recipe.id,

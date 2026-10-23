@@ -189,7 +189,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 10,
+      schemaVersion: 11,
       tables: {
         household: [
           {

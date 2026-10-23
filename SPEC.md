@@ -75,7 +75,7 @@ Rating      { slotId, memberId?, value: again|meh|never, note?, at }
 Notes
 - **Diners by person, not number.** Enables per-member constraints, "Alex's away Tuesday" (day-level clear), and future calendar input from a coordinator. `guests` remains the numeric fallback. A Slot's Diners are every Member until chosen for that Slot or day; there is no separate default list, so someone who is away is taken off those days.
 - **Locked** slots survive a re-roll. Changing diners never changes the recipe, only the scale.
-- **Leftovers** link to their source slot; `yieldsLeftovers` recipes auto-fill a later `leftovers` slot.
+- **Leftovers** link to their source slot, which is cooked for both (`cookFor`); `yieldsLeftovers` recipes auto-fill the next free dinner within two days for the same diners (ADR 0016).
 - **Breakfast/lunch** exist in the model, default `unplanned`, collapsed in the UI. The proposer only fills dinners.
 
 ## 4. Features
