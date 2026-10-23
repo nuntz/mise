@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CalendarToken } from "./calendar";
 import { type Caller, ResolvedCaller } from "./caller";
 import { type Conflict, SlotConflict } from "./conflicts";
 import {
@@ -322,6 +323,17 @@ export const tools = {
   set_store_section_order: defineTool({
     input: SetStoreSectionOrderInput,
     output: z.array(StoreSection),
+    changes: "household",
+  }),
+  /** The calendar feed's token; null until `rotate_calendar_token` first makes one. */
+  get_calendar_token: defineTool({
+    input: z.object({}).strict(),
+    output: CalendarToken.nullable(),
+  }),
+  /** Makes a new calendar feed token; the old one stops working at once. Returns the new one. */
+  rotate_calendar_token: defineTool({
+    input: z.object({}).strict(),
+    output: CalendarToken,
     changes: "household",
   }),
   get_caller: defineTool({

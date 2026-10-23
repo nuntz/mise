@@ -1,6 +1,7 @@
-import type { Household, QueuedChange } from "@mise/domain";
+import { type Household, type QueuedChange, RecipeId } from "@mise/domain";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { CalendarSettings } from "./Calendar";
 import type { MiseClient } from "./client";
 import { GroceryPage } from "./Grocery";
 import { ImportPage } from "./Import";
@@ -14,14 +15,29 @@ import { SetupForm } from "./SetupForm";
 import { TagRecipes } from "./TagRecipes";
 import { WeekPage } from "./Week";
 
-type Page = "week" | "grocery" | "pantry" | "recipes" | "import" | "resolve" | "tag" | "members";
-const PAGES: Page[] = ["week", "grocery", "pantry", "recipes", "import", "resolve", "tag", "members"];
+type Page = "week" | "grocery" | "pantry" | "recipes" | "import" | "resolve" | "tag" | "members" | "calendar";
+const PAGES: Page[] = ["week", "grocery", "pantry", "recipes", "import", "resolve", "tag", "members", "calendar"];
+
+/**
+ * The Recipe a link asks to open (`/?recipe=<id>`, as calendar events give), if any. The query is
+ * dropped once read, so the address doesn't keep reopening it.
+ */
+function recipeFromLink(): RecipeId | undefined {
+  const params = new URLSearchParams(window.location.search);
+  const id = RecipeId.safeParse(Number(params.get("recipe")));
+  if (!params.has("recipe")) return undefined;
+  params.delete("recipe");
+  const query = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  return id.success ? id.data : undefined;
+}
 
 export function App(props: { client: MiseClient }) {
   // The Household saved on this device, if any, shows at once: the household may be out of reach.
   const saved = savedHousehold();
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">(saved ? "ready" : "loading");
-  const [page, setPage] = createSignal<Page>("week");
+  const openRecipe = recipeFromLink();
+  const [page, setPage] = createSignal<Page>(openRecipe ? "recipes" : "week");
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
   // refresh updates the settings without remounting them and throwing away a form someone is filling in.
   const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: saved ?? null });
@@ -113,7 +129,7 @@ export function App(props: { client: MiseClient }) {
                   <PantryPage client={props.client} locale={household().locale} />
                 </Match>
                 <Match when={page() === "recipes"}>
-                  <RecipesPage client={props.client} />
+                  <RecipesPage client={props.client} open={openRecipe} />
                 </Match>
                 <Match when={page() === "import"}>
                   <ImportPage client={props.client} />
@@ -126,6 +142,9 @@ export function App(props: { client: MiseClient }) {
                 </Match>
                 <Match when={page() === "members"}>
                   <MembersSettings client={props.client} members={household().members} />
+                </Match>
+                <Match when={page() === "calendar"}>
+                  <CalendarSettings client={props.client} />
                 </Match>
               </Switch>
             </>

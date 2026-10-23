@@ -111,6 +111,13 @@ A suggested set of Recipes for a Week's dinners, with a reason for each choice.
 Proposing a Week again from a new seed, for a different Proposal that keeps its Locked Slots.
 _Avoid_: Shuffle, regenerate
 
+**Prep-ahead note**:
+What a Recipe needs doing the day before, such as soaking beans; the Calendar Feed shows it as its own event that day.
+
+**Calendar Feed**:
+The plan's dinners as an iCalendar subscription, read without signing in by whoever has its token; read-only.
+_Avoid_: Calendar sync, export
+
 ## Groceries and pantry
 
 **Staple**:

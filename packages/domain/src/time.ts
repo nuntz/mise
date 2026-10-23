@@ -16,17 +16,25 @@ export function localDate(instant: Date, timezone: string): string {
 
 type WallClock = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
+/** One formatter per timezone: building one is far slower than using it. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
 function wallClock(instant: Date, timezone: string): WallClock {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    second: "numeric",
-  }).formatToParts(instant);
+  let formatter = formatters.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+    });
+    formatters.set(timezone, formatter);
+  }
+  const parts = formatter.formatToParts(instant);
   const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
   return {
     year: part("year"),
@@ -46,6 +54,44 @@ function offsetAt(instant: number, timezone: string): number {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+
+/** A change of a timezone's offset from UTC: at `at`, the clocks go from `offsetFrom` to `offsetTo` (milliseconds). */
+export type OffsetTransition = { at: Date; offsetFrom: number; offsetTo: number };
+
+/** How far the wall clock in `timezone` is ahead of UTC at `instant`, in milliseconds. */
+export function utcOffset(instant: Date, timezone: string): number {
+  return offsetAt(instant.getTime(), timezone);
+}
+
+/**
+ * Every change of `timezone`'s offset after `from` and up to `to`, to the minute. Changes are found
+ * a day apart at most, so two in one day count as one (or none, if they cancel out).
+ */
+export function offsetTransitions(timezone: string, from: Date, to: Date): OffsetTransition[] {
+  const transitions: OffsetTransition[] = [];
+  // Offsets change on the minute, so the search steps from one whole minute to the next.
+  let before = Math.ceil(from.getTime() / MINUTE_MS) * MINUTE_MS;
+  let offsetBefore = offsetAt(before, timezone);
+  while (before < to.getTime()) {
+    const after = Math.min(before + DAY_MS, to.getTime());
+    const offsetAfter = offsetAt(after, timezone);
+    if (offsetAfter !== offsetBefore) {
+      // `low` is the last whole minute known to show the old offset; the change is after it, by `high`.
+      let low = before;
+      let high = after;
+      while (high - low > MINUTE_MS) {
+        const middle = low + Math.max(1, Math.floor((high - low) / 2 / MINUTE_MS)) * MINUTE_MS;
+        if (offsetAt(middle, timezone) === offsetBefore) low = middle;
+        else high = middle;
+      }
+      transitions.push({ at: new Date(low + MINUTE_MS), offsetFrom: offsetBefore, offsetTo: offsetAfter });
+    }
+    before = after;
+    offsetBefore = offsetAfter;
+  }
+  return transitions;
+}
 
 /**
  * The instant at which `timezone` shows a wall-clock time, given as if it were UTC milliseconds.

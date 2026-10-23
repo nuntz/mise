@@ -8,7 +8,7 @@ import {
 } from "@mise/domain";
 import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 
@@ -266,4 +266,13 @@ test("the last Recipe viewed stays readable offline", async () => {
   await user.click(await screen.findByRole("button", { name: "Last viewed: Toast" }));
   expect(await screen.findByRole("heading", { name: "Toast" })).toBeTruthy();
   expect(screen.getByText("Butter it.")).toBeTruthy();
+});
+
+test("a link to a Recipe, as the calendar feed gives, opens it", async () => {
+  window.history.replaceState(null, "", `/?recipe=${toast.id}`);
+  onTestFinished(() => window.history.replaceState(null, "", "/"));
+  render(() => <App client={fakeClient([toast, rice]).client} />);
+
+  expect(await screen.findByRole("heading", { name: "Toast" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Recipes" }).getAttribute("aria-pressed")).toBe("true");
 });

@@ -325,6 +325,13 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE UNIQUE INDEX grocery_line_client_key ON grocery_line (client_key)",
     ],
   },
+  {
+    version: 14,
+    statements: [
+      // The calendar feed's token (ADR 0019): at most one, none until it is first made.
+      "CREATE TABLE calendar_token (id INTEGER PRIMARY KEY CHECK (id = 1), token TEXT NOT NULL)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

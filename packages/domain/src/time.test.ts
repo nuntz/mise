@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localDate, nextOccurrence } from "./time";
+import { localDate, nextOccurrence, offsetTransitions } from "./time";
 
 describe("nextOccurrence", () => {
   test("a time already past today is tomorrow", () => {
@@ -48,5 +48,39 @@ describe("nextOccurrence", () => {
 describe("localDate", () => {
   test("is the date on the Household's wall clock, not in UTC", () => {
     expect(localDate(new Date("2026-10-21T03:00:00Z"), "America/Vancouver")).toBe("2026-10-20");
+  });
+});
+
+describe("offsetTransitions", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  test("finds each change of offset in a year, to the minute", () => {
+    const year = offsetTransitions(
+      "America/Vancouver",
+      new Date("2026-01-01T00:00:00Z"),
+      new Date("2027-01-01T00:00:00Z"),
+    );
+
+    // 02:00 PST on 8 March, and 02:00 PDT on 1 November.
+    expect(year).toEqual([
+      { at: new Date("2026-03-08T10:00:00Z"), offsetFrom: -8 * HOUR, offsetTo: -7 * HOUR },
+      { at: new Date("2026-11-01T09:00:00Z"), offsetFrom: -7 * HOUR, offsetTo: -8 * HOUR },
+    ]);
+  });
+
+  test("a range that starts mid-minute still finds the change on the minute", () => {
+    const [change] = offsetTransitions(
+      "America/Vancouver",
+      new Date("2026-03-07T10:00:30.500Z"),
+      new Date("2026-03-09T00:00:00Z"),
+    );
+
+    expect(change?.at).toEqual(new Date("2026-03-08T10:00:00Z"));
+  });
+
+  test("a timezone without daylight time has none", () => {
+    expect(
+      offsetTransitions("Asia/Kolkata", new Date("2026-01-01T00:00:00Z"), new Date("2027-01-01T00:00:00Z")),
+    ).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ import {
   type ToolOutput,
   type ToolResult,
 } from "@mise/domain";
+import { calendarHandlers, readCalendarToken } from "./calendar";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
@@ -123,6 +124,7 @@ export const handlers: Handlers = {
   ...weekHandlers,
   ...groceryHandlers,
   ...stapleHandlers,
+  ...calendarHandlers,
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,
@@ -148,6 +150,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readGroceryBuilds(sql);
   readGroceryLines(sql);
   readStaples(sql);
+  readCalendarToken(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {

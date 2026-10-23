@@ -25,6 +25,7 @@ import {
 import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
+import { readCalendarFeed } from "./calendar";
 import { callerFrom } from "./identity";
 import { type PreparedRecipe, runImport } from "./imports";
 import { migrate } from "./migrations";
@@ -176,6 +177,14 @@ class HouseholdAgent extends Agent<Env> {
       stored.push(key);
     }
     return key;
+  }
+
+  /**
+   * The Calendar Feed for `token`, or null if it is not the current one. Called by the Worker over
+   * RPC for `/cal/<token>.ics`, which bypasses Access (ADR 0019); never callable over the WebSocket.
+   */
+  async calendarFeed(token: string, origin: string): Promise<string | null> {
+    return readCalendarFeed(this.ctx.storage.sql, token, origin, new Date());
   }
 
   /** Writes tonight's export to R2, then schedules tomorrow's. Run by the scheduler at 03:00 Household time. */

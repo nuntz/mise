@@ -74,6 +74,20 @@ const en = {
   "nav.members": "Members",
   "nav.grocery": "Grocery List",
   "nav.pantry": "Pantry",
+  "nav.calendar": "Calendar",
+
+  "calendar.title": "Calendar",
+  "calendar.intro":
+    "Subscribe to the plan in Google Calendar or Apple Calendar: each dinner shows at dinner time, with prep-ahead reminders the day before.",
+  "calendar.url": "Subscribe URL",
+  "calendar.subscribe": "Subscribe in your calendar app",
+  "calendar.secret": "Anyone with this link can see the plan without signing in. Share it only with the Household.",
+  "calendar.create": "Create a subscribe link",
+  "calendar.rotate": "Rotate link",
+  "calendar.rotateWarning":
+    "Calendars subscribed with the current link will stop updating. Everyone will need to subscribe again with the new one.",
+  "calendar.rotateConfirm": "Rotate now",
+  "calendar.cancel": "Cancel",
 
   "offline.notice":
     "Offline: showing what was last loaded. Ticks and lines you add are kept and sync when the connection comes back.",

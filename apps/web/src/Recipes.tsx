@@ -19,9 +19,9 @@ import { RecipeForm } from "./RecipeForm";
 
 type View = { kind: "list" } | { kind: "recipe"; id: RecipeId } | { kind: "new" } | { kind: "edit"; recipe: Recipe };
 
-/** Recipes: list and search them, view one, create and edit them. */
-export function RecipesPage(props: { client: MiseClient }) {
-  const [view, setView] = createSignal<View>({ kind: "list" });
+/** Recipes: list and search them, view one, create and edit them. Opens on the list, or on the Recipe `open`. */
+export function RecipesPage(props: { client: MiseClient; open?: RecipeId }) {
+  const [view, setView] = createSignal<View>(props.open ? { kind: "recipe", id: props.open } : { kind: "list" });
   const list = () => setView({ kind: "list" });
   const show = (recipe: { id: RecipeId }) => setView({ kind: "recipe", id: recipe.id });
 

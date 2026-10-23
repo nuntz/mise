@@ -1,0 +1,14 @@
+# The calendar feed is read with a token, through an RPC method the Worker calls
+
+Calendar apps subscribe to `GET /cal/<token>.ics` and fetch it on their own schedule, with no way to sign in through Cloudflare Access. So `/cal/*` bypasses Access (ADR 0007) and the token in the path is the only secret: 256 random bits, URL-safe, stored in the household's `calendar_token` table. There is none until someone first asks for one with `rotate_calendar_token`, which also replaces it. The old token stops working at once, and every subscriber must subscribe again. `get_calendar_token` reads it. Both are ordinary tools, so the PWA and the agent show and rotate the link the same way.
+
+The Worker routes `/cal/*` before it resolves a Caller and calls the household's `calendarFeed(token, origin)` method over Durable Object RPC. That method is not `@callable`, so no WebSocket client can call it. The household compares the token in constant time and returns null for a wrong one, and the Worker answers 404 whether the token is wrong, missing or malformed, or the Household isn't set up. The feed is not a tool, because a tool's caller is someone who signed in. It is also not a route on the Durable Object, because those sit under the Access-protected `/agents/` path. Like photos (ADR 0010) and uploaded imports (ADR 0011), it is an exception to "tools are the API". It only reads, and only what the tools already return.
+
+The feed (`calendarFeed` in `packages/domain`) has an event for each dinner Slot planned as a Recipe, Leftovers or eating out, from four weeks ago on. Each one starts at the Household's `dinnerTime`, lasts an hour and carries its own VTIMEZONE, which is worked out from the runtime's timezone data for the years the events cover. Its description gives the Servings, the Diners and Guests, every Conflict (overridden or not) and a link to the Recipe, `/?recipe=<id>`, which the PWA opens. A Recipe with a Prep-ahead note gets an all-day event the day before. Event UIDs come from the date and the host serving the feed, so an edited Slot updates its event rather than adding another. `REFRESH-INTERVAL` and `X-PUBLISHED-TTL` ask calendar apps to refresh every hour, though Google Calendar refreshes on its own, slower, schedule.
+
+## Consequences
+
+- The token is in the backup like every other table (ADR 0006), so a restored household keeps its subscribers. Anyone holding an export can read the feed until the token is rotated.
+- The feed URL is a bearer secret. It is served `Cache-Control: private, no-cache`, `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and the settings page says that anyone with the link can see the plan.
+- Conflicts name Members and their Allergens, so the feed carries health information to anyone with the link. This is why rotating is one click from the subscribe URL.
+- The feed is written in English, the one locale Mise has.
