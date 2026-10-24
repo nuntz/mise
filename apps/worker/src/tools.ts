@@ -14,8 +14,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
-  type WeekCalendar,
-  WeekStartChange,
+  WeekCalendar,
 } from "@mise/domain";
 import { calendarHandlers, readCalendarToken } from "./calendar";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
@@ -218,15 +217,12 @@ export function readSettings(sql: SqlStorage): Settings | null {
     units: row.units,
     locale: row.locale,
   });
-  return { ...settings, weekStartChanges: readWeekStartChanges(sql) };
-}
-
-/** Every change of week start, oldest first; parsed, so a bad row throws. */
-function readWeekStartChanges(sql: SqlStorage): WeekStartChange[] {
-  return sql
+  const weekStartChanges = sql
     .exec<{ from_date: string; stretches: string }>("SELECT * FROM week_start_change ORDER BY from_date")
     .toArray()
-    .map((row) => WeekStartChange.parse({ from: row.from_date, stretches: row.stretches }));
+    .map((row) => ({ from: row.from_date, stretches: row.stretches }));
+  // Parsed with the week start, so changes that would leave a date in no Week, or in two, throw.
+  return { ...settings, ...WeekCalendar.parse({ weekStartsOn: settings.weekStartsOn, weekStartChanges }) };
 }
 
 /**

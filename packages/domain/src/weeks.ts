@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Overrides, SlotConflict } from "./conflicts";
-import { EffortBudgets, type Household, Minutes, WEEKDAYS, Weekday, type WeekStartChange } from "./household";
+import { EffortBudgets, Minutes, WEEKDAYS, Weekday, WeekStartChange } from "./household";
 import { ItemId } from "./items";
 import { Constraint, MemberId } from "./members";
 import { ProposalReason, Rating } from "./proposals";
@@ -30,8 +30,33 @@ export function weekStartOf(date: LocalDate, weekStartsOn: Weekday): LocalDate {
   return addDays(date, -behind);
 }
 
-/** What decides the Household's Weeks: the day they start on now, and every change to it, oldest first. */
-export type WeekCalendar = Pick<Household, "weekStartsOn" | "weekStartChanges">;
+/**
+ * What decides the Household's Weeks: the day they start on now, and every change to it, oldest
+ * first. Checked to give every date exactly one Week: each change stretches a Week that starts on
+ * the day Weeks start on then, no earlier than the previous change, by more than seven days, and the
+ * last leaves Weeks starting on `weekStartsOn`.
+ */
+export const WeekCalendar = z
+  .object({ weekStartsOn: Weekday, weekStartChanges: z.array(WeekStartChange) })
+  .superRefine(({ weekStartsOn, weekStartChanges }, ctx) => {
+    let previous: WeekStartChange | undefined;
+    for (const change of weekStartChanges) {
+      if (change.from <= addDays(change.stretches, 7)) {
+        ctx.addIssue({ code: "custom", message: `The Week of ${change.stretches} must run on past seven days` });
+      }
+      if (previous && change.stretches < previous.from) {
+        ctx.addIssue({ code: "custom", message: `The Week of ${change.stretches} starts before ${previous.from}` });
+      }
+      if (previous && weekdayOf(change.stretches) !== weekdayOf(previous.from)) {
+        ctx.addIssue({ code: "custom", message: `Weeks did not start on ${change.stretches}'s weekday then` });
+      }
+      previous = change;
+    }
+    if (previous && weekdayOf(previous.from) !== weekStartsOn) {
+      ctx.addIssue({ code: "custom", message: `Weeks start on ${weekdayOf(previous.from)}, not ${weekStartsOn}` });
+    }
+  });
+export type WeekCalendar = z.infer<typeof WeekCalendar>;
 
 /** A Week's first and last days. */
 export type WeekSpan = { startDate: LocalDate; endDate: LocalDate };
