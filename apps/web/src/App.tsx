@@ -13,6 +13,7 @@ import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
 import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
+import { RanOut } from "./RanOut";
 import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
 import { SetupForm } from "./SetupForm";
@@ -126,6 +127,9 @@ export function App(props: { client: MiseClient }) {
                   <p>{t("offline.notice")}</p>
                 </div>
               </Show>
+              <header class="app-header">
+                <RanOut client={props.client} online={online()} />
+              </header>
               <main class="page">
                 {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}
                 <Show when={status() === "error" && online()}>

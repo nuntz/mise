@@ -12,10 +12,11 @@ import {
   type Weekday,
   weekdayOf,
 } from "@mise/domain";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { Icon } from "./icons";
+import { itemNamed } from "./items";
 import { t } from "./messages";
 
 /** What the Week, and proposing it, need to know of the Household. */
@@ -25,9 +26,17 @@ export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudget
  * Proposing the Week and re-rolling it, and, while a proposed Week hasn't been looked over, a banner
  * asking for that. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
  */
-export function ProposalControls(props: { client: MiseClient; week: Week; readOnly: boolean; onGrocery: () => void }) {
+export function ProposalControls(props: {
+  client: MiseClient;
+  week: Week;
+  items: Map<ItemId, Item>;
+  readOnly: boolean;
+  onGrocery: () => void;
+}) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
+  // "Use it up" Items aren't stored (ADR 0013): they go with every Proposal asked for from here.
+  const [useUp, setUseUp] = createSignal<ItemId[]>([]);
   const proposed = () => props.week.proposalSeed !== null;
   const empty = () =>
     !proposed() && props.week.slots.every((slot) => slot.meal !== "dinner" || slot.kind === "unplanned");
@@ -43,8 +52,21 @@ export function ProposalControls(props: { client: MiseClient; week: Week; readOn
     setBusy(false);
   };
   const date = () => props.week.startDate;
-  const propose = () => run(() => props.client.call("propose_week", { date: date() }));
+  const proposeWeek = (reroll: boolean) =>
+    run(() =>
+      props.client.call("propose_week", {
+        date: date(),
+        ...(reroll ? { reroll } : {}),
+        ...(useUp().length > 0 ? { useUp: useUp() } : {}),
+      }),
+    );
+  const propose = () => proposeWeek(false);
   const disabled = () => busy() || props.readOnly;
+  const picker = () => (
+    <Show when={!props.readOnly}>
+      <UseUpPicker items={props.items} picked={useUp()} onChange={setUseUp} />
+    </Show>
+  );
 
   return (
     <>
@@ -72,6 +94,7 @@ export function ProposalControls(props: { client: MiseClient; week: Week; readOn
             <Icon name="calendarPlus" />
             <p class="empty-title">{t("week.emptyTitle")}</p>
             <p>{t("week.emptyBody")}</p>
+            {picker()}
             <button type="button" class="button-primary" disabled={disabled()} onClick={propose}>
               {t("week.propose")}
             </button>
@@ -87,12 +110,7 @@ export function ProposalControls(props: { client: MiseClient; week: Week; readOn
               </button>
             }
           >
-            <button
-              type="button"
-              class="button-primary"
-              disabled={disabled()}
-              onClick={() => run(() => props.client.call("propose_week", { date: date(), reroll: true }))}
-            >
+            <button type="button" class="button-primary" disabled={disabled()} onClick={() => proposeWeek(true)}>
               <Icon name="refresh" />
               {t("week.reroll")}
             </button>
@@ -108,8 +126,68 @@ export function ProposalControls(props: { client: MiseClient; week: Week; readOn
           </button>
         </Show>
         <small>{t("week.proposeHint")}</small>
+        {picker()}
       </Show>
     </>
+  );
+}
+
+/** Items on hand to use up, picked by name or alias from the Item catalogue. */
+function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChange: (picked: ItemId[]) => void }) {
+  const [name, setName] = createSignal("");
+  const [error, setError] = createSignal<string>();
+  const list = createUniqueId();
+
+  const add = (event: SubmitEvent) => {
+    event.preventDefault();
+    const item = itemNamed(props.items.values(), name());
+    if (!item) {
+      setError(t("useUp.noSuchItem", { name: name().trim() }));
+      return;
+    }
+    setError(undefined);
+    setName("");
+    if (!props.picked.includes(item.id)) props.onChange([...props.picked, item.id]);
+  };
+  const nameOf = (id: ItemId) => props.items.get(id)?.name ?? id;
+
+  return (
+    <form class="slot-form" aria-label={t("useUp.title")} onSubmit={add}>
+      <h2>{t("useUp.title")}</h2>
+      <p class="meta">{t("useUp.hint")}</p>
+      <Show when={props.picked.length > 0}>
+        <ul class="rows">
+          <For each={props.picked}>
+            {(id) => (
+              <li>
+                <span>{nameOf(id)}</span>
+                <button
+                  type="button"
+                  class="button-small"
+                  aria-label={t("useUp.remove", { name: nameOf(id) })}
+                  onClick={() => props.onChange(props.picked.filter((other) => other !== id))}
+                >
+                  {t("member.remove")}
+                </button>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+      <Show when={error()}>
+        <p role="alert">{error()}</p>
+      </Show>
+      <label>
+        {t("useUp.item")}
+        <input list={list} required value={name()} onInput={(event) => setName(event.currentTarget.value)} />
+      </label>
+      <datalist id={list}>
+        <For each={[...props.items.values()]}>{(item) => <option value={item.name} />}</For>
+      </datalist>
+      <button type="submit" class="button-secondary">
+        {t("useUp.add")}
+      </button>
+    </form>
   );
 }
 
