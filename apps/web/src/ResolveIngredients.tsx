@@ -276,24 +276,7 @@ function SuggestionPanel(props: {
   // "None" must be said by a person (ADR 0009): a new Item without Allergens is accepted from Edit.
   const acceptable = () =>
     props.suggestion.suggested.kind === "existing" || props.suggestion.suggested.allergens.length > 0;
-  const summary = () => {
-    const suggested = props.suggestion.suggested;
-    if (suggested.kind === "new") {
-      return t("suggestion.new", {
-        name: suggested.name,
-        section: t(`section.${suggested.section}`),
-        allergens:
-          suggested.allergens.length > 0
-            ? suggested.allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ")
-            : t("suggestion.noAllergens"),
-      });
-    }
-    const item = props.items.get(suggested.item);
-    return t("suggestion.existing", {
-      item: item?.name ?? suggested.item,
-      allergens: item ? allergenSummary(item.allergens) : "?",
-    });
-  };
+  const summary = () => suggestionSummary(props.suggestion.suggested, props.items);
 
   return (
     <section aria-labelledby={heading}>
@@ -318,6 +301,25 @@ function SuggestionPanel(props: {
       </Show>
     </section>
   );
+}
+
+/** What a Suggestion says the text is, with the Allergens that would come with it. */
+export function suggestionSummary(suggested: SuggestedItem, items: Map<ItemId, Item>): string {
+  if (suggested.kind === "new") {
+    return t("suggestion.new", {
+      name: suggested.name,
+      section: t(`section.${suggested.section}`),
+      allergens:
+        suggested.allergens.length > 0
+          ? suggested.allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ")
+          : t("suggestion.noAllergens"),
+    });
+  }
+  const item = items.get(suggested.item);
+  return t("suggestion.existing", {
+    item: item?.name ?? suggested.item,
+    allergens: item ? allergenSummary(item.allergens) : "?",
+  });
 }
 
 /** Picks an existing Item by name or alias, suggesting every Item with its Allergens. */

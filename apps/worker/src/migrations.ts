@@ -371,6 +371,13 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 19,
+    statements: [
+      // 1 for a Draft Recipe: read by an LLM, not yet accepted by a person, so never planned or shopped.
+      "ALTER TABLE recipe ADD COLUMN draft INTEGER NOT NULL DEFAULT 0",
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

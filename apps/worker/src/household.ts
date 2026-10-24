@@ -13,6 +13,7 @@ import {
   type ImportError,
   type ImportedPhoto,
   type ImportRun,
+  importedFromText,
   importUploadKey,
   isToolName,
   LlmError,
@@ -23,6 +24,7 @@ import {
   PHOTO_PREFIX,
   parseToolInput,
   type Recipe,
+  type RecipeReading,
   readPaprikaExport,
   type Suggestion,
   suggestItems,
@@ -45,7 +47,7 @@ import { migrate } from "./migrations";
 import { sentryOptions } from "./observability";
 import { photoInUse, photoKeyOf, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
-import { handlers } from "./tools";
+import { type HouseholdToolName, handlers } from "./tools";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
@@ -151,7 +153,8 @@ class HouseholdAgent extends Agent<Env> {
     if (name === "request_suggestions") {
       return this.requestSuggestions(parsed.value as ParsedToolInput<"request_suggestions">);
     }
-    const toolName = name as Exclude<ToolName, "run_paprika_import" | "request_suggestions">;
+    if (name === "import_text") return this.importText(parsed.value as ParsedToolInput<"import_text">);
+    const toolName = name as Exclude<ToolName, HouseholdToolName>;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
       input: unknown,
@@ -222,7 +225,7 @@ class HouseholdAgent extends Agent<Env> {
       let photoKey: string | null | undefined = null;
       if (photoError || unchanged) photoKey = undefined;
       else if (photo) photoKey = await this.storeImportedPhoto(photo, stored);
-      prepared.push({ recipe, photoKey });
+      prepared.push({ recipe, photoKey, draft: false });
     }
 
     const outcome = this.ctx.storage.transactionSync(() => {
@@ -236,6 +239,41 @@ class HouseholdAgent extends Agent<Env> {
     for (const key of [...outcome.replacedPhotos, ...stored]) await this.deletePhoto(key);
     await this.env.BUCKET.delete(uploadKey);
     return { ok: true, value: outcome.run };
+  }
+
+  /**
+   * Has the model read pasted text, then imports what it read as a Draft, in one transaction, as a
+   * Paprika import is. Like one, it asks for Suggestions for the new Unresolved texts once it has answered.
+   */
+  private async importText(input: ParsedToolInput<"import_text">): Promise<ToolResult<ToolOutput<"import_text">>> {
+    const startedAt = new Date().toISOString();
+    let reading: RecipeReading;
+    try {
+      reading = await openLlm(this.env).readRecipe({ text: input.text });
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      Sentry.captureException(error);
+      return { ok: false, error: { code: "model_failed", message: error.message } };
+    }
+    const { sql } = this.ctx.storage;
+    const recipe = reading.isRecipe ? importedFromText(input.text, reading) : null;
+    const outcome = this.ctx.storage.transactionSync(() => {
+      const imported = recipe
+        ? runImport(sql, "text", startedAt, [{ recipe, photoKey: null, draft: true }], [])
+        : runImport(sql, "text", startedAt, [], [{ entry: null, message: "The text holds no recipe" }]);
+      const [made] = recipe
+        ? sql
+            .exec<{ id: number; title: string }>(
+              "SELECT id, title FROM recipe WHERE source_kind = 'text' AND source_id = ?",
+              recipe.externalId,
+            )
+            .toArray()
+        : [];
+      return { ...imported, made, newTexts: newTextsIn(sql, imported.written), revision: this.bumpRevision() };
+    });
+    this.notify("recipes", outcome.revision);
+    if (outcome.newTexts.length > 0) await this.schedule(0, "suggestAfterImport", { texts: outcome.newTexts });
+    return { ok: true, value: { run: outcome.run, recipe: outcome.made ?? null } };
   }
 
   /** Asks the model for one batch of Suggestions; see `RequestSuggestionsInput`. */

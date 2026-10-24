@@ -35,6 +35,7 @@ type RecipeRow = {
   created_at: string;
   updated_at: string;
   edited_in_app_at: string | null;
+  draft: number;
 };
 
 type IngredientRow = {
@@ -173,12 +174,17 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
         .toArray()
         .map((row) => row.id),
     );
-    return { ok: true, value: summaries(readRecipes(sql).filter((recipe) => matching.has(recipe.id))) };
+    return {
+      ok: true,
+      value: summaries(readRecipes(sql).filter((recipe) => !recipe.draft && matching.has(recipe.id))),
+    };
   },
 
   list_untagged_recipes: (sql) => ({
     ok: true,
-    value: summaries(readRecipes(sql).filter((recipe) => recipe.cuisine === null || recipe.mainProtein === null)),
+    value: summaries(
+      readRecipes(sql).filter((recipe) => !recipe.draft && (recipe.cuisine === null || recipe.mainProtein === null)),
+    ),
   }),
 };
 
@@ -239,7 +245,7 @@ export function writeLists(
   }
 }
 
-function readRecipe(sql: SqlStorage, id: RecipeId): Recipe | null {
+export function readRecipe(sql: SqlStorage, id: RecipeId): Recipe | null {
   return readRecipes(sql, id)[0] ?? null;
 }
 
@@ -312,6 +318,7 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       editedInAppAt: row.edited_in_app_at,
+      draft: row.draft === 1,
       lastCookedAt: cooked.get(row.id)?.last_cooked_at ?? null,
       cookCount: cooked.get(row.id)?.cook_count ?? 0,
     });

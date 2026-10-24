@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ItemCatalogue, SHIPPED_ITEMS } from "./items";
+import { FakeLlm } from "./llm";
 import {
-  FakeLlm,
   SUGGESTION_BATCH_SIZE,
   type SuggestedItem,
   type SuggestionAnswer,

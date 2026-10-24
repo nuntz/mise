@@ -354,7 +354,7 @@ function RecipeDetail(props: {
 }
 
 /** The Item a line resolved to (its key until the Items load), or that it is Unresolved. */
-function resolutionText(ingredient: Ingredient, items: Map<ItemId, Item>): string {
+export function resolutionText(ingredient: Ingredient, items: Map<ItemId, Item>): string {
   if (ingredient.item === null) return t("recipe.unresolved");
   return items.get(ingredient.item)?.name ?? ingredient.item;
 }
@@ -378,17 +378,18 @@ function allergenNames(allergens: Allergen[]): string {
   return allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ");
 }
 
-function courseText(course: Course | null): string | null {
+export function courseText(course: Course | null): string | null {
   return course === null ? null : t(`course.${course}`);
 }
 
-function effortText(minutes: number | null): string {
+export function effortText(minutes: number | null): string {
   return minutes === null ? t("recipe.effortUnknown") : t("recipe.effort", { minutes: String(minutes) });
 }
 
 /** Where an imported Recipe came from; nothing for one typed into Mise. */
 function sourceText(recipe: Recipe): string | null {
   if (recipe.source.kind === "manual") return null;
+  if (recipe.source.kind === "text") return t("recipe.importedText");
   const from = recipe.source.author ?? recipe.source.url;
   return from ? t("recipe.importedFrom", { from }) : t("recipe.imported");
 }

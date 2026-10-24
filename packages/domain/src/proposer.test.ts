@@ -36,6 +36,7 @@ function recipe(id: number, fields: Partial<ProposerRecipe> = {}): ProposerRecip
     recurring: null,
     yieldsLeftovers: false,
     importedPreference: null,
+    draft: false,
     ratings: [],
     ...fields,
   };
@@ -369,6 +370,17 @@ describe("proposeWeek, rule by rule", () => {
     const proposal = proposeWeek(input({ recipes: [fridayCake, ...input().recipes.slice(1)] }));
 
     expect(proposal.dinners.map((dinner) => dinner.recipeId)).not.toContain(1);
+  });
+
+  test("a Draft Recipe is never proposed, pinned as Recurring, or counted as a candidate", () => {
+    const drafts = [recipe(1, { draft: true }), recipe(2, { draft: true, recurring: "weekly" })];
+    const curry = recipe(3);
+
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const proposal = proposeWeek(input({ dinners: dinners().slice(0, 1), seed, recipes: [...drafts, curry] }));
+
+      expect(proposal.dinners[0]).toMatchObject({ recipeId: 3, reason: { kind: "chosen", candidates: 1 } });
+    }
   });
 
   test("a Recipe planned lately is scored down, less the longer ago, until 6 weeks", () => {

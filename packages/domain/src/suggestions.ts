@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type Item, type ItemCatalogue, ItemId, ItemName, normaliseItemName, StoreSection } from "./items";
+import type { Llm } from "./llm";
 import { ALLERGENS, Allergen } from "./members";
 import { UnitFamily } from "./units";
 
@@ -74,21 +75,6 @@ export type SuggestionAnswer = { name: string; suggested: SuggestedItem };
 export type SuggestionBatch = { names: string[]; answers: SuggestionAnswer[] };
 
 /**
- * The LLM behind Mise (ADR 0023). Tests use `FakeLlm`; only `bun run eval` calls a real model.
- */
-export type Llm = {
-  /** One request. A name the model has no answer for is left out. Throws `LlmError` if the model fails. */
-  makeSuggestions(request: SuggestionRequest): Promise<SuggestionAnswer[]>;
-};
-
-/** The model could not be reached, or answered with something that could not be read. */
-export class LlmError extends Error {
-  constructor(detail: string) {
-    super(`The model could not make Suggestions: ${detail}`);
-  }
-}
-
-/**
  * Asks `llm` about `names` in batches, yielding each batch as its answers come. Only answers the
  * catalogue can hold are kept: one per name asked, of an Item it has. A new Item whose name an Item
  * already has becomes a Suggestion of that Item.
@@ -118,37 +104,4 @@ function fittedToCatalogue(suggested: SuggestedItem, catalogue: ItemCatalogue): 
   if (suggested.kind === "existing") return catalogue.item(suggested.item) ? suggested : null;
   const named = catalogue.named(suggested.name);
   return named === null ? suggested : { kind: "existing", item: named };
-}
-
-/**
- * An `Llm` that answers from a table of names, for tests. Like the real one, it leaves out names it
- * has no answer for, and answers it cannot read, and while `failing`, throws `LlmError`. `answer` replaces the table, to give
- * answers the real model might (for names not asked about, say).
- */
-export class FakeLlm implements Llm {
-  readonly requests: SuggestionRequest[] = [];
-  failing = false;
-
-  constructor(
-    private readonly answers: Readonly<Record<string, z.input<typeof SuggestedItem>>>,
-    private readonly answer?: (
-      request: SuggestionRequest,
-    ) => { name: string; suggested: z.input<typeof SuggestedItem> }[],
-  ) {}
-
-  async makeSuggestions(request: SuggestionRequest): Promise<SuggestionAnswer[]> {
-    this.requests.push(request);
-    if (this.failing) throw new LlmError("the fake is failing");
-    const answers =
-      this.answer?.(request) ??
-      request.names.flatMap((name) => {
-        const suggested = this.answers[name];
-        return suggested ? [{ name, suggested }] : [];
-      });
-    // An answer that can't be read is left out, as the real adapter leaves it out.
-    return answers.flatMap(({ name, suggested }) => {
-      const parsed = SuggestedItem.safeParse(suggested);
-      return parsed.success ? [{ name, suggested: parsed.data }] : [];
-    });
-  }
 }

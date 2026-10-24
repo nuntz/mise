@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { normaliseItemName } from "./items";
-import { Recipe } from "./recipes";
+import type { RecipeReading } from "./llm";
+import { ImportedPreference, IngredientLines, Recipe, RecipeFields, RecipeId } from "./recipes";
 
 /** The sources an import reads; more arrive with the Drive, URL and video imports. */
-export const ImportSource = z.enum(["paprika"]);
+export const ImportSource = z.enum(["paprika", "text"]);
 export type ImportSource = z.infer<typeof ImportSource>;
 
 /** Something an import could not read: a file of the export, or the export itself (`entry` null). */
@@ -32,6 +33,30 @@ export const ImportRun = z.object({
 export type ImportRun = z.infer<typeof ImportRun>;
 
 const RecipeRef = Recipe.pick({ id: true, title: true });
+
+/** A Recipe read from a source, mapped onto Mise's fields, before it is stored. */
+export const ImportedRecipe = z.object({
+  /** The source's id for it (Paprika's `uid`): imports upsert on it. */
+  externalId: z.string().min(1),
+  /** Changes whenever the source's copy does (Paprika's `hash`, else a hash of the entry). */
+  revision: z.string().min(1),
+  title: RecipeFields.title,
+  baseServings: RecipeFields.baseServings,
+  ingredients: IngredientLines,
+  steps: RecipeFields.steps,
+  tags: RecipeFields.tags,
+  effortMinutes: RecipeFields.effortMinutes,
+  cuisine: RecipeFields.cuisine,
+  mainProtein: RecipeFields.mainProtein,
+  course: RecipeFields.course,
+  notes: RecipeFields.notes,
+  url: z.string().trim().min(1).max(2000).nullable(),
+  author: z.string().trim().min(1).max(200).nullable(),
+  importedPreference: ImportedPreference.nullable(),
+  /** In the source's trash: never created, but never deleted either. */
+  inTrash: z.boolean(),
+});
+export type ImportedRecipe = z.infer<typeof ImportedRecipe>;
 
 /**
  * A Recipe an import left for someone to look at. `merge`: the source changed a Recipe edited in
@@ -77,4 +102,68 @@ function ingredientKeys(recipe: DuplicateCandidate): Set<string> {
   return new Set(
     recipe.ingredients.map((ingredient) => ingredient.item ?? `name:${normaliseItemName(ingredient.name)}`),
   );
+}
+
+/** Servings when the source doesn't say. */
+export const FALLBACK_SERVINGS = 4;
+
+/** The longest text `import_text` reads: what a Recipe's notes, which keep it, can hold. */
+const MAX_PASTED_TEXT = 20_000;
+
+/** Pasted text (a caption, a message, a Doc's contents), for the model to read into a Draft Recipe. */
+export const ImportTextInput = z.object({ text: z.string().trim().min(1).max(MAX_PASTED_TEXT) }).strict();
+
+export const ImportTextOutput = z.object({
+  run: ImportRun,
+  /** The Draft made, or the Recipe the same text made before; null when the text holds no recipe. */
+  recipe: RecipeRef.nullable(),
+});
+
+/**
+ * The Recipe an import makes of pasted text the model read: its lines as the model copied them, its
+ * Course as the model guessed it (ADR 0022 amendment), and the text itself in its notes, so a person
+ * can check the guess against it. Keyed on the text, so pasting the same text again is skipped.
+ */
+export function importedFromText(text: string, reading: Extract<RecipeReading, { isRecipe: true }>): ImportedRecipe {
+  const key = `text:${contentHash(text)}`;
+  const clip = (lines: string[], most: number, length: number) =>
+    lines.slice(0, most).map((line) => line.slice(0, length));
+  return ImportedRecipe.parse({
+    externalId: key,
+    revision: key,
+    title: reading.title.slice(0, 200),
+    baseServings: Math.min(reading.servings ?? FALLBACK_SERVINGS, 100),
+    ingredients: clip(reading.ingredients, 200, 500),
+    steps: clip(reading.steps, 100, 5000),
+    tags: [],
+    effortMinutes: reading.minutes !== null && reading.minutes <= 24 * 60 ? reading.minutes : null,
+    cuisine: null,
+    mainProtein: null,
+    course: reading.course,
+    notes: text.slice(0, MAX_PASTED_TEXT),
+    url: null,
+    author: null,
+    importedPreference: null,
+    inTrash: false,
+  });
+}
+
+/** A Draft Recipe waiting on a person, with the Recipes an import flagged it as a possible duplicate of. */
+export const Draft = z.object({ recipe: Recipe, duplicateOf: z.array(RecipeRef) });
+export type Draft = z.infer<typeof Draft>;
+
+export const DraftInput = z.object({ id: RecipeId }).strict();
+
+/** A short, stable hash of an entry's text (cyrb53), for exports whose Recipes carry no `hash`. */
+export function contentHash(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }

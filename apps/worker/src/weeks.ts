@@ -127,6 +127,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     if (recipeId !== null && !recipeExists(sql, recipeId)) {
       return recipeNotFound(recipeId);
     }
+    if (recipeId !== null && isDraft(sql, recipeId)) return draftRefused(recipeId);
     const unknown = unknownMember(sql, input.diners);
     if (unknown !== undefined) return memberNotFound(unknown);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
@@ -227,9 +228,11 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
         error: { code: "not_earlier", message: `${of.date} ${of.meal} is not before ${input.date} ${input.meal}` },
       };
     }
-    if (of && !readSlot(sql, of.date, of.meal).recipe) {
+    const ofRecipe = of && readSlot(sql, of.date, of.meal).recipe;
+    if (of && !ofRecipe) {
       return { ok: false, error: { code: "no_recipe", message: `${of.date} ${of.meal} has no Recipe to cook` } };
     }
+    if (ofRecipe && isDraft(sql, ofRecipe.id)) return draftRefused(ofRecipe.id);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
       // Linked by hand now, so no longer for the reason a Proposal gave.
       sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
@@ -573,6 +576,15 @@ function conflictRefused<T>(sql: SqlStorage, conflicts: RefusedConflict[]): Tool
 
 function recipeExists(sql: SqlStorage, id: RecipeId): boolean {
   return sql.exec("SELECT 1 FROM recipe WHERE id = ?", id).toArray().length > 0;
+}
+
+function isDraft(sql: SqlStorage, id: RecipeId): boolean {
+  return sql.exec("SELECT 1 FROM recipe WHERE id = ? AND draft = 1", id).toArray().length > 0;
+}
+
+/** A Draft is not planned until a person accepts it. */
+function draftRefused<T>(id: RecipeId): ToolResult<T> {
+  return { ok: false, error: { code: "draft_recipe", message: `Recipe ${id} is a Draft: accept it to plan it` } };
 }
 
 /** The first Diner given who is not a Member. */

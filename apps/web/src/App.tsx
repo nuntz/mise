@@ -18,6 +18,7 @@ import { PantryBanner, PantryPage } from "./Pantry";
 import { RanOut } from "./RanOut";
 import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
+import { ReviewPage } from "./Review";
 import { SetupForm } from "./SetupForm";
 import { TagRecipes } from "./TagRecipes";
 import { createKitchenMode } from "./theme";
@@ -33,8 +34,8 @@ const NAV: { page: Page; icon: IconName }[] = [
 ];
 
 /** The Household's settings, each a section of the Household page. */
-type Setting = "members" | "settings" | "calendar" | "import" | "resolve" | "items" | "tag";
-const SETTINGS: Setting[] = ["members", "settings", "calendar", "import", "resolve", "items", "tag"];
+type Setting = "members" | "settings" | "calendar" | "review" | "import" | "resolve" | "items" | "tag";
+const SETTINGS: Setting[] = ["members", "settings", "calendar", "review", "import", "resolve", "items", "tag"];
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
@@ -302,8 +303,11 @@ function HouseholdPage(props: {
         <Match when={setting() === "calendar"}>
           <CalendarSettings client={props.client} />
         </Match>
+        <Match when={setting() === "review"}>
+          <ReviewPage client={props.client} onResolve={() => setSetting("resolve")} />
+        </Match>
         <Match when={setting() === "import"}>
-          <ImportPage client={props.client} />
+          <ImportPage client={props.client} onReview={() => setSetting("review")} />
         </Match>
         <Match when={setting() === "resolve"}>
           <ResolveIngredients client={props.client} />

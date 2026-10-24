@@ -12,7 +12,13 @@ import type { IngredientUnit } from "./units";
 
 /** A Recipe whose Ingredients are read from the lines given, as a hand-entered one's are. */
 function recipe(id: number, baseServings: number, lines: string[]): GroceryRecipe {
-  return { id, title: `Recipe ${id}`, baseServings, ingredients: lines.map((line) => parseIngredient(line)) };
+  return {
+    id,
+    title: `Recipe ${id}`,
+    baseServings,
+    draft: false,
+    ingredients: lines.map((line) => parseIngredient(line)),
+  };
 }
 
 function demand(fields: Partial<GroceryDemand>): GroceryDemand {
@@ -42,6 +48,22 @@ describe("buildGroceryList", () => {
         unmeasured: false,
         recipeIds: [1, 2],
       },
+    ]);
+  });
+
+  test("buys nothing for a Draft Recipe, which is not shopped until a person accepts it", () => {
+    const lines = buildGroceryList(
+      demand({
+        recipes: [{ ...recipe(1, 4, ["400 g rice"]), draft: true }, recipe(2, 2, ["100 g rice"])],
+        slots: [
+          { recipeId: 1, servings: 4 },
+          { recipeId: 2, servings: 2 },
+        ],
+      }),
+    );
+
+    expect(lines).toMatchObject([
+      { item: "rice", amounts: [{ amount: { min: 100, max: 100 }, unit: "g" }], recipeIds: [2] },
     ]);
   });
 

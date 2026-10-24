@@ -58,6 +58,7 @@ const toast: Recipe = {
   createdAt: "2026-10-21T12:00:00.000Z",
   updatedAt: "2026-10-21T12:00:00.000Z",
   editedInAppAt: null,
+  draft: false,
   lastCookedAt: null,
   cookCount: 0,
 };

@@ -1,0 +1,40 @@
+{
+  "about": "Pasted texts for `bun run eval`, each with what a good reading holds: `isRecipe`; for a recipe, the `title` it should contain, the `ingredients` lines it must copy exactly as written, and `servings`, `minutes` and `course` where the text makes them plain.",
+  "texts": [
+    {
+      "name": "a video caption",
+      "text": "the easiest weeknight dal 🍲✨ serves 4, ready in 40 min!!\n\nyou'll need:\n1 cup red lentils, rinsed\n2 tbsp ghee\n1 tsp cumin seeds\n1/2 tsp turmeric\n3 cups water\nsalt to taste\n\nsimmer lentils w turmeric + water ~25 min. temper cumin in ghee, pour over. #dal #comfortfood #weeknightdinner",
+      "expect": {
+        "isRecipe": true,
+        "title": "dal",
+        "ingredients": [
+          "1 cup red lentils, rinsed",
+          "2 tbsp ghee",
+          "1 tsp cumin seeds",
+          "1/2 tsp turmeric",
+          "3 cups water",
+          "salt to taste"
+        ],
+        "servings": 4,
+        "minutes": 40,
+        "course": "main"
+      }
+    },
+    {
+      "name": "a message",
+      "text": "Lemonade for the party: juice of 6 lemons, 1/2 cup sugar, 4 cups cold water. Stir till the sugar's gone, ice it. Makes about 6 glasses.",
+      "expect": {
+        "isRecipe": true,
+        "title": "Lemonade",
+        "ingredients": [],
+        "servings": 6,
+        "course": "drink"
+      }
+    },
+    {
+      "name": "a caption with no recipe",
+      "text": "best banana bread I've ever made 😍🍌 recipe in bio! #baking",
+      "expect": { "isRecipe": false }
+    }
+  ]
+}

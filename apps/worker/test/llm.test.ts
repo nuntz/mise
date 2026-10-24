@@ -5,8 +5,17 @@ import {
   fauxProvider,
   fauxToolCall,
 } from "@earendil-works/pi-ai";
-import { FakeLlm, type Llm, LlmError, SHIPPED_ITEMS, type SuggestedItem } from "@mise/domain";
+import {
+  FakeLlm,
+  type Llm,
+  LlmError,
+  type ModelReading,
+  type RecipeReading,
+  SHIPPED_ITEMS,
+  type SuggestedItem,
+} from "@mise/domain";
 import { describe, expect, test, vi } from "vitest";
+import type { z } from "zod";
 import { claudeLlm, openLlm, useLlm } from "../src/llm";
 
 type Answers = Record<string, SuggestedItem>;
@@ -87,6 +96,96 @@ describe.each([
   });
 });
 
+/** A reading as a model may give it. */
+type ModelAnswer = z.input<typeof ModelReading>;
+
+/** What both adapters promise when reading a recipe; the real one answers `reading` in the tool's shape. */
+type Reader = { llm: Llm; fail: () => void };
+
+/** A scripted model that reads every source as `reading`. */
+function scriptedReader(reading: ModelAnswer): Reader {
+  let failing = false;
+  const faux = fauxProvider();
+  faux.setResponses([
+    () =>
+      failing
+        ? fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded" })
+        : fauxAssistantMessage(fauxToolCall("read_recipe", JSON.parse(JSON.stringify(reading))), {
+            stopReason: "toolUse",
+          }),
+  ]);
+  const models = createModels();
+  models.setProvider(faux.provider);
+  return {
+    llm: claudeLlm(models, faux.getModel()),
+    fail: () => {
+      failing = true;
+    },
+  };
+}
+
+function fakeReader(reading: ModelAnswer): Reader {
+  const llm = new FakeLlm();
+  llm.reading = reading;
+  return {
+    llm,
+    fail: () => {
+      llm.failing = true;
+    },
+  };
+}
+
+describe.each([
+  ["Claude through pi-ai", scriptedReader],
+  ["the fake", fakeReader],
+])("reading a recipe: %s", (_, open) => {
+  const caption = "Grandma's dal 🍲 serves 4, 40 min\n1 cup red lentils\n2 tbsp ghee\nSimmer, then temper.";
+  const dal: RecipeReading = {
+    isRecipe: true,
+    title: "Grandma's dal",
+    ingredients: ["1 cup red lentils", "2 tbsp ghee"],
+    steps: ["Simmer, then temper."],
+    servings: 4,
+    minutes: 40,
+    course: "main",
+  };
+
+  test("gives the recipe it read, with each Ingredient line as written", async () => {
+    expect(await open(dal).llm.readRecipe({ text: caption })).toEqual(dal);
+  });
+
+  test("says when the source holds no recipe", async () => {
+    expect(await open({ isRecipe: false }).llm.readRecipe({ text: "Recipe in bio!" })).toEqual({ isRecipe: false });
+  });
+
+  test("reads servings or a time out of range as unknown, rather than failing the read", async () => {
+    const toast = { isRecipe: true, title: "Toast", ingredients: ["1 slice bread"], servings: 0, minutes: 2.5 };
+
+    expect(await open(toast).llm.readRecipe({ text: "Toast" })).toEqual({
+      isRecipe: true,
+      title: "Toast",
+      ingredients: ["1 slice bread"],
+      steps: [],
+      servings: null,
+      minutes: null,
+      course: null,
+    });
+  });
+
+  test("throws LlmError for a recipe with no title", async () => {
+    await expect(open({ isRecipe: true, ingredients: ["1 egg"] }).llm.readRecipe({ text: "1 egg" })).rejects.toThrow(
+      LlmError,
+    );
+  });
+
+  test("throws LlmError when the model fails", async () => {
+    const reader = open(dal);
+    reader.fail();
+
+    await expect(reader.llm.readRecipe({ text: caption })).rejects.toThrow(LlmError);
+  });
+});
+
 describe("the Claude adapter", () => {
   test("leaves out an answer it cannot read, such as an Item id that does not exist", async () => {
     const faux = fauxProvider();
@@ -111,6 +210,15 @@ describe("the Claude adapter", () => {
     });
 
     expect(answers).toEqual([{ name: "beurre", suggested: { kind: "existing", item: "butter" } }]);
+  });
+
+  test("throws LlmError when the model reads a recipe without the tool", async () => {
+    const faux = fauxProvider();
+    faux.setResponses([fauxAssistantMessage("That's a dal recipe.")]);
+    const models = createModels();
+    models.setProvider(faux.provider);
+
+    await expect(claudeLlm(models, faux.getModel()).readRecipe({ text: "dal" })).rejects.toThrow(LlmError);
   });
 
   test("throws LlmError when the model answers without the tool", async () => {

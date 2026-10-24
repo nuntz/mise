@@ -17,6 +17,7 @@ import {
   WeekCalendar,
 } from "@mise/domain";
 import { calendarHandlers, readCalendarToken } from "./calendar";
+import { draftHandlers } from "./drafts";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
@@ -41,8 +42,11 @@ export type ConstraintColumns = { kind: string; allergen: string | null; term: s
 
 type ConstraintRow = ConstraintColumns & { member_id: number };
 
-/** Tools that need more than SQLite, which the household runs itself: an import reads R2, Suggestions ask the model. */
-export type HouseholdToolName = "run_paprika_import" | "request_suggestions";
+/**
+ * Tools that need more than SQLite, which the household runs itself: a Paprika import reads R2;
+ * Suggestions and a text import ask the model.
+ */
+export type HouseholdToolName = "run_paprika_import" | "request_suggestions" | "import_text";
 
 export type Handlers = {
   [N in Exclude<ToolName, HouseholdToolName>]: (
@@ -159,6 +163,7 @@ export const handlers: Handlers = {
   ...itemHandlers,
   ...suggestionHandlers,
   ...importHandlers,
+  ...draftHandlers,
   ...weekHandlers,
   ...groceryHandlers,
   ...stapleHandlers,

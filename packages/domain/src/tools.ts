@@ -18,7 +18,15 @@ import {
   SetupHouseholdInput,
   UpdateHouseholdSettingsInput,
 } from "./household";
-import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
+import {
+  Draft,
+  DraftInput,
+  ImportFlag,
+  ImportRun,
+  ImportTextInput,
+  ImportTextOutput,
+  RunPaprikaImportInput,
+} from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection, UpdateItemInput } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 import {
@@ -156,12 +164,12 @@ export const tools = {
     output: Recipe,
     changes: "recipes",
   }),
-  /** Recipes in title order. */
+  /** Recipes in title order; Drafts are left out, for `list_drafts`. */
   search_recipes: defineTool({
     input: SearchRecipesInput,
     output: z.array(RecipeSummary),
   }),
-  /** Recipes missing a cuisine or a main protein, in title order; `update_recipe` sets them. */
+  /** Recipes missing a cuisine or a main protein, in title order, Drafts left out; `update_recipe` sets them. */
   list_untagged_recipes: defineTool({
     input: z.object({}).strict(),
     output: z.array(RecipeSummary),
@@ -236,6 +244,28 @@ export const tools = {
     output: ImportRun,
     changes: "recipes",
   }),
+  /**
+   * Reads pasted text with the model (ADR 0023) into a Draft Recipe, logged as an Import Run of source
+   * `text`, and flagged if it looks like a Recipe already kept. Text pasted before is skipped, and text
+   * holding no recipe creates nothing, logged as the run's error. Refuses with `model_failed` when the
+   * model fails, logging nothing.
+   */
+  import_text: defineTool({
+    input: ImportTextInput,
+    output: ImportTextOutput,
+    changes: "recipes",
+  }),
+  /** Draft Recipes, newest first. */
+  list_drafts: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(Draft),
+  }),
+  /** Makes a Draft a Recipe like any other, to plan and shop. Refuses a Recipe that is no Draft (`not_found`). */
+  accept_draft: defineTool({
+    input: DraftInput,
+    output: Recipe,
+    changes: "recipes",
+  }),
   /** Import runs, newest first. */
   list_import_runs: defineTool({
     input: z.object({}).strict(),
@@ -251,7 +281,10 @@ export const tools = {
     input: GetWeekInput,
     output: Week,
   }),
-  /** Refuses a change that leaves the Slot with a new Conflict it doesn't override (`constraint_conflict`). */
+  /**
+   * Refuses a Draft Recipe (`draft_recipe`), and a change that leaves the Slot with a new Conflict it
+   * doesn't override (`constraint_conflict`).
+   */
   set_slot: defineTool({
     input: SetSlotInput,
     output: Slot,
@@ -270,8 +303,8 @@ export const tools = {
     changes: "plan",
   }),
   /**
-   * Refuses a Slot to link to that is not earlier (`not_earlier`) or holds no Recipe (`no_recipe`),
-   * and new Conflicts as `set_slot` does. Returns the Slot.
+   * Refuses a Slot to link to that is not earlier (`not_earlier`), holds no Recipe (`no_recipe`) or a
+   * Draft (`draft_recipe`), and new Conflicts as `set_slot` does. Returns the Slot.
    */
   link_leftovers: defineTool({
     input: LinkLeftoversInput,
@@ -433,6 +466,7 @@ export type ToolErrorCode =
   | "not_cooked"
   | "not_built"
   | "not_earlier"
+  | "draft_recipe"
   | "model_failed";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */

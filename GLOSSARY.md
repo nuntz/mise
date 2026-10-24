@@ -69,7 +69,7 @@ An LLM's guess at the Item an Unresolved Ingredient refers to: an existing Item,
 _Avoid_: Proposal (that is a Week's), tag
 
 **Draft Recipe**:
-An imported Recipe kept but not yet accepted by a person, because its source is unreliable (a video's caption, a screenshot). It is never proposed until accepted.
+An imported Recipe kept but not yet accepted by a person, because an LLM read it from an unreliable source (a video's caption, a screenshot, pasted text). It is never proposed, planned or shopped until accepted, and can be discarded.
 _Avoid_: Pending recipe, review item
 
 **Imported Preference**:

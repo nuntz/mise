@@ -15,8 +15,9 @@ import type { Handlers } from "./tools";
 /**
  * A Recipe read from an export, its photo already stored in R2 under `photoKey`: null when the
  * source has none, undefined when its photo could not be used, so the Recipe keeps the one it has.
+ * `draft` when an LLM read it, so that it waits on a person (ADR 0023).
  */
-export type PreparedRecipe = { recipe: ImportedRecipe; photoKey: string | null | undefined };
+export type PreparedRecipe = { recipe: ImportedRecipe; photoKey: string | null | undefined; draft: boolean };
 
 type ExistingRow = {
   id: number;
@@ -75,8 +76,12 @@ export function runImport(
   const replacedPhotos: string[] = [];
   const written: RecipeId[] = [];
   const catalogue = readCatalogue(sql);
-  // Candidates for a duplicate: Recipes from other sources, as they were before this run.
-  const others = readRecipes(sql).filter((recipe) => recipe.source.kind !== source);
+  // Candidates for a duplicate: Recipes kept from other sources, as they were before this run; a Draft
+  // is not kept until accepted. Pasted text has no id of its own to upsert on, so its earlier Recipes
+  // are candidates too.
+  const others = readRecipes(sql).filter(
+    (recipe) => !recipe.draft && (recipe.source.kind !== source || source === "text"),
+  );
 
   // `flagged` counts Recipes, however many flags each gets.
   const flag = (kind: ImportFlag["kind"], recipeId: number, duplicateOf: number | null, revision: string | null) => {
@@ -92,7 +97,7 @@ export function runImport(
     );
   };
 
-  for (const { recipe, photoKey } of prepared) {
+  for (const { recipe, photoKey, draft } of prepared) {
     const [existing] = sql
       .exec<ExistingRow>(
         `SELECT id, source_revision, imported_at, edited_in_app_at, photo_key FROM recipe
@@ -107,7 +112,7 @@ export function runImport(
         counts.skipped++;
         continue;
       }
-      const id = insertRecipe(sql, source, recipe, photoKey ?? null, startedAt);
+      const id = insertRecipe(sql, source, recipe, photoKey ?? null, draft, startedAt);
       written.push(id);
       counts.created++;
       const candidate = {
@@ -172,14 +177,15 @@ function insertRecipe(
   source: ImportSource,
   recipe: ImportedRecipe,
   photoKey: string | null,
+  draft: boolean,
   now: string,
 ): number {
   const { id } = sql
     .exec<{ id: number }>(
       `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, course, recurring,
          yields_leftovers, prep_ahead, notes, photo_key, source_kind, source_id, source_revision, source_url,
-         source_author, imported_at, imported_preference, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+         source_author, imported_at, imported_preference, created_at, updated_at, draft)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       recipe.title,
       recipe.baseServings,
       recipe.effortMinutes,
@@ -197,6 +203,7 @@ function insertRecipe(
       recipe.importedPreference,
       now,
       now,
+      Number(draft),
     )
     .one();
   writeLists(sql, id, recipe);

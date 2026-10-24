@@ -107,6 +107,8 @@ export const RecipeSource = z.discriminatedUnion("kind", [
     /** When the import last wrote it. */
     importedAt: z.iso.datetime(),
   }),
+  /** Pasted text an LLM read; the text itself is kept in the Recipe's notes. */
+  z.object({ kind: z.literal("text"), importedAt: z.iso.datetime() }),
 ]);
 export type RecipeSource = z.infer<typeof RecipeSource>;
 
@@ -121,6 +123,11 @@ export const Recipe = z.object({
   importedPreference: ImportedPreference.nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  /**
+   * A Draft Recipe: read by an LLM and not yet accepted by a person, so never proposed, planned or
+   * shopped. Editing it is editing any Recipe; `accept_draft` makes it a Recipe like the others.
+   */
+  draft: z.boolean(),
   /** When someone last changed it in Mise; an import never overwrites a Recipe changed since. */
   editedInAppAt: z.iso.datetime().nullable(),
   /** The date of the latest Slot it was cooked for; null if it never was. */

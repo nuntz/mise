@@ -31,7 +31,7 @@ export const GroceryNeed = z.object({
 export type GroceryNeed = z.infer<typeof GroceryNeed>;
 
 /** What the builder reads of a Recipe. */
-export type GroceryRecipe = Pick<Recipe, "id" | "title" | "baseServings"> & {
+export type GroceryRecipe = Pick<Recipe, "id" | "title" | "baseServings" | "draft"> & {
   ingredients: Pick<Ingredient, "raw" | "amount" | "unit" | "item">[];
 };
 
@@ -64,7 +64,8 @@ export type GroceryDemand = {
  * the Slot's, merged by Item: one line per Item. Mass and volume are added up and given in the
  * Household's units; they never convert into each other, and counts add up only when they count
  * the same thing (cloves with cloves). What can't be combined stays on the line as its own amount.
- * Unresolved Ingredients can't be merged or scaled, so each is a line as written.
+ * Unresolved Ingredients can't be merged or scaled, so each is a line as written. A Draft Recipe
+ * adds nothing: it is not shopped until a person accepts it.
  *
  * Staples low, out or always bought are added at their usual quantity, unless the Recipes need an
  * amount of the Item, which replaces it. An Ingredient of a Staple's Item without an amount ("salt
@@ -78,6 +79,7 @@ export function buildGroceryList({ slots, recipes, staples, units }: GroceryDema
     if (slot.servings === 0) continue;
     const recipe = recipes.find((other) => other.id === slot.recipeId);
     if (!recipe) throw new Error(`No Recipe ${slot.recipeId}`);
+    if (recipe.draft) continue;
     const scale = slot.servings / recipe.baseServings;
     for (const ingredient of recipe.ingredients) {
       if (ingredient.item && !ingredient.amount && stapleItems.has(ingredient.item)) continue;
@@ -178,7 +180,13 @@ export function groceryPlanRevision({ slots, recipes }: GroceryDemand): string {
     slots: cooked.map((slot) => [slot.recipeId, slot.servings]),
     recipes: used.map((id) => {
       const recipe = recipes.find((other) => other.id === id);
-      return recipe && [id, recipe.baseServings, recipe.ingredients.map((i) => [i.raw, i.amount, i.unit, i.item])];
+      const read = recipe && [
+        id,
+        recipe.baseServings,
+        recipe.ingredients.map((i) => [i.raw, i.amount, i.unit, i.item]),
+      ];
+      // Marked only on a Draft, so the revisions of lists built before Drafts existed stay as they were.
+      return recipe?.draft ? [...(read ?? []), "draft"] : read;
     }),
   });
   return hash(plan);

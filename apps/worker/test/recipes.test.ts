@@ -74,6 +74,7 @@ describe("hand-entered Recipes", () => {
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
       editedInAppAt: null,
+      draft: false,
       lastCookedAt: null,
       cookCount: 0,
     };

@@ -46,6 +46,7 @@ export type ProposerRecipe = Pick<
   | "recurring"
   | "yieldsLeftovers"
   | "importedPreference"
+  | "draft"
 > & { ratings: Rating[] };
 
 export type ProposerInput = {
@@ -111,7 +112,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Recipe that no Hard Constraint of anyone eating it rules out (unknown Allergens fail closed), not
  * rated "never", not planned within 2 weeks of it and within the day's Effort Budget (an unknown
  * effort passes), and safe too for whoever eats its Leftovers kept by hand. Every Recipe a dinner
- * gets, Recurring, Leftovers or not, is a main dish or of unknown Course (ADR 0022).
+ * gets, Recurring, Leftovers or not, is a main dish or of unknown Course (ADR 0022), and no Draft.
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
  * A dinner whose Recipe yields Leftovers, and has none kept, gets them in the next dinner within two
@@ -140,7 +141,9 @@ export function rerollWeek(input: ProposerInput): Proposal {
 }
 
 /** Proposes the Week, choosing for each dinner among the candidates scoring less than `window` below the best. */
-function propose(input: ProposerInput, window: number, choice: ProposalChoice): Proposal {
+function propose(given: ProposerInput, window: number, choice: ProposalChoice): Proposal {
+  // A Draft is not a Recipe to plan until a person accepts it, so it is no candidate at all.
+  const input = { ...given, recipes: given.recipes.filter((recipe) => !recipe.draft) };
   const random = seededRandom(input.seed);
   const recipes = new Map(input.recipes.map((recipe) => [recipe.id, recipe]));
   const weekDates = new Set(input.dinners.map((dinner) => dinner.date));

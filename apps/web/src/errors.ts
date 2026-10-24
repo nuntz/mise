@@ -69,6 +69,8 @@ export function errorText(error: ToolError, form: Form): string {
       return t("item.nameInUse");
     case "shipped_item":
       return t("item.shippedItem");
+    case "draft_recipe":
+      return t("recipe.draft");
     case "not_found":
       return t(
         form === "recipe"

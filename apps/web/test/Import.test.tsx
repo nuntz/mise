@@ -61,7 +61,7 @@ const flags: ImportFlag[] = [
 ];
 
 /** A client with one past import that records every upload and tool call made. */
-function fakeClient(options: { upload?: string | null } = {}) {
+function fakeClient(options: { upload?: string | null; importText?: unknown } = {}) {
   const calls: { name: string; input: unknown }[] = [];
   const uploads: Blob[] = [];
   let runs = [lastWeek];
@@ -82,6 +82,11 @@ function fakeClient(options: { upload?: string | null } = {}) {
           // The change notice that follows a run.
           queueMicrotask(() => notify("recipes"));
           return { ok: true, value: today };
+        case "import_text":
+          return options.importText;
+        case "list_drafts":
+        case "list_suggestions":
+          return { ok: true, value: [] };
         default:
           throw new Error(`Unexpected tool ${name}`);
       }
@@ -146,4 +151,62 @@ test("an upload that fails says so and runs nothing", async () => {
 
   expect((await screen.findByRole("alert")).textContent).toBe("The export could not be uploaded.");
   expect(calls.map((call) => call.name)).not.toContain("run_paprika_import");
+});
+
+const pastedRun: ImportRun = {
+  ...today,
+  id: 3,
+  source: "text",
+  created: 1,
+  updated: 0,
+  skipped: 0,
+  flagged: 0,
+  errors: [],
+};
+
+test("pasting a recipe's text reads it into a Draft, and goes to the Review screen to check it", async () => {
+  const { client, calls } = fakeClient({
+    importText: { ok: true, value: { run: pastedRun, recipe: { id: 9, title: "Grandma's dal" } } },
+  });
+  await openImport(client);
+
+  await userEvent.type(await screen.findByLabelText("Recipe text"), "Grandma's dal{enter}1 cup red lentils");
+  await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
+
+  expect(calls).toContainEqual({ name: "import_text", input: { text: "Grandma's dal\n1 cup red lentils" } });
+  expect((await screen.findByRole("status")).textContent).toBe(
+    "Grandma's dal is waiting on the Review screen as a Draft, until someone checks it.",
+  );
+  expect((screen.getByLabelText("Recipe text") as HTMLTextAreaElement).value).toBe("");
+  await userEvent.click(screen.getByRole("button", { name: "Review it" }));
+  expect(await screen.findByRole("heading", { name: "Waiting on you" })).toBeTruthy();
+});
+
+test("pasted text with no recipe in it says so, and keeps the text", async () => {
+  const { client } = fakeClient({
+    importText: {
+      ok: true,
+      value: {
+        run: { ...pastedRun, created: 0, errors: [{ entry: null, message: "The text holds no recipe" }] },
+        recipe: null,
+      },
+    },
+  });
+  await openImport(client);
+
+  await userEvent.type(await screen.findByLabelText("Recipe text"), "Recipe in bio!");
+  await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
+
+  expect((await screen.findByRole("alert")).textContent).toBe("No recipe was found in that text.");
+  expect((screen.getByLabelText("Recipe text") as HTMLTextAreaElement).value).toBe("Recipe in bio!");
+});
+
+test("pasted text the model could not read says to try again", async () => {
+  const { client } = fakeClient({ importText: { ok: false, error: { code: "model_failed", message: "" } } });
+  await openImport(client);
+
+  await userEvent.type(await screen.findByLabelText("Recipe text"), "Grandma's dal");
+  await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
+
+  expect((await screen.findByRole("alert")).textContent).toBe("The text could not be read just now; try again later.");
 });

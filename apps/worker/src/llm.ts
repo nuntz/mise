@@ -5,6 +5,9 @@ import {
   type Item,
   type Llm,
   LlmError,
+  ModelReading,
+  type ReadRecipeRequest,
+  recipeReadingOf,
   STORE_SECTIONS,
   SuggestedItem,
   type SuggestionAnswer,
@@ -13,8 +16,8 @@ import {
 } from "@mise/domain";
 import { z } from "zod";
 
-/** The model that makes Suggestions (SPEC §2): Allergens are worth the stronger model. */
-export const SUGGESTION_MODEL = "claude-sonnet-5-5";
+/** The model that makes Suggestions and reads recipes (SPEC §2): Allergens and amounts are worth the stronger model. */
+export const LLM_MODEL = "claude-sonnet-5-5";
 
 /** pi-ai's models with only Anthropic registered, calling with `apiKey`. */
 export function anthropicModels(apiKey: string | undefined): Models {
@@ -45,8 +48,8 @@ export function useLlm(open: ((env: LlmEnv) => Llm) | undefined): void {
 export function openLlm(env: LlmEnv): Llm {
   if (replacement) return replacement(env);
   const models = anthropicModels(env.ANTHROPIC_API_KEY);
-  const model = models.getModel("anthropic", SUGGESTION_MODEL);
-  if (!model) throw new Error(`pi-ai has no model ${SUGGESTION_MODEL}`);
+  const model = models.getModel("anthropic", LLM_MODEL);
+  if (!model) throw new Error(`pi-ai has no model ${LLM_MODEL}`);
   return claudeLlm(models, model);
 }
 
@@ -82,10 +85,50 @@ const SYSTEM_PROMPT = [
   `Answer only by calling ${SUGGEST_TOOL}.`,
 ].join("\n");
 
+const READ_TOOL = "read_recipe";
+
+const READ_PROMPT = [
+  "You read recipes for a family meal planner, from text someone pasted: a video caption, a message, a document.",
+  "Say whether it holds a recipe someone could cook from. A caption that only says the recipe is elsewhere",
+  '("recipe in bio", "link in comments") holds none.',
+  "Copy each ingredient line exactly as written, with its amount, unit and notes: the planner parses the lines",
+  "itself, so never rewrite, convert, merge or complete them. Leave out headings and emoji-only lines.",
+  "Give servings and the cooking time only when the text says them.",
+  `Answer only by calling ${READ_TOOL}.`,
+].join("\n");
+
 /** An `Llm` that asks a Claude model through pi-ai, for one tool call with the answers. */
 export function claudeLlm(models: Models, model: Model<Api>): Llm {
   const { $schema: _, ...parameters } = z.toJSONSchema(z.object({ suggestions: z.array(ModelAnswer) }));
+  const { $schema: __, ...readParameters } = z.toJSONSchema(ModelReading);
   return {
+    async readRecipe(request) {
+      const message = await models.complete(
+        model,
+        {
+          systemPrompt: READ_PROMPT,
+          messages: [{ role: "user", content: readPrompt(request), timestamp: Date.now() }],
+          tools: [
+            {
+              name: READ_TOOL,
+              description: "Gives the recipe read from the text, or says there is none.",
+              parameters: Type.Unsafe(readParameters),
+            },
+          ],
+        },
+        // Not forced with `toolChoice`, for the reason `makeSuggestions` gives.
+        { maxTokens: 32_000 },
+      );
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        throw new LlmError(message.errorMessage ?? message.stopReason, "read the recipe");
+      }
+      const call = message.content.find((block) => block.type === "toolCall" && block.name === READ_TOOL);
+      if (call?.type !== "toolCall") throw new LlmError(`no ${READ_TOOL} call`, "read the recipe");
+      const reading = recipeReadingOf(call.arguments);
+      if (!reading) throw new LlmError("an answer that could not be read", "read the recipe");
+      return reading;
+    },
+
     async makeSuggestions(request) {
       const message = await models.complete(
         model,
@@ -120,6 +163,10 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
       });
     },
   };
+}
+
+function readPrompt({ text }: ReadRecipeRequest): string {
+  return ["The pasted text:", "<text>", text, "</text>"].join("\n");
 }
 
 function prompt({ names, catalogue }: SuggestionRequest): string {

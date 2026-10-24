@@ -1,31 +1,8 @@
 import { z } from "zod";
+import { contentHash, FALLBACK_SERVINGS, ImportedRecipe } from "./imports";
 import { normaliseItemName } from "./items";
-import { type Course, ImportedPreference, IngredientLines, RecipeFields } from "./recipes";
+import type { Course, ImportedPreference } from "./recipes";
 import { decompress, readZip } from "./zip";
-
-/** A Recipe read from a source, mapped onto Mise's fields, before it is stored. */
-export const ImportedRecipe = z.object({
-  /** The source's id for it (Paprika's `uid`): imports upsert on it. */
-  externalId: z.string().min(1),
-  /** Changes whenever the source's copy does (Paprika's `hash`, else a hash of the entry). */
-  revision: z.string().min(1),
-  title: RecipeFields.title,
-  baseServings: RecipeFields.baseServings,
-  ingredients: IngredientLines,
-  steps: RecipeFields.steps,
-  tags: RecipeFields.tags,
-  effortMinutes: RecipeFields.effortMinutes,
-  cuisine: RecipeFields.cuisine,
-  mainProtein: RecipeFields.mainProtein,
-  course: RecipeFields.course,
-  notes: RecipeFields.notes,
-  url: z.string().trim().min(1).max(2000).nullable(),
-  author: z.string().trim().min(1).max(200).nullable(),
-  importedPreference: ImportedPreference.nullable(),
-  /** In the source's trash: never created, but never deleted either. */
-  inTrash: z.boolean(),
-});
-export type ImportedRecipe = z.infer<typeof ImportedRecipe>;
 
 /** The image types a photo may be, recognised from its first bytes. */
 export type ImageType = "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "image/avif";
@@ -43,9 +20,6 @@ export type PaprikaEntry =
       photoError: string | null;
     }
   | { entry: string; ok: false; error: string };
-
-/** Servings when the source's text has no number in it. */
-const FALLBACK_SERVINGS = 4;
 
 /**
  * The Recipes in a `.paprikarecipes` file (a zip of gzipped JSON, one file per Recipe), read one
@@ -333,18 +307,4 @@ function imageType(bytes: Uint8Array): ImageType | null {
   if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
   if (ascii(4, 8) === "ftyp" && /^avi[fs]$/.test(ascii(8, 12))) return "image/avif";
   return null;
-}
-
-/** A short, stable hash of an entry's text (cyrb53), for exports whose Recipes carry no `hash`. */
-function contentHash(text: string): string {
-  let h1 = 0xdeadbeef;
-  let h2 = 0x41c6ce57;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 2654435761);
-    h2 = Math.imul(h2 ^ c, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
