@@ -1,5 +1,8 @@
 import {
   type Allergen,
+  type HouseholdItemId,
+  householdItemId,
+  householdItemRow,
   Item,
   ItemCatalogue,
   type ItemId,
@@ -70,7 +73,7 @@ export const itemHandlers: Pick<Handlers, ItemTools> = {
       )
       .one();
     writeAllergens(sql, id, input.allergens);
-    const key: ItemId = `household:${id}`;
+    const key = householdItemId(id);
     writeAliases(sql, key, [input.name], input.aliases);
     const updated = readCatalogue(sql);
     resolveLines(sql, updated);
@@ -106,7 +109,7 @@ export const itemHandlers: Pick<Handlers, ItemTools> = {
         }
       }
     } else {
-      const row = householdRowId(input.id);
+      const row = householdItemRow(input.id as HouseholdItemId);
       sql.exec(
         "UPDATE item SET name = ?, section = ?, unit_family = ? WHERE id = ?",
         name,
@@ -146,7 +149,7 @@ export function readCatalogue(sql: SqlStorage): ItemCatalogue {
     .toArray()
     .map((row) =>
       Item.parse({
-        id: `household:${row.id}`,
+        id: householdItemId(row.id),
         name: row.name,
         aliases: [],
         section: row.section,
@@ -208,11 +211,6 @@ function writeAliases(sql: SqlStorage, item: ItemId, own: readonly string[], ali
     names.add(normaliseItemName(alias));
     sql.exec("INSERT INTO item_alias (item_id, alias) VALUES (?, ?)", item, alias);
   }
-}
-
-/** The row of a Household Item's key. */
-function householdRowId(id: ItemId): number {
-  return Number(id.slice("household:".length));
 }
 
 function nameInUse<T>(name: string): ToolResult<T> {
