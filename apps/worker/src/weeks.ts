@@ -249,9 +249,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
   clear_week: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
-    const week = weekOf(input.date, settings);
-    const dates = weekDates(week);
-    const range = [dates[0], dates.at(-1)];
+    const span = weekOf(input.date, settings);
+    const range = [span.startDate, span.endDate];
     // Leftovers of the Slots cleared, in the next Week, are of nothing in particular now.
     const cleared = `SELECT date, meal FROM slot WHERE date BETWEEN ? AND ? AND cooked_at IS NULL`;
     sql.exec(
@@ -272,7 +271,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
         ...range,
       );
     }
-    return { ok: true, value: readWeek(sql, week) };
+    return { ok: true, value: readWeek(sql, span) };
   },
 
   propose_week: (sql, input) => {
@@ -282,9 +281,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const unknownItem = input.useUp.find((id) => !catalogue.item(id));
     if (unknownItem) return itemNotFound(unknownItem);
     const span = weekNamedBy(settings, input.date);
-    const start = span.startDate;
     const week = readWeek(sql, span);
-    const stored = readWeekRecords(sql, start)[0];
+    const stored = readWeekRecords(sql, span.startDate)[0];
     const members = readMembers(sql);
     const ratings = readRatingsByRecipe(sql);
     const people = (slot: Slot): ProposerPeople => ({
@@ -320,7 +318,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     };
     const proposal = input.reroll ? rerollWeek(proposerInput) : proposeWeek(proposerInput);
 
-    storeWeek(sql, start);
+    storeWeek(sql, span.startDate);
     for (const dinner of proposal.dinners) {
       const slot = { date: dinner.date, meal: "dinner" } as const;
       storeSlot(sql, settings, dinner.date, "dinner");
@@ -352,7 +350,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
       "UPDATE week SET proposal_seed = ?, proposal_choice = ?, reviewed = 0 WHERE start_date = ?",
       proposal.seed,
       proposal.choice,
-      start,
+      span.startDate,
     );
     return { ok: true, value: readWeek(sql, span) };
   },
@@ -361,15 +359,14 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
     const span = weekOf(input.date, settings);
-    const start = span.startDate;
-    storeWeek(sql, start);
+    storeWeek(sql, span.startDate);
     for (const [weekday, minutes] of Object.entries(input.budgets)) {
       if (minutes === null) {
-        sql.exec("DELETE FROM week_effort_budget WHERE start_date = ? AND weekday = ?", start, weekday);
+        sql.exec("DELETE FROM week_effort_budget WHERE start_date = ? AND weekday = ?", span.startDate, weekday);
       } else {
         sql.exec(
           "INSERT OR REPLACE INTO week_effort_budget (start_date, weekday, minutes) VALUES (?, ?, ?)",
-          start,
+          span.startDate,
           weekday,
           minutes,
         );
@@ -382,9 +379,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
     const span = weekOf(input.date, settings);
-    const start = span.startDate;
-    storeWeek(sql, start);
-    sql.exec("UPDATE week SET reviewed = ? WHERE start_date = ?", Number(input.reviewed), start);
+    storeWeek(sql, span.startDate);
+    sql.exec("UPDATE week SET reviewed = ? WHERE start_date = ?", Number(input.reviewed), span.startDate);
     return { ok: true, value: readWeek(sql, span) };
   },
 
@@ -489,8 +485,8 @@ export function weekNamedBy(settings: Settings, date: LocalDate | undefined): We
  * The Recipes planned for dinners within 6 weeks of the Week, before or after it, cooked or not:
  * a cooked one counts on its own date, and a past one nobody marked cooked most likely was (ADR 0014).
  */
-function plannedAround(sql: SqlStorage, week: WeekSpan): { recipeId: RecipeId; date: LocalDate }[] {
-  const { startDate: start, endDate: end } = week;
+function plannedAround(sql: SqlStorage, span: WeekSpan): { recipeId: RecipeId; date: LocalDate }[] {
+  const { startDate: start, endDate: end } = span;
   return sql
     .exec<{ recipe_id: number; date: string }>(
       `SELECT recipe_id, date FROM slot
@@ -641,10 +637,10 @@ function writeGuestConstraints(sql: SqlStorage, { date, meal }: SlotKey, constra
   });
 }
 
-export function readWeek(sql: SqlStorage, week: WeekSpan): Week {
-  const { startDate, endDate } = week;
-  const dates = weekDates(week);
-  const stored = readSlots(sql, dates[0], dates.at(-1));
+export function readWeek(sql: SqlStorage, span: WeekSpan): Week {
+  const { startDate, endDate } = span;
+  const dates = weekDates(span);
+  const stored = readSlots(sql, startDate, endDate);
   const defaults = memberIds(sql);
   const slots = dates.flatMap((date) =>
     MEALS.map(
