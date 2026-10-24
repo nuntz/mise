@@ -1,6 +1,6 @@
 import type { ErrorEvent } from "@sentry/cloudflare";
 import { describe, expect, test } from "vitest";
-import { scrubEvent, scrubSpan, sentryOptions } from "../src/observability";
+import { type SentrySpan, scrubEvent, scrubSpan, sentryOptions, sentryTelemetry } from "../src/observability";
 
 describe("Sentry scrubbing", () => {
   test("an error event keeps what went wrong and drops who it happened to", () => {
@@ -78,5 +78,69 @@ describe("Sentry scrubbing", () => {
       dsn: undefined,
       dataCollection: { userInfo: false, cookies: false, httpBodies: [], genAI: { inputs: false, outputs: false } },
     });
+  });
+});
+
+describe("the agent's traces", () => {
+  /** A stand-in for Sentry's `startSpan` that keeps what each span was given. */
+  function recordingTracer() {
+    const spans: { name: string; op?: string; attributes?: unknown; status?: unknown; events: unknown[] }[] = [];
+    const startSpan = <T>(
+      options: { name: string; op?: string; attributes?: Record<string, unknown> },
+      callback: (span: SentrySpan) => T,
+    ): T => {
+      const recorded = { ...options, events: [] as unknown[], status: undefined as unknown };
+      spans.push(recorded);
+      const span: SentrySpan = {
+        setAttributes(attributes) {
+          recorded.attributes = { ...(recorded.attributes as object), ...attributes };
+        },
+        setStatus(status) {
+          recorded.status = status;
+        },
+        addEvent(name, attributes) {
+          recorded.events.push({ name, attributes });
+        },
+      };
+      return callback(span);
+    };
+    return { spans, startSpan };
+  }
+
+  test("pi's runs and model requests become Sentry spans, nested, with their content-free attributes", async () => {
+    const tracer = recordingTracer();
+    const telemetry = sentryTelemetry(tracer.startSpan);
+
+    const answer = await telemetry.startSpan({ name: "pi.durable.phase", attributes: { phase: "generate" } }, (run) =>
+      run.startSpan(
+        { name: "pi.ai.request", attributes: { model: "claude-haiku-5-5", reasoning: undefined } },
+        (request) => {
+          request.setAttributes({ "usage.input": 120 });
+          request.addEvent("pi.ai.first_chunk");
+          return "answered";
+        },
+      ),
+    );
+
+    expect(answer).toBe("answered");
+    expect(tracer.spans).toEqual([
+      { name: "pi.durable.phase", op: "pi.durable.phase", attributes: { phase: "generate" }, events: [] },
+      {
+        name: "pi.ai.request",
+        op: "pi.ai.request",
+        attributes: { model: "claude-haiku-5-5", "usage.input": 120 },
+        events: [{ name: "pi.ai.first_chunk", attributes: {} }],
+      },
+    ]);
+  });
+
+  test("a failed span keeps that it failed, not the provider's error text", async () => {
+    const tracer = recordingTracer();
+
+    await sentryTelemetry(tracer.startSpan).startSpan({ name: "pi.ai.request" }, (span) =>
+      span.setStatus({ status: "error", error: { name: "ProviderError", message: "Robin asked about peanuts" } }),
+    );
+
+    expect(tracer.spans[0]?.status).toEqual({ code: 2, message: "internal_error" });
   });
 });

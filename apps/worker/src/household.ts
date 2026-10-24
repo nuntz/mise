@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
+import { type ConversationId, createRegistry, Harness } from "@earendil-works/pi-durable";
 import {
   type Caller,
   type ChangeNotice,
@@ -7,6 +7,7 @@ import {
   ChatInput,
   type ChatMessage,
   type ChatReply,
+  ChatWhere,
   changeTopicOf,
   DRIVE_SYNC_TIME,
   type DriveDoc,
@@ -39,6 +40,7 @@ import {
   type ParsedToolInput,
   PHOTO_PREFIX,
   parseToolInput,
+  presentTurn,
   type Recipe,
   type RecipeId,
   type RecipeImage,
@@ -55,7 +57,7 @@ import {
 import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
 import { PiHarness } from "agents/harness/pi";
-import { agentModels, miseExtension, recentChat } from "./agent";
+import { agentModels, miseExtension, recentChat, TURN_ENTRY, type TurnData, turnBeingAnswered } from "./agent";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed } from "./calendar";
 import { type Drive, DriveError, driveRevision, openDrive, recordDriveDocs } from "./drive";
@@ -65,10 +67,11 @@ import { readCatalogue } from "./items";
 import { fetchPhoto, readLink } from "./links";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
-import { sentryOptions } from "./observability";
+import { sentryOptions, sentryTelemetry } from "./observability";
 import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { type HouseholdToolName, handlers } from "./tools";
+import { callerOfTurn, recordTurn, speakerOfTurn } from "./turns";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
@@ -105,17 +108,28 @@ class HouseholdAgent extends Agent<Env> {
 
   /**
    * The agent: one shared Pi conversation, kept in Pi's own `pi_` tables beside ours. It reaches
-   * Mise's data only through the tools, called as the PWA calls them.
+   * Mise's data only through the tools, called as the PWA calls them, as the Member whose turn it answers.
    */
   private readonly harness = new PiHarness({
     harness: ({ storage, context, onWake }) => {
       const registry = createRegistry();
-      // As no one for now: which Member is speaking reaches the tools with the speaker records (#31, story 45).
-      registry.install(miseExtension((name, input) => this.invokeTool(name, input, null)));
+      registry.install(
+        miseExtension({
+          callTool: (name, input, caller) => this.invokeTool(name, input, caller),
+          speakerIn: (id) => this.callerAnswered(id),
+        }),
+      );
       return Harness.open(
         storage,
-        // A failed run answers nothing more: later messages are not run against a stale question.
-        { models: this.models.models, registry, onWake, settings: { afterFailedRun: "withdraw" } },
+        {
+          models: this.models.models,
+          registry,
+          onWake,
+          // A failed run answers nothing more: later messages are not run against a stale question.
+          settings: { afterFailedRun: "withdraw" },
+          // Runs and model requests are traced, without what anyone said.
+          telemetry: sentryTelemetry(),
+        },
         context,
       );
     },
@@ -145,17 +159,39 @@ class HouseholdAgent extends Agent<Env> {
     return this.invokeTool(name, input, this.callerOf(getCurrentAgent().connection));
   }
 
-  /** Sends a Member's message to the agent and waits for its answer. */
+  /**
+   * Sends a Member's message to the agent, from the screen and Week `where` names, and waits for its
+   * answer. The turn is recorded with its Caller and shown to the model with who said it; a turn sent
+   * while another is answered waits for it. Every screen is told once the conversation has grown.
+   */
   @callable()
-  async chat(text: unknown): Promise<ChatReply> {
+  async chat(text: unknown, where: unknown): Promise<ChatReply> {
     const message = ChatInput.safeParse(text);
-    if (!message.success)
+    const from = ChatWhere.safeParse(where);
+    if (!message.success || !from.success) {
       return { ok: false, error: { code: "invalid_input", message: "Send a message to the agent" } };
-    const answer = await this.harness.prompt(message.data);
+    }
+    const { sql } = this.ctx.storage;
+    const caller = handlers.get_caller(sql, {}, { caller: this.callerOf(getCurrentAgent().connection) });
+    const speaker = caller.ok ? caller.value : null;
+    const turn = recordTurn(sql, speaker, new Date().toISOString());
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), where: from.data, text: message.data });
+    const entry: TurnData = { turn, text: message.data };
+    const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, () =>
+      this.harness.prompt(presented, { entry: { kind: TURN_ENTRY, data: entry } }),
+    );
+    this.notify("chat", this.bumpRevision());
     if (answer.status !== "done") {
       return { ok: false, error: { code: "unanswered", message: answer.reason ?? "The agent did not answer" } };
     }
     return { ok: true, value: { role: "agent", text: answer.text ?? "" } };
+  }
+
+  /** The Caller whose turn the conversation `id` is answering. */
+  private async callerAnswered(id: ConversationId): Promise<Caller | null> {
+    const conversation = await (await this.harness.pi()).conversation(id, BACKGROUND_CONTEXT);
+    const turn = conversation && (await turnBeingAnswered(conversation));
+    return turn ? callerOfTurn(this.ctx.storage.sql, turn) : null;
   }
 
   /** The latest turns of the Household's conversation with the agent, oldest first. */
@@ -163,7 +199,8 @@ class HouseholdAgent extends Agent<Env> {
   async conversation(): Promise<ChatMessage[]> {
     // The harness opened Pi with its root conversation, so `root` finds it rather than making one.
     const pi = await this.harness.pi();
-    return recentChat(await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS);
+    const { sql } = this.ctx.storage;
+    return recentChat(await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS, (turn) => speakerOfTurn(sql, turn));
   }
 
   /** A tool call, as `caller`; the agent's calls come here too. */

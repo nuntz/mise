@@ -397,6 +397,21 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE TABLE drive_doc (doc_id TEXT PRIMARY KEY, modified_time TEXT NOT NULL)",
     ],
   },
+  {
+    version: 22,
+    statements: [
+      // Who said each Member's turn of the conversation with the agent, whose own tables (pi_) the
+      // export leaves out: the Caller's email, the Member they signed in as and the name the chat
+      // shows, each NULL when there was none. A removed Member's turns keep the name they had.
+      `CREATE TABLE chat_turn (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT,
+        member_id INTEGER,
+        speaker TEXT,
+        sent_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

@@ -3,6 +3,7 @@ import {
   type ChangeTopic,
   type ChatMessage,
   type ChatReply,
+  type ChatWhere,
   HOUSEHOLD_AGENT,
   HOUSEHOLD_PATH,
   PAPRIKA_UPLOAD_PATH,
@@ -30,8 +31,11 @@ export type MiseClient = {
    * the first attempt to connect fails, it counts as reachable. Returns an unsubscribe function.
    */
   onConnection(listener: (online: boolean) => void): () => void;
-  /** Sends a message to the agent and resolves with its answer, which can take a while. */
-  chat(text: string): Promise<ChatReply>;
+  /**
+   * Sends a message to the agent, from the screen and Week `where` names, and resolves with its
+   * answer, which can take a while.
+   */
+  chat(text: string, where: ChatWhere): Promise<ChatReply>;
   /** The latest turns of the Household's conversation with the agent, oldest first. */
   conversation(): Promise<ChatMessage[]>;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
@@ -68,7 +72,7 @@ export function createMiseClient(host = window.location.host): MiseClient {
 
     subscribe: (topics, refetch) => subscribeTo(agent, topics, refetch),
 
-    chat: (text) => agent.call("chat", [text], { timeout: CHAT_TIMEOUT_MS }),
+    chat: (text, where) => agent.call("chat", [text, where], { timeout: CHAT_TIMEOUT_MS }),
 
     conversation: () => agent.call("conversation", []),
 

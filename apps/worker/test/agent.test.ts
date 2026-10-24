@@ -7,11 +7,21 @@ import {
   fauxToolCall,
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
+import type { JsonObject } from "@earendil-works/pi-durable";
+import type { ChatWhere, Slot, ToolResult, Week } from "@mise/domain";
 import { afterEach, describe, expect, test } from "vitest";
 import { useAgentModels } from "../src/agent";
+import { connectAs } from "./connect";
 
 // Monday 26 October 2026 to Sunday 1 November.
+const MONDAY = "2026-10-26";
+const TUESDAY = "2026-10-27";
 const THURSDAY = "2026-10-29";
+const FRIDAY = "2026-10-30";
+
+const ON_THE_WEEK: ChatWhere = { screen: "week", week: MONDAY };
+
+type HouseholdStub = ReturnType<typeof env.Household.getByName>;
 
 /** A Household whose Thursday dinner is Lemon chicken. */
 async function householdWithThursdayDinner() {
@@ -22,8 +32,41 @@ async function householdWithThursdayDinner() {
   return household;
 }
 
+/**
+ * A Household of Robin (robin@example.com, allergic to peanut), Alex (alex@example.com) and Sam,
+ * Members 1, 2 and 3. Recipe 1 is Satay (peanut); Recipes 2 to 9 are rice bowls, safe for everyone.
+ */
+async function familyHousehold() {
+  const household = env.Household.getByName(crypto.randomUUID());
+  await household.callTool("setup_household", {
+    name: "The Example Family",
+    members: [
+      { name: "Robin", email: "robin@example.com", constraints: [{ kind: "allergy", allergen: "peanut" }] },
+      { name: "Alex", email: "alex@example.com" },
+      { name: "Sam" },
+    ],
+  });
+  await household.callTool("create_recipe", {
+    title: "Satay",
+    baseServings: 4,
+    ingredients: ["2 tbsp peanut butter"],
+    effortMinutes: 30,
+  });
+  for (let index = 2; index <= 9; index++) {
+    await household.callTool("create_recipe", {
+      title: `Rice bowl ${index}`,
+      baseServings: 4,
+      ingredients: ["400 g rice"],
+      effortMinutes: 30,
+    });
+  }
+  return household;
+}
+
+type Message = TranscriptContext["messages"][number];
+
 /** The text of a message's content. */
-function textOf(message: TranscriptContext["messages"][number] | undefined): string {
+function textOf(message: Message | undefined): string {
   const content = message?.content;
   if (typeof content === "string") return content;
   return (content ?? []).map((block) => ("text" in block ? block.text : "")).join("");
@@ -37,6 +80,22 @@ function lastText(context: TranscriptContext): string {
 /** Everything a request shows the model, as one text. */
 function allText(context: TranscriptContext): string {
   return context.messages.map(textOf).join("\n");
+}
+
+/** The newest message a person sent, as the model sees it. */
+function lastUserText(context: TranscriptContext): string {
+  return textOf([...context.messages].reverse().find((message) => message.role === "user"));
+}
+
+/** The system prompt's sections and the tools offered, as the first request of a conversation shows them. */
+function systemOf(context: TranscriptContext): { sections: string; tools: string[] } {
+  const system = context.messages.find((message) => (message.role as string) === "system") as
+    | { sections?: Record<string, string>; toolsAdded?: { name: string }[] }
+    | undefined;
+  return {
+    sections: Object.values(system?.sections ?? {}).join("\n"),
+    tools: (system?.toolsAdded ?? []).map((tool) => tool.name),
+  };
 }
 
 /**
@@ -58,6 +117,22 @@ function dinnerReader(): FauxResponseFactory {
 }
 
 /**
+ * A scripted model that answers each message by making `calls` one after the other, then saying what
+ * the last tool returned, or "Refused: <the error>" if it failed.
+ */
+function caller(calls: [string, JsonObject][]): FauxResponseFactory {
+  return (context) => {
+    const fromLast = [...context.messages].reverse().findIndex((message) => message.role === "user");
+    const made = context.messages.slice(-fromLast - 1).filter((message) => message.role === "toolResult");
+    const failed = made.find((message) => (message as { isError?: boolean }).isError);
+    if (failed) return fauxAssistantMessage(`Refused: ${textOf(failed)}`);
+    const next = calls[made.length];
+    if (!next) return fauxAssistantMessage(`Done: ${lastText(context)}`);
+    return fauxAssistantMessage(fauxToolCall(...next), { stopReason: "toolUse" });
+  };
+}
+
+/**
  * Puts the agent of households started from now on a faux model that answers every request with
  * `respond`. A household's models are fixed when it starts, so script the model before using it.
  */
@@ -71,6 +146,16 @@ function scriptModel(respond: FauxResponseFactory, { contextWindow }: { contextW
   return faux;
 }
 
+async function weekOf(household: HouseholdStub, date: string): Promise<Week> {
+  const result = (await household.callTool("get_week", { date })) as ToolResult<unknown>;
+  if (!result.ok) throw new Error(result.error.message);
+  return result.value as Week;
+}
+
+async function dinnerOn(household: HouseholdStub, date: string): Promise<Slot | undefined> {
+  return (await weekOf(household, date)).slots.find((slot) => slot.date === date && slot.meal === "dinner");
+}
+
 afterEach(() => useAgentModels(undefined));
 
 describe("the agent", () => {
@@ -78,7 +163,7 @@ describe("the agent", () => {
     scriptModel(dinnerReader());
     const household = await householdWithThursdayDinner();
 
-    const reply = await household.chat("What's for dinner Thursday?");
+    const reply = await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
 
     expect(reply).toEqual({ ok: true, value: { role: "agent", text: "Thursday's dinner is Lemon chicken." } });
   });
@@ -87,24 +172,26 @@ describe("the agent", () => {
     scriptModel(dinnerReader());
     const household = await householdWithThursdayDinner();
 
-    await household.chat("What's for dinner Thursday?");
-    await household.chat("And Thursday again?");
+    await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
+    await household.chat("And Thursday again?", ON_THE_WEEK);
 
     expect(await household.conversation()).toEqual([
-      { role: "member", text: "What's for dinner Thursday?" },
+      { role: "member", speaker: null, text: "What's for dinner Thursday?" },
       { role: "agent", text: "Thursday's dinner is Lemon chicken." },
-      { role: "member", text: "And Thursday again?" },
+      { role: "member", speaker: null, text: "And Thursday again?" },
       { role: "agent", text: "Thursday's dinner is Lemon chicken." },
     ]);
   });
 
-  test("refuses an empty message without asking the model", async () => {
+  test("refuses an empty message, or one sent from nowhere, without asking the model", async () => {
     const faux = scriptModel(dinnerReader());
     const household = await householdWithThursdayDinner();
 
-    const reply = await household.chat("   ");
+    const empty = await household.chat("   ", ON_THE_WEEK);
+    const nowhere = await household.chat("What's for dinner?", { screen: "attic" });
 
-    expect(reply).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+    expect(empty).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+    expect(nowhere).toMatchObject({ ok: false, error: { code: "invalid_input" } });
     expect(faux.state.callCount).toBe(0);
   });
 
@@ -114,9 +201,283 @@ describe("the agent", () => {
     );
     const household = await householdWithThursdayDinner();
 
-    const reply = await household.chat("What's for dinner Thursday?");
+    const reply = await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
 
     expect(reply).toMatchObject({ ok: false, error: { code: "unanswered" } });
+  });
+});
+
+describe("what the agent is told", () => {
+  test("the system prompt describes the Household, its Members and their Constraints", async () => {
+    const seen: string[] = [];
+    scriptModel((context) => {
+      seen.push(systemOf(context).sections);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    const system = seen[0] ?? "";
+    expect(system).toContain("The Example Family");
+    expect(system).toContain("America/Vancouver");
+    expect(system).toMatch(/Robin \(Member 1\).*allergic to peanut/);
+    expect(system).toContain("Alex (Member 2)");
+    expect(system).toContain("Sam (Member 3)");
+  });
+
+  test("is offered the tool catalogue, except setup, uploads and what only a person may do", async () => {
+    const offered: string[][] = [];
+    scriptModel((context) => {
+      offered.push(systemOf(context).tools);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    const tools = offered[0] ?? [];
+    for (const tool of [
+      "get_household",
+      "get_caller",
+      "get_week",
+      "propose_week",
+      "set_slot",
+      "set_diners",
+      "set_guests",
+      "lock_slot",
+      "search_recipes",
+      "get_recipe",
+      "list_items",
+      "list_staples",
+      "upsert_staple",
+      "record_staple_status",
+      "build_grocery_list",
+      "import_url",
+      "import_text",
+    ]) {
+      expect(tools).toContain(tool);
+    }
+    for (const tool of [
+      // Never: it would recreate the Household (ADR 0024).
+      "setup_household",
+      // Uploads come over HTTP, which the agent can't make.
+      "run_paprika_import",
+      "import_screenshots",
+      // Need a person's tap, which the chat can't offer yet (ADR 0024, #40).
+      "delete_recipe",
+      "clear_week",
+      "update_member",
+      "update_member_constraints",
+      "remove_member",
+      // Only a person accepts what a model read or suggested (ADR 0023), or states an Item's Allergens.
+      "accept_suggestion",
+      "accept_draft",
+      "create_item",
+      "update_item",
+      "resolve_ingredient",
+    ]) {
+      expect(tools).not.toContain(tool);
+    }
+  });
+});
+
+describe("who is speaking", () => {
+  test("each turn is shown to the model with its speaker and where the chat was opened, and its tools run as them", async () => {
+    const seen: string[] = [];
+    scriptModel((context) => {
+      if (context.messages.at(-1)?.role !== "toolResult") {
+        seen.push(lastUserText(context));
+        return fauxAssistantMessage(fauxToolCall("get_caller", {}), { stopReason: "toolUse" });
+      }
+      const caller = JSON.parse(lastText(context)) as { email: string };
+      return fauxAssistantMessage(`You are ${caller.email}.`);
+    });
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+
+    const reply = await robin.rpc("chat", ["Who am I?", ON_THE_WEEK]);
+
+    expect(seen).toEqual(["[Robin, on the Week screen, showing the Week of Monday 2026-10-26]\nWho am I?"]);
+    expect(reply).toEqual({ ok: true, value: { role: "agent", text: "You are robin@example.com." } });
+    expect(await household.conversation()).toEqual([
+      { role: "member", speaker: "Robin", text: "Who am I?" },
+      { role: "agent", text: "You are robin@example.com." },
+    ]);
+  });
+
+  test("a Caller who is no Member is shown by their email", async () => {
+    scriptModel(() => fauxAssistantMessage("Hello."));
+    const household = await familyHousehold();
+    const guest = await connectAs(household, "guest@example.com");
+
+    await guest.rpc("chat", ["Hello", { screen: "recipes" }]);
+
+    expect(await household.conversation()).toContainEqual({
+      role: "member",
+      speaker: "guest@example.com",
+      text: "Hello",
+    });
+  });
+
+  test("two people's messages are answered one after the other, each as its own speaker", async () => {
+    let releaseRobin!: () => void;
+    const robinHeld = new Promise<void>((resolve) => (releaseRobin = resolve));
+    const requests: string[] = [];
+    scriptModel(async (context) => {
+      const last = context.messages.at(-1);
+      requests.push(last?.role === "toolResult" ? "tool result" : lastUserText(context));
+      if (last?.role !== "toolResult") {
+        // Robin's turn is held at its first request, until Alex has sent theirs.
+        if (lastUserText(context).endsWith("Robin here")) await robinHeld;
+        return fauxAssistantMessage(fauxToolCall("get_caller", {}), { stopReason: "toolUse" });
+      }
+      const caller = JSON.parse(lastText(context)) as { email: string };
+      return fauxAssistantMessage(`You are ${caller.email}.`);
+    });
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+    const alex = await connectAs(household, "alex@example.com");
+
+    const robinReply = robin.rpc("chat", ["Robin here", ON_THE_WEEK]);
+    // Give Robin's turn time to start, then send Alex's while it runs.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const alexReply = alex.rpc("chat", ["Alex here", ON_THE_WEEK]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    releaseRobin();
+
+    expect(await robinReply).toEqual({ ok: true, value: { role: "agent", text: "You are robin@example.com." } });
+    expect(await alexReply).toEqual({ ok: true, value: { role: "agent", text: "You are alex@example.com." } });
+    expect(requests.map((request) => request.split("\n").at(-1))).toEqual([
+      "Robin here",
+      "tool result",
+      "Alex here",
+      "tool result",
+    ]);
+    expect(await household.conversation()).toEqual([
+      { role: "member", speaker: "Robin", text: "Robin here" },
+      { role: "agent", text: "You are robin@example.com." },
+      { role: "member", speaker: "Alex", text: "Alex here" },
+      { role: "agent", text: "You are alex@example.com." },
+    ]);
+  });
+});
+
+describe("typical turns", () => {
+  test("“re-propose the week but keep Tuesday” locks Tuesday and proposes the rest again", async () => {
+    scriptModel(
+      caller([
+        ["lock_slot", { date: TUESDAY, meal: "dinner", locked: true }],
+        ["propose_week", { date: MONDAY, reroll: true }],
+      ]),
+    );
+    const household = await familyHousehold();
+    await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
+
+    const reply = await household.chat("Re-propose the week but keep Tuesday", ON_THE_WEEK);
+
+    expect(reply).toMatchObject({ ok: true });
+    const dinners = (await weekOf(household, MONDAY)).slots.filter((slot) => slot.meal === "dinner");
+    expect(dinners.find((slot) => slot.date === TUESDAY)).toMatchObject({ recipe: { id: 2 }, locked: true });
+    expect(dinners.filter((slot) => slot.recipe !== null)).toHaveLength(7);
+  });
+
+  test("“just the two of us Friday” sets Friday's Diners", async () => {
+    scriptModel(caller([["set_diners", { date: FRIDAY, diners: [1, 2] }]]));
+    const household = await familyHousehold();
+
+    await household.chat("Just the two of us Friday", ON_THE_WEEK);
+
+    expect(await dinnerOn(household, FRIDAY)).toMatchObject({ diners: [1, 2] });
+  });
+
+  test("“swap Thursday for something with the chicken we have” searches, then sets Thursday", async () => {
+    scriptModel(
+      caller([
+        ["search_recipes", { query: "chicken" }],
+        ["set_slot", { date: THURSDAY, meal: "dinner", kind: "recipe", recipeId: 1 }],
+      ]),
+    );
+    const household = await householdWithThursdayDinner();
+    await household.callTool("set_slot", { date: THURSDAY, meal: "dinner", kind: "eat_out" });
+
+    await household.chat("Swap Thursday for something with the chicken we have", ON_THE_WEEK);
+
+    expect(await dinnerOn(household, THURSDAY)).toMatchObject({ kind: "recipe", recipe: { title: "Lemon chicken" } });
+  });
+
+  test("“we're out of cumin” records the Staple as out", async () => {
+    scriptModel(
+      caller([
+        ["upsert_staple", { item: "cumin" }],
+        ["record_staple_status", { item: "cumin", status: "out" }],
+      ]),
+    );
+    const household = await familyHousehold();
+
+    const reply = await household.chat("We're out of cumin", { screen: "pantry" });
+
+    expect(reply).toMatchObject({ ok: true });
+    expect(await household.callTool("list_staples", {})).toMatchObject({
+      value: [{ item: "cumin", status: "out" }],
+    });
+  });
+
+  test("a pasted link is imported", async () => {
+    scriptModel(caller([["import_url", { url: "https://kitchen.example.com/recipes/dal/" }]]));
+    const household = await familyHousehold();
+
+    await household.chat("https://kitchen.example.com/recipes/dal/", { screen: "recipes" });
+
+    expect(await household.callTool("list_drafts", {})).toMatchObject({ value: [{ recipe: { draft: true } }] });
+  });
+
+  test("an Override is refused, and the Slot stays as it was", async () => {
+    scriptModel(
+      caller([
+        [
+          "set_slot",
+          {
+            date: FRIDAY,
+            meal: "dinner",
+            kind: "recipe",
+            recipeId: 1,
+            overrides: [{ who: 1, allergen: "peanut", reason: "We'll make Robin's without the sauce" }],
+          },
+        ],
+      ]),
+    );
+    const household = await familyHousehold();
+
+    const reply = await household.chat("Plan Satay Friday anyway", ON_THE_WEEK);
+
+    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringMatching(/^Refused: /) } });
+    expect(await dinnerOn(household, FRIDAY)).toMatchObject({ recipe: null });
+  });
+
+  test("a Conflict the agent runs into names the person and the Allergen", async () => {
+    scriptModel(caller([["set_slot", { date: FRIDAY, meal: "dinner", kind: "recipe", recipeId: 1 }]]));
+    const household = await familyHousehold();
+
+    const reply = await household.chat("Plan Satay Friday", ON_THE_WEEK);
+
+    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringContaining("constraint_conflict") } });
+    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringContaining("peanut") } });
+    expect(await dinnerOn(household, FRIDAY)).toMatchObject({ recipe: null });
+  });
+});
+
+describe("screens and the agent", () => {
+  test("what the agent changes is announced to every connected screen, and so is each answer", async () => {
+    scriptModel(caller([["set_diners", { date: FRIDAY, diners: [1, 2] }]]));
+    const household = await familyHousehold();
+    const screen = await connectAs(household, "alex@example.com");
+
+    await household.chat("Just the two of us Friday", ON_THE_WEEK);
+    // Notices arrive over the socket a moment after the answer.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(screen.notices.map((notice) => notice.topic)).toEqual(["plan", "chat"]);
   });
 });
 
@@ -136,7 +497,7 @@ describe("a long conversation", () => {
       if (shown.includes(SUMMARISER)) {
         return fauxAssistantMessage(known ? "Sam's birthday dinner: Saturday." : "Nothing to keep.");
       }
-      if (lastText(context).startsWith("When is Sam's birthday dinner?")) {
+      if (lastText(context).endsWith("When is Sam's birthday dinner?")) {
         return fauxAssistantMessage(known ? "On Saturday." : "I don't know.");
       }
       return fauxAssistantMessage(`Noted. ${"Here is a long answer about meal planning. ".repeat(60)}`);
@@ -150,11 +511,12 @@ describe("a long conversation", () => {
     const household = env.Household.getByName(crypto.randomUUID());
     await household.callTool("setup_household", { name: "The Example Family" });
 
-    const replies = [await household.chat(BIRTHDAY)];
+    const replies = [await household.chat(BIRTHDAY, ON_THE_WEEK)];
     for (let turn = 1; turn <= 40; turn++) {
-      replies.push(await household.chat(`Turn ${turn}. ${"Some long chatter about what we might cook. ".repeat(60)}`));
+      const chatter = `Turn ${turn}. ${"Some long chatter about what we might cook. ".repeat(60)}`;
+      replies.push(await household.chat(chatter, ON_THE_WEEK));
     }
-    const answer = await household.chat("When is Sam's birthday dinner?");
+    const answer = await household.chat("When is Sam's birthday dinner?", ON_THE_WEEK);
 
     expect(replies.filter((reply) => !reply.ok)).toEqual([]);
     const last = requests.at(-1) ?? "";
@@ -165,17 +527,18 @@ describe("a long conversation", () => {
     // The chat still shows the turns the model now sees only as a summary.
     const conversation = await household.conversation();
     expect(conversation).toHaveLength(84);
-    expect(conversation[0]).toEqual({ role: "member", text: BIRTHDAY });
+    expect(conversation[0]).toEqual({ role: "member", speaker: null, text: BIRTHDAY });
   });
 });
 
 describe("the agent's conversation and the export", () => {
   const householdUrl = "http://mise.example.com/agents/household/household";
 
-  test("stays out of the export, which still restores into a fresh deployment", async () => {
+  test("the speaker records are exported and restored; what was said stays out", async () => {
     scriptModel(dinnerReader());
-    const household = await householdWithThursdayDinner();
-    await household.chat("What's for dinner Thursday?");
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+    await robin.rpc("chat", ["What's for dinner Thursday?", ON_THE_WEEK]);
 
     const exported = await (await household.fetch(`${householdUrl}/export`)).text();
     const fresh = env.Household.getByName(crypto.randomUUID());
@@ -185,7 +548,11 @@ describe("the agent's conversation and the export", () => {
       body: exported,
     });
 
-    expect(Object.keys(JSON.parse(exported).tables).filter((table) => table.startsWith("pi_"))).toEqual([]);
+    const tables = JSON.parse(exported).tables as Record<string, Record<string, unknown>[]>;
+    expect(Object.keys(tables).filter((table) => table.startsWith("pi_"))).toEqual([]);
+    expect(tables.chat_turn).toEqual([
+      { id: 1, email: "robin@example.com", member_id: 1, speaker: "Robin", sent_at: expect.any(String) },
+    ]);
     expect(exported).not.toContain("What's for dinner Thursday?");
     expect(restored.status).toBe(200);
     expect(await (await fresh.fetch(`${householdUrl}/export`)).text()).toBe(exported);

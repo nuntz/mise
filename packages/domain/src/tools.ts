@@ -83,9 +83,10 @@ import {
  * Recipes, and its log and flags are read beside them; and so are Suggestions, which are read beside
  * the Unresolved Ingredients they are for and resolve them when accepted. "plan" is the Weeks and their Slots;
  * "grocery" their Grocery Lists and the Household's Staples, which the lists buy and their Have Ticks
- * restock; the lists also depend on the plan, the Recipes and the Household.
+ * restock; the lists also depend on the plan, the Recipes and the Household. "chat" is the Household's
+ * conversation with the agent, announced once each turn is answered; no tool changes it.
  */
-export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery"]);
+export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery", "chat"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 type ToolDefinition = {

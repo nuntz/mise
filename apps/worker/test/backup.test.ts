@@ -231,9 +231,10 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 21,
+      schemaVersion: 22,
       tables: {
         calendar_token: [],
+        chat_turn: [],
         drive_doc: [],
         household: [
           {
@@ -493,6 +494,21 @@ describe("export and restore", () => {
     await source.callTool("update_item", { id: "garam_masala", section: "international" });
     const exported = JSON.parse(await exportOf(source));
     Object.assign(exported.tables.item_section[0], change);
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+  });
+
+  test("restore rejects a speaker record whose email is not an email", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.chat_turn = [
+      { id: 1, email: "not an email", member_id: null, speaker: "Robin", sent_at: "2026-10-24T12:00:00.000Z" },
+    ];
     const target = freshHousehold();
 
     const response = await restore(target, JSON.stringify(exported));

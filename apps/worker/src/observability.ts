@@ -1,4 +1,6 @@
+import type { HarnessOptions } from "@earendil-works/pi-durable";
 import type { CloudflareOptions, Event } from "@sentry/cloudflare";
+import * as Sentry from "@sentry/cloudflare";
 
 type StreamedSpan = Parameters<NonNullable<CloudflareOptions["beforeSendSpan"]>>[0];
 
@@ -79,4 +81,54 @@ export function scrubSpan(span: StreamedSpan): StreamedSpan {
 
 function withoutQuery(url: string): string {
   return url.split(/[?#]/, 1)[0] ?? url;
+}
+
+type TelemetryContext = NonNullable<HarnessOptions["telemetry"]>;
+type TelemetrySpan = Parameters<Parameters<TelemetryContext["startSpan"]>[1]>[0];
+type PiAttributes = NonNullable<Parameters<TelemetrySpan["setAttributes"]>[0]>;
+type SpanAttributes = NonNullable<Parameters<Sentry.Span["setAttributes"]>[0]>;
+
+/** What the agent's traces use of a Sentry span. */
+export type SentrySpan = {
+  setAttributes(attributes: SpanAttributes): unknown;
+  setStatus(status: { code: 1 | 2; message?: string }): unknown;
+  addEvent(name: string, attributes: SpanAttributes): unknown;
+};
+
+/** Sentry's `startSpan`, as far as the agent's traces use it. */
+export type StartSpan = <T>(
+  options: { name: string; op: string; attributes: SpanAttributes },
+  callback: (span: SentrySpan) => T,
+) => T;
+
+/**
+ * pi's telemetry as Sentry spans: agent runs (`pi.durable.*`) and model requests (`pi.ai.request`),
+ * which tool calls (`mise.tool`) nest under. pi records only ids, model names, token counts and the
+ * like, never what anyone said; a failure keeps only that it failed, since a provider's error text
+ * can quote the prompt.
+ */
+export function sentryTelemetry(startSpan: StartSpan = Sentry.startSpan as StartSpan): TelemetryContext {
+  const telemetry: TelemetryContext = {
+    startSpan: (options, callback) =>
+      Promise.resolve(
+        startSpan({ name: options.name, op: options.name, attributes: defined(options.attributes) }, (span) =>
+          callback({
+            ...telemetry,
+            setAttributes: (attributes) => void span.setAttributes(defined(attributes)),
+            setStatus: (status) =>
+              void span.setStatus(status.status === "ok" ? { code: 1 } : { code: 2, message: "internal_error" }),
+            addEvent: (name, attributes) => void span.addEvent(name, defined(attributes)),
+            // Links name other pi spans, which Sentry has no handle on.
+            addLink: () => {},
+          }),
+        ),
+      ),
+  };
+  return telemetry;
+}
+
+function defined(attributes: PiAttributes | undefined): SpanAttributes {
+  return Object.fromEntries(
+    Object.entries(attributes ?? {}).filter(([, value]) => value !== undefined),
+  ) as SpanAttributes;
 }

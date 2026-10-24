@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
-import { CALLER_HEADER } from "../src/identity";
+import { connectAs } from "./connect";
 
 function freshHousehold() {
   return env.Household.getByName(crypto.randomUUID());
@@ -256,31 +256,3 @@ describe("first-run setup with Members", () => {
     });
   });
 });
-
-/**
- * Opens a WebSocket to the household as `email`, stamped as the Worker stamps it after Access
- * (identity.test.ts covers that step), and calls tools over the Agents SDK's RPC protocol.
- */
-async function connectAs(household: ReturnType<typeof freshHousehold>, email: string) {
-  const response = await household.fetch("http://mise.example.com/agents/household/household", {
-    headers: { Upgrade: "websocket", [CALLER_HEADER]: JSON.stringify({ email }) },
-  });
-  const socket = response.webSocket;
-  if (!socket) throw new Error(`Expected a WebSocket upgrade, got ${response.status}`);
-  socket.accept();
-
-  const replies = new Map<string, (reply: { success: boolean; result?: unknown; error?: string }) => void>();
-  socket.addEventListener("message", (event) => {
-    const message = JSON.parse(String(event.data));
-    if (message.type === "rpc") replies.get(message.id)?.(message);
-  });
-
-  return {
-    call: (name: string, input: unknown) =>
-      new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        replies.set(id, (reply) => (reply.success ? resolve(reply.result) : reject(new Error(reply.error))));
-        socket.send(JSON.stringify({ type: "rpc", id, method: "callTool", args: [name, input] }));
-      }),
-  };
-}

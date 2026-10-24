@@ -1,15 +1,17 @@
-import type { ChatMessage } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, onMount, Show } from "solid-js";
+import type { ChatMessage, ChatWhere } from "@mise/domain";
+import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { Sheet } from "./Sheet";
 
 /**
- * "Ask Mise", in the app header: a chat with the agent from whatever screen is open. Kitchen mode
- * covers the header, so it has none. The agent needs the connection.
+ * "Ask Mise", in the app header: a chat with the agent from whatever screen is open, which each
+ * message names, with the Week it shows (`where`). Kitchen mode covers the header, so it has none.
+ * The agent needs the connection.
  */
-export function Chat(props: { client: MiseClient; online: boolean }) {
+export function Chat(props: { client: MiseClient; online: boolean; where: () => ChatWhere }) {
   const [open, setOpen] = createSignal(false);
 
   return (
@@ -19,14 +21,17 @@ export function Chat(props: { client: MiseClient; online: boolean }) {
         {t("chat.action")}
       </button>
       <Show when={open()}>
-        <ChatSheet client={props.client} onClose={() => setOpen(false)} />
+        <ChatSheet client={props.client} where={props.where} onClose={() => setOpen(false)} />
       </Show>
     </>
   );
 }
 
-/** The Household's conversation with the agent, and a message to add to it; a sheet over the page. */
-function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
+/**
+ * The Household's shared conversation with the agent, and a message to add to it; a sheet over the
+ * page. Turns others send show as the conversation changes.
+ */
+function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose: () => void }) {
   const titleId = createUniqueId();
   const [turns, setTurns] = createSignal<ChatMessage[]>();
   const [draft, setDraft] = createSignal("");
@@ -42,14 +47,20 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
     end?.scrollIntoView?.({ block: "end" });
   });
 
-  onMount(async () => {
-    try {
-      setTurns(await props.client.conversation());
-    } catch {
+  // While a message waits for its answer, the turns shown keep it; the conversation is read again after.
+  const refetch = keepFresh(
+    props.client,
+    ["chat"],
+    () => props.client.conversation(),
+    (conversation) => {
+      if (!waiting()) setTurns(conversation);
+    },
+    () => {
+      if (turns()) return;
       setTurns([]);
       setError("load");
-    }
-  });
+    },
+  );
 
   const send = async () => {
     const text = draft().trim();
@@ -58,11 +69,12 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
     setError(undefined);
     setWaiting(true);
     setDraft("");
-    const sent: ChatMessage[] = [...before, { role: "member", text }];
+    // Shown as theirs until the conversation, which names them, is read again.
+    const sent: ChatMessage[] = [...before, { role: "member", speaker: t("chat.speaker.you"), text }];
     setTurns(sent);
     let answer: ChatMessage | undefined;
     try {
-      const reply = await props.client.chat(text);
+      const reply = await props.client.chat(text, props.where());
       if (reply.ok) answer = reply.value;
     } catch {
       // Shown as unanswered below.
@@ -70,6 +82,7 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
     setWaiting(false);
     if (answer) {
       setTurns([...sent, answer]);
+      void refetch();
       return;
     }
     // Unanswered: the message goes back in the box to send again.
@@ -101,7 +114,7 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
                   {(turn) => (
                     <li class={`chat-turn chat-turn-${turn.role}`}>
                       <span class="chat-speaker">
-                        {t(`chat.speaker.${turn.role}`)}
+                        {turn.role === "agent" ? t("chat.speaker.agent") : (turn.speaker ?? t("chat.speaker.someone"))}
                         <span class="visually-hidden">: </span>
                       </span>
                       {turn.text}

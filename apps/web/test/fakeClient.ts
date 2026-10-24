@@ -28,15 +28,22 @@ export function createFakeClient(
     for (const listener of listeners) listener(value);
     if (reconnected) for (const subscription of [...subscriptions]) subscription.refetch();
   };
+  const notifyAll = (topic: ChangeTopic) => {
+    if (!connection.online) return;
+    for (const subscription of [...subscriptions]) if (subscription.topics.includes(topic)) subscription.refetch();
+  };
   const client: MiseClient = {
     call: (async (name: string, input: Record<string, unknown>) => {
       if (!connection.online) throw new Error("Connection closed");
       return call(name, input);
     }) as MiseClient["call"],
-    async chat(text) {
+    async chat(text, where) {
       if (!connection.online) throw new Error("Connection closed");
       if (!chat) throw new Error("Unexpected chat");
-      return chat(text);
+      const reply = await chat(text, where);
+      // The household announces the conversation once a turn is answered, or fails to be.
+      notifyAll("chat");
+      return reply;
     },
     async conversation() {
       if (!connection.online) throw new Error("Connection closed");
@@ -66,10 +73,7 @@ export function createFakeClient(
   return {
     client,
     /** A change notice for `topic`. */
-    notify(topic: ChangeTopic) {
-      if (!connection.online) return;
-      for (const subscription of [...subscriptions]) if (subscription.topics.includes(topic)) subscription.refetch();
-    },
+    notify: notifyAll,
     goOnline: () => setOnline(true),
     goOffline: () => setOnline(false),
   };

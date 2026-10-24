@@ -1,4 +1,12 @@
-import { type ChatMessage, type ChatReply, DEFAULT_EFFORT_BUDGETS, type Household, STORE_SECTIONS } from "@mise/domain";
+import {
+  type ChatMessage,
+  type ChatReply,
+  type ChatWhere,
+  currentWeek,
+  DEFAULT_EFFORT_BUDGETS,
+  type Household,
+  STORE_SECTIONS,
+} from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test } from "vitest";
@@ -25,6 +33,7 @@ const household: Household = {
 function fakeClient(earlier: ChatMessage[], reply: (text: string) => Promise<ChatReply>) {
   const conversation = [...earlier];
   const sent: string[] = [];
+  const sentFrom: ChatWhere[] = [];
   const fake = createFakeClient(
     async (name) => {
       switch (name) {
@@ -44,15 +53,16 @@ function fakeClient(earlier: ChatMessage[], reply: (text: string) => Promise<Cha
     },
     {
       conversation: async () => [...conversation],
-      chat: async (text) => {
+      chat: async (text, where) => {
         sent.push(text);
+        sentFrom.push(where);
         const answer = await reply(text);
-        if (answer.ok) conversation.push({ role: "member", text }, answer.value);
+        if (answer.ok) conversation.push({ role: "member", speaker: "Robin", text }, answer.value);
         return answer;
       },
     },
   );
-  return { ...fake, sent };
+  return { ...fake, sent, sentFrom, conversation };
 }
 
 function messageBox(chat: HTMLElement): HTMLTextAreaElement {
@@ -64,11 +74,12 @@ async function openChat() {
   return screen.findByRole("dialog", { name: "Ask Mise" });
 }
 
-test("the chat opens from the header with the conversation so far", async () => {
+test("the chat opens from the header with the conversation so far, each turn saying who said it", async () => {
   const { client } = fakeClient(
     [
-      { role: "member", text: "What's for dinner Monday?" },
+      { role: "member", speaker: "Robin", text: "What's for dinner Monday?" },
       { role: "agent", text: "Dal." },
+      { role: "member", speaker: null, text: "And Tuesday?" },
     ],
     async () => ({ ok: true, value: { role: "agent", text: "" } }),
   );
@@ -77,7 +88,11 @@ test("the chat opens from the header with the conversation so far", async () => 
   const chat = await openChat();
 
   const turns = await within(chat).findAllByRole("listitem");
-  expect(turns.map((turn) => turn.textContent)).toEqual(["Member: What's for dinner Monday?", "Mise: Dal."]);
+  expect(turns.map((turn) => turn.textContent)).toEqual([
+    "Robin: What's for dinner Monday?",
+    "Mise: Dal.",
+    "Someone: And Tuesday?",
+  ]);
 });
 
 /** What the chat last scrolled into view, by its text; jsdom has no scrolling of its own. */
@@ -98,7 +113,7 @@ test("the chat opens at its newest turn and follows the conversation as it grows
   let answer!: (reply: ChatReply) => void;
   const { client } = fakeClient(
     [
-      { role: "member", text: "What's for dinner Monday?" },
+      { role: "member", speaker: "Robin", text: "What's for dinner Monday?" },
       { role: "agent", text: "Dal." },
     ],
     () => new Promise((resolve) => (answer = resolve)),
@@ -168,4 +183,44 @@ test("the chat closes with its close button", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Close the chat" }));
 
   expect(screen.queryByRole("dialog", { name: "Ask Mise" })).toBeNull();
+});
+
+test("a message says which screen, and which Week, the chat was opened from", async () => {
+  const { client, sentFrom } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "Done." } }));
+  render(() => <App client={client} />);
+
+  let chat = await openChat();
+  await userEvent.type(messageBox(chat), "What's this week?");
+  await userEvent.click(within(chat).getByRole("button", { name: "Send" }));
+  await within(chat).findByText("Done.");
+  await userEvent.click(within(chat).getByRole("button", { name: "Close the chat" }));
+  await userEvent.click(screen.getByRole("button", { name: "Groceries" }));
+  chat = await openChat();
+  await userEvent.type(messageBox(chat), "Build the list");
+  await userEvent.click(within(chat).getByRole("button", { name: "Send" }));
+  await within(chat).findAllByText("Done.");
+
+  expect(sentFrom).toEqual([
+    // The Week screen shows no Week until one loads.
+    { screen: "week" },
+    { screen: "grocery", week: currentWeek(new Date(), household).startDate },
+  ]);
+});
+
+test("someone else's turn shows once the conversation changes", async () => {
+  const { client, conversation, notify } = fakeClient([], async () => ({
+    ok: true,
+    value: { role: "agent", text: "" },
+  }));
+  render(() => <App client={client} />);
+  const chat = await openChat();
+  await within(chat).findByText("Ask about the Week, for example “What's for dinner Thursday?”");
+
+  conversation.push(
+    { role: "member", speaker: "Alex", text: "Just the two of us Friday" },
+    { role: "agent", text: "Done." },
+  );
+  notify("chat");
+
+  expect(await within(chat).findByText("Just the two of us Friday")).toBeTruthy();
 });

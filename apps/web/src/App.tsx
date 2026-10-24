@@ -1,4 +1,4 @@
-import { type Household, type QueuedChange, RecipeId } from "@mise/domain";
+import { type ChatWhere, type Household, type LocalDate, type QueuedChange, RecipeId } from "@mise/domain";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CalendarSettings } from "./Calendar";
@@ -79,6 +79,12 @@ export function App(props: { client: MiseClient }) {
     const opened = opening();
     return opened?.page === "household" ? opened.setting : undefined;
   };
+  // The Week the Week or Grocery page last showed, for the chat to say where it was opened.
+  const [weekShown, setWeekShown] = createSignal<LocalDate>();
+  const where = (): ChatWhere => {
+    const week = page() === "week" || page() === "grocery" ? weekShown() : undefined;
+    return { screen: page(), ...(week && { week }) };
+  };
   const [inKitchen, setInKitchen] = createSignal<KitchenRecipe>();
   const [kitchenMode, setKitchenMode] = createKitchenMode();
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
@@ -152,7 +158,7 @@ export function App(props: { client: MiseClient }) {
               </Show>
               <header class="app-header">
                 <RanOut client={props.client} online={online()} />
-                <Chat client={props.client} online={online()} />
+                <Chat client={props.client} online={online()} where={where} />
               </header>
               <main class="page">
                 {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}
@@ -188,6 +194,7 @@ export function App(props: { client: MiseClient }) {
                       onHousehold={() => go("household")}
                       onGrocery={() => go("grocery")}
                       onCook={cook}
+                      onWeekShown={setWeekShown}
                     />
                   </Match>
                   <Match when={page() === "grocery"}>
@@ -198,6 +205,7 @@ export function App(props: { client: MiseClient }) {
                       pending={pending()}
                       online={online()}
                       onWeek={() => go("week")}
+                      onWeekShown={setWeekShown}
                     />
                   </Match>
                   <Match when={page() === "pantry"}>

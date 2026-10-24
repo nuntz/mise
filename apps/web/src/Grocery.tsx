@@ -11,7 +11,7 @@ import {
   type StoreSection,
   type TickQueue,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { shortDate } from "./dates";
 import { keepFresh } from "./fresh";
@@ -33,6 +33,8 @@ export function GroceryPage(props: {
   pending: readonly QueuedChange[];
   online: boolean;
   onWeek: () => void;
+  /** Told the start of the Week shown. */
+  onWeekShown?: (start: LocalDate) => void;
 }) {
   const [next, setNext] = createSignal(false);
   const [error, setError] = createSignal(false);
@@ -44,6 +46,7 @@ export function GroceryPage(props: {
   // Undefined until loaded; null while the Week has no Grocery List. The one saved on this device
   // shows until the household answers, or for as long as it can't be reached.
   const [list, setList] = createSignal<GroceryList | null | undefined>(savedGroceryList(weekShown()));
+  createEffect(() => props.onWeekShown?.(weekShown()));
 
   // The list says whether the plan, its Recipes or the Household's Store Sections changed under it.
   const refetch = keepFresh(

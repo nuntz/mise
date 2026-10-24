@@ -26,7 +26,7 @@ import {
   weekDates,
   weekdayOf,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { formatDate, shortDate } from "./dates";
 import { errorText } from "./errors";
@@ -57,6 +57,8 @@ export function WeekPage(props: {
   onHousehold: () => void;
   onGrocery: () => void;
   onCook: (recipe: RecipeId, servings: number) => void;
+  /** Told the start of the Week shown, or undefined while none is. */
+  onWeekShown?: (start: LocalDate | undefined) => void;
 }) {
   const [next, setNext] = createSignal(false);
   // The current Week kept on this device shows at once, and for as long as the household can't be
@@ -67,6 +69,7 @@ export function WeekPage(props: {
     return saved && saved.endDate >= today ? saved : undefined;
   };
   const [week, setWeek] = createSignal<Week | undefined>(kept());
+  createEffect(() => props.onWeekShown?.(week()?.startDate));
   // The Week after the current one starts the day after it ends.
   const [nextStart, setNextStart] = createSignal<LocalDate>();
   const [error, setError] = createSignal<string>();

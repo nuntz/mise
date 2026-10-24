@@ -25,6 +25,7 @@ import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
 import { readStaples, stapleHandlers } from "./staples";
 import { readSuggestions, suggestionHandlers } from "./suggestions";
+import { readChatTurns } from "./turns";
 import { readSlots, readWeekRecords, weekHandlers } from "./weeks";
 
 type HouseholdRow = {
@@ -204,6 +205,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readStaples(sql);
   readCalendarToken(sql);
   readDriveDocs(sql);
+  readChatTurns(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {
