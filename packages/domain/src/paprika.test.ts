@@ -153,14 +153,11 @@ describe("categories", () => {
 
   test.each([
     ["Desserts", "dessert"],
-    ["Baking", "dessert"],
     ["Drinks", "drink"],
     ["Beverages", "drink"],
     ["Cocktails", "drink"],
     ["Breakfast", "breakfast"],
-    ["Brunch", "breakfast"],
     ["Sides", "side"],
-    ["Sauces", "side"],
     ["Condiments", "side"],
     ["Dips", "side"],
     ["Snacks", "snack"],
@@ -172,8 +169,24 @@ describe("categories", () => {
     expect((await mapped({ ...toast, categories: [category] })).course).toBe(course);
   });
 
-  test("set the Course from the first that names one", async () => {
-    expect((await mapped({ ...toast, categories: ["Italian", "Desserts", "Dinner"] })).course).toBe("dessert");
+  test.each(["Baking", "Brunch", "Sauces", "Sauce"])(
+    "leave the Course unknown for %p, which can hold a dinner",
+    async (category) => {
+      expect((await mapped({ ...toast, categories: [category] })).course).toBeNull();
+    },
+  );
+
+  test("set the Course to main when any names a main, whatever the others name", async () => {
+    expect((await mapped({ ...toast, categories: ["Italian", "Desserts", "Dinner"] })).course).toBe("main");
+    expect((await mapped({ ...toast, categories: ["Baking", "Dinner"] })).course).toBe("main");
+  });
+
+  test("set the Course that all of them name when none names a main", async () => {
+    expect((await mapped({ ...toast, categories: ["Desserts", "Italian", "Dessert"] })).course).toBe("dessert");
+  });
+
+  test("leave the Course unknown when they name different ones and none a main", async () => {
+    expect((await mapped({ ...toast, categories: ["Desserts", "Drinks"] })).course).toBeNull();
   });
 
   test("leave the Course unknown when none names one, whatever the title or Ingredients", async () => {

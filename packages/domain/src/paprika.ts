@@ -106,7 +106,7 @@ function mapPaprikaRecipe(json: unknown, fallbackRevision: string): Mapped {
     effortMinutes: effortOf(paprika),
     cuisine: firstSynonym(categories, CUISINES),
     mainProtein: firstSynonym(categories, PROTEINS),
-    course: firstSynonym(categories, COURSES),
+    course: courseOf(categories),
     notes: notes || null,
     url: text(paprika.source_url) || null,
     author: text(paprika.source) || null,
@@ -260,14 +260,29 @@ const PROTEINS = synonyms({
  * Category names that say a Recipe's Course. Only categories are read, never the title or
  * Ingredients: a wrong guess would keep a dinner out of every Proposal (ADR 0022).
  */
+/**
+ * Only categories that rarely hold a dinner: "Baking" (lasagna, pot pie), "Sauces" (bolognese)
+ * and "Brunch" (shakshuka) are left out, so they leave the Course unknown and a candidate.
+ */
 const COURSES = synonyms<Course>({
   main: ["main", "mains", "main course", "main dish", "dinner", "dinners", "weeknight"],
-  side: ["side", "sides", "side dish", "side dishes", "sauce", "sauces", "condiment", "condiments", "dip", "dips"],
-  dessert: ["dessert", "desserts", "baking"],
+  side: ["side", "sides", "side dish", "side dishes", "condiment", "condiments", "dip", "dips"],
+  dessert: ["dessert", "desserts"],
   drink: ["drink", "drinks", "beverage", "beverages", "cocktail", "cocktails"],
-  breakfast: ["breakfast", "brunch"],
+  breakfast: ["breakfast"],
   snack: ["snack", "snacks", "appetizer", "appetizers", "starter", "starters"],
 });
+
+/**
+ * Main if any category names a main; otherwise the Course every category with a synonym agrees
+ * on; otherwise unknown. A wrong Course keeps a dinner out of every Proposal, so doubt leaves it
+ * unknown (ADR 0022).
+ */
+function courseOf(categories: string[]): Course | null {
+  const courses = new Set(categories.flatMap((category) => COURSES.get(normaliseItemName(category)) ?? []));
+  if (courses.has("main")) return "main";
+  return courses.size === 1 ? ([...courses][0] as Course) : null;
+}
 
 function synonyms<T extends string>(table: Record<T, string[]>): Map<string, T> {
   const map = new Map<string, T>();
