@@ -718,6 +718,27 @@ details[open] > summary::after {
 
 /* ---------- Chat ---------- */
 
+/* The sheet keeps its height; only the log scrolls, between the header and the composer. */
+.sheet-chat {
+  height: 92dvh;
+  overflow: hidden;
+}
+
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  border-top: var(--hairline) solid var(--line);
+}
+
 .chat-turns {
   display: flex;
   flex-direction: column;

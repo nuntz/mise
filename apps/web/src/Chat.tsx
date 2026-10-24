@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@mise/domain";
-import { createSignal, createUniqueId, For, onMount, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { Icon } from "./icons";
 import { t } from "./messages";
@@ -32,6 +32,15 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
   const [draft, setDraft] = createSignal("");
   const [waiting, setWaiting] = createSignal(false);
   const [error, setError] = createSignal<"load" | "answer">();
+  let log!: HTMLDivElement;
+
+  // The newest turn, or the note that Mise is thinking, stays in view as the conversation grows.
+  createEffect(() => {
+    turns();
+    waiting();
+    const end = log.querySelector('[role="status"]') ?? log.querySelector(".chat-turns > li:last-child");
+    end?.scrollIntoView?.({ block: "end" });
+  });
 
   onMount(async () => {
     try {
@@ -70,7 +79,7 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
   };
 
   return (
-    <Sheet labelledBy={titleId} onEscape={() => props.onClose()}>
+    <Sheet labelledBy={titleId} class="sheet-chat" onEscape={() => props.onClose()}>
       <div class="sheet-header">
         <div class="page-heading">
           <p class="overline">{t("chat.overline")}</p>
@@ -82,7 +91,8 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
           <Icon name="close" />
         </button>
       </div>
-      <div class="sheet-body">
+      {/* Only the conversation scrolls: the close button and the message box stay in reach. */}
+      <div class="sheet-body chat-log" ref={log}>
         <Show when={turns()} fallback={<p>{t("app.loading")}</p>}>
           {(shown) => (
             <Show when={shown().length > 0} fallback={<p class="body-muted">{t("chat.empty")}</p>}>
@@ -114,6 +124,8 @@ function ChatSheet(props: { client: MiseClient; onClose: () => void }) {
             </p>
           )}
         </Show>
+      </div>
+      <div class="chat-composer">
         <form
           class="chat-form"
           onSubmit={(event) => {

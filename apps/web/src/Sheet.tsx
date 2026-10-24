@@ -5,14 +5,14 @@ import type { JSX } from "solid-js";
  * element with id `labelledBy`, that focuses its first field on opening. Escape calls `onEscape`;
  * Tab and Shift+Tab go round its controls, not out to the page under it.
  */
-export function Sheet(props: { labelledBy: string; onEscape: () => void; children: JSX.Element }) {
+export function Sheet(props: { labelledBy: string; onEscape: () => void; class?: string; children: JSX.Element }) {
   const focusFirst = (sheet: HTMLElement) =>
     queueMicrotask(() => sheet.querySelector<HTMLElement>("input, textarea")?.focus());
 
   return (
     <div class="sheet-backdrop">
       <div
-        class="sheet"
+        class={props.class ? `sheet ${props.class}` : "sheet"}
         role="dialog"
         aria-modal="true"
         aria-labelledby={props.labelledBy}

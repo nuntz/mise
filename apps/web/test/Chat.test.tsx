@@ -1,7 +1,7 @@
 import { type ChatMessage, type ChatReply, DEFAULT_EFFORT_BUDGETS, type Household, STORE_SECTIONS } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { App } from "../src/App";
 import { createFakeClient } from "./fakeClient";
 
@@ -78,6 +78,44 @@ test("the chat opens from the header with the conversation so far", async () => 
 
   const turns = await within(chat).findAllByRole("listitem");
   expect(turns.map((turn) => turn.textContent)).toEqual(["Member: What's for dinner Monday?", "Mise: Dal."]);
+});
+
+/** What the chat last scrolled into view, by its text; jsdom has no scrolling of its own. */
+function watchScrolling() {
+  const scrolled: string[] = [];
+  Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this.textContent ?? "");
+  };
+  return { last: () => scrolled.at(-1) };
+}
+
+afterEach(() => {
+  delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+});
+
+test("the chat opens at its newest turn and follows the conversation as it grows", async () => {
+  const scrolling = watchScrolling();
+  let answer!: (reply: ChatReply) => void;
+  const { client } = fakeClient(
+    [
+      { role: "member", text: "What's for dinner Monday?" },
+      { role: "agent", text: "Dal." },
+    ],
+    () => new Promise((resolve) => (answer = resolve)),
+  );
+  render(() => <App client={client} />);
+  const chat = await openChat();
+  await within(chat).findByText("Dal.");
+
+  expect(scrolling.last()).toBe("Mise: Dal.");
+
+  await userEvent.type(messageBox(chat), "And Tuesday?");
+  await userEvent.click(within(chat).getByRole("button", { name: "Send" }));
+  expect(scrolling.last()).toBe("Mise is thinking…");
+
+  answer({ ok: true, value: { role: "agent", text: "Pasta." } });
+  await within(chat).findByText("Pasta.");
+  expect(scrolling.last()).toBe("Mise: Pasta.");
 });
 
 test("a message shows at once, then the agent's answer", async () => {
