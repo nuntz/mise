@@ -1,0 +1,29 @@
+{
+  "about": "Which TikTok oEmbed answers under `fixtures/oembed/` `bun run eval` has the real model read, by their caption (`title`), as `import_url` does, with what a good reading holds (see pasted-recipes.json).",
+  "captions": [
+    {
+      "name": "a TikTok caption with a recipe",
+      "oembed": "tiktok-noodles.json",
+      "expect": {
+        "isRecipe": true,
+        "title": "noodles",
+        "ingredients": [
+          "200 g wheat noodles",
+          "3 tbsp peanut butter",
+          "2 tbsp soy sauce",
+          "1 tbsp rice vinegar",
+          "1 tsp chilli crisp",
+          "2 spring onions, sliced"
+        ],
+        "servings": 2,
+        "minutes": 10,
+        "course": "main"
+      }
+    },
+    {
+      "name": "a TikTok caption with the recipe in the bio",
+      "oembed": "tiktok-recipe-in-bio.json",
+      "expect": { "isRecipe": false }
+    }
+  ]
+}

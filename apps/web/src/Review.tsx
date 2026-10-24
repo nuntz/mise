@@ -4,6 +4,7 @@ import {
   type Item,
   type ItemId,
   isLinkOnly,
+  linkOf,
   type Suggestion,
   type ToolResult,
 } from "@mise/domain";
@@ -101,7 +102,7 @@ export function ReviewPage(props: { client: MiseClient; onResolve: () => void })
 
 /**
  * A Draft with what to check before accepting it, edited in place; a link-only Draft with its link
- * and a place to paste its recipe's text instead.
+ * and a place to add screenshots or paste its recipe's text instead.
  */
 function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<ItemId, Item> }) {
   const heading = createUniqueId();
@@ -110,10 +111,7 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
   const [error, setError] = createSignal<string>();
   const recipe = () => props.draft.recipe;
   /** The link of a link-only Draft; null for any other. */
-  const link = () => {
-    const { source } = recipe();
-    return source.kind === "url" && isLinkOnly(recipe()) ? source.url : null;
-  };
+  const link = () => (isLinkOnly(recipe()) ? linkOf(recipe()) : null);
 
   const act = async (change: () => Promise<ToolResult<unknown>>) => {
     setBusy(true);

@@ -3,8 +3,8 @@ import { normaliseItemName } from "./items";
 import type { RecipeReading } from "./llm";
 import { ImportedPreference, IngredientLines, Recipe, RecipeFields, RecipeId } from "./recipes";
 
-/** The sources an import reads; more arrive with the Drive and video imports. */
-export const ImportSource = z.enum(["paprika", "text", "url"]);
+/** The sources an import reads; Drive arrives with its own import. */
+export const ImportSource = z.enum(["paprika", "text", "url", "tiktok", "instagram", "screenshot"]);
 export type ImportSource = z.infer<typeof ImportSource>;
 
 /** Something an import could not read: a file of the export, or the export itself (`entry` null). */
@@ -108,7 +108,7 @@ function ingredientKeys(recipe: DuplicateCandidate): Set<string> {
 export const FALLBACK_SERVINGS = 4;
 
 /** The longest text `import_text` reads: what a Recipe's notes, which keep it, can hold. */
-const MAX_PASTED_TEXT = 20_000;
+export const MAX_PASTED_TEXT = 20_000;
 
 /**
  * Pasted text (a caption, a message, a Doc's contents), for the model to read into a Draft Recipe;
@@ -161,6 +161,46 @@ export function importedFromReading(
     importedPreference: null,
     inTrash: false,
   });
+}
+
+/** The image types a screenshot may be: those the model reads. */
+export const SCREENSHOT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+export type ScreenshotType = (typeof SCREENSHOT_TYPES)[number];
+
+export function isScreenshotType(type: string | null): type is ScreenshotType {
+  return (SCREENSHOT_TYPES as readonly (string | null)[]).includes(type);
+}
+/**
+ * The largest screenshot the model takes, the most read together, and their largest size together:
+ * what one request to the model can carry once they are base64.
+ */
+export const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+export const MAX_SCREENSHOTS = 10;
+export const MAX_SCREENSHOTS_BYTES = 20 * 1024 * 1024;
+
+/** Where an uploaded screenshot waits in R2 until `import_screenshots` reads it. */
+export function screenshotUploadKey(upload: string): string {
+  return `imports/${upload}.screenshot`;
+}
+
+/**
+ * The ids `PUT …/imports/screenshots` gave the uploaded screenshots, in the order to read them; or
+ * with `draft`, to fill that link-only Draft.
+ */
+export const ImportScreenshotsInput = z
+  .object({ uploads: z.array(z.uuid()).min(1).max(MAX_SCREENSHOTS), draft: RecipeId.optional() })
+  .strict();
+
+/**
+ * The Recipe an import makes of screenshots the model read together, keyed on their contents (the
+ * SHA-256 of each, in order), so that the same screenshots read again are skipped.
+ */
+export function importedFromScreenshots(
+  digests: string[],
+  reading: Extract<RecipeReading, { isRecipe: true }>,
+): ImportedRecipe {
+  const key = `screenshot:${contentHash(digests.join(","))}`;
+  return importedFromReading(reading, { externalId: key, revision: key, notes: null, url: null });
 }
 
 /** A link to a recipe page, to import. */

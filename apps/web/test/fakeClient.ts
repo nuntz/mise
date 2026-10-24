@@ -16,7 +16,7 @@ export function createFakeClient(
     conversation,
     ...rest
   }: { online?: boolean } & Partial<
-    Pick<MiseClient, "photoUrl" | "uploadExport" | "chat" | "conversation" | "signedIn">
+    Pick<MiseClient, "photoUrl" | "uploadExport" | "uploadScreenshot" | "chat" | "conversation" | "signedIn">
   > = {},
 ) {
   const connection = { online };
@@ -58,6 +58,7 @@ export function createFakeClient(
     uploadPhoto: async () => true,
     removePhoto: async () => true,
     uploadExport: async () => null,
+    uploadScreenshot: async () => null,
     signedIn: async () => true,
     close() {},
     ...rest,

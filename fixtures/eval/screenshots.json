@@ -1,0 +1,27 @@
+{
+  "about": "Sets of screenshots under `fixtures/screenshots/`, in order, that `bun run eval` has the real model read together, as `import_screenshots` does, with what a good reading holds (see pasted-recipes.json).",
+  "sets": [
+    {
+      "name": "a recipe over two screenshots",
+      "screenshots": ["salad-ingredients.png", "salad-steps.png"],
+      "expect": {
+        "isRecipe": true,
+        "title": "Cabbage Salad",
+        "ingredients": [
+          "½ red cabbage, finely shredded",
+          "2 carrots, grated",
+          "4 spring onions, sliced",
+          "1 handful coriander, chopped",
+          "3 tbsp roasted peanuts, crushed",
+          "2 tbsp rice vinegar",
+          "1 tbsp toasted sesame oil",
+          "1 tbsp soy sauce",
+          "1 tsp honey"
+        ],
+        "servings": 4,
+        "minutes": 15,
+        "course": "side"
+      }
+    }
+  ]
+}

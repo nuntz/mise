@@ -1,4 +1,4 @@
-import { type ChangeTopic, HOUSEHOLD_PATH } from "@mise/domain";
+import { type ChangeTopic, HOUSEHOLD_PATH, SCREENSHOT_UPLOAD_PATH } from "@mise/domain";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { type ChangeSource, createMiseClient, subscribeTo } from "../src/client";
 import { createFakeClient } from "./fakeClient";
@@ -111,5 +111,33 @@ describe("whether Safari is signed in, with the real client", () => {
 
   test("counts as signed in when the route can't be reached at all, which is no sign-in problem", async () => {
     expect(await signedIn(new TypeError("Failed to fetch")).result).toBe(true);
+  });
+});
+
+describe("uploading a screenshot, with the real client", () => {
+  const uploading = (response: Response) => {
+    const fetch = vi.fn(async (_path: string, _init: RequestInit) => response);
+    vi.stubGlobal("fetch", fetch);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    const client = createMiseClient("mise.example");
+    onTestFinished(() => client.close());
+    const screenshot = new File([new Uint8Array([0x89, 0x50])], "steps.png", { type: "image/png" });
+    return { result: client.uploadScreenshot(screenshot), fetch, screenshot };
+  };
+
+  test("PUTs it as its own type, for import_screenshots to read by the id it is given", async () => {
+    const { result, fetch, screenshot } = uploading(Response.json({ ok: true, upload: "upload-1" }));
+    expect(await result).toBe("upload-1");
+    expect(fetch).toHaveBeenCalledWith(SCREENSHOT_UPLOAD_PATH, {
+      method: "PUT",
+      headers: { "Content-Type": "image/png" },
+      body: screenshot,
+    });
+  });
+
+  test("gives null when the household refuses it", async () => {
+    expect(await uploading(new Response("Send a JPEG, PNG, WebP or GIF image", { status: 415 })).result).toBeNull();
   });
 });

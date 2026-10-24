@@ -8,6 +8,7 @@ import {
   PAPRIKA_UPLOAD_PATH,
   type RecipeId,
   recipePhotoPath,
+  SCREENSHOT_UPLOAD_PATH,
   type ToolInput,
   type ToolName,
   type ToolOutput,
@@ -40,6 +41,8 @@ export type MiseClient = {
   removePhoto(recipeId: RecipeId): Promise<boolean>;
   /** Uploads a Paprika export over HTTP too (ADR 0011); `run_paprika_import` takes the id returned. Null if refused. */
   uploadExport(file: Blob): Promise<string | null>;
+  /** Uploads one screenshot the same way; `import_screenshots` takes the ids returned. Null if refused. */
+  uploadScreenshot(file: Blob): Promise<string | null>;
   /**
    * Whether this browser is signed in to Access, asked when the household can't be reached: Safari
    * keeps its own sign-in, apart from the app on the home screen. A route that can't be reached at all
@@ -101,14 +104,11 @@ export function createMiseClient(host = window.location.host): MiseClient {
     },
 
     async uploadExport(file) {
-      const response = await fetch(PAPRIKA_UPLOAD_PATH, {
-        method: "PUT",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: file,
-      });
-      if (!response.ok) return null;
-      const { upload } = (await response.json()) as { upload?: unknown };
-      return typeof upload === "string" ? upload : null;
+      return upload(PAPRIKA_UPLOAD_PATH, file, "application/octet-stream");
+    },
+
+    async uploadScreenshot(file) {
+      return upload(SCREENSHOT_UPLOAD_PATH, file, file.type);
     },
 
     async signedIn() {
@@ -124,6 +124,14 @@ export function createMiseClient(host = window.location.host): MiseClient {
 
     close: () => agent.close(),
   };
+}
+
+/** PUTs a file to stage it for an import; the id the household gave it, or null if refused. */
+async function upload(path: string, file: Blob, type: string): Promise<string | null> {
+  const response = await fetch(path, { method: "PUT", headers: { "Content-Type": type }, body: file });
+  if (!response.ok) return null;
+  const { upload } = (await response.json()) as { upload?: unknown };
+  return typeof upload === "string" ? upload : null;
 }
 
 /** Where change notices arrive: the household's socket. */

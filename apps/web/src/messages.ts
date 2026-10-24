@@ -323,9 +323,9 @@ const en = {
   "link.leftAlone":
     "{title} changed at its link, but was edited or accepted in Mise, so it was left alone and flagged.",
   "link.linkOnly":
-    "Mise could not read a recipe at that link, so it kept the link as a Draft: {title}. Paste the recipe's text to fill it in.",
+    "Mise could not read a recipe at that link, so it kept the link as a Draft: {title}. Add screenshots or paste the recipe's text to fill it in.",
   "link.linkOnlyBecause":
-    "Mise could not read a recipe at that link ({reason}), so it kept the link as a Draft: {title}. Paste the recipe's text to fill it in.",
+    "Mise could not read a recipe at that link ({reason}), so it kept the link as a Draft: {title}. Add screenshots or paste the recipe's text to fill it in.",
   "link.invalid": "That is not a link to a web page.",
   "share.title": "Share to Mise",
   "share.open": "Open {title}",
@@ -337,6 +337,16 @@ const en = {
   "share.signInLink": "Sign in and import the link",
   "fill.text": "The recipe's text, for {title}",
   "fill.read": "Fill in the Draft",
+  "fill.screenshots": "Screenshots of the recipe, for {title}",
+  "shots.title": "Import screenshots",
+  "shots.intro":
+    "Pick screenshots of one recipe: the ingredients on one, the steps on the next. AI reads them together into a Draft, to check on the Review screen.",
+  "shots.files": "Screenshots of a recipe",
+  "shots.reading": "Reading the screenshots…",
+  "shots.uploadFailed": "The screenshots could not be uploaded.",
+  "shots.tooMany": "Pick at most {count} screenshots at a time.",
+  "shots.noRecipe": "No recipe was found in those screenshots.",
+  "shots.failed": "The screenshots could not be read just now; try again later.",
   "paste.title": "Paste a recipe",
   "paste.intro":
     "Paste a recipe's text: a caption, a message, a Doc. AI reads it into a Draft, which is never planned or shopped until someone checks it on the Review screen.",
@@ -352,7 +362,8 @@ const en = {
   "review.drafts": "Drafts",
   "review.aiRead":
     "Read by AI, so it may be wrong or incomplete. Check the title, Ingredients, servings, time and Course: until accepted it is never planned or shopped.",
-  "review.linkOnly": "Mise could not read a recipe at its link. Paste the recipe's text to fill it in.",
+  "review.linkOnly":
+    "Mise could not read a recipe at its link. Add screenshots or paste the recipe's text to fill it in.",
   "review.duplicate": "It may be the same as {title}, which you already have.",
   "review.courseUnknown": "Course unknown",
   "review.accept": "Accept",
@@ -376,6 +387,9 @@ const en = {
   "import.source.paprika": "Paprika",
   "import.source.text": "pasted text",
   "import.source.url": "a link",
+  "import.source.tiktok": "TikTok",
+  "import.source.instagram": "Instagram",
+  "import.source.screenshot": "screenshots",
   "import.runErrors": "{count} not imported",
   "import.flags": "Flagged Recipes",
   "import.merge": "{title} changed at its source after it was edited or accepted in Mise, so it was left alone.",
@@ -429,6 +443,9 @@ const en = {
   "recipe.importedFrom": "Imported from Paprika; source: {from}.",
   "recipe.importedLink": "Imported from {url}.",
   "recipe.importedText": "Read by AI from pasted text, kept in the notes.",
+  "recipe.importedTikTok": "Read by AI from a TikTok: {url}.",
+  "recipe.importedTikTokBy": "Read by AI from a TikTok by {author}: {url}.",
+  "recipe.importedScreenshots": "Read by AI from screenshots.",
   "recipe.draft": "That Recipe is a Draft: accept it on the Review screen to plan it.",
 
   "recipeForm.title": "Title",

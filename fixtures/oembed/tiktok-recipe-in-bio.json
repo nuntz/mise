@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "type": "video",
+  "title": "the fudgiest brownies of my LIFE 🤤 full recipe in bio! #baking #brownies #fyp",
+  "author_url": "https://www.tiktok.com/@cook.example",
+  "author_name": "Sam Example",
+  "width": "100%",
+  "height": "100%",
+  "html": "<blockquote class=\"tiktok-embed\" cite=\"https://www.tiktok.com/@cook.example/video/7309876543210987654\" data-video-id=\"7309876543210987654\"><section></section></blockquote>",
+  "thumbnail_width": 720,
+  "thumbnail_height": 1280,
+  "thumbnail_url": "https://p16-sign.tiktokcdn.example/obj/brownies.jpeg",
+  "provider_url": "https://www.tiktok.com",
+  "provider_name": "TikTok",
+  "author_unique_id": "cook.example",
+  "embed_product_id": "7309876543210987654",
+  "embed_type": "video"
+}

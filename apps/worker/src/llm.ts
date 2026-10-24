@@ -1,4 +1,4 @@
-import { type Api, createModels, type Model, type Models, Type } from "@earendil-works/pi-ai";
+import { type Api, createModels, type Model, type Models, Type, type UserMessage } from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import {
   ALLERGENS,
@@ -88,8 +88,9 @@ const SYSTEM_PROMPT = [
 const READ_TOOL = "read_recipe";
 
 const READ_PROMPT = [
-  "You read recipes for a family meal planner, from text someone pasted (a video caption, a message, a document)",
-  "or the text of a web page.",
+  "You read recipes for a family meal planner, from text someone pasted (a video caption, a message, a document),",
+  "the text of a web page, or screenshots. Screenshots are read together, in order, as one recipe spread over",
+  "a few screens (the ingredients on one, the steps on the next).",
   "Say whether it holds a recipe someone could cook from. A caption that only says the recipe is elsewhere",
   '("recipe in bio", "link in comments") holds none. On a web page, read only the recipe, never its story,',
   "comments, adverts or links to other recipes.",
@@ -113,7 +114,7 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
           tools: [
             {
               name: READ_TOOL,
-              description: "Gives the recipe read from the text, or says there is none.",
+              description: "Gives the recipe read from the text or screenshots, or says there is none.",
               parameters: Type.Unsafe(readParameters),
             },
           ],
@@ -167,8 +168,21 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
   };
 }
 
-function readPrompt({ text }: ReadRecipeRequest): string {
-  return ["The text:", "<text>", text, "</text>"].join("\n");
+function readPrompt(request: ReadRecipeRequest): UserMessage["content"] {
+  if ("text" in request) return ["The text:", "<text>", request.text, "</text>"].join("\n");
+  return [
+    { type: "text", text: `The screenshots, ${request.images.length} in order:` },
+    ...request.images.map((image) => ({ type: "image" as const, data: base64(image.bytes), mimeType: image.type })),
+  ];
+}
+
+/** Bytes as base64, as the API takes an image; in chunks, since spreading megabytes overflows the stack. */
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let start = 0; start < bytes.length; start += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+  }
+  return btoa(binary);
 }
 
 function prompt({ names, catalogue }: SuggestionRequest): string {

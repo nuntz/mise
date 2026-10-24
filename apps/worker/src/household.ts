@@ -12,22 +12,33 @@ import {
   type Household as HouseholdData,
   type ImportError,
   type ImportedPhoto,
+  type ImportedRecipe,
   type ImportRun,
+  type ImportSource,
+  imageType,
+  importedFromScreenshots,
   importedFromText,
   importUploadKey,
   isLinkOnly,
+  isScreenshotType,
   isToolName,
+  type Llm,
   LlmError,
   localDate,
+  MAX_SCREENSHOT_BYTES,
+  MAX_SCREENSHOTS_BYTES,
   NIGHTLY_EXPORT_TIME,
   nextOccurrence,
   type ParsedToolInput,
   PHOTO_PREFIX,
   parseToolInput,
   type Recipe,
+  type RecipeId,
+  type RecipeImage,
   type RecipeReading,
   readPaprikaExport,
   type Suggestion,
+  screenshotUploadKey,
   suggestItems,
   type ToolContext,
   type ToolName,
@@ -157,6 +168,9 @@ class HouseholdAgent extends Agent<Env> {
     }
     if (name === "import_text") return this.importText(parsed.value as ParsedToolInput<"import_text">);
     if (name === "import_url") return this.importUrl(parsed.value as ParsedToolInput<"import_url">);
+    if (name === "import_screenshots") {
+      return this.importScreenshots(parsed.value as ParsedToolInput<"import_screenshots">);
+    }
     const toolName = name as Exclude<ToolName, HouseholdToolName>;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
@@ -236,12 +250,67 @@ class HouseholdAgent extends Agent<Env> {
     return { ok: true, value: outcome.run };
   }
 
-  /**
-   * Has the model read pasted text, then imports what it read as a Draft, in one transaction, as a
-   * Paprika import is; or, given `draft`, fills that link-only Draft with it. Like an import, it asks
-   * for Suggestions for the new Unresolved texts once it has answered.
-   */
+  /** Has the model read pasted text into a Draft, or into a link-only Draft; see `importReading`. */
   private async importText(input: ParsedToolInput<"import_text">): Promise<ToolResult<ToolOutput<"import_text">>> {
+    return this.importReading("text", input.draft, {
+      read: (llm) => llm.readRecipe({ text: input.text }),
+      imported: (reading) => importedFromText(input.text, reading),
+      noRecipe: "The text holds no recipe",
+    });
+  }
+
+  /**
+   * Has the model read uploaded screenshots together into a Draft, or into a link-only Draft (see
+   * `importReading`); the uploads are deleted, whatever came of them.
+   */
+  private async importScreenshots(
+    input: ParsedToolInput<"import_screenshots">,
+  ): Promise<ToolResult<ToolOutput<"import_screenshots">>> {
+    try {
+      const screenshots: RecipeImage[] = [];
+      for (const [position, upload] of input.uploads.entries()) {
+        const object = await this.env.BUCKET.get(screenshotUploadKey(upload));
+        if (!object) {
+          return { ok: false, error: { code: "not_found", message: `No uploaded screenshot with id ${upload}` } };
+        }
+        const bytes = new Uint8Array(await object.arrayBuffer());
+        const type = imageType(bytes);
+        if (!isScreenshotType(type)) {
+          const message = `Screenshot ${position + 1} is not a JPEG, PNG, WebP or GIF image`;
+          return { ok: false, error: { code: "invalid_input", message } };
+        }
+        screenshots.push({ bytes, type });
+      }
+      if (screenshots.reduce((total, { bytes }) => total + bytes.byteLength, 0) > MAX_SCREENSHOTS_BYTES) {
+        const message = `The screenshots are larger than ${MAX_SCREENSHOTS_BYTES / 1024 / 1024} MB together`;
+        return { ok: false, error: { code: "invalid_input", message } };
+      }
+      const digests = await Promise.all(screenshots.map(({ bytes }) => sha256(bytes)));
+      return await this.importReading("screenshot", input.draft, {
+        read: (llm) => llm.readRecipe({ images: screenshots }),
+        imported: (reading) => importedFromScreenshots(digests, reading),
+        noRecipe: "The screenshots hold no recipe",
+      });
+    } finally {
+      await this.env.BUCKET.delete(input.uploads.map(screenshotUploadKey));
+    }
+  }
+
+  /**
+   * Has the model read a source, then imports what it read as a Draft, in one transaction, as a
+   * Paprika import is; or, given `draft`, fills that link-only Draft with it. A source with no recipe
+   * is logged, creating nothing. Like an import, it asks for Suggestions for the new Unresolved texts
+   * once it has answered.
+   */
+  private async importReading(
+    source: Extract<ImportSource, "text" | "screenshot">,
+    draft: RecipeId | undefined,
+    reader: {
+      read: (llm: Llm) => Promise<RecipeReading>;
+      imported: (reading: Extract<RecipeReading, { isRecipe: true }>) => ImportedRecipe;
+      noRecipe: string;
+    },
+  ): Promise<ToolResult<ToolOutput<"import_text">>> {
     const startedAt = new Date().toISOString();
     const { sql } = this.ctx.storage;
     const linkOnly = (id: number) => {
@@ -250,29 +319,28 @@ class HouseholdAgent extends Agent<Env> {
     };
     const noDraft = {
       ok: false,
-      error: { code: "not_found", message: `No link-only Draft with id ${input.draft}` },
+      error: { code: "not_found", message: `No link-only Draft with id ${draft}` },
     } as const;
-    if (input.draft !== undefined && !linkOnly(input.draft)) return noDraft;
+    if (draft !== undefined && !linkOnly(draft)) return noDraft;
     let reading: RecipeReading;
     try {
-      reading = await openLlm(this.env).readRecipe({ text: input.text });
+      reading = await reader.read(openLlm(this.env));
     } catch (error) {
       if (!(error instanceof LlmError)) throw error;
       Sentry.captureException(error);
       return { ok: false, error: { code: "model_failed", message: error.message } };
     }
-    const recipe = reading.isRecipe ? importedFromText(input.text, reading) : null;
+    const recipe = reading.isRecipe ? reader.imported(reading) : null;
     const outcome = this.ctx.storage.transactionSync(() => {
       // The Draft may have been filled or discarded while the model read.
-      if (recipe && input.draft !== undefined && !linkOnly(input.draft)) return null;
+      if (recipe && draft !== undefined && !linkOnly(draft)) return null;
       const imported = !recipe
-        ? runImport(sql, "text", startedAt, [], [{ entry: null, message: "The text holds no recipe" }])
-        : input.draft !== undefined
-          ? fillDraft(sql, input.draft, recipe, startedAt)
-          : runImport(sql, "text", startedAt, [{ recipe, photoKey: null, draft: true }], []);
+        ? runImport(sql, source, startedAt, [], [{ entry: null, message: reader.noRecipe }])
+        : draft !== undefined
+          ? fillDraft(sql, source, draft, recipe, startedAt)
+          : runImport(sql, source, startedAt, [{ recipe, photoKey: null, draft: true }], []);
       const made =
-        recipe &&
-        (input.draft !== undefined ? readRecipe(sql, input.draft) : readRecipeFrom(sql, "text", recipe.externalId));
+        recipe && (draft !== undefined ? readRecipe(sql, draft) : readRecipeFrom(sql, source, recipe.externalId));
       return {
         ...imported,
         made: made && { id: made.id, title: made.title },
@@ -299,7 +367,7 @@ class HouseholdAgent extends Agent<Env> {
     const stored: string[] = [];
     let photoKey: string | null | undefined = null;
     // A skipped Recipe's photo is not fetched again.
-    if (isUnchanged(sql, "url", link.recipe)) photoKey = undefined;
+    if (isUnchanged(sql, link.source, link.recipe)) photoKey = undefined;
     else if (link.image) {
       const photo = await fetchPhoto(link.image);
       if ("error" in photo) {
@@ -309,10 +377,11 @@ class HouseholdAgent extends Agent<Env> {
     }
 
     const outcome = this.ctx.storage.transactionSync(() => {
-      const imported = runImport(sql, "url", startedAt, [{ recipe: link.recipe, photoKey, draft: link.draft }], errors);
+      const prepared = [{ recipe: link.recipe, photoKey, draft: link.draft }];
+      const imported = runImport(sql, link.source, startedAt, prepared, errors);
       return {
         ...imported,
-        made: readRecipeFrom(sql, "url", link.recipe.externalId) as Recipe,
+        made: readRecipeFrom(sql, link.source, link.recipe.externalId) as Recipe,
         newTexts: newTextsIn(sql, imported.written),
         revision: this.bumpRevision(),
       };
@@ -366,8 +435,7 @@ class HouseholdAgent extends Agent<Env> {
 
   /** Stores an imported photo under its SHA-256 unless already there; returns its key. */
   private async storeImportedPhoto(photo: ImportedPhoto, stored: string[]): Promise<string> {
-    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", photo.bytes));
-    const key = `${PHOTO_PREFIX}sha256-${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    const key = `${PHOTO_PREFIX}sha256-${await sha256(photo.bytes)}`;
     if (!(await this.env.BUCKET.head(key))) {
       await this.env.BUCKET.put(key, photo.bytes, { httpMetadata: { contentType: photo.type } });
       stored.push(key);
@@ -405,13 +473,15 @@ class HouseholdAgent extends Agent<Env> {
    * Backup over HTTP: `GET …/export` downloads the export, `POST …/restore` loads one into an empty
    * household. Recipe photos, which are too big for a tool call (ADR 0010): `GET`, `PUT` (the image
    * as the body) and `DELETE …/recipes/<id>/photo`. A Paprika export, for `run_paprika_import` to
-   * import (ADR 0011): `PUT …/imports/paprika`.
+   * import (ADR 0011): `PUT …/imports/paprika`. A screenshot, for `import_screenshots` to read:
+   * `PUT …/imports/screenshots`, one per request.
    */
   override async onRequest(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
     const photo = /\/recipes\/(\d+)\/photo$/.exec(pathname);
     if (photo) return this.photo(request, Number(photo[1]));
     if (pathname.endsWith("/imports/paprika")) return this.uploadExport(request);
+    if (pathname.endsWith("/imports/screenshots")) return this.uploadScreenshot(request);
     const action = pathname.split("/").at(-1);
     if (request.method === "GET" && action === "export") {
       return new Response(await this.exportFile(), { headers: { "Content-Type": "application/json" } });
@@ -456,6 +526,27 @@ class HouseholdAgent extends Agent<Env> {
     if (file.byteLength > MAX_UPLOAD_BYTES) return new Response("The export is larger than 100 MB", { status: 413 });
     const upload = crypto.randomUUID();
     await this.env.BUCKET.put(importUploadKey(upload), file);
+    return Response.json({ ok: true, upload });
+  }
+
+  /**
+   * Keeps an uploaded screenshot in R2 under a new id, which `import_screenshots` is then given. An
+   * image type is not one a form can send, so another site needs a CORS preflight, as for a photo.
+   */
+  private async uploadScreenshot(request: Request): Promise<Response> {
+    if (request.method !== "PUT") {
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "PUT" } });
+    }
+    const type = request.headers.get("Content-Type")?.split(";")[0]?.trim() ?? "";
+    if (!isScreenshotType(type)) {
+      return new Response("Send a JPEG, PNG, WebP or GIF image", { status: 415 });
+    }
+    const image = await request.arrayBuffer();
+    if (image.byteLength > MAX_SCREENSHOT_BYTES) {
+      return new Response(`The screenshot is larger than ${MAX_SCREENSHOT_BYTES / 1024 / 1024} MB`, { status: 413 });
+    }
+    const upload = crypto.randomUUID();
+    await this.env.BUCKET.put(screenshotUploadKey(upload), image, { httpMetadata: { contentType: type } });
     return Response.json({ ok: true, upload });
   }
 
@@ -559,6 +650,12 @@ class HouseholdAgent extends Agent<Env> {
       .exec<{ value: number }>("UPDATE revision SET value = value + 1 WHERE id = 1 RETURNING value")
       .one().value;
   }
+}
+
+/** The SHA-256 of `bytes`, in hex. */
+async function sha256(bytes: Uint8Array): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** A tool's refusal, carried out of the transaction it rolls back. */

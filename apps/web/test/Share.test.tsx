@@ -56,7 +56,7 @@ test("a shared link the model read, or could not read, is a Draft a link away on
   render(() => <SharePage client={linkOnly.client} url={DAL_LINK} />);
 
   expect((await screen.findByRole("status")).textContent).toBe(
-    "Mise could not read a recipe at that link, so it kept the link as a Draft: Dal Video. Paste the recipe's text to fill it in.",
+    "Mise could not read a recipe at that link, so it kept the link as a Draft: Dal Video. Add screenshots or paste the recipe's text to fill it in.",
   );
   expect(screen.getByRole("link", { name: "Review Dal Video" }).getAttribute("href")).toBe("/?review");
 });

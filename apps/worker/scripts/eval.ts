@@ -1,7 +1,7 @@
 /**
  * Runs the real model on recorded fixtures, so that a prompt or model change can be checked by hand:
- * Suggestions for Unresolved names, and recipes read from pasted text and from recorded pages. It calls a model and costs
- * money, so it never runs in CI (CODING_STANDARDS.md).
+ * Suggestions for Unresolved names, and recipes read from pasted text, recorded pages, TikTok captions
+ * and screenshots. It calls a model and costs money, so it never runs in CI (CODING_STANDARDS.md).
  *
  *   ANTHROPIC_API_KEY=… bun run eval
  *
@@ -14,6 +14,7 @@ import {
   type Allergen,
   type Course,
   type ItemId,
+  type ReadRecipeRequest,
   type RecipeReading,
   readRecipePage,
   SHIPPED_ITEMS,
@@ -22,6 +23,8 @@ import {
 } from "@mise/domain";
 import pasted from "../../../fixtures/eval/pasted-recipes.json";
 import recorded from "../../../fixtures/eval/recipe-pages.json";
+import screenshotSets from "../../../fixtures/eval/screenshots.json";
+import captions from "../../../fixtures/eval/tiktok-captions.json";
 import fixture from "../../../fixtures/eval/unresolved-names.json";
 import { openLlm } from "../src/llm";
 
@@ -64,25 +67,43 @@ for (const { name, expect } of fixture.names as { name: string; expect: Expectat
 }
 console.log(`\n${fixture.names.length - misses} of ${fixture.names.length} as expected.\n`);
 
+const fixtures = `${import.meta.dir}/../../../fixtures`;
 // A page is read as an import reads it: its text, for the model.
 const pages = recorded.pages.map(({ name, page, expect }) => ({
   name,
-  text: readRecipePage(
-    readFileSync(`${import.meta.dir}/../../../fixtures/pages/${page}`, "utf8"),
-    "https://example.com/",
-  ).text,
+  text: readRecipePage(readFileSync(`${fixtures}/pages/${page}`, "utf8"), "https://example.com/").text,
   expect,
 }));
-const texts = [...pasted.texts, ...pages] as { name: string; text: string; expect: ReadingExpectation }[];
+// A TikTok is read by its oEmbed caption, as an import reads it.
+const tiktoks = captions.captions.map(({ name, oembed, expect }) => ({
+  name,
+  text: (JSON.parse(readFileSync(`${fixtures}/oembed/${oembed}`, "utf8")) as { title: string }).title,
+  expect,
+}));
+const sources: { name: string; request: ReadRecipeRequest; expect: ReadingExpectation }[] = [
+  ...([...pasted.texts, ...pages, ...tiktoks] as { name: string; text: string; expect: ReadingExpectation }[]).map(
+    ({ name, text, expect }) => ({ name, request: { text }, expect }),
+  ),
+  ...screenshotSets.sets.map(({ name, screenshots, expect }) => ({
+    name,
+    request: {
+      images: screenshots.map((file) => ({
+        bytes: new Uint8Array(readFileSync(`${fixtures}/screenshots/${file}`)),
+        type: "image/png" as const,
+      })),
+    },
+    expect: expect as ReadingExpectation,
+  })),
+];
 let readingMisses = 0;
-for (const { name, text, expect } of texts) {
-  const reading = await llm.readRecipe({ text });
+for (const { name, request, expect } of sources) {
+  const reading = await llm.readRecipe(request);
   const problems = readingShortfalls(expect, reading);
   if (problems.length > 0) readingMisses++;
   console.log(`${problems.length > 0 ? "✗" : "✓"} ${name}: ${JSON.stringify(reading)}`);
   for (const problem of problems) console.log(`    ${problem}`);
 }
-console.log(`\n${texts.length - readingMisses} of ${texts.length} read as expected.`);
+console.log(`\n${sources.length - readingMisses} of ${sources.length} read as expected.`);
 process.exit(misses + readingMisses > 0 ? 1 : 0);
 
 /** What the reading lacks against the expectation. */

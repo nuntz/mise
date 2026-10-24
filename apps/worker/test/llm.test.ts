@@ -221,6 +221,32 @@ describe("the Claude adapter", () => {
     await expect(claudeLlm(models, faux.getModel()).readRecipe({ text: "dal" })).rejects.toThrow(LlmError);
   });
 
+  test("shows the model screenshots as images, in order, to read together", async () => {
+    const faux = fauxProvider();
+    let asked: Parameters<FauxResponseFactory>[0] | undefined;
+    faux.setResponses([
+      (context) => {
+        asked = context;
+        return fauxAssistantMessage(fauxToolCall("read_recipe", { isRecipe: false }), { stopReason: "toolUse" });
+      },
+    ]);
+    const models = createModels();
+    models.setProvider(faux.provider);
+
+    await claudeLlm(models, faux.getModel()).readRecipe({
+      images: [
+        { bytes: new Uint8Array([1, 2, 3]), type: "image/png" },
+        { bytes: new Uint8Array([4, 5, 6]), type: "image/jpeg" },
+      ],
+    });
+
+    const content = asked?.messages.find((message) => message.role === "user")?.content;
+    expect(Array.isArray(content) && content.filter((block) => block.type === "image")).toEqual([
+      { type: "image", data: "AQID", mimeType: "image/png" },
+      { type: "image", data: "BAUG", mimeType: "image/jpeg" },
+    ]);
+  });
+
   test("throws LlmError when the model answers without the tool", async () => {
     const faux = fauxProvider();
     faux.setResponses([fauxAssistantMessage("I think tahini paste is tahini.")]);

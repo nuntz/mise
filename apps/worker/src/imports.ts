@@ -272,13 +272,15 @@ function insertFlag(
 }
 
 /**
- * Fills the link-only Draft `id` with what the model read of pasted text, logged as a run of source
- * `text` that updated it. The Draft keeps its link, title aside, and the text goes in its notes, as
- * for any pasted text. Filling it is an edit in Mise: a later import of its link flags it instead
- * of overwriting it. Like a new Draft, it is flagged if it looks like a Recipe already kept.
+ * Fills the link-only Draft `id` with what the model read of pasted text or screenshots, logged as a
+ * run of that `source` that updated it. The Draft keeps its link, title aside, and pasted text goes
+ * in its notes, as for any pasted text. Filling it is an edit in Mise: a later import of its link
+ * flags it instead of overwriting it. Like a new Draft, it is flagged if it looks like a Recipe
+ * already kept.
  */
 export function fillDraft(
   sql: SqlStorage,
+  source: Extract<ImportSource, "text" | "screenshot">,
   id: RecipeId,
   recipe: ImportedRecipe,
   startedAt: string,
@@ -286,7 +288,8 @@ export function fillDraft(
   const { id: runId } = sql
     .exec<{ id: number }>(
       `INSERT INTO import_run (source, started_at, created, updated, skipped, flagged)
-       VALUES ('text', ?, 0, 1, 0, 0) RETURNING id`,
+       VALUES (?, ?, 0, 1, 0, 0) RETURNING id`,
+      source,
       startedAt,
     )
     .one();

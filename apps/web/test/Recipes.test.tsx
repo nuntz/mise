@@ -245,6 +245,30 @@ test("a Recipe imported from a link names its page", async () => {
   expect(await screen.findByText("Imported from https://kitchen.example.com/toast/.")).toBeTruthy();
 });
 
+test("a Recipe read from a TikTok names the video and its author", async () => {
+  const video = "https://www.tiktok.com/@cook.example/video/7301234567890123456";
+  const fromTikTok: Recipe = {
+    ...toast,
+    source: { kind: "tiktok", url: video, author: "Sam Example", importedAt: "2026-10-24T12:00:00.000Z" },
+  };
+  const { client } = fakeClient([fromTikTok]);
+  await openRecipes(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
+
+  expect(await screen.findByText(`Read by AI from a TikTok by Sam Example: ${video}.`)).toBeTruthy();
+});
+
+test("a Recipe read from screenshots says so", async () => {
+  const fromScreenshots: Recipe = { ...toast, source: { kind: "screenshot", importedAt: "2026-10-24T12:00:00.000Z" } };
+  const { client } = fakeClient([fromScreenshots]);
+  await openRecipes(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
+
+  expect(await screen.findByText("Read by AI from screenshots.")).toBeTruthy();
+});
+
 test("editing a Recipe starts from what it has and saves the changes", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([toast]);

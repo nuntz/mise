@@ -109,14 +109,19 @@ export const RecipeSource = z.discriminatedUnion("kind", [
   }),
   /** Pasted text an LLM read; the text itself is kept in the Recipe's notes. */
   z.object({ kind: z.literal("text"), importedAt: z.iso.datetime() }),
-  /** A page imported from its link; importing the link again updates this Recipe. */
+  /**
+   * A link imported: a page (`url`), a TikTok video read from its caption, or an Instagram post kept
+   * link-only. Importing the link again updates this Recipe.
+   */
   z.object({
-    kind: z.literal("url"),
-    /** The page's canonical URL. */
+    kind: z.enum(["url", "tiktok", "instagram"]),
+    /** The page's canonical URL, or the video's. */
     url: z.string(),
     author: z.string().nullable(),
     importedAt: z.iso.datetime(),
   }),
+  /** Screenshots an LLM read together; they are not kept. */
+  z.object({ kind: z.literal("screenshot"), importedAt: z.iso.datetime() }),
 ]);
 export type RecipeSource = z.infer<typeof RecipeSource>;
 
@@ -150,7 +155,13 @@ export type Recipe = z.infer<typeof Recipe>;
  * the page had one) until someone adds the recipe's text.
  */
 export function isLinkOnly(recipe: Pick<Recipe, "draft" | "source" | "ingredients">): boolean {
-  return recipe.draft && recipe.source.kind === "url" && recipe.ingredients.length === 0;
+  return recipe.draft && linkOf(recipe) !== null && recipe.ingredients.length === 0;
+}
+
+/** The link a Recipe was imported from, as a page or a video; null for any other source. */
+export function linkOf(recipe: Pick<Recipe, "source">): string | null {
+  const { source } = recipe;
+  return source.kind === "url" || source.kind === "tiktok" || source.kind === "instagram" ? source.url : null;
 }
 
 /** What a search lists for each Recipe. */

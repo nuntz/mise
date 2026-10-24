@@ -23,6 +23,7 @@ import {
   DraftInput,
   ImportFlag,
   ImportRun,
+  ImportScreenshotsInput,
   ImportTextInput,
   ImportTextOutput,
   ImportUrlInput,
@@ -260,12 +261,26 @@ export const tools = {
     changes: "recipes",
   }),
   /**
+   * Reads uploaded screenshots together with the model's vision (ADR 0023) into a Draft Recipe,
+   * logged as an Import Run of source `screenshot`, as `import_text` reads text: the same screenshots
+   * read again are skipped, screenshots holding no recipe create nothing, and `model_failed` logs
+   * nothing. With `draft`, fills that link-only Draft instead. The uploads are deleted once read;
+   * an upload that is not there refuses the call (`not_found`).
+   */
+  import_screenshots: defineTool({
+    input: ImportScreenshotsInput,
+    output: ImportTextOutput,
+    changes: "recipes",
+  }),
+  /**
    * Fetches a recipe page and imports it, logged as an Import Run of source `url`, upserted on the
    * page's canonical URL. A schema.org Recipe in its JSON-LD makes a Recipe, with the Recipe's photo
    * (else the page's `og:image`); otherwise the model reads the page's text into a Draft. A page that
    * can't be fetched, or holds no recipe, or that the model fails to read, makes a link-only Draft, so
    * the link is never lost; why is logged as the run's error. Importing an unchanged page again is
-   * skipped, without asking the model.
+   * skipped, without asking the model. A TikTok video is read from its oEmbed caption and thumbnail
+   * instead (source `tiktok`, upserted on the video's URL), and an Instagram link is kept link-only
+   * (source `instagram`) without fetching anything.
    */
   import_url: defineTool({
     input: ImportUrlInput,

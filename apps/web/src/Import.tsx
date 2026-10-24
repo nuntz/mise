@@ -1,12 +1,20 @@
-import type { ImportError, ImportFlag, ImportRun, ToolError, ToolOutput } from "@mise/domain";
-import { createSignal, For, Show } from "solid-js";
+import {
+  type ImportError,
+  type ImportFlag,
+  type ImportRun,
+  MAX_SCREENSHOTS,
+  SCREENSHOT_TYPES,
+  type ToolError,
+  type ToolOutput,
+} from "@mise/domain";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
 /**
- * Paste a link or a recipe's text, import a Paprika export, and see past imports and the Recipes
+ * Paste a link or a recipe's text, import screenshots or a Paprika export, and see past imports and the Recipes
  * they flagged. `onReview` opens the Review screen, where what the model read waits as a Draft.
  */
 export function ImportPage(props: { client: MiseClient; onReview: () => void }) {
@@ -53,6 +61,7 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
     <section>
       <PasteLink client={props.client} onReview={props.onReview} />
       <PasteRecipe client={props.client} onReview={props.onReview} />
+      <ImportScreenshots client={props.client} onReview={props.onReview} />
       <h2>{t("import.title")}</h2>
       <p>{t("import.intro")}</p>
       <label>
@@ -227,29 +236,34 @@ function linkError({ run }: ToolOutput<"import_url">, link: string): string | un
 }
 
 /**
- * The text of the recipe at a link-only Draft's link, pasted for the model to read into that Draft.
- * Exported for the Review screen, which offers it on each link-only Draft.
+ * The text of the recipe at a link-only Draft's link, pasted for the model to read into that Draft,
+ * or screenshots of it. Exported for the Review screen, which offers it on each link-only Draft.
  */
 export function FillDraft(props: { client: MiseClient; draft: { id: number; title: string }; onReview?: () => void }) {
+  const screenshots = createUniqueId();
   const [text, setText] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const [made, setMade] = createSignal<string>();
 
-  const read = async () => {
+  const fill = async (read: () => Promise<{ title: string } | { error: string }>) => {
     setBusy(true);
     setError(undefined);
     try {
-      const result = await props.client.call("import_text", { text: text(), draft: props.draft.id });
-      if (!result.ok)
-        setError(result.error.code === "model_failed" ? t("paste.failed") : errorText(result.error, "recipe"));
-      else if (!result.value.recipe) setError(t("paste.noRecipe"));
-      else setMade(result.value.recipe.title);
+      const outcome = await read();
+      if ("error" in outcome) setError(outcome.error);
+      else setMade(outcome.title);
     } catch {
       setError(t("app.error"));
     } finally {
       setBusy(false);
     }
+  };
+  const readText = async () => {
+    const result = await props.client.call("import_text", { text: text(), draft: props.draft.id });
+    if (!result.ok)
+      return { error: result.error.code === "model_failed" ? t("paste.failed") : errorText(result.error, "recipe") };
+    return result.value.recipe ? { title: result.value.recipe.title } : { error: t("paste.noRecipe") };
   };
 
   return (
@@ -258,11 +272,17 @@ export function FillDraft(props: { client: MiseClient; draft: { id: number; titl
       fallback={
         // Not a form of its own: it may sit inside the link's form.
         <div>
+          <label for={screenshots}>{t("fill.screenshots", { title: props.draft.title })}</label>
+          <ScreenshotInput
+            id={screenshots}
+            disabled={busy()}
+            onPick={(files) => void fill(() => readScreenshots(props.client, files, props.draft.id))}
+          />
           <label>
             {t("fill.text", { title: props.draft.title })}
             <textarea rows={6} maxLength={20_000} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
           </label>
-          <button type="button" disabled={busy() || text().trim() === ""} onClick={() => void read()}>
+          <button type="button" disabled={busy() || text().trim() === ""} onClick={() => void fill(readText)}>
             {busy() ? t("paste.reading") : t("fill.read")}
           </button>
           <Show when={error()}>
@@ -285,6 +305,94 @@ export function FillDraft(props: { client: MiseClient; draft: { id: number; titl
       )}
     </Show>
   );
+}
+
+/** Screenshots of one recipe, read together by the model into a Draft (ADR 0023). */
+function ImportScreenshots(props: { client: MiseClient; onReview: () => void }) {
+  const screenshots = createUniqueId();
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const [made, setMade] = createSignal<string>();
+
+  const read = async (files: File[]) => {
+    setBusy(true);
+    setError(undefined);
+    setMade(undefined);
+    try {
+      const outcome = await readScreenshots(props.client, files);
+      if ("error" in outcome) setError(outcome.error);
+      else setMade(outcome.title);
+    } catch {
+      setError(t("app.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h2>{t("shots.title")}</h2>
+      <p>{t("shots.intro")}</p>
+      <label for={screenshots}>{t("shots.files")}</label>
+      <ScreenshotInput id={screenshots} disabled={busy()} onPick={(files) => void read(files)} />
+      <Show when={busy()}>
+        <p>{t("shots.reading")}</p>
+      </Show>
+      <Show when={error()}>
+        <p role="alert">{error()}</p>
+      </Show>
+      <Show when={made()}>
+        {(title) => (
+          <>
+            <p role="status">{t("paste.done", { title: title() })}</p>
+            <button type="button" class="button-secondary" onClick={() => props.onReview()}>
+              {t("paste.review")}
+            </button>
+          </>
+        )}
+      </Show>
+    </section>
+  );
+}
+
+/** A file input for screenshots, several at once; cleared once picked, so the same ones can be picked again. */
+function ScreenshotInput(props: { id: string; disabled: boolean; onPick: (files: File[]) => void }) {
+  return (
+    <input
+      id={props.id}
+      type="file"
+      accept={SCREENSHOT_TYPES.join(",")}
+      multiple
+      disabled={props.disabled}
+      onChange={(e) => {
+        const files = [...(e.currentTarget.files ?? [])];
+        e.currentTarget.value = "";
+        if (files.length > 0) props.onPick(files);
+      }}
+    />
+  );
+}
+
+/**
+ * Uploads screenshots, in the order picked, and has the model read them together into a Draft, or
+ * into the link-only Draft `draft`: the Draft's title, or why not.
+ */
+async function readScreenshots(
+  client: MiseClient,
+  files: File[],
+  draft?: number,
+): Promise<{ title: string } | { error: string }> {
+  if (files.length > MAX_SCREENSHOTS) return { error: t("shots.tooMany", { count: String(MAX_SCREENSHOTS) }) };
+  const uploads: string[] = [];
+  for (const file of files) {
+    const upload = await client.uploadScreenshot(file);
+    if (upload === null) return { error: t("shots.uploadFailed") };
+    uploads.push(upload);
+  }
+  const result = await client.call("import_screenshots", draft === undefined ? { uploads } : { uploads, draft });
+  if (!result.ok)
+    return { error: result.error.code === "model_failed" ? t("shots.failed") : errorText(result.error, "recipe") };
+  return result.value.recipe ? { title: result.value.recipe.title } : { error: t("shots.noRecipe") };
 }
 
 /** A recipe's text, pasted for the model to read into a Draft (ADR 0023). */

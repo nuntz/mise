@@ -84,10 +84,18 @@ const pastedRun: ImportRun = {
 
 /** A client with one past import that records every upload and tool call made. */
 function fakeClient(
-  options: { upload?: string | null; importText?: unknown; importUrl?: unknown; runs?: ImportRun[] } = {},
+  options: {
+    upload?: string | null;
+    importText?: unknown;
+    importUrl?: unknown;
+    importScreenshots?: unknown;
+    screenshotUploads?: boolean;
+    runs?: ImportRun[];
+  } = {},
 ) {
   const calls: { name: string; input: unknown }[] = [];
   const uploads: Blob[] = [];
+  const screenshots: Blob[] = [];
   let runs = options.runs ?? [lastWeek];
   const { client, notify } = createFakeClient(
     async (name: string, input: unknown) => {
@@ -110,6 +118,8 @@ function fakeClient(
           return options.importText;
         case "import_url":
           return options.importUrl;
+        case "import_screenshots":
+          return options.importScreenshots;
         case "list_drafts":
         case "list_suggestions":
           return { ok: true, value: [] };
@@ -122,10 +132,21 @@ function fakeClient(
         uploads.push(file);
         return options.upload === undefined ? "4b0c6a62-6f1e-4c1a-9d43-2f4d8e5a7b10" : options.upload;
       },
+      async uploadScreenshot(file) {
+        screenshots.push(file);
+        return options.screenshotUploads === false ? null : `upload-${screenshots.length}`;
+      },
     },
   );
-  return { client, calls, uploads };
+  return { client, calls, uploads, screenshots };
 }
+
+const screenshotFiles = () => [
+  new File([new Uint8Array([0x89, 0x50])], "ingredients.png", { type: "image/png" }),
+  new File([new Uint8Array([0x89, 0x50])], "steps.png", { type: "image/png" }),
+];
+
+const screenshotRun: ImportRun = { ...pastedRun, id: 5, source: "screenshot" };
 
 async function openImport(client: MiseClient) {
   render(() => <App client={client} />);
@@ -308,7 +329,7 @@ test("a link Mise could not read is kept, and its recipe's text can be pasted in
   await pasteLink();
 
   expect((await screen.findByRole("status")).textContent).toBe(
-    "Mise could not read a recipe at that link (The page was refused by its site (HTTP 403)), so it kept the link as a Draft: Red lentil dal. Paste the recipe's text to fill it in.",
+    "Mise could not read a recipe at that link (The page was refused by its site (HTTP 403)), so it kept the link as a Draft: Red lentil dal. Add screenshots or paste the recipe's text to fill it in.",
   );
   await userEvent.type(screen.getByLabelText("The recipe's text, for Red lentil dal"), "1 cup red lentils");
   await userEvent.click(screen.getByRole("button", { name: "Fill in the Draft" }));
@@ -376,4 +397,80 @@ test("a link imported before that can't be read now says it kept the Recipe, and
   expect((await screen.findByRole("status")).textContent).toBe(
     "Red Lentil Dal is already in Mise, kept as it was: the link could not be read again (The page was refused by its site (HTTP 403)).",
   );
+});
+
+test("screenshots of a recipe are uploaded and read together into a Draft, to check on the Review screen", async () => {
+  const { client, calls, screenshots } = fakeClient({
+    importScreenshots: { ok: true, value: { run: screenshotRun, recipe: { id: 21, title: "Cabbage Salad" } } },
+  });
+  await openImport(client);
+
+  await userEvent.upload(await screen.findByLabelText("Screenshots of a recipe"), screenshotFiles());
+
+  expect(
+    await screen.findByText("Cabbage Salad is waiting on the Review screen as a Draft, until someone checks it."),
+  ).toBeTruthy();
+  expect(screenshots.map((file) => (file as File).name)).toEqual(["ingredients.png", "steps.png"]);
+  expect(calls).toContainEqual({ name: "import_screenshots", input: { uploads: ["upload-1", "upload-2"] } });
+});
+
+test("screenshots that can't be uploaded say so, and nothing is read", async () => {
+  const { client, calls } = fakeClient({ screenshotUploads: false });
+  await openImport(client);
+
+  await userEvent.upload(await screen.findByLabelText("Screenshots of a recipe"), screenshotFiles());
+
+  expect((await screen.findByRole("alert")).textContent).toBe("The screenshots could not be uploaded.");
+  expect(calls.map((call) => call.name)).not.toContain("import_screenshots");
+});
+
+test("screenshots with no recipe in them say so", async () => {
+  const { client } = fakeClient({
+    importScreenshots: { ok: true, value: { run: { ...screenshotRun, created: 0 }, recipe: null } },
+  });
+  await openImport(client);
+
+  await userEvent.upload(await screen.findByLabelText("Screenshots of a recipe"), screenshotFiles());
+
+  expect((await screen.findByRole("alert")).textContent).toBe("No recipe was found in those screenshots.");
+});
+
+test("a link Mise could not read takes screenshots of its recipe, too", async () => {
+  const { client, calls } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: {
+        run: { ...linkRun, source: "instagram" },
+        recipe: { id: 14, title: "Instagram reel", draft: true, linkOnly: true },
+      },
+    },
+    importScreenshots: { ok: true, value: { run: screenshotRun, recipe: { id: 14, title: "Cabbage Salad" } } },
+  });
+  await openImport(client);
+  await pasteLink();
+
+  await userEvent.upload(
+    await screen.findByLabelText("Screenshots of the recipe, for Instagram reel"),
+    screenshotFiles(),
+  );
+
+  expect(calls).toContainEqual({
+    name: "import_screenshots",
+    input: { uploads: ["upload-1", "upload-2"], draft: 14 },
+  });
+  expect(
+    await screen.findByText("Cabbage Salad is waiting on the Review screen as a Draft, until someone checks it."),
+  ).toBeTruthy();
+});
+
+test("past imports name TikTok, Instagram and screenshots", async () => {
+  const { client } = fakeClient({
+    runs: [screenshotRun, { ...linkRun, id: 6, source: "tiktok" }, { ...linkRun, id: 7, source: "instagram" }],
+  });
+  await openImport(client);
+
+  const runs = await screen.findByRole("list", { name: "Past imports" });
+  expect(within(runs).getByText(/screenshots: 1 created/)).toBeTruthy();
+  expect(within(runs).getByText(/TikTok: 1 created/)).toBeTruthy();
+  expect(within(runs).getByText(/Instagram: 1 created/)).toBeTruthy();
 });

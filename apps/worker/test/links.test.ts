@@ -9,6 +9,8 @@ import {
   type ToolResult,
 } from "@mise/domain";
 import { beforeEach, describe, expect, test } from "vitest";
+import noodlesOembed from "../../../fixtures/oembed/tiktok-noodles.json";
+import browniesOembed from "../../../fixtures/oembed/tiktok-recipe-in-bio.json";
 import noJsonLd from "../../../fixtures/pages/no-json-ld.html?raw";
 import yoastGraph from "../../../fixtures/pages/yoast-graph.html?raw";
 import { SAMPLE_JPEG } from "../../../fixtures/paprika";
@@ -122,7 +124,7 @@ describe("importing a link", () => {
       recipe: { title: "My Nan's Shepherd's Pie", draft: true, linkOnly: false },
     });
     expect(llm.readings).toHaveLength(1);
-    expect(llm.readings[0]?.text).toMatch(/^My Nan's Shepherd's Pie\nEvery Sunday/);
+    expect(llm.readings[0]).toHaveProperty("text", expect.stringMatching(/^My Nan's Shepherd's Pie\nEvery Sunday/));
     const draft = await recipe(household, imported.recipe.id);
     expect(draft).toMatchObject({
       draft: true,
@@ -400,6 +402,171 @@ describe("filling a link-only Draft with pasted text", () => {
       ok: false,
       error: { code: "not_found" },
     });
+    expect(llm.readings).toEqual([]);
+  });
+});
+
+const NOODLES_VIDEO = "https://www.tiktok.com/@cook.example/video/7301234567890123456";
+const NOODLES_OEMBED = `https://www.tiktok.com/oembed?url=${encodeURIComponent(NOODLES_VIDEO)}`;
+const BROWNIES_VIDEO = "https://www.tiktok.com/@cook.example/video/7309876543210987654";
+const BROWNIES_OEMBED = `https://www.tiktok.com/oembed?url=${encodeURIComponent(BROWNIES_VIDEO)}`;
+
+const noodles: RecipeReading = {
+  isRecipe: true,
+  title: "10-minute peanut noodles",
+  ingredients: ["200 g wheat noodles", "3 tbsp peanut butter", "2 tbsp soy sauce"],
+  steps: ["Boil the noodles.", "Toss with the sauce."],
+  servings: 2,
+  minutes: 10,
+  course: "main",
+};
+
+const json = (body: unknown) => () => Response.json(body);
+
+describe("importing a TikTok", () => {
+  test("has the model read its caption into a Draft, with its thumbnail, at the video's URL", async () => {
+    const requested = serve({
+      [NOODLES_OEMBED]: json(noodlesOembed),
+      [noodlesOembed.thumbnail_url]: jpeg,
+    });
+    const llm = withReading(noodles);
+    const household = await newHousehold();
+
+    const imported = await importUrl(household, `${NOODLES_VIDEO}?is_from_webapp=1&sender_device=pc`);
+
+    expect(imported).toMatchObject({
+      run: { source: "tiktok", created: 1, errors: [] },
+      recipe: { title: "10-minute peanut noodles", draft: true, linkOnly: false },
+    });
+    expect(requested).toEqual([NOODLES_OEMBED, noodlesOembed.thumbnail_url]);
+    expect(llm.readings).toEqual([{ text: noodlesOembed.title }]);
+    const draft = await recipe(household, imported.recipe.id);
+    expect(draft).toMatchObject({
+      draft: true,
+      baseServings: 2,
+      notes: noodlesOembed.title,
+      source: { kind: "tiktok", url: NOODLES_VIDEO, author: "Sam Example" },
+    });
+    expect(draft.ingredients[0]).toMatchObject({ raw: "200 g wheat noodles" });
+    const photo = (await env.BUCKET.get(draft.photoKey as string)) as R2ObjectBody;
+    expect(new Uint8Array(await photo.arrayBuffer())).toEqual(SAMPLE_JPEG);
+  });
+
+  test("keeps a video whose caption has no recipe as a link-only Draft, and skips it when shared again", async () => {
+    const requested = serve({
+      [BROWNIES_OEMBED]: json(browniesOembed),
+      [browniesOembed.thumbnail_url]: jpeg,
+    });
+    const llm = withReading({ isRecipe: false });
+    const household = await newHousehold();
+
+    const imported = await importUrl(household, BROWNIES_VIDEO);
+
+    expect(imported).toMatchObject({
+      run: {
+        source: "tiktok",
+        created: 1,
+        errors: [{ entry: BROWNIES_VIDEO, message: "The caption holds no recipe" }],
+      },
+      recipe: { title: "the fudgiest brownies of my LIFE 🤤 full recipe in bio!", draft: true, linkOnly: true },
+    });
+    const draft = await recipe(household, imported.recipe.id);
+    expect(draft).toMatchObject({ source: { kind: "tiktok", url: BROWNIES_VIDEO }, ingredients: [] });
+    expect(draft.photoKey).not.toBeNull();
+
+    expect(await importUrl(household, BROWNIES_VIDEO)).toMatchObject({
+      run: { created: 0, updated: 0, skipped: 1 },
+      recipe: { id: imported.recipe.id, linkOnly: true },
+    });
+    expect(requested).toEqual([BROWNIES_OEMBED, browniesOembed.thumbnail_url]);
+    expect(llm.readings).toHaveLength(1);
+  });
+
+  test("follows a short link to its video", async () => {
+    serve({
+      "https://vm.tiktok.com/ZMabcdef/": () =>
+        new Response(null, { status: 301, headers: { Location: `${NOODLES_VIDEO}?_r=1&u_code=abc` } }),
+      [`${NOODLES_VIDEO}?_r=1&u_code=abc`]: html("<html><body>TikTok</body></html>"),
+      [NOODLES_OEMBED]: json(noodlesOembed),
+      [noodlesOembed.thumbnail_url]: jpeg,
+    });
+    withReading(noodles);
+    const household = await newHousehold();
+
+    const imported = await importUrl(household, "https://vm.tiktok.com/ZMabcdef/");
+
+    expect(await recipe(household, imported.recipe.id)).toMatchObject({
+      draft: true,
+      source: { kind: "tiktok", url: NOODLES_VIDEO },
+    });
+  });
+
+  test("keeps a video it can't ask TikTok about as a link-only Draft, and reads it once TikTok answers", async () => {
+    let down = true;
+    serve({
+      [NOODLES_OEMBED]: () => (down ? new Response("Busy", { status: 503 }) : json(noodlesOembed)()),
+      [noodlesOembed.thumbnail_url]: jpeg,
+    });
+    const llm = withReading(noodles);
+    const household = await newHousehold();
+
+    const linkOnly = await importUrl(household, NOODLES_VIDEO);
+
+    expect(linkOnly).toMatchObject({
+      run: { source: "tiktok", created: 1, errors: [{ entry: NOODLES_VIDEO }] },
+      recipe: { title: "TikTok video by cook.example", draft: true, linkOnly: true },
+    });
+    expect(llm.readings).toEqual([]);
+    down = false;
+    expect(await importUrl(household, NOODLES_VIDEO)).toMatchObject({
+      run: { updated: 1 },
+      recipe: { id: linkOnly.recipe.id, title: "10-minute peanut noodles", linkOnly: false },
+    });
+  });
+
+  test("keeps a video the model fails to read as a link-only Draft, titled from its caption", async () => {
+    serve({ [NOODLES_OEMBED]: json(noodlesOembed), [noodlesOembed.thumbnail_url]: jpeg });
+    const llm = withReading(noodles);
+    llm.failing = true;
+    const household = await newHousehold();
+
+    expect(await importUrl(household, NOODLES_VIDEO)).toMatchObject({
+      run: { created: 1, errors: [{ entry: NOODLES_VIDEO, message: expect.stringContaining("could not read") }] },
+      recipe: { title: "10-minute peanut noodles 🥜🍜 serves 2!!", linkOnly: true },
+    });
+  });
+
+  test("keeps a TikTok link that is no video's as a link-only Draft", async () => {
+    const requested = serve({});
+    const household = await newHousehold();
+
+    expect(await importUrl(household, "https://www.tiktok.com/@cook.example")).toMatchObject({
+      run: { source: "tiktok", created: 1, errors: [{ message: "The link is not a TikTok video" }] },
+      recipe: { draft: true, linkOnly: true },
+    });
+    expect(requested).toEqual([]);
+  });
+});
+
+describe("importing an Instagram link", () => {
+  test("keeps it as a link-only Draft without fetching anything, and skips it when shared again", async () => {
+    const requested = serve({});
+    const llm = withReading(noodles);
+    const household = await newHousehold();
+    const reel = "https://www.instagram.com/reel/Cabc123_-x/";
+
+    const imported = await importUrl(household, `${reel}?igsh=xyz`);
+
+    expect(imported).toMatchObject({
+      run: { source: "instagram", created: 1, errors: [{ entry: `${reel}?igsh=xyz` }] },
+      recipe: { title: "Instagram reel", draft: true, linkOnly: true },
+    });
+    expect(await recipe(household, imported.recipe.id)).toMatchObject({
+      source: { kind: "instagram", url: reel },
+      photoKey: null,
+    });
+    expect(await importUrl(household, reel)).toMatchObject({ run: { created: 0, skipped: 1 } });
+    expect(requested).toEqual([]);
     expect(llm.readings).toEqual([]);
   });
 });

@@ -1,9 +1,16 @@
 import { z } from "zod";
+import type { ScreenshotType } from "./imports";
 import { COURSES, Course } from "./recipes";
 import { SuggestedItem, type SuggestionAnswer, type SuggestionRequest } from "./suggestions";
 
-/** What the model is asked to read as a recipe: text for now (a caption, a message, a Doc); images later. */
-export type ReadRecipeRequest = { text: string };
+/** An image the model reads: a screenshot, its bytes and type. */
+export type RecipeImage = { bytes: Uint8Array; type: ScreenshotType };
+
+/**
+ * What the model is asked to read as a recipe: text (a caption, a message, a page, a Doc), or
+ * screenshots read together, in order.
+ */
+export type ReadRecipeRequest = { text: string } | { images: RecipeImage[] };
 
 /**
  * What the model read: a recipe, or the answer that the source holds none. Only what a person can

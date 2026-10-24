@@ -21,6 +21,7 @@ export * from "./tickQueue";
 export * from "./time";
 export * from "./tools";
 export * from "./units";
+export * from "./videos";
 export * from "./weeks";
 
 /** The one household Durable Object a deployment serves. */
@@ -36,3 +37,6 @@ export function recipePhotoPath(id: number): string {
 
 /** Where a Paprika export is uploaded (PUT) before `run_paprika_import` imports it. */
 export const PAPRIKA_UPLOAD_PATH = `${HOUSEHOLD_PATH}/imports/paprika`;
+
+/** Where a screenshot is uploaded (PUT), one per request, before `import_screenshots` reads it. */
+export const SCREENSHOT_UPLOAD_PATH = `${HOUSEHOLD_PATH}/imports/screenshots`;
