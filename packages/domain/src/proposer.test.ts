@@ -547,6 +547,17 @@ describe("proposeWeek, Leftovers", () => {
     });
   });
 
+  test("Leftovers of a Locked Recipe that is not a main dish fill no dinner", () => {
+    const cake = recipe(1, { course: "dessert", yieldsLeftovers: true });
+    const week = dinners();
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1, locked: true };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: [cake, ...plain] }));
+
+    expect(proposal.dinners[0]).toMatchObject({ recipeId: 1, reason: { kind: "locked" } });
+    expect(proposal.dinners.map((dinner) => dinner.kind)).not.toContain("leftovers");
+  });
+
   test("a dinner already cooked gets no Leftovers afterwards", () => {
     const week = dinners();
     week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1, cooked: true };

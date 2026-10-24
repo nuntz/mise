@@ -51,8 +51,9 @@ type FlagRow = {
 /**
  * Upserts each Recipe on its source id, and logs the run. A Recipe whose revision is unchanged, or
  * that is in the source's trash, is skipped; one edited in Mise since it was imported (a Course
- * corrected by hand, say) is flagged for a merge, not overwritten; a new one like a Recipe from another source is created and flagged as a
- * possible duplicate. Nothing is deleted. Returns the run, and the photos updated Recipes no longer show.
+ * corrected by hand, say) is flagged for a merge, not overwritten; a new one like a Recipe from
+ * another source is created and flagged as a possible duplicate. Nothing is deleted. Returns the
+ * run, and the photos updated Recipes no longer show.
  */
 export function runImport(
   sql: SqlStorage,

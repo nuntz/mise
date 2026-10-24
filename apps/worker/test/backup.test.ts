@@ -398,6 +398,21 @@ describe("export and restore", () => {
     expect(await target.callTool("search_recipes", {})).toEqual({ ok: true, value: [] });
   });
 
+  test("restore rejects a Recipe whose Course is not one Mise has", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    await source.callTool("create_recipe", recipe);
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.recipe[0].course = "entrée";
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+    expect(await target.callTool("search_recipes", {})).toEqual({ ok: true, value: [] });
+  });
+
   test("restore rejects an alias of an Item the catalogue does not have", async () => {
     const source = freshHousehold();
     await source.callTool("setup_household", sampleHousehold);
