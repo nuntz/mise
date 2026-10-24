@@ -1,0 +1,18 @@
+{
+  "about": "Unresolved Ingredient texts for `bun run eval`, each with what a good Suggestion holds: `item`, the shipped Item it is another name for; `allergens`, Allergens it must list at least; or `notFood`, for a name that should get no Suggestion.",
+  "names": [
+    { "name": "beurre", "expect": { "item": "butter" } },
+    { "name": "nam pla", "expect": { "item": "fish_sauce" } },
+    { "name": "shoyu", "expect": { "item": "soy_sauce" } },
+    { "name": "worcester sauce", "expect": { "item": "worcestershire_sauce" } },
+    { "name": "tahini paste", "expect": { "item": "tahini" } },
+    { "name": "gochujang", "expect": { "allergens": ["wheat", "soy"] } },
+    { "name": "basil pesto", "expect": { "allergens": ["tree_nut", "milk"] } },
+    { "name": "halloumi", "expect": { "allergens": ["milk"] } },
+    { "name": "marzipan", "expect": { "allergens": ["tree_nut"] } },
+    { "name": "egg noodle", "expect": { "allergens": ["egg", "wheat"] } },
+    { "name": "furikake", "expect": { "allergens": ["sesame"] } },
+    { "name": "shrimp paste", "expect": { "allergens": ["shellfish"] } },
+    { "name": "for serving", "expect": { "notFood": true } }
+  ]
+}

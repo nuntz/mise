@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "seed": "bun scripts/seed.ts",
+    "eval": "bun scripts/eval.ts",
     "test": "vitest run",
     "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p scripts"
   },

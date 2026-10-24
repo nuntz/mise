@@ -1,6 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels, type Models, Type } from "@earendil-works/pi-ai";
-import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
+import { type Models, Type } from "@earendil-works/pi-ai";
 import type { Conversation, Cursor, EntryRecord, Extension, ToolRegistration } from "@earendil-works/pi-durable";
 import {
   type ChatMessage,
@@ -13,6 +12,7 @@ import {
 } from "@mise/domain";
 import type { PiModel } from "agents/harness/pi";
 import { z } from "zod";
+import { anthropicModels } from "./llm";
 
 /** The agent's model (SPEC §2): Haiku, until multi-constraint requests show it drops clauses. */
 export const AGENT_MODEL: PiModel = { provider: "anthropic", id: "claude-haiku-5-5" };
@@ -33,14 +33,7 @@ export function useAgentModels(open: ((env: Env) => AgentModels) | undefined): v
 /** Claude, with the deployment's Anthropic key (a Worker secret). */
 export function agentModels(env: Env): AgentModels {
   if (replacement) return replacement(env);
-  const models = createModels({
-    authContext: {
-      env: async (name) => (name === "ANTHROPIC_API_KEY" ? env.ANTHROPIC_API_KEY : undefined),
-      fileExists: async () => false,
-    },
-  });
-  models.setProvider(anthropicProvider());
-  return { models, model: AGENT_MODEL };
+  return { models: anthropicModels(env.ANTHROPIC_API_KEY), model: AGENT_MODEL };
 }
 
 /** How the agent reaches a tool: the household's validated entry point (ADR 0002). */

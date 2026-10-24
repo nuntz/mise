@@ -40,6 +40,13 @@ import {
   UpsertStapleInput,
 } from "./staples";
 import {
+  AcceptSuggestionInput,
+  DismissSuggestionInput,
+  RequestSuggestionsInput,
+  RequestSuggestionsOutput,
+  Suggestion,
+} from "./suggestions";
+import {
   CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
@@ -62,7 +69,8 @@ import {
 /**
  * Topics a change notice can name; clients refetch the matching tools. Items are announced as
  * "recipes": a change to one changes the Recipes that resolve to it. So are imports: a run changes
- * Recipes, and its log and flags are read beside them. "plan" is the Weeks and their Slots;
+ * Recipes, and its log and flags are read beside them; and so are Suggestions, which are read beside
+ * the Unresolved Ingredients they are for and resolve them when accepted. "plan" is the Weeks and their Slots;
  * "grocery" their Grocery Lists and the Household's Staples, which the lists buy and their Have Ticks
  * restock; the lists also depend on the plan, the Recipes and the Household.
  */
@@ -182,6 +190,36 @@ export const tools = {
   update_item: defineTool({
     input: UpdateItemInput,
     output: Item,
+    changes: "recipes",
+  }),
+  /**
+   * Asks the model for Suggestions (ADR 0023); see `RequestSuggestionsInput`. One batch per call:
+   * call again while `remaining` is above 0. Refuses with `model_failed` when the model fails.
+   */
+  request_suggestions: defineTool({
+    input: RequestSuggestionsInput,
+    output: RequestSuggestionsOutput,
+    changes: "recipes",
+  }),
+  /** Suggestions not yet accepted or dismissed whose text is still Unresolved, most frequent text first. */
+  list_suggestions: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(Suggestion),
+  }),
+  /**
+   * Refuses a Suggestion already accepted or dismissed (`not_found`), a new Item with no Allergens
+   * accepted without `suggested` stating them (`invalid_input`), and a name that already names another
+   * Item (`name_in_use`), as `resolve_ingredient` and `create_item` do.
+   */
+  accept_suggestion: defineTool({
+    input: AcceptSuggestionInput,
+    output: ResolveIngredientOutput,
+    changes: "recipes",
+  }),
+  /** Refuses a Suggestion already accepted or dismissed (`not_found`). Returns the Suggestion. */
+  dismiss_suggestion: defineTool({
+    input: DismissSuggestionInput,
+    output: Suggestion,
     changes: "recipes",
   }),
   /** Every Item: the shipped ones in catalogue order, then the Household's in the order added. */
@@ -394,7 +432,8 @@ export type ToolErrorCode =
   | "not_yet"
   | "not_cooked"
   | "not_built"
-  | "not_earlier";
+  | "not_earlier"
+  | "model_failed";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */
 export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };

@@ -4,6 +4,7 @@ import {
   ITEMS,
   type RecipeSummary,
   STORE_SECTIONS,
+  type Suggestion,
   type UnresolvedGroup,
 } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
@@ -39,6 +40,16 @@ const groups: UnresolvedGroup[] = [
   { text: "", count: 1, lines: ["2 cups"], recipes: [{ id: 3, title: "Toast" }] },
 ];
 
+const suggestions: Suggestion[] = [
+  {
+    id: 7,
+    text: "gochujang",
+    suggested: { kind: "new", name: "gochujang", section: "international", unitFamily: "volume", allergens: ["soy"] },
+    suggestedAt: "2026-10-23T12:00:00.000Z",
+  },
+  { id: 8, text: "beurre", suggested: { kind: "existing", item: "butter" }, suggestedAt: "2026-10-23T12:00:00.000Z" },
+];
+
 const untagged: RecipeSummary[] = [
   {
     id: 1,
@@ -53,8 +64,11 @@ const untagged: RecipeSummary[] = [
   },
 ];
 
-/** A client with fixed Unresolved Ingredients and untagged Recipes that records every tool call made. */
-function fakeClient() {
+/**
+ * A client with fixed Unresolved Ingredients, their Suggestions and untagged Recipes that records every
+ * tool call made. `request_suggestions` answers with `requested` in turn.
+ */
+function fakeClient(requested: unknown[] = [], listed: Suggestion[] = suggestions) {
   const calls: { name: string; input: unknown }[] = [];
   const { client } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
@@ -67,6 +81,14 @@ function fakeClient() {
         return { ok: true, value: ITEMS };
       case "list_unresolved_ingredients":
         return { ok: true, value: groups };
+      case "list_suggestions":
+        return { ok: true, value: listed };
+      case "request_suggestions":
+        return requested.shift();
+      case "accept_suggestion":
+        return { ok: true, value: { item: ITEMS[0], resolved: 1 } };
+      case "dismiss_suggestion":
+        return { ok: true, value: suggestions[0] };
       case "list_untagged_recipes":
         return { ok: true, value: untagged };
       case "resolve_ingredient":
@@ -84,9 +106,9 @@ function fakeClient() {
   return { client, calls };
 }
 
-async function openPage(name: string) {
+async function openPage(name: string, requested?: unknown[], listed?: Suggestion[]) {
   const user = userEvent.setup();
-  const fake = fakeClient();
+  const fake = fakeClient(requested, listed);
   render(() => <App client={fake.client} />);
   await user.click(await screen.findByRole("button", { name: "Household" }));
   await user.click(await screen.findByRole("button", { name }));
@@ -188,6 +210,123 @@ test("a new Item named as the group has no alias, and a name in use is reported"
 
   expect(calls.find((call) => call.name === "create_item")?.input).toMatchObject({ name: "gochujang", aliases: [] });
   expect((await within(gochujang).findByRole("alert")).textContent).toBe("That name already belongs to another Item.");
+});
+
+test("a Suggestion shows on its group, marked as AI-drafted and not guaranteed complete", async () => {
+  await openPage("Resolve Ingredients");
+
+  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
+  expect(suggestion.textContent).toContain("AI-drafted, not guaranteed complete");
+  expect(suggestion.textContent).toContain("A new Item: gochujang, in International, with Soy");
+  const beurre = screen.getByRole("article", { name: "beurre" });
+  expect(within(beurre).getByRole("region", { name: "Suggestion" }).textContent).toContain(
+    "Another name for butter (Milk)",
+  );
+  expect(within(screen.getByRole("article", { name: "(no name)" })).queryByRole("region")).toBeNull();
+});
+
+test("a Suggestion is accepted, or dismissed, in one tap", async () => {
+  const { user, calls } = await openPage("Resolve Ingredients");
+
+  const beurre = await screen.findByRole("article", { name: "beurre" });
+  await user.click(await within(beurre).findByRole("button", { name: "Accept" }));
+  const gochujang = screen.getByRole("article", { name: "gochujang" });
+  await user.click(within(gochujang).getByRole("button", { name: "Dismiss" }));
+
+  expect(calls.find((call) => call.name === "accept_suggestion")?.input).toEqual({ id: 8 });
+  expect(calls.find((call) => call.name === "dismiss_suggestion")?.input).toEqual({ id: 7 });
+});
+
+test("a Suggestion for a new Item is accepted after a person edits its Allergens", async () => {
+  const { user, calls } = await openPage("Resolve Ingredients");
+
+  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  await user.click(await within(gochujang).findByRole("button", { name: "Edit" }));
+  expect(within(gochujang).getByRole<HTMLInputElement>("checkbox", { name: "Soy" }).checked).toBe(true);
+  await user.click(within(gochujang).getByRole("checkbox", { name: "Wheat" }));
+  await user.click(within(gochujang).getByRole("button", { name: "Accept" }));
+
+  expect(calls.find((call) => call.name === "accept_suggestion")?.input).toEqual({
+    id: 7,
+    suggested: {
+      kind: "new",
+      name: "gochujang",
+      section: "international",
+      unitFamily: "volume",
+      allergens: ["soy", "wheat"],
+    },
+  });
+});
+
+test("a Suggestion of a new Item with no Allergens is accepted only once a person ticks none", async () => {
+  const noAllergens: Suggestion = {
+    id: 7,
+    text: "gochujang",
+    suggested: { kind: "new", name: "gochujang", section: "international", unitFamily: "volume", allergens: [] },
+    suggestedAt: "2026-10-23T12:00:00.000Z",
+  };
+  const { user, calls } = await openPage("Resolve Ingredients", [], [noAllergens]);
+
+  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
+  expect(suggestion.textContent).toContain("with no Allergens");
+  expect(within(suggestion).queryByRole("button", { name: "Accept" })).toBeNull();
+  await user.click(within(suggestion).getByRole("button", { name: "Edit" }));
+  expect(within(gochujang).getByRole<HTMLInputElement>("checkbox", { name: "Contains none of these" }).checked).toBe(
+    false,
+  );
+  await user.click(within(gochujang).getByRole("button", { name: "Accept" }));
+  expect(calls.some((call) => call.name === "accept_suggestion")).toBe(false);
+  await user.click(within(gochujang).getByRole("checkbox", { name: "Contains none of these" }));
+  await user.click(within(gochujang).getByRole("button", { name: "Accept" }));
+
+  expect(calls.find((call) => call.name === "accept_suggestion")?.input).toMatchObject({
+    id: 7,
+    suggested: { kind: "new", allergens: [] },
+  });
+});
+
+test("a Suggestion of an existing Item is accepted with another Item a person picked", async () => {
+  const { user, calls } = await openPage("Resolve Ingredients");
+
+  const beurre = await screen.findByRole("article", { name: "beurre" });
+  await user.click(await within(beurre).findByRole("button", { name: "Edit" }));
+  const item = within(beurre).getByRole<HTMLInputElement>("combobox", { name: "Item" });
+  expect(item.value).toBe("butter");
+  await user.clear(item);
+  await user.type(item, "ghee");
+  await user.click(within(beurre).getByRole("button", { name: "Accept" }));
+
+  expect(calls.find((call) => call.name === "accept_suggestion")?.input).toEqual({
+    id: 8,
+    suggested: { kind: "existing", item: "ghee" },
+  });
+});
+
+test("Suggest for all asks in batches until no text is left", async () => {
+  const { user, calls } = await openPage("Resolve Ingredients", [
+    { ok: true, value: { suggestions: [suggestions[0]], remaining: 40 } },
+    { ok: true, value: { suggestions: [], remaining: 0 } },
+  ]);
+
+  await user.click(await screen.findByRole("button", { name: "Suggest for all" }));
+
+  expect(await screen.findByText("Suggestions made: 1. Every Ingredient has been asked about.")).toBeTruthy();
+  expect(calls.filter((call) => call.name === "request_suggestions").map((call) => call.input)).toEqual([{}, {}]);
+});
+
+test("Suggest for all says when the model fails, keeping what it already made", async () => {
+  const { user } = await openPage("Resolve Ingredients", [
+    { ok: true, value: { suggestions: [suggestions[0], suggestions[1]], remaining: 40 } },
+    { ok: false, error: { code: "model_failed", message: "" } },
+  ]);
+
+  await user.click(await screen.findByRole("button", { name: "Suggest for all" }));
+
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "Suggestions made: 2. The model could not make the rest; try again later.",
+  );
 });
 
 test("a Recipe missing a main protein is tagged in place", async () => {

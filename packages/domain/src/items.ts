@@ -225,7 +225,7 @@ export function matchItem(name: string): ItemId | null {
 }
 
 /** A name for an Item: it must keep a letter or digit once normalised, or it would match nothing. */
-const ItemName = z
+export const ItemName = z
   .string()
   .trim()
   .min(1)

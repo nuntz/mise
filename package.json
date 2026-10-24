@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun run --filter @mise/web build && bun run --filter @mise/worker dev",
     "seed": "bun run --filter @mise/worker seed",
+    "eval": "bun run --filter @mise/worker eval",
     "test": "bun test packages",
     "test:worker": "bun run --filter @mise/worker test",
     "test:web": "bun run --filter @mise/web test",

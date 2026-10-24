@@ -355,6 +355,22 @@ const migrations: { version: number; statements: string[] }[] = [
       "ALTER TABLE recipe ADD COLUMN course TEXT",
     ],
   },
+  {
+    version: 18,
+    statements: [
+      // An LLM's Suggestion for the Unresolved Ingredients with this normalised text (ADR 0023):
+      // `suggested` is a SuggestedItem as JSON, or NULL when the model had no answer. Accepting one
+      // deletes it. A dismissed one stays, with dismissed_at, and so does one with no answer, so the
+      // text is not asked about again unless asked by name.
+      `CREATE TABLE suggestion (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL UNIQUE,
+        suggested TEXT,
+        suggested_at TEXT NOT NULL,
+        dismissed_at TEXT
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

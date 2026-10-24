@@ -43,6 +43,7 @@ export default defineConfig({
     }),
   ],
   test: {
+    setupFiles: ["./test/setup.ts"],
     // The first Durable Object in each file loads the Worker bundle (Agents SDK, Sentry), which
     // takes several seconds on CI runners. Later tests run in milliseconds.
     testTimeout: 30_000,

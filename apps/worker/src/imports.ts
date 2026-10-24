@@ -6,6 +6,7 @@ import {
   type ImportSource,
   parseIngredient,
   possibleDuplicate,
+  type RecipeId,
 } from "@mise/domain";
 import { readCatalogue } from "./items";
 import { readRecipes, writeLists } from "./recipes";
@@ -53,7 +54,7 @@ type FlagRow = {
  * that is in the source's trash, is skipped; one edited in Mise since it was imported (a Course
  * corrected by hand, say) is flagged for a merge, not overwritten; a new one like a Recipe from
  * another source is created and flagged as a possible duplicate. Nothing is deleted. Returns the
- * run, and the photos updated Recipes no longer show.
+ * run, the Recipes it created or updated, and the photos updated Recipes no longer show.
  */
 export function runImport(
   sql: SqlStorage,
@@ -61,7 +62,7 @@ export function runImport(
   startedAt: string,
   prepared: PreparedRecipe[],
   errors: ImportError[],
-): { run: ImportRun; replacedPhotos: string[] } {
+): { run: ImportRun; written: RecipeId[]; replacedPhotos: string[] } {
   const { id: runId } = sql
     .exec<{ id: number }>(
       `INSERT INTO import_run (source, started_at, created, updated, skipped, flagged)
@@ -72,6 +73,7 @@ export function runImport(
     .one();
   const counts = { created: 0, updated: 0, skipped: 0, flagged: 0 };
   const replacedPhotos: string[] = [];
+  const written: RecipeId[] = [];
   const catalogue = readCatalogue(sql);
   // Candidates for a duplicate: Recipes from other sources, as they were before this run.
   const others = readRecipes(sql).filter((recipe) => recipe.source.kind !== source);
@@ -106,6 +108,7 @@ export function runImport(
         continue;
       }
       const id = insertRecipe(sql, source, recipe, photoKey ?? null, startedAt);
+      written.push(id);
       counts.created++;
       const candidate = {
         title: recipe.title,
@@ -139,6 +142,7 @@ export function runImport(
     }
     const newPhoto = photoKey === undefined ? existing.photo_key : photoKey;
     updateRecipe(sql, existing.id, recipe, newPhoto, startedAt);
+    written.push(existing.id);
     if (existing.photo_key !== null && existing.photo_key !== newPhoto) replacedPhotos.push(existing.photo_key);
     counts.updated++;
   }
@@ -160,7 +164,7 @@ export function runImport(
       error.message,
     );
   });
-  return { run: readImportRuns(sql, runId)[0] as ImportRun, replacedPhotos };
+  return { run: readImportRuns(sql, runId)[0] as ImportRun, written, replacedPhotos };
 }
 
 function insertRecipe(

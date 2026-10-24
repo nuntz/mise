@@ -7,6 +7,7 @@ import {
   ItemCatalogue,
   type ItemId,
   normaliseItemName,
+  type RecipeId,
   SHIPPED_ITEMS,
   ShippedItemId,
   StoreSection,
@@ -28,27 +29,7 @@ type ItemTools = "list_unresolved_ingredients" | "resolve_ingredient" | "create_
 
 /** The Item tools, against the household's SQLite. */
 export const itemHandlers: Pick<Handlers, ItemTools> = {
-  list_unresolved_ingredients: (sql) => {
-    const rows = sql
-      .exec<UnresolvedRow>(
-        `SELECT i.recipe_id, r.title, i.raw, i.name FROM recipe_ingredient AS i JOIN recipe AS r ON r.id = i.recipe_id
-         WHERE i.item_id IS NULL ORDER BY i.recipe_id, i.position`,
-      )
-      .toArray();
-    const groups = new Map<string, UnresolvedGroup>();
-    for (const row of rows) {
-      const text = normaliseItemName(row.name);
-      const group = groups.get(text) ?? { text, count: 0, lines: [], recipes: [] };
-      group.count++;
-      group.lines.push(row.raw);
-      if (!group.recipes.some((recipe) => recipe.id === row.recipe_id)) {
-        group.recipes.push({ id: row.recipe_id, title: row.title });
-      }
-      groups.set(text, group);
-    }
-    const sorted = [...groups.values()].sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
-    return { ok: true, value: sorted };
-  },
+  list_unresolved_ingredients: (sql) => ({ ok: true, value: readUnresolvedGroups(sql) }),
 
   resolve_ingredient: (sql, input) => {
     const catalogue = readCatalogue(sql);
@@ -130,6 +111,45 @@ export const itemHandlers: Pick<Handlers, ItemTools> = {
 
   list_items: (sql) => ({ ok: true, value: readCatalogue(sql).items }),
 };
+
+/** Unresolved Ingredients grouped by their normalised text, most frequent first. */
+export function readUnresolvedGroups(sql: SqlStorage): UnresolvedGroup[] {
+  const rows = sql
+    .exec<UnresolvedRow>(
+      `SELECT i.recipe_id, r.title, i.raw, i.name FROM recipe_ingredient AS i JOIN recipe AS r ON r.id = i.recipe_id
+       WHERE i.item_id IS NULL ORDER BY i.recipe_id, i.position`,
+    )
+    .toArray();
+  const groups = new Map<string, UnresolvedGroup>();
+  for (const row of rows) {
+    const text = normaliseItemName(row.name);
+    const group = groups.get(text) ?? { text, count: 0, lines: [], recipes: [] };
+    group.count++;
+    group.lines.push(row.raw);
+    if (!group.recipes.some((recipe) => recipe.id === row.recipe_id)) {
+      group.recipes.push({ id: row.recipe_id, title: row.title });
+    }
+    groups.set(text, group);
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
+}
+
+/** The normalised texts of the Unresolved Ingredients in these Recipes, each once, in line order. */
+export function unresolvedTextsIn(sql: SqlStorage, recipeIds: readonly RecipeId[]): string[] {
+  const names = sql
+    .exec<{ name: string }>(
+      `SELECT name FROM recipe_ingredient WHERE item_id IS NULL AND recipe_id IN (SELECT value FROM json_each(?))
+       ORDER BY recipe_id, position`,
+      JSON.stringify(recipeIds),
+    )
+    .toArray();
+  return [...new Set(names.map((row) => normaliseItemName(row.name)))];
+}
+
+/** How many Ingredients are Unresolved, across every Recipe. */
+export function countUnresolved(sql: SqlStorage): number {
+  return sql.exec<{ n: number }>("SELECT count(*) AS n FROM recipe_ingredient WHERE item_id IS NULL").one().n;
+}
 
 export function itemNotFound<T>(id: ItemId): ToolResult<T> {
   return { ok: false, error: { code: "not_found", message: `No Item ${id}` } };

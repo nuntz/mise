@@ -15,6 +15,7 @@ import {
   type ImportRun,
   importUploadKey,
   isToolName,
+  LlmError,
   localDate,
   NIGHTLY_EXPORT_TIME,
   nextOccurrence,
@@ -23,8 +24,11 @@ import {
   parseToolInput,
   type Recipe,
   readPaprikaExport,
+  type Suggestion,
+  suggestItems,
   type ToolContext,
   type ToolName,
+  type ToolOutput,
   type ToolResult,
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
@@ -35,9 +39,12 @@ import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed } from "./calendar";
 import { callerFrom } from "./identity";
 import { type PreparedRecipe, runImport } from "./imports";
+import { readCatalogue } from "./items";
+import { openLlm } from "./llm";
 import { migrate } from "./migrations";
 import { sentryOptions } from "./observability";
 import { photoInUse, photoKeyOf, setPhotoKey } from "./recipes";
+import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { handlers } from "./tools";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
@@ -141,7 +148,10 @@ class HouseholdAgent extends Agent<Env> {
     if (name === "run_paprika_import") {
       return this.runPaprikaImport(parsed.value as ParsedToolInput<"run_paprika_import">);
     }
-    const toolName = name as Exclude<ToolName, "run_paprika_import">;
+    if (name === "request_suggestions") {
+      return this.requestSuggestions(parsed.value as ParsedToolInput<"request_suggestions">);
+    }
+    const toolName = name as Exclude<ToolName, "run_paprika_import" | "request_suggestions">;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
       input: unknown,
@@ -215,15 +225,55 @@ class HouseholdAgent extends Agent<Env> {
       prepared.push({ recipe, photoKey });
     }
 
-    const outcome = this.ctx.storage.transactionSync(() => ({
-      ...runImport(sql, "paprika", startedAt, prepared, errors),
-      revision: this.bumpRevision(),
-    }));
+    const outcome = this.ctx.storage.transactionSync(() => {
+      const imported = runImport(sql, "paprika", startedAt, prepared, errors);
+      return { ...imported, newTexts: newTextsIn(sql, imported.written), revision: this.bumpRevision() };
+    });
     this.notify("recipes", outcome.revision);
+    // Asking the model takes a while, so the import answers first (ADR 0023).
+    if (outcome.newTexts.length > 0) await this.schedule(0, "suggestAfterImport", { texts: outcome.newTexts });
     // Photos the updated Recipes replaced, and new ones a Recipe flagged for a merge did not take.
     for (const key of [...outcome.replacedPhotos, ...stored]) await this.deletePhoto(key);
     await this.env.BUCKET.delete(uploadKey);
     return { ok: true, value: outcome.run };
+  }
+
+  /** Asks the model for one batch of Suggestions; see `RequestSuggestionsInput`. */
+  private async requestSuggestions(
+    input: ParsedToolInput<"request_suggestions">,
+  ): Promise<ToolResult<ToolOutput<"request_suggestions">>> {
+    try {
+      const suggestions = await this.suggest(textsToSuggest(this.ctx.storage.sql, input.texts));
+      return { ok: true, value: { suggestions, remaining: remainingToSuggest(this.ctx.storage.sql) } };
+    } catch (error) {
+      if (error instanceof LlmError) return { ok: false, error: { code: "model_failed", message: error.message } };
+      throw error;
+    }
+  }
+
+  /** Asks the model about the new Unresolved texts an import brought. Run by the scheduler after it. */
+  async suggestAfterImport({ texts }: { texts: string[] }): Promise<void> {
+    try {
+      await this.suggest(texts);
+    } catch (error) {
+      // The scheduler swallows callback errors, so report them here. The texts can be asked about again.
+      Sentry.captureException(error);
+    }
+  }
+
+  /** Asks the model about `texts` in batches, storing each batch as it comes. Returns the Suggestions made. */
+  private async suggest(texts: string[]): Promise<Suggestion[]> {
+    const { sql } = this.ctx.storage;
+    const made: Suggestion[] = [];
+    for await (const batch of suggestItems(openLlm(this.env), texts, readCatalogue(sql))) {
+      const outcome = this.ctx.storage.transactionSync(() => ({
+        stored: storeSuggestions(sql, batch.names, batch.answers, new Date().toISOString()),
+        revision: this.bumpRevision(),
+      }));
+      this.notify("recipes", outcome.revision);
+      made.push(...outcome.stored);
+    }
+    return made;
   }
 
   /** Stores an imported photo under its SHA-256 unless already there; returns its key. */

@@ -22,6 +22,7 @@ import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { readRecipes, recipeHandlers } from "./recipes";
 import { readStaples, stapleHandlers } from "./staples";
+import { readSuggestions, suggestionHandlers } from "./suggestions";
 import { readSlots, readWeekRecords, weekHandlers } from "./weeks";
 
 type HouseholdRow = {
@@ -40,8 +41,8 @@ export type ConstraintColumns = { kind: string; allergen: string | null; term: s
 
 type ConstraintRow = ConstraintColumns & { member_id: number };
 
-/** Tools that need more than SQLite, which the household runs itself: an import reads R2. */
-export type HouseholdToolName = "run_paprika_import";
+/** Tools that need more than SQLite, which the household runs itself: an import reads R2, Suggestions ask the model. */
+export type HouseholdToolName = "run_paprika_import" | "request_suggestions";
 
 export type Handlers = {
   [N in Exclude<ToolName, HouseholdToolName>]: (
@@ -156,6 +157,7 @@ export const handlers: Handlers = {
 
   ...recipeHandlers,
   ...itemHandlers,
+  ...suggestionHandlers,
   ...importHandlers,
   ...weekHandlers,
   ...groceryHandlers,
@@ -177,6 +179,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readEffortBudgets(sql);
   readMembers(sql);
   readCatalogue(sql);
+  readSuggestions(sql);
   readRecipes(sql);
   readImportRuns(sql);
   readImportFlags(sql);
