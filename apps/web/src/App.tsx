@@ -5,6 +5,7 @@ import { CalendarSettings } from "./Calendar";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
+import { HouseholdSettingsForm } from "./HouseholdSettings";
 import { ImportPage } from "./Import";
 import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
@@ -29,8 +30,8 @@ const NAV: { page: Page; icon: IconName }[] = [
 ];
 
 /** The Household's settings, each a section of the Household page. */
-type Setting = "members" | "calendar" | "import" | "resolve" | "tag";
-const SETTINGS: Setting[] = ["members", "calendar", "import", "resolve", "tag"];
+type Setting = "members" | "settings" | "calendar" | "import" | "resolve" | "tag";
+const SETTINGS: Setting[] = ["members", "settings", "calendar", "import", "resolve", "tag"];
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
@@ -287,6 +288,9 @@ function HouseholdPage(props: {
       <Switch>
         <Match when={setting() === "members"}>
           <MembersSettings client={props.client} members={props.household.members} />
+        </Match>
+        <Match when={setting() === "settings"}>
+          <HouseholdSettingsForm client={props.client} household={props.household} />
         </Match>
         <Match when={setting() === "calendar"}>
           <CalendarSettings client={props.client} />

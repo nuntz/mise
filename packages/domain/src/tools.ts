@@ -11,7 +11,13 @@ import {
   SetHaveTickInput,
   SetStoreSectionOrderInput,
 } from "./grocery";
-import { EffortBudgets, Household, SetEffortBudgetsInput, SetupHouseholdInput } from "./household";
+import {
+  EffortBudgets,
+  Household,
+  SetEffortBudgetsInput,
+  SetupHouseholdInput,
+  UpdateHouseholdSettingsInput,
+} from "./household";
 import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
@@ -84,6 +90,15 @@ export const tools = {
   get_household: defineTool({
     input: z.object({}).strict(),
     output: Household.nullable(),
+  }),
+  /**
+   * Changes the settings given, validated as at setup. A new week start applies from the next Week:
+   * existing Weeks keep their dates (ADR 0021).
+   */
+  update_household_settings: defineTool({
+    input: UpdateHouseholdSettingsInput,
+    output: Household,
+    changes: "household",
   }),
   /** Returns every weekday's default Effort Budget. */
   set_effort_budgets: defineTool({

@@ -28,6 +28,7 @@ const household: Household = {
   timezone: "America/Vancouver",
   dinnerTime: "18:00",
   weekStartsOn: "monday",
+  weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
   members: [robin, alex, sam],
@@ -50,6 +51,7 @@ const curry: RecipeSummary = { ...pasta, id: 2, title: "Curry", photoKey: null }
 function emptyWeek(startDate: string): Week {
   return {
     startDate,
+    endDate: addDays(startDate, 6),
     slots: Array.from({ length: 7 }, (_, day) => addDays(startDate, day)).flatMap((date) =>
       MEALS.map(
         (meal): Slot => ({

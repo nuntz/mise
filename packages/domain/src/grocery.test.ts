@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildGroceryList, type GroceryDemand, type GroceryRecipe, type GroceryStaple } from "./grocery";
+import {
+  buildGroceryList,
+  type GroceryDemand,
+  type GroceryRecipe,
+  type GroceryStaple,
+  inHouseholdUnits,
+} from "./grocery";
 import { parseIngredient } from "./ingredients";
 import type { ItemId } from "./items";
 import type { IngredientUnit } from "./units";
@@ -184,5 +190,20 @@ describe("buildGroceryList with Staples", () => {
       // Out, so bought at its usual quantity.
       { origin: "staple", item: "black_pepper", text: null, amounts: [dozen], unmeasured: false, recipeIds: [] },
     ]);
+  });
+});
+
+describe("inHouseholdUnits", () => {
+  test("an amount weighed or measured in the other units is given in the Household's", () => {
+    expect(inHouseholdUnits(exactly(800, "g"), "imperial")).toEqual(exactly(1.76, "lb"));
+    expect(inHouseholdUnits(exactly(2, "cup"), "metric")).toEqual(exactly(473, "ml"));
+    expect(inHouseholdUnits(exactly(1, "lb"), "metric")).toEqual(exactly(454, "g"));
+  });
+
+  test("an amount already in the Household's units, or that doesn't convert, is left as it is", () => {
+    expect(inHouseholdUnits(exactly(2, "tbsp"), "imperial")).toEqual(exactly(2, "tbsp"));
+    expect(inHouseholdUnits(exactly(500, "g"), "metric")).toEqual(exactly(500, "g"));
+    expect(inHouseholdUnits(exactly(3, "clove"), "imperial")).toEqual(exactly(3, "clove"));
+    expect(inHouseholdUnits(exactly(2, null), "imperial")).toEqual(exactly(2, null));
   });
 });

@@ -10,8 +10,8 @@ import {
   groceryLineKey,
   groceryPlanRevision,
   groupGroceryLines,
-  type HouseholdSettings,
   type ItemCatalogue,
+  inHouseholdUnits,
   LocalDate,
   parseIngredient,
   RecipeId,
@@ -19,13 +19,15 @@ import {
   stapleToBuy,
   storeSectionOrder,
   type ToolResult,
-  weekStartOf,
+  type Units,
+  type WeekSpan,
+  weekOf,
 } from "@mise/domain";
 import { z } from "zod";
 import { readCatalogue } from "./items";
 import { readRecipes } from "./recipes";
 import { readStaples, restockStaple } from "./staples";
-import { type Handlers, notSetUp, readSettings } from "./tools";
+import { type Handlers, notSetUp, readSettings, type Settings } from "./tools";
 import { readWeek, storeWeek, weekNamedBy } from "./weeks";
 
 type LineRow = {
@@ -60,8 +62,9 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
   build_grocery_list: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
-    const start = weekNamedBy(settings, input.date);
-    const demand = readDemand(sql, settings, start);
+    const week = weekNamedBy(settings, input.date);
+    const start = week.startDate;
+    const demand = readDemand(sql, settings, week);
     storeWeek(sql, start);
 
     // A line still needed keeps its id, and so its Have Tick: matched by Item and units, or by text.
@@ -112,7 +115,7 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
   get_grocery_list: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
-    return { ok: true, value: readGroceryList(sql, settings, weekNamedBy(settings, input.date)) };
+    return { ok: true, value: readGroceryList(sql, settings, weekNamedBy(settings, input.date).startDate) };
   },
 
   set_have_tick: (sql, input) => {
@@ -137,7 +140,7 @@ export const groceryHandlers: Pick<Handlers, GroceryTools> = {
   add_grocery_line: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
-    const start = weekStartOf(input.date, settings.weekStartsOn);
+    const start = weekOf(input.date, settings).startDate;
     if (readGroceryBuilds(sql, start).length === 0) {
       return {
         ok: false,
@@ -187,8 +190,8 @@ export function readStoreSections(sql: SqlStorage): StoreSection[] {
  * What the Week's Grocery List is built from: its Slots with a Recipe, each for what it is cooked for
  * (its Leftovers too, even those in the next Week), those Recipes, and the Household's Staples.
  */
-function readDemand(sql: SqlStorage, settings: HouseholdSettings, start: LocalDate): GroceryDemand {
-  const slots = readWeek(sql, start).slots.flatMap((slot) =>
+function readDemand(sql: SqlStorage, settings: Settings, week: WeekSpan): GroceryDemand {
+  const slots = readWeek(sql, week).slots.flatMap((slot) =>
     slot.recipe ? [{ recipeId: slot.recipe.id, servings: slot.cookFor }] : [],
   );
   const used = new Set(slots.map((slot) => slot.recipeId));
@@ -235,11 +238,11 @@ export function readGroceryBuilds(sql: SqlStorage, start?: LocalDate): BuiltReco
 }
 
 /** The Week's Grocery List as shown, against the plan as it is now; null until it is built. */
-function readGroceryList(sql: SqlStorage, settings: HouseholdSettings, start: LocalDate): GroceryList | null {
+function readGroceryList(sql: SqlStorage, settings: Settings, start: LocalDate): GroceryList | null {
   const [built] = readGroceryBuilds(sql, start);
   if (!built) return null;
   const catalogue = readCatalogue(sql);
-  const demand = readDemand(sql, settings, start);
+  const demand = readDemand(sql, settings, weekOf(start, settings));
   const lines = readGroceryLines(sql, start);
   const listed = new Set(lines.map((line) => line.item));
   return {
@@ -247,20 +250,21 @@ function readGroceryList(sql: SqlStorage, settings: HouseholdSettings, start: Lo
     builtAt: built.builtAt,
     planChanged: built.planRevision !== groceryPlanRevision(demand),
     staplesChanged: demand.staples.some((staple) => stapleToBuy(staple) && !listed.has(staple.item)),
-    sections: groupGroceryLines(shownLines(sql, catalogue, lines), readStoreSections(sql)),
+    sections: groupGroceryLines(shownLines(sql, catalogue, lines, settings.units), readStoreSections(sql)),
   };
 }
 
-function shownLine(sql: SqlStorage, settings: HouseholdSettings, start: LocalDate, id: number): GroceryLine {
+function shownLine(sql: SqlStorage, settings: Settings, start: LocalDate, id: number): GroceryLine {
   const lines = readGroceryList(sql, settings, start)?.sections.flatMap((section) => section.lines) ?? [];
   return lines.find((line) => line.id === id) as GroceryLine;
 }
 
-/** Lines with their names, Recipes and sections, as the list shows them. */
+/** Lines with their names, Recipes and sections, as the list shows them, in the Household's units. */
 function shownLines(
   sql: SqlStorage,
   catalogue: ItemCatalogue,
   lines: StoredLine[],
+  units: Units,
 ): (GroceryLine & { section: GrocerySection })[] {
   const titles = new Map(
     sql
@@ -272,6 +276,7 @@ function shownLines(
     const item = line.item === null ? undefined : catalogue.item(line.item);
     return {
       ...line,
+      amounts: line.amounts.map((amount) => inHouseholdUnits(amount, units)),
       // A line added by hand shows what was typed; one built for an Item, the Item's name.
       name: line.origin === "manual" || !item ? (text ?? "") : item.name,
       // A Recipe deleted since the list was built no longer needs anything.

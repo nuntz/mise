@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Overrides, SlotConflict } from "./conflicts";
-import { EffortBudgets, Minutes, WEEKDAYS, Weekday } from "./household";
+import { EffortBudgets, type Household, Minutes, WEEKDAYS, Weekday, type WeekStartChange } from "./household";
 import { ItemId } from "./items";
 import { Constraint, MemberId } from "./members";
 import { ProposalReason, Rating } from "./proposals";
@@ -30,14 +30,65 @@ export function weekStartOf(date: LocalDate, weekStartsOn: Weekday): LocalDate {
   return addDays(date, -behind);
 }
 
-/** The start date of the Week the Household is in at `now`, by its own calendar. */
-export function currentWeekStart(now: Date, timezone: string, weekStartsOn: Weekday): LocalDate {
-  return weekStartOf(localDate(now, timezone), weekStartsOn);
+/** What decides the Household's Weeks: the day they start on now, and every change to it, oldest first. */
+export type WeekCalendar = Pick<Household, "weekStartsOn" | "weekStartChanges">;
+
+/** A Week's first and last days. */
+export type WeekSpan = { startDate: LocalDate; endDate: LocalDate };
+
+/** The Week `date` falls in: seven days, but for one a change of week start makes run on. */
+export function weekOf(date: LocalDate, calendar: WeekCalendar): WeekSpan {
+  const changes = calendar.weekStartChanges;
+  // Changes are oldest first: count those already begun by `date`, less one.
+  const since = changes.filter((change) => change.from <= date).length - 1;
+  const startsOn =
+    since >= 0
+      ? weekdayOf((changes[since] as WeekStartChange).from)
+      : changes[0]
+        ? weekdayOf(changes[0].stretches)
+        : calendar.weekStartsOn;
+  const next = changes[since + 1];
+  if (next && date >= next.stretches) return { startDate: next.stretches, endDate: addDays(next.from, -1) };
+  const startDate = weekStartOf(date, startsOn);
+  return { startDate, endDate: addDays(startDate, 6) };
 }
 
-/** The dates of the Week that starts on `startDate`, in order. */
-export function weekDates(startDate: LocalDate): LocalDate[] {
-  return Array.from({ length: 7 }, (_, day) => addDays(startDate, day));
+/** The Week the Household is in at `now`, by its own calendar. */
+export function currentWeek(now: Date, timezone: string, calendar: WeekCalendar): WeekSpan {
+  return weekOf(localDate(now, timezone), calendar);
+}
+
+/** The first day of the Week after `week`. */
+export function nextWeekStart(week: WeekSpan): LocalDate {
+  return addDays(week.endDate, 1);
+}
+
+/** Every date of the Week, in order. */
+export function weekDates(week: WeekSpan): LocalDate[] {
+  const dates: LocalDate[] = [];
+  for (let date = week.startDate; date <= week.endDate; date = addDays(date, 1)) dates.push(date);
+  return dates;
+}
+
+/**
+ * The changes of week start once Weeks start on `weekStartsOn` (ADR 0021). The current Week, and
+ * any Week already `created` after it, keep their dates: the last of them runs on to the first new
+ * start day after it, which starts the next Week. A change no Week has started under yet is replaced.
+ */
+export function changeWeekStart(
+  calendar: WeekCalendar,
+  weekStartsOn: Weekday,
+  today: LocalDate,
+  created: LocalDate[],
+): WeekStartChange[] {
+  const current = weekOf(today, calendar).startDate;
+  const last = created.reduce((latest, start) => (start > latest ? start : latest), current);
+  const kept = calendar.weekStartChanges.filter((change) => change.from <= last);
+  // Seven days at least, and past today: a Week that has run on past seven days stays today's.
+  let from = addDays(last, 7);
+  if (from <= today) from = addDays(today, 1);
+  while (weekdayOf(from) !== weekStartsOn) from = addDays(from, 1);
+  return from === addDays(last, 7) ? kept : [...kept, { from, stretches: last }];
 }
 
 export const MEALS = ["breakfast", "lunch", "dinner"] as const;
@@ -113,6 +164,8 @@ export type Slot = z.infer<typeof Slot>;
 
 export const Week = z.object({
   startDate: LocalDate,
+  /** Its last day: six days on, but for a Week a change of week start makes run on (ADR 0021). */
+  endDate: LocalDate,
   /** Every meal of every day, by date and then breakfast, lunch, dinner. */
   slots: z.array(Slot),
   /** Each weekday's Effort Budget for this Week: the Household's default, or this Week's override. */

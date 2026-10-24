@@ -175,6 +175,25 @@ describe("the calendar feed", () => {
     expect((await fetchFeed(rotated.token)).status).toBe(200);
   });
 
+  test("a new dinner time and timezone move every dinner in the feed", async () => {
+    const recipe = await createRecipe({ title: "Ramen" });
+    const date = inDays(6);
+    succeeded(await household.callTool("set_slot", { date, meal: "dinner", kind: "recipe", recipeId: recipe.id }));
+
+    succeeded(
+      await household.callTool("update_household_settings", { dinnerTime: "19:45", timezone: "America/Toronto" }),
+    );
+    try {
+      const [event] = await eventsOn(date);
+
+      expect(event?.component.getFirstProperty("dtstart")?.getParameter("tzid")).toBe("America/Toronto");
+      expect(event?.startDate.toString()).toBe(`${date}T19:45:00`);
+    } finally {
+      // The other tests share this Household.
+      await household.callTool("update_household_settings", { dinnerTime: "18:30", timezone: TIMEZONE });
+    }
+  });
+
   test("refuses a request without a valid token", async () => {
     await feedToken();
 

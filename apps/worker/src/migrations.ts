@@ -332,6 +332,14 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE TABLE calendar_token (id INTEGER PRIMARY KEY CHECK (id = 1), token TEXT NOT NULL)",
     ],
   },
+  {
+    version: 16,
+    statements: [
+      // Each change of week start (ADR 0021): Weeks start on from_date's weekday from it on, and the
+      // Week starting on `stretches` runs on to the day before. household.week_starts_on is the latest.
+      "CREATE TABLE week_start_change (from_date TEXT PRIMARY KEY, stretches TEXT NOT NULL)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

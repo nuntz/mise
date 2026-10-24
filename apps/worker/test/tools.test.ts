@@ -27,6 +27,7 @@ describe("first-run Household setup", () => {
       weekStartsOn: "monday",
       units: "metric",
       locale: "en-CA",
+      weekStartChanges: [],
       members: [],
       effortBudgets: DEFAULT_EFFORT_BUDGETS,
       storeSections: [...STORE_SECTIONS],
@@ -100,6 +101,16 @@ describe("change notices", () => {
     expect(await notices.next()).toEqual({ type: "mise:change", topic: "household", revision: 2 });
   });
 
+  test("a connected client is told when the Household's settings change", async () => {
+    const household = freshHousehold();
+    await household.callTool("setup_household", { name: "The Example Family" });
+    const notices = await connect(household);
+
+    await household.callTool("update_household_settings", { weekStartsOn: "sunday" });
+
+    expect(await notices.next()).toEqual({ type: "mise:change", topic: "household", revision: 2 });
+  });
+
   test("a rejected mutation neither broadcasts nor advances the revision", async () => {
     const household = freshHousehold();
     const notices = await connect(household);
@@ -118,6 +129,7 @@ describe("change notices", () => {
 function withMemberIds<T extends { members: object[] }>(input: T) {
   return {
     ...input,
+    weekStartChanges: [],
     members: input.members.map((member, index) => ({ id: index + 1, ...member })),
     effortBudgets: DEFAULT_EFFORT_BUDGETS,
     storeSections: [...STORE_SECTIONS],
