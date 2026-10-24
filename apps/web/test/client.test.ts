@@ -1,6 +1,6 @@
-import type { ChangeTopic } from "@mise/domain";
-import { describe, expect, test, vi } from "vitest";
-import { type ChangeSource, subscribeTo } from "../src/client";
+import { type ChangeTopic, HOUSEHOLD_PATH } from "@mise/domain";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
+import { type ChangeSource, createMiseClient, subscribeTo } from "../src/client";
 import { createFakeClient } from "./fakeClient";
 
 /** A way to subscribe, and to drive the connection under it. */
@@ -78,5 +78,38 @@ describe.each([
     harness.goOffline();
     harness.goOnline();
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("whether Safari is signed in, with the real client", () => {
+  const signedIn = (response: Response | Error) => {
+    const fetch = vi.fn(async () => {
+      if (response instanceof Error) throw response;
+      return response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    const client = createMiseClient("mise.example");
+    onTestFinished(() => client.close());
+    return { result: client.signedIn(), fetch };
+  };
+
+  test("is signed in when the household's route answers, even with a not found", async () => {
+    const { result, fetch } = signedIn(new Response("Not found", { status: 404 }));
+    expect(await result).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(HOUSEHOLD_PATH, { redirect: "manual" });
+  });
+
+  test("is not signed in when Access sends the request to sign in, or the Worker refuses it", async () => {
+    expect(await signedIn(Response.redirect("https://team.example/cdn-cgi/access/login", 302)).result).toBe(false);
+    const redirected = Object.defineProperty(new Response(null), "type", { value: "opaqueredirect" });
+    expect(await signedIn(redirected).result).toBe(false);
+    expect(await signedIn(new Response("Sign in through Cloudflare Access", { status: 401 })).result).toBe(false);
+  });
+
+  test("counts as signed in when the route can't be reached at all, which is no sign-in problem", async () => {
+    expect(await signedIn(new TypeError("Failed to fetch")).result).toBe(true);
   });
 });

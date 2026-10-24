@@ -40,6 +40,10 @@ The wizard walks you through Pulumi Cloud, a Cloudflare API token, a Google OAut
 
 The Worker checks the Access token on every request and passes the signed-in email into tool calls (ADR 0007). `/cal/*` skips sign-in.
 
+## Share to Mise from an iPhone
+
+An iOS Shortcut puts "Mise" in the iPhone share sheet: it opens `/share?url=…` in Safari, behind Access, and that page imports the link. [docs/share-from-iphone.md](docs/share-from-iphone.md) has the steps to build it.
+
 ## The agent
 
 "Ask Mise" in the header opens a chat with an agent on Claude (Anthropic). It reads and changes the Household only through the same tools the screens use. It needs the `mise:anthropicApiKey` setting, which becomes the `ANTHROPIC_API_KEY` Worker secret; without it the chat answers nothing. **Set a monthly spend limit in the Anthropic console** (Settings → Limits): Mise has no cap of its own. For `wrangler dev`, put the key in `apps/worker/.dev.vars`.

@@ -10,7 +10,7 @@ import {
 } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
@@ -185,6 +185,21 @@ test("a Draft shows what to check, says AI read it, and is accepted in one tap",
 
   expect(calls).toContainEqual({ name: "accept_draft", input: { id: 9 } });
   expect(await screen.findByText("Nothing is waiting on you.")).toBeTruthy();
+});
+
+test("a link to the Review screen, as the share page gives, opens it", async () => {
+  window.history.replaceState(null, "", "/?review");
+  onTestFinished(() => window.history.replaceState(null, "", "/"));
+  render(() => <App client={fakeClient({ drafts: [{ recipe: dal, duplicateOf: [] }] }).client} />);
+
+  expect(await screen.findByRole("article", { name: "Grandma's dal" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Review" }).getAttribute("aria-current")).toBe("page");
+  expect(window.location.search).toBe("");
+
+  // Only once: the Household page opened again later opens on its first setting.
+  await userEvent.click(screen.getByRole("button", { name: "Week" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Household" }));
+  expect(screen.getByRole("button", { name: "Members" }).getAttribute("aria-current")).toBe("page");
 });
 
 test("a Draft of unknown time and Course says so", async () => {

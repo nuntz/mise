@@ -4,6 +4,7 @@ import {
   type ChatMessage,
   type ChatReply,
   HOUSEHOLD_AGENT,
+  HOUSEHOLD_PATH,
   PAPRIKA_UPLOAD_PATH,
   type RecipeId,
   recipePhotoPath,
@@ -39,17 +40,28 @@ export type MiseClient = {
   removePhoto(recipeId: RecipeId): Promise<boolean>;
   /** Uploads a Paprika export over HTTP too (ADR 0011); `run_paprika_import` takes the id returned. Null if refused. */
   uploadExport(file: Blob): Promise<string | null>;
+  /**
+   * Whether this browser is signed in to Access, asked when the household can't be reached: Safari
+   * keeps its own sign-in, apart from the app on the home screen. A route that can't be reached at all
+   * is no sign-in problem, so that counts as signed in.
+   */
+  signedIn(): Promise<boolean>;
   close(): void;
 };
 
 /** How long an answer from the agent may take: a model turn or several, each with its tool calls. */
 const CHAT_TIMEOUT_MS = 120_000;
 
+/** The tools that read a recipe with the model, or a whole export: slower than a call's usual 30 seconds. */
+const SLOW_TOOLS: ReadonlySet<ToolName> = new Set(["import_url", "import_text", "run_paprika_import"]);
+const SLOW_TOOL_TIMEOUT_MS = 120_000;
+
 export function createMiseClient(host = window.location.host): MiseClient {
   const agent = new AgentClient({ ...HOUSEHOLD_AGENT, host });
 
   return {
-    call: (name, input) => agent.call("callTool", [name, input]),
+    call: (name, input) =>
+      agent.call("callTool", [name, input], SLOW_TOOLS.has(name) ? { timeout: SLOW_TOOL_TIMEOUT_MS } : undefined),
 
     subscribe: (topics, refetch) => subscribeTo(agent, topics, refetch),
 
@@ -97,6 +109,17 @@ export function createMiseClient(host = window.location.host): MiseClient {
       if (!response.ok) return null;
       const { upload } = (await response.json()) as { upload?: unknown };
       return typeof upload === "string" ? upload : null;
+    },
+
+    async signedIn() {
+      try {
+        // Access sends a request without a session to sign in; the Worker refuses one without an identity.
+        const response = await fetch(HOUSEHOLD_PATH, { redirect: "manual" });
+        const status = response.status;
+        return !(response.type === "opaqueredirect" || (status >= 300 && status < 400) || status === 401);
+      } catch {
+        return true;
+      }
     },
 
     close: () => agent.close(),

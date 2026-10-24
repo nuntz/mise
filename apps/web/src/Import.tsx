@@ -1,4 +1,4 @@
-import type { ImportError, ImportFlag, ImportRun, ToolOutput } from "@mise/domain";
+import type { ImportError, ImportFlag, ImportRun, ToolError, ToolOutput } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
@@ -138,8 +138,7 @@ function PasteLink(props: { client: MiseClient; onReview: () => void }) {
     try {
       const link = url().trim();
       const result = await props.client.call("import_url", { url: link });
-      if (!result.ok)
-        setError(result.error.code === "invalid_input" ? t("link.invalid") : errorText(result.error, "recipe"));
+      if (!result.ok) setError(linkErrorText(result.error));
       else {
         setImported({ link, output: result.value });
         setUrl("");
@@ -190,6 +189,16 @@ function PasteLink(props: { client: MiseClient; onReview: () => void }) {
       </Show>
     </form>
   );
+}
+
+/** Why a link was refused. Exported for the share page, as is `importedText`. */
+export function linkErrorText(error: ToolError): string {
+  return error.code === "invalid_input" ? t("link.invalid") : errorText(error, "recipe");
+}
+
+/** What importing a link did. */
+export function importedText(output: ToolOutput<"import_url">, link: string): string {
+  return output.recipe.linkOnly ? linkOnlyText(output, link) : linkText(output, link);
 }
 
 /** What importing a link did, for a link that is not link-only. */

@@ -327,6 +327,14 @@ const en = {
   "link.linkOnlyBecause":
     "Mise could not read a recipe at that link ({reason}), so it kept the link as a Draft: {title}. Paste the recipe's text to fill it in.",
   "link.invalid": "That is not a link to a web page.",
+  "share.title": "Share to Mise",
+  "share.open": "Open {title}",
+  "share.review": "Review {title}",
+  "share.noLink": "There is no link to import. Share a recipe page or a video to Mise from the share sheet.",
+  "share.unreachable": "Mise can't be reached right now. Share the link again once you have a connection.",
+  "share.signIn":
+    "Safari isn't signed in to Mise yet. Sign in once, and every link you share after that goes straight in.",
+  "share.signInLink": "Sign in and import the link",
   "fill.text": "The recipe's text, for {title}",
   "fill.read": "Fill in the Draft",
   "paste.title": "Paste a recipe",

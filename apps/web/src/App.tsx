@@ -40,26 +40,45 @@ const SETTINGS: Setting[] = ["members", "settings", "calendar", "review", "impor
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
 
+/** What a link opens: a Recipe, or one of the Household's settings. */
+type Opening = { page: "recipes"; recipe: RecipeId } | { page: "household"; setting: Setting };
+
 /**
- * The Recipe a link asks to open (`/?recipe=<id>`, as calendar events give), if any. The query is
- * dropped once read, so the address doesn't keep reopening it.
+ * What a link asks to open, if anything: a Recipe (`/?recipe=<id>`, as calendar events give) or the
+ * Review screen (`/?review`, as the share page gives). The query is dropped once read, so the
+ * address doesn't keep reopening it.
  */
-function recipeFromLink(): RecipeId | undefined {
+function openFromLink(): Opening | undefined {
   const params = new URLSearchParams(window.location.search);
+  if (!params.has("recipe") && !params.has("review")) return undefined;
   const id = RecipeId.safeParse(Number(params.get("recipe")));
-  if (!params.has("recipe")) return undefined;
+  const opening: Opening | undefined = params.has("recipe")
+    ? id.success
+      ? { page: "recipes", recipe: id.data }
+      : undefined
+    : { page: "household", setting: "review" };
   params.delete("recipe");
+  params.delete("review");
   const query = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  return id.success ? id.data : undefined;
+  return opening;
 }
 
 export function App(props: { client: MiseClient }) {
   // The Household saved on this device, if any, shows at once: the household may be out of reach.
   const saved = savedHousehold();
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">(saved ? "ready" : "loading");
-  const openRecipe = recipeFromLink();
-  const [page, setPage] = createSignal<Page>(openRecipe ? "recipes" : "week");
+  // What a link opened, until the bottom nav or a button goes anywhere: then pages open as usual.
+  const [opening, setOpening] = createSignal(openFromLink());
+  const [page, setPage] = createSignal<Page>(opening()?.page ?? "week");
+  const openedRecipe = () => {
+    const opened = opening();
+    return opened?.page === "recipes" ? opened.recipe : undefined;
+  };
+  const openedSetting = () => {
+    const opened = opening();
+    return opened?.page === "household" ? opened.setting : undefined;
+  };
   const [inKitchen, setInKitchen] = createSignal<KitchenRecipe>();
   const [kitchenMode, setKitchenMode] = createKitchenMode();
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
@@ -93,6 +112,7 @@ export function App(props: { client: MiseClient }) {
   );
 
   const go = (to: Page) => {
+    setOpening(undefined);
     setPage(to);
     window.scrollTo?.({ top: 0 });
   };
@@ -184,11 +204,12 @@ export function App(props: { client: MiseClient }) {
                     <PantryPage client={props.client} locale={household().locale} onWeek={() => go("week")} />
                   </Match>
                   <Match when={page() === "recipes"}>
-                    <RecipesPage client={props.client} online={online()} open={openRecipe} onCook={cook} />
+                    <RecipesPage client={props.client} online={online()} open={openedRecipe()} onCook={cook} />
                   </Match>
                   <Match when={page() === "household"}>
                     <HouseholdPage
                       client={props.client}
+                      open={openedSetting()}
                       household={household()}
                       kitchenMode={kitchenMode()}
                       onKitchenMode={setKitchenMode}
@@ -240,14 +261,18 @@ function OfflineGroceryLists(props: { client: MiseClient; household: Household }
   return null;
 }
 
-/** The Household: what it is, kitchen mode for this device, and its settings one section at a time. */
+/**
+ * The Household: what it is, kitchen mode for this device, and its settings one section at a time,
+ * opening on `open` when given.
+ */
 function HouseholdPage(props: {
   client: MiseClient;
+  open?: Setting;
   household: Household;
   kitchenMode: boolean;
   onKitchenMode: (on: boolean) => void;
 }) {
-  const [setting, setSetting] = createSignal<Setting>("members");
+  const [setting, setSetting] = createSignal<Setting>(props.open ?? "members");
 
   return (
     <section class="screen">
