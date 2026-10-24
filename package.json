@@ -16,6 +16,7 @@
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p scripts",
     "lint": "biome check .",
     "check:private": "bun scripts/check-private.ts",
+    "check:stories": "bun scripts/check-story-coverage.ts",
     "wizard": "bash scripts/setup-deployment.sh"
   },
   "devDependencies": {
