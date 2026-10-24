@@ -58,8 +58,10 @@ Allergen    = peanut|tree_nut|milk|egg|wheat|soy|fish|shellfish|sesame|mustard|s
 Ingredient  { raw, item, qty?, unit?, note?, section, allergens: Allergen[] }   // allergens tagged at import; see §4.2
 Recipe      { id, title, lang, baseServings, ingredients[], steps[], tags[], effortMinutes, photoKey?,
               yieldsLeftovers: bool, prepAhead?: string, recurring?: "weekly"|{weekday},
-              lastCookedAt?, cookCount, source, createdAt, updatedAt, editedInAppAt? }
-Source      { kind: paprika|gdrive|url|tiktok|instagram|manual, externalId?, externalRevision?, url?, author?, importedAt, confidence? }
+              lastCookedAt?, cookCount, source, createdAt, updatedAt, editedInAppAt?,
+              draft: bool }   // a Draft Recipe is never proposed, planned or shopped until accepted
+Suggestion  { ingredient, item? | newItem?: { name, allergens: Allergen[] }, at }   // LLM-made; changes nothing until accepted (ADR 0023)
+Source      { kind: paprika|gdrive|url|tiktok|instagram|screenshot|text|manual, externalId?, externalRevision?, url?, author?, importedAt, confidence? }
 WeekPlan    { id, startDate, slots[], groceryListId?, instacartUrl? }
 Slot        { date, meal: breakfast|lunch|dinner, kind: recipe|leftovers|eat_out|unplanned|skip,
               recipeId?, leftoversOf?: slotId, diners: memberId[], guests: int, guestConstraints: Constraint[],
@@ -87,9 +89,13 @@ Notes
 - Rating after cooking: `again | meh | never` + note; feeds the proposer.
 
 ### 4.2 Imports (one pipeline, several parsers)
-All sources share: parser → ingredient normaliser (LLM at import time: `"2 cloves garlic, minced"` → `{item: garlic, qty: 2, unit: clove, note: minced}`) → canonical units + language → **allergen tagging** → upsert by `Source` → review queue for low confidence → `ImportRun` log.
+All sources share: source reader (structured fields, or the LLM extracting the Recipe as text: title, Ingredient lines as written, steps, servings, time, Course) → deterministic ingredient parser against the Item catalogue (`"2 cloves garlic, minced"` → `{item: garlic, qty: 2, unit: clove, note: minced}`) → **Suggestions** for Unresolved Ingredients → upsert by `Source` → `ImportRun` log. The LLM never returns parsed amounts or Items (ADR 0023).
 
-**Allergen tagging.** Each normalised ingredient gets `allergens[]` from a deterministic lookup table (item → allergens; e.g. `soy sauce → [soy, wheat]`, `butter → [milk]`, `tahini → [sesame]`), with the LLM only proposing tags for items the table doesn't know; those land in the review queue so the table grows under human control. A recipe's effective allergens are the union over its ingredients. Hidden sources (fish sauce, Worcestershire, stock cubes) are exactly what the table is for.
+**Allergen tagging.** Each resolved Ingredient takes its `allergens[]` from its Item (ADR 0001, 0009; e.g. `soy sauce → [soy, wheat]`, `butter → [milk]`, `tahini → [sesame]`). For an Unresolved Ingredient the LLM makes a Suggestion: an existing Item it is an alias of, or a new Item with its Allergens. A Suggestion changes nothing until a person accepts it on the Resolve Ingredients screen, which says it is AI-drafted and not guaranteed complete; until then the line fails closed. Suggestions are asked for after every import (new Unresolved lines only), plus a one-off "Suggest for all" for the Paprika backlog, run in batches. A recipe's effective allergens are the union over its ingredients. Hidden sources (fish sauce, Worcestershire, stock cubes) are exactly what the catalogue is for.
+
+**Draft Recipes.** Anything the LLM read (a page without JSON-LD, a video caption, screenshots, pasted text, a Drive Doc) lands as a Draft Recipe: kept, but never proposed, planned or shopped until a person accepts it. Its Course is the LLM's guess, corrected on acceptance (ADR 0022 amendment). When nothing readable is found (a caption that says "recipe in bio", a page that blocks the fetch, any Instagram link), the Draft is link-only (title, thumbnail, link) and the import screen offers to add screenshots or pasted text to it. Paprika and JSON-LD imports land as normal Recipes.
+
+**Review screen.** One screen lists what waits on a person: Import Flags, Draft Recipes, Suggestions. It is a view, not a stored queue; each keeps its own tools.
 
 **Idempotency & conflicts (all sources)**
 - Upsert on `(kind, externalId)`; skip when `externalRevision` unchanged; update when changed.
@@ -100,12 +106,16 @@ All sources share: parser → ingredient normaliser (LLM at import time: `"2 clo
 | Source | Access | Parse | Revision key |
 |---|---|---|---|
 | Paprika `.paprikarecipes` | Upload in PWA | zip → gzipped JSON per recipe; fields map directly; photo base64 → R2 | `uid` / `hash` (fallback: content hash) |
-| Google Drive folder (Docs) | Service account with folder shared to it; nightly DO alarm + "sync now" | Export Doc as `text/markdown` (zipped HTML if photos needed) → LLM to structured recipe; subfolders → tags; "is this a recipe?" gate | `docId` / `modifiedTime` |
-| URL | Paste / Web Share Target | schema.org `Recipe` JSON-LD first; LLM on page text as fallback; `og:image` | `canonicalUrl` / `fetchedAt` |
-| TikTok / Instagram | Web Share Target | Tier 1: oEmbed caption + thumbnail (TikTok public; Instagram gated). Tier 2: external job runner (yt-dlp → Whisper transcript → frame samples → LLM). Tier 3: paste caption / screenshot → vision. Lower confidence expected; review step must make fixing amounts fast. | `videoUrl` |
+| Google Drive folder (Docs) | Service account with folder shared to it; nightly DO alarm + "sync now" | Export Doc as `text/markdown` (zipped HTML when it holds an image; the first image is the photo) → LLM to Recipe text; subfolders → tags (same mapping as Paprika categories); "is this a recipe?" gate | `docId` / `modifiedTime` |
+| URL | Paste a link in the PWA; iOS Shortcut in the share sheet opening `/share?url=…` in Safari (behind Access) | schema.org `Recipe` JSON-LD first; LLM on page text as fallback; `og:image` | `canonicalUrl` / `fetchedAt` |
+| TikTok / Instagram | Same as URL | Tier 1: oEmbed caption + thumbnail (TikTok only; Instagram oEmbed needs Meta app review, so Instagram is link-only + tier 3). Tier 2: external job runner (yt-dlp → Whisper transcript → frame samples → LLM). Tier 3: paste caption / one or more screenshots → vision. Always a Draft; review must make fixing amounts fast. | `videoUrl` |
 | Manual | PWA form, or dictated to the agent | — | — |
 
-Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by morning. No reverse sync.
+Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by morning. No reverse sync. A Doc that fails the recipe gate is skipped and listed in the run log (with a link), and skipped again until it changes. An edited Doc updates its Recipe or Draft (or flags a merge if edited in Mise); a Doc removed from the folder leaves its Recipe in Mise.
+
+Web Share Target is not used: iOS does not support it, while a pasted link and a Shortcut work on every phone.
+
+**LLM in tests.** The LLM sits behind a small interface (read a recipe, make Suggestions). `bun test` and Worker tests use a fake; CI never calls a model. `bun run eval` runs real models against recorded fixtures, by hand when prompts or models change.
 
 ### 4.3 Weekly plan
 - Week view: dinner row prominent with photo; breakfast/lunch collapsed strip. One or two weeks ahead (`planHorizonWeeks`).
@@ -119,7 +129,7 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
   Returns plan + per-slot rationale (so the agent can explain).
 - **Allergy safety on manual edits.** Hard constraints apply to every path, not just the proposer: setting a slot to a recipe that conflicts with a diner's hard constraint, or adding a diner whose hard constraint conflicts with the slot's recipe, shows a blocking warning naming the person and the allergen, with explicit override (e.g. "we'll make hers without the nuts"). The agent must surface the same warning and ask before overriding. Conflicts are shown on the week view and in the calendar event description. Recipes with unknown/unreviewed allergen tags are treated as conflicting for the relevant allergen (fail closed) and flagged for review.
 - Re-roll respects locks. "Mark cooked" updates `lastCookedAt`, `cookCount`, prompts for rating and "anything run out?".
-- Weekly nudge (Saturday): "next week is proposed, review it" via web push or email.
+- Weekly nudge, two days before the Week starts: "next week is proposed, review it" by web push (§4.9).
 
 ### 4.4 Grocery list
 - `build_grocery_list(weekId)`: aggregate parsed ingredients × (servings / baseServings) across planned slots; merge same item+unit; convert units within canonical families; add staples that are `low|out|alwaysBuy` (with `qtyPerShop`); recipe demand for a staple (eggs across three dinners) overrides the staple's default quantity.
@@ -142,8 +152,10 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 - Read-only mirror; Google refreshes slowly (hours), Apple configurable. Set `REFRESH-INTERVAL`.
 
 ### 4.7 Agent (text) — drop 2
-- Pi Durable conversation per household, system prompt describing the household, tool catalogue below.
-- Agent never edits state except through tools; destructive tools (`delete_recipe`, `clear_week`) require confirmation.
+- One shared Pi Durable conversation per household, with no reset (the harness compacts it); system prompt describing the household, tool catalogue below. Each turn records and tells the agent which Caller is speaking; turns from two people run one after the other. (Per-Caller conversations may come later; recording the speaker keeps that a data split.)
+- Chat is a sheet opened from every screen's header (kitchen mode aside), and knows which screen and Week it was opened from.
+- Agent never edits state except through tools. Deletes (`delete_recipe`, `clear_week`), Overrides, and anything loosening a Hard Constraint (removing one, making it a dislike, removing a Member who has one) return a pending confirmation; only the person's tap on the button the chat shows runs them. The model cannot confirm (ADR 0024). `setup_household` is not offered to the agent.
+- LLM spend is capped by the Anthropic console limit, documented in the deployment settings; no in-app cap for text.
 - Typical turns: "re-propose the week but keep Tuesday", "swap Thursday for something with the chicken we have", "just the two of us Friday", "we're out of cumin", "put this week on Instacart".
 
 ### 4.8 Voice — drop 3
@@ -152,26 +164,29 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 - Telephony path (if ever) authenticates with its own shared secret, outside Access.
 
 ### 4.9 Notifications
-- Web push (PWA) with email fallback: weekly plan proposed, pantry check due, prep-ahead reminder (day before), import review queue non-empty, Drive sync flagged a conflict.
+- Web push only (installed PWA; no email fallback): weekly plan proposed, pantry check due, prep-ahead reminder (day before), something waiting on the review screen, Drive sync flagged a conflict. Each device opts in, with a toggle per kind; no per-Member routing.
+- Weekly proposal: two days before the next Week starts, at a morning hour in the Household's timezone, a household alarm runs `propose_week` for that Week if none of its dinners are planned yet (it never re-rolls one someone started), then pushes "next week is proposed, review it".
 
 ## 5. Tool catalogue (shared by PWA, agent, and future integrations)
 
 ```
-recipes:   search_recipes, get_recipe, create_recipe, update_recipe, delete_recipe*, rate_recipe, import_recipe_url
+recipes:   search_recipes, get_recipe, create_recipe, update_recipe, delete_recipe*, rate_recipe, list_drafts, accept_draft
 plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
 pantry:    list_staples, list_due_staples, record_staple_status, upsert_staple, remove_staple
 household: get_household, update_household_settings, update_member_constraints, set_effort_budgets, set_store_section_order, check_slot_constraints
-items:     list_items, create_item, update_item, list_unresolved_ingredients, resolve_ingredient
-imports:   run_paprika_import, list_import_runs, list_import_flags, sync_drive_folder, enqueue_video_import, list_review_queue, resolve_review_item
+items:     list_items, create_item, update_item, list_unresolved_ingredients, resolve_ingredient,
+           request_suggestions, list_suggestions, accept_suggestion, dismiss_suggestion
+imports:   run_paprika_import, import_url, import_text, import_screenshots, list_import_runs, list_import_flags,
+           sync_drive_folder, enqueue_video_import
 calendar:  rotate_calendar_token
-* = requires confirmation
+* = requires confirmation (from the agent: a tapped confirmation, ADR 0024; so do Overrides and loosening a Hard Constraint)
 ```
 
 ## 6. Security & privacy
 - Access in front of everything except `/cal/*` and the external job runner's poll endpoint (bearer secret; the runner polls outbound, nothing calls into it).
-- Service account key, OpenAI key, Instacart key, Sentry DSN as Worker secrets.
+- Service account key, Anthropic key, OpenAI key, Instacart key, Sentry DSN, web push VAPID key as Worker secrets.
 - Household data is personal: no third-party analytics; Sentry scrubs prompts by default.
 - Instacart and GPT-Live-1 receive only what the tool call sends (list lines, voice audio); recipes and history stay in the DO.
 - Dependency install scripts don't run by default (Bun's `trustedDependencies`); allow-list a package only when it needs one. This matters for a project pinning beta/experimental harness packages.
@@ -180,8 +195,8 @@ calendar:  rotate_calendar_token
 1. Name: **Mise** (working)
 2. Sensible effort-budget defaults per weekday before a household configures its own.
 3. How many households order via Instacart versus shopping in person? Decides whether Instacart is a nice-to-have or shapes unit mapping from day one.
-4. Instagram: does tier 1 (caption) work at all without Meta app review, or is Instagram tier 2/3 only?
-5. Drive folder structure: subfolders as tags, or flat?
+4. ~~Instagram tier 1 without Meta app review?~~ No: in Drop 2 Instagram links land link-only and are filled by tier 3.
+5. ~~Drive folder structure?~~ Subfolders become tags (mapped like Paprika categories); a flat folder works too.
 6. Coordinator interface: npm package of tools vs MCP endpoint exposed by the Worker.
 
 ## 8. Roadmap
@@ -203,12 +218,14 @@ calendar:  rotate_calendar_token
 **Exit: the family plans and shops one real week with it.**
 
 ### Drop 2 — Imports and the text agent (3–4 weeks)
-- Ingredient normaliser (LLM at import) applied to Paprika backlog and all new imports.
-- Google Drive folder sync (service account, nightly + manual, conflict flags, review queue).
-- URL import (JSON-LD + fallback) and Web Share Target; TikTok tier 1 (oEmbed caption) and tier 3 (paste/screenshot).
-- Pi Durable agent with the tool catalogue; chat panel in the PWA; confirmations on destructive tools. Chat (and later voice) surfaces are built directly from the design system, not mocked up in Claude Design — they are mostly behaviour, and their needs only become clear once the tools are real.
-- Web push: weekly proposal, pantry check due, prep-ahead, review queue.
-**Exit: "re-propose but keep Tuesday" works in chat; a shared TikTok lands as a recipe.**
+- First: agent harness spike — chat sheet + one read tool through `pi-durable`/`PiHarness`, deployed, including a long-transcript check; fallback is the Agents SDK `AIChatAgent` behind the same `callTool`.
+- Suggestions (LLM) for Unresolved Ingredients, after every import and once for the Paprika backlog (ADR 0023).
+- Draft Recipes and the review screen (Import Flags, Drafts, Suggestions).
+- URL import (JSON-LD + LLM fallback) by pasted link and an iOS Shortcut; TikTok tier 1 (oEmbed caption) and tier 3 (pasted text / screenshots); link-only Drafts when nothing is readable.
+- Google Drive folder sync (service account, nightly + manual, subfolders → tags, first image → photo, conflict flags).
+- Pi Durable agent with the tool catalogue; one shared conversation; chat sheet in every header; tapped confirmations (ADR 0024). Chat (and later voice) surfaces are built directly from the design system, not mocked up in Claude Design — they are mostly behaviour, and their needs only become clear once the tools are real.
+- Web push (per device, per kind): weekly auto-proposal, pantry check due, prep-ahead, review screen, Drive conflicts.
+**Exit: "re-propose but keep Tuesday" works in chat; a TikTok shared from an iPhone lands as a Draft Recipe and, once accepted, can be planned and shopped; a Doc dropped in the Drive folder appears by morning.**
 
 ### Drop 3 — Voice (2–3 weeks)
 - GPT-Live-1 over WebRTC in the PWA; same agent backend; minute cap.

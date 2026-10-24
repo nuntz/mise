@@ -64,6 +64,14 @@ _Avoid_: Item (when meaning a recipe line)
 **Unresolved Ingredient**:
 An Ingredient not yet matched to an Item; its Allergens are unknown and treated as conflicting.
 
+**Suggestion**:
+An LLM's guess at the Item an Unresolved Ingredient refers to: an existing Item, or a new one with its Allergens. It changes nothing until a person accepts it.
+_Avoid_: Proposal (that is a Week's), tag
+
+**Draft Recipe**:
+An imported Recipe kept but not yet accepted by a person, because its source is unreliable (a video's caption, a screenshot). It is never proposed until accepted.
+_Avoid_: Pending recipe, review item
+
 **Imported Preference**:
 How much the Household liked a Recipe before Mise, carried over from its source; separate from Ratings made in Mise.
 
