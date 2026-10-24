@@ -4,6 +4,7 @@ import {
   ImportFlag,
   ImportRun,
   type ImportSource,
+  type ItemCatalogue,
   parseIngredient,
   possibleDuplicate,
   type Recipe,
@@ -87,18 +88,8 @@ export function runImport(
   );
 
   // `flagged` counts Recipes, however many flags each gets.
-  const flag = (kind: ImportFlag["kind"], recipeId: number, duplicateOf: number | null, revision: string | null) => {
-    sql.exec(
-      `INSERT INTO import_flag (run_id, kind, recipe_id, duplicate_of, source_revision, flagged_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      runId,
-      kind,
-      recipeId,
-      duplicateOf,
-      revision,
-      startedAt,
-    );
-  };
+  const flag = (kind: ImportFlag["kind"], recipeId: number, duplicateOf: number | null, revision: string | null) =>
+    insertFlag(sql, { runId, kind, recipeId, duplicateOf, revision, flaggedAt: startedAt });
 
   for (const { recipe, photoKey, draft } of prepared) {
     const [existing] = sql
@@ -118,11 +109,7 @@ export function runImport(
       const id = insertRecipe(sql, source, recipe, photoKey ?? null, draft, startedAt);
       written.push(id);
       counts.created++;
-      const candidate = {
-        title: recipe.title,
-        ingredients: recipe.ingredients.map((line) => parseIngredient(line, catalogue)),
-      };
-      const duplicates = others.filter((other) => possibleDuplicate(candidate, other));
+      const duplicates = duplicatesOf(recipe, others, catalogue);
       for (const other of duplicates) flag("duplicate", id, other.id, null);
       if (duplicates.length > 0) counts.flagged++;
       continue;
@@ -252,11 +239,43 @@ function updateRecipe(
   writeLists(sql, id, recipe);
 }
 
+/** The Recipes among `others` an imported Recipe is possibly the same dish as. */
+function duplicatesOf(recipe: ImportedRecipe, others: Recipe[], catalogue: ItemCatalogue): Recipe[] {
+  const candidate = {
+    title: recipe.title,
+    ingredients: recipe.ingredients.map((line) => parseIngredient(line, catalogue)),
+  };
+  return others.filter((other) => possibleDuplicate(candidate, other));
+}
+
+function insertFlag(
+  sql: SqlStorage,
+  flag: {
+    runId: number;
+    kind: ImportFlag["kind"];
+    recipeId: number;
+    duplicateOf: number | null;
+    revision: string | null;
+    flaggedAt: string;
+  },
+): void {
+  sql.exec(
+    `INSERT INTO import_flag (run_id, kind, recipe_id, duplicate_of, source_revision, flagged_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    flag.runId,
+    flag.kind,
+    flag.recipeId,
+    flag.duplicateOf,
+    flag.revision,
+    flag.flaggedAt,
+  );
+}
+
 /**
  * Fills the link-only Draft `id` with what the model read of pasted text, logged as a run of source
  * `text` that updated it. The Draft keeps its link, title aside, and the text goes in its notes, as
  * for any pasted text. Filling it is an edit in Mise: a later import of its link flags it instead
- * of overwriting it.
+ * of overwriting it. Like a new Draft, it is flagged if it looks like a Recipe already kept.
  */
 export function fillDraft(
   sql: SqlStorage,
@@ -285,6 +304,19 @@ export function fillDraft(
     id,
   );
   writeLists(sql, id, recipe);
+  const kept = readRecipes(sql).filter((other) => !other.draft);
+  const duplicates = duplicatesOf(recipe, kept, readCatalogue(sql));
+  for (const other of duplicates) {
+    insertFlag(sql, {
+      runId,
+      kind: "duplicate",
+      recipeId: id,
+      duplicateOf: other.id,
+      revision: null,
+      flaggedAt: startedAt,
+    });
+  }
+  if (duplicates.length > 0) sql.exec("UPDATE import_run SET flagged = 1 WHERE id = ?", runId);
   return { run: readImportRuns(sql, runId)[0] as ImportRun, written: [id] };
 }
 

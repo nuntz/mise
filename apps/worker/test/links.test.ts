@@ -369,6 +369,27 @@ describe("filling a link-only Draft with pasted text", () => {
     });
   });
 
+  test("flags a filled Draft that looks like a Recipe already kept, as a new Draft is flagged", async () => {
+    serve({ [DAL_URL]: () => new Response("Busy", { status: 503 }) });
+    withReading(pie);
+    const household = await newHousehold();
+    const kept = succeeded<Recipe>(
+      await household.callTool("create_recipe", {
+        title: "My nan's shepherd's pie",
+        baseServings: 6,
+        ingredients: ["500 g lamb mince", "1 onion, diced", "1 kg potatoes"],
+      }),
+    );
+    const { recipe: linkOnly } = await importUrl(household, DAL_URL);
+
+    const filled = await household.callTool("import_text", { text: "Shepherd's pie…", draft: linkOnly.id });
+
+    expect(filled).toMatchObject({ ok: true, value: { run: { updated: 1, flagged: 1 } } });
+    expect(succeeded<Draft[]>(await household.callTool("list_drafts", {}))).toMatchObject([
+      { recipe: { id: linkOnly.id }, duplicateOf: [{ id: kept.id, title: "My nan's shepherd's pie" }] },
+    ]);
+  });
+
   test("refuses a Recipe that is no link-only Draft, without asking the model", async () => {
     serve({ [DAL_URL]: html(yoastGraph), [DAL_PHOTO]: jpeg });
     const llm = withReading(pie);
