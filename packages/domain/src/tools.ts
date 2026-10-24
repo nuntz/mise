@@ -279,7 +279,7 @@ export const tools = {
    * can't be fetched, or holds no recipe, or that the model fails to read, makes a link-only Draft, so
    * the link is never lost; why is logged as the run's error. Importing an unchanged page again is
    * skipped, without asking the model. A TikTok video is read from its oEmbed caption and thumbnail
-   * instead (source `tiktok`, upserted on the video's URL), and an Instagram link is kept link-only
+   * instead (source `tiktok`, upserted on the video's URL), kept link-only while TikTok sends none, and an Instagram link is kept link-only
    * (source `instagram`) without fetching anything.
    */
   import_url: defineTool({

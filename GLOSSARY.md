@@ -73,7 +73,7 @@ An imported Recipe kept but not yet accepted by a person, because an LLM read it
 _Avoid_: Pending recipe, review item
 
 **Link-only Draft**:
-A Draft Recipe that holds only a link, its title and its photo if the page or video had one, because Mise could not read a recipe there (the site refused it, its page holds none, a TikTok's caption says "recipe in bio", or it is an Instagram link). It waits for someone to add screenshots of the recipe or paste its text.
+A Draft Recipe that holds only a link, its title and its photo if the page or video had one, because Mise could not read a recipe there (the site refused it, its page holds none, TikTok gives no caption, or one that says "recipe in bio", or it is an Instagram link). It waits for someone to add screenshots of the recipe or paste its text.
 _Avoid_: Bookmark, stub
 
 **Imported Preference**:

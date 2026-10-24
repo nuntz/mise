@@ -378,6 +378,16 @@ const migrations: { version: number; statements: string[] }[] = [
       "ALTER TABLE recipe ADD COLUMN draft INTEGER NOT NULL DEFAULT 0",
     ],
   },
+  {
+    version: 20,
+    statements: [
+      // TikTok's oEmbed gave no caption, so the first TikTok import kept every video link-only, at the
+      // video's URL as its revision, which skipped it for good. Such a Draft is read again when shared.
+      `UPDATE recipe SET source_revision = 'uncaptioned'
+       WHERE source_kind = 'tiktok' AND draft = 1 AND source_revision = source_id
+         AND NOT EXISTS (SELECT 1 FROM recipe_ingredient WHERE recipe_ingredient.recipe_id = recipe.id)`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

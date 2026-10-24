@@ -45,6 +45,11 @@ const USER_AGENT = "Mise/1.0 (family meal planner; +https://github.com/nuntz/mis
 /** The revision of a link-only Draft whose page could not be fetched, or that the model failed to read. */
 const UNFETCHED = "unfetched";
 const UNREAD = "unread";
+/**
+ * The revision of a link-only Draft of a TikTok whose oEmbed answer has no caption, as TikTok's have
+ * none today (October 2026): asked again each time it is shared, in case one comes back.
+ */
+const UNCAPTIONED = "uncaptioned";
 /** The revision of a link-only Draft of a link that is never read: an Instagram link, or a TikTok that is no video. */
 const UNREADABLE = "unreadable";
 
@@ -60,9 +65,12 @@ export type LinkReading = {
   errors: ImportError[];
 };
 
-/** What TikTok's oEmbed says of a video: its caption (`title`), author and thumbnail. */
+/**
+ * What TikTok's oEmbed says of a video: its caption (`title`), author and thumbnail, as it documents
+ * them. Its answers today carry none of them, only a player to embed.
+ */
 const TikTokOembed = z.object({
-  title: z.string().catch(""),
+  title: z.string().nullish().catch(null),
   author_name: z.string().nullish().catch(null),
   thumbnail_url: z
     .url({ protocol: /^https?$/ })
@@ -167,7 +175,7 @@ async function readTikTok(
     const reading = linkOnlyReading(sql, "tiktok", link, url, captionTitle("", handle), UNFETCHED);
     return reading(null, fetched.ok ? "The video's caption could not be read" : `The video's caption ${fetched.error}`);
   }
-  const caption = oembed.title.trim();
+  const caption = oembed.title?.trim() ?? "";
   const author = oembed.author_name ?? handle;
   const linkOnly = (revision: string, message: string) =>
     linkOnlyReading(
@@ -178,7 +186,12 @@ async function readTikTok(
       captionTitle(caption, author),
       revision,
     )(oembed.thumbnail_url ?? null, message);
-  if (!caption) return linkOnly(url, "The video has no caption");
+  if (!caption) {
+    return linkOnly(
+      UNCAPTIONED,
+      "TikTok doesn't share this video's caption with Mise: add screenshots or paste the caption",
+    );
+  }
   try {
     const reading = await llm.readRecipe({ text: caption });
     if (!reading.isRecipe) return linkOnly(url, "The caption holds no recipe");

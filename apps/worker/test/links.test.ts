@@ -1,3 +1,4 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
   type Draft,
@@ -11,11 +12,13 @@ import {
 import { beforeEach, describe, expect, test } from "vitest";
 import noodlesOembed from "../../../fixtures/oembed/tiktok-noodles.json";
 import browniesOembed from "../../../fixtures/oembed/tiktok-recipe-in-bio.json";
+import uncaptionedOembed from "../../../fixtures/oembed/tiktok-uncaptioned.json";
 import noJsonLd from "../../../fixtures/pages/no-json-ld.html?raw";
 import yoastGraph from "../../../fixtures/pages/yoast-graph.html?raw";
 import { SAMPLE_JPEG } from "../../../fixtures/paprika";
 import { useFetch } from "../src/links";
 import { useLlm } from "../src/llm";
+import { migrate } from "../src/migrations";
 
 type HouseholdStub = ReturnType<typeof env.Household.getByName>;
 
@@ -423,6 +426,8 @@ const noodles: RecipeReading = {
 
 const json = (body: unknown) => () => Response.json(body);
 
+const UNCAPTIONED = "TikTok doesn't share this video's caption with Mise: add screenshots or paste the caption";
+
 describe("importing a TikTok", () => {
   test("has the model read its caption into a Draft, with its thumbnail, at the video's URL", async () => {
     const requested = serve({
@@ -480,6 +485,53 @@ describe("importing a TikTok", () => {
     });
     expect(requested).toEqual([BROWNIES_OEMBED, browniesOembed.thumbnail_url]);
     expect(llm.readings).toHaveLength(1);
+  });
+
+  test("keeps a video whose oEmbed answer has no caption, as TikTok's have none today, link-only, and reads it once it does", async () => {
+    let captioned = false;
+    serve({
+      [NOODLES_OEMBED]: () => json(captioned ? noodlesOembed : uncaptionedOembed)(),
+      [noodlesOembed.thumbnail_url]: jpeg,
+    });
+    const llm = withReading(noodles);
+    const household = await newHousehold();
+
+    const linkOnly = await importUrl(household, NOODLES_VIDEO);
+
+    expect(linkOnly).toMatchObject({
+      run: { source: "tiktok", created: 1, errors: [{ entry: NOODLES_VIDEO, message: UNCAPTIONED }] },
+      recipe: { title: "TikTok video by cook.example", draft: true, linkOnly: true },
+    });
+    expect(await recipe(household, linkOnly.recipe.id)).toMatchObject({ photoKey: null });
+    expect(llm.readings).toEqual([]);
+    captioned = true;
+    expect(await importUrl(household, NOODLES_VIDEO)).toMatchObject({
+      run: { updated: 1 },
+      recipe: { id: linkOnly.recipe.id, title: "10-minute peanut noodles", linkOnly: false },
+    });
+  });
+
+  test("reads again a video kept link-only before Mise knew TikTok's answers have no caption", async () => {
+    let captioned = false;
+    serve({
+      [NOODLES_OEMBED]: () => json(captioned ? noodlesOembed : uncaptionedOembed)(),
+      [noodlesOembed.thumbnail_url]: jpeg,
+    });
+    withReading(noodles);
+    const household = await newHousehold();
+    const { recipe: linkOnly } = await importUrl(household, NOODLES_VIDEO);
+    // As the first TikTok import stored it: at the video's URL, which skipped it for good.
+    await runInDurableObject(household, async (_household, state) => {
+      state.storage.sql.exec("UPDATE recipe SET source_revision = source_id WHERE id = ?", linkOnly.id);
+      state.storage.sql.exec("DELETE FROM schema_version WHERE version >= 20");
+      migrate(state.storage);
+    });
+
+    captioned = true;
+    expect(await importUrl(household, NOODLES_VIDEO)).toMatchObject({
+      run: { updated: 1 },
+      recipe: { id: linkOnly.id, linkOnly: false },
+    });
   });
 
   test("follows a short link to its video", async () => {
