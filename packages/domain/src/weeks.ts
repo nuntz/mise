@@ -78,9 +78,12 @@ export function weekOf(date: LocalDate, calendar: WeekCalendar): WeekSpan {
   return { startDate, endDate: addDays(startDate, 6) };
 }
 
+/** What tells which Week the Household is in now: its Weeks, and the timezone its today is read in. */
+export type HouseholdClock = WeekCalendar & { timezone: string };
+
 /** The Week the Household is in at `now`, by its own calendar. */
-export function currentWeek(now: Date, timezone: string, calendar: WeekCalendar): WeekSpan {
-  return weekOf(localDate(now, timezone), calendar);
+export function currentWeek(now: Date, household: HouseholdClock): WeekSpan {
+  return weekOf(localDate(now, household.timezone), household);
 }
 
 /** The first day of the Week after `week`. */

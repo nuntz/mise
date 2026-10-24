@@ -216,7 +216,7 @@ test("offline, ticks and added lines show at once, wait as changes to sync, and 
 });
 
 test("the Household and both Weeks' Grocery Lists open offline from what was last loaded", async () => {
-  const thisWeek = currentWeek(new Date(), household.timezone, household).startDate;
+  const thisWeek = currentWeek(new Date(), household).startDate;
   const nextWeek: GroceryList = { ...list, sections: list.sections.slice(2) };
   const answers = {
     get_grocery_list: (input: Record<string, unknown>) =>
@@ -249,7 +249,7 @@ test("the Household and both Weeks' Grocery Lists open offline from what was las
 test("a Household and Week saved before week starts could change still open the Grocery List offline", async () => {
   // As a device kept them before Household.weekStartChanges and Week.endDate existed.
   const { weekStartChanges: _, ...oldHousehold } = household;
-  const thisWeek = currentWeek(new Date(), household.timezone, household).startDate;
+  const thisWeek = currentWeek(new Date(), household).startDate;
   localStorage.setItem("mise.household", JSON.stringify(oldHousehold));
   localStorage.setItem(
     "mise.week",

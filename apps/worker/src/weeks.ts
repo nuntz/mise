@@ -482,7 +482,7 @@ function readRatingsByRecipe(sql: SqlStorage): Map<RecipeId, Rating[]> {
 
 /** The Week `date` is in; without one, the Week the Household is in today. */
 export function weekNamedBy(settings: Settings, date: LocalDate | undefined): WeekSpan {
-  return date ? weekOf(date, settings) : currentWeek(new Date(), settings.timezone, settings);
+  return date ? weekOf(date, settings) : currentWeek(new Date(), settings);
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   type GroceryLine,
   type GroceryList,
   type Household,
+  type HouseholdClock,
   type LocalDate,
   nextWeekStart,
   type QueuedChange,
@@ -18,7 +19,7 @@ import { Icon } from "./icons";
 import { t } from "./messages";
 import { savedGroceryList } from "./offline";
 
-type GroceryHousehold = Pick<Household, "timezone" | "weekStartsOn" | "weekStartChanges" | "locale" | "storeSections">;
+type GroceryHousehold = HouseholdClock & Pick<Household, "locale" | "storeSections">;
 
 /**
  * The Week's Grocery List, by Store Section in walking order, with Have Ticks, the Staples due to be
@@ -37,7 +38,7 @@ export function GroceryPage(props: {
   const [error, setError] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const weekShown = (): LocalDate => {
-    const current = currentWeek(new Date(), props.household.timezone, props.household);
+    const current = currentWeek(new Date(), props.household);
     return next() ? nextWeekStart(current) : current.startDate;
   };
   // Undefined until loaded; null while the Week has no Grocery List. The one saved on this device

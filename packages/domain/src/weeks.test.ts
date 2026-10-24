@@ -35,13 +35,13 @@ describe("currentWeek", () => {
   const mondayInUtc = new Date("2026-10-26T03:00:00Z");
 
   test("the current Week follows the Household's calendar, not UTC's", () => {
-    expect(currentWeek(mondayInUtc, "America/Vancouver", mondays).startDate).toBe("2026-10-19");
-    expect(currentWeek(mondayInUtc, "Europe/Paris", mondays).startDate).toBe("2026-10-26");
+    expect(currentWeek(mondayInUtc, { ...mondays, timezone: "America/Vancouver" }).startDate).toBe("2026-10-19");
+    expect(currentWeek(mondayInUtc, { ...mondays, timezone: "Europe/Paris" }).startDate).toBe("2026-10-26");
   });
 
   test("a Week starting on Sunday has already begun in Vancouver", () => {
     const sundays: WeekCalendar = { weekStartsOn: "sunday", weekStartChanges: [] };
-    expect(currentWeek(mondayInUtc, "America/Vancouver", sundays).startDate).toBe("2026-10-25");
+    expect(currentWeek(mondayInUtc, { ...sundays, timezone: "America/Vancouver" }).startDate).toBe("2026-10-25");
   });
 });
 

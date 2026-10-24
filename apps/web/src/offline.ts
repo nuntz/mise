@@ -4,6 +4,7 @@ import {
   currentWeek,
   GroceryList,
   Household,
+  type HouseholdClock,
   type LocalDate,
   nextWeekStart,
   QueuedChange,
@@ -93,16 +94,13 @@ export const saveRecipe = (recipe: Recipe) => write(KEYS.recipe, recipe);
  * Keeps the current and next Week's Grocery Lists on this device, loaded again on every connect and
  * whenever anything they're built from changes.
  */
-export function keepGroceryLists(
-  client: MiseClient,
-  household: () => Pick<Household, "timezone" | "weekStartsOn" | "weekStartChanges">,
-): void {
+export function keepGroceryLists(client: MiseClient, household: () => HouseholdClock): void {
   // Offline, what was saved is kept.
   keepFresh(
     client,
     ["grocery", "plan", "recipes", "household"],
     async () => {
-      const current = currentWeek(new Date(), household().timezone, household());
+      const current = currentWeek(new Date(), household());
       return Promise.all(
         [current.startDate, nextWeekStart(current)].map(
           async (date) => [date, await client.call("get_grocery_list", { date })] as const,
