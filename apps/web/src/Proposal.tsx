@@ -323,6 +323,7 @@ export function reasonText(
       const why = [
         excluded.conflict > 0 && t("reason.excludedConflict", { count: String(excluded.conflict) }),
         excluded.never > 0 && t("reason.excludedNever", { count: String(excluded.never) }),
+        excluded.course > 0 && t("reason.excludedCourse", { count: String(excluded.course) }),
         excluded.recent > 0 && t("reason.excludedRecent", { count: String(excluded.recent) }),
         excluded.effort > 0 && t("reason.excludedEffort", { count: String(excluded.effort) }),
       ].filter((part): part is string => typeof part === "string");

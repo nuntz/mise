@@ -46,6 +46,7 @@ const toast: Recipe = {
   effortMinutes: 5,
   cuisine: null,
   mainProtein: null,
+  course: null,
   recurring: "weekly",
   yieldsLeftovers: false,
   prepAhead: null,
@@ -71,8 +72,8 @@ const rice: Recipe = {
   allergens: { kind: "known", allergens: [] },
 };
 
-const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }: Recipe) =>
-  ({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }) satisfies RecipeSummary;
+const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }: Recipe) =>
+  ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }) satisfies RecipeSummary;
 
 /** A client over a fixed set of Recipes that records every tool call made; offline, every call fails. */
 function fakeClient(recipes: Recipe[], { online = true } = {}) {
@@ -166,6 +167,7 @@ test("a new Recipe is created from its lines and fields", async () => {
   await user.type(screen.getByRole("textbox", { name: "Steps" }), "Rinse.{enter}{enter}Simmer.");
   await user.type(screen.getByRole("textbox", { name: "Tags" }), "vegetarian, weeknight");
   await user.type(screen.getByRole("spinbutton", { name: "Effort (minutes)" }), "40");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "Main dish");
   await user.selectOptions(screen.getByRole("combobox", { name: "Recurring" }), "monday");
   await user.click(screen.getByRole("checkbox", { name: "Yields Leftovers" }));
   await user.type(screen.getByRole("textbox", { name: "Notes" }), "From a friend.");
@@ -180,6 +182,7 @@ test("a new Recipe is created from its lines and fields", async () => {
     effortMinutes: 40,
     cuisine: null,
     mainProtein: null,
+    course: "main",
     recurring: { weekday: "monday" },
     yieldsLeftovers: true,
     prepAhead: null,
@@ -231,6 +234,35 @@ test("editing a Recipe starts from what it has and saves the changes", async () 
     effortMinutes: null,
     recurring: "weekly",
   });
+});
+
+test("a Recipe shows its Course, which the form corrects or leaves unknown", async () => {
+  const user = userEvent.setup();
+  const { client, calls } = fakeClient([{ ...toast, course: "dessert" }, rice]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+  expect(screen.getByText(/Dessert/).textContent).toContain("Dessert");
+  await user.click(await screen.findByRole("button", { name: "Edit Recipe" }));
+  expect((screen.getByRole("combobox", { name: "Course" }) as HTMLSelectElement).value).toBe("dessert");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "Breakfast");
+  await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+
+  expect(calls.find((call) => call.name === "update_recipe")?.input).toMatchObject({ id: 1, course: "breakfast" });
+});
+
+test("a Recipe of unknown Course says so on the form, and is saved without one", async () => {
+  const user = userEvent.setup();
+  const { client, calls } = fakeClient([rice]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByRole("button", { name: "Rice" }));
+  await user.click(await screen.findByRole("button", { name: "Edit Recipe" }));
+  const course = screen.getByRole("combobox", { name: "Course" }) as HTMLSelectElement;
+  expect(course.selectedOptions[0]?.textContent).toBe("Unknown");
+  await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+
+  expect(calls.find((call) => call.name === "update_recipe")?.input).toMatchObject({ id: 2, course: null });
 });
 
 /** The App opens on the Week; these tests start from the Recipes. */

@@ -83,6 +83,7 @@ Notes
 ### 4.1 Recipes
 - CRUD, search (title, tag, ingredient), photo (R2), kitchen mode view (large type, wake-lock, step-by-step, timers).
 - Tags: cuisine, protein, effort/time, season (optional), diet flags.
+- Course: what the dish is served as (`main | side | dessert | drink | breakfast | snack`, or unknown). Worked out at import from categories, corrected by hand on the Recipe (ADR 0022).
 - Rating after cooking: `again | meh | never` + note; feeds the proposer.
 
 ### 4.2 Imports (one pipeline, several parsers)
@@ -92,7 +93,7 @@ All sources share: parser → ingredient normaliser (LLM at import time: `"2 clo
 
 **Idempotency & conflicts (all sources)**
 - Upsert on `(kind, externalId)`; skip when `externalRevision` unchanged; update when changed.
-- If `editedInAppAt > importedAt`: do not overwrite; flag for manual merge.
+- If `editedInAppAt > importedAt`: do not overwrite; flag for manual merge. A Course corrected by hand is such an edit, so an import never overwrites it.
 - Soft duplicate check across sources on normalised title (+ ingredient overlap) → flag, never auto-merge.
 - Re-running an import is a visible no-op (run log shows 0 created / 0 updated).
 
@@ -112,7 +113,7 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 - **Proposer (deterministic, no LLM):** `propose_week(date?, useUp?, reroll?)` (ADR 0013)
   1. Pin recurring favourites and locked slots.
   2. Apply per-weekday effort budget (default per household, editable per week).
-  3. Apply constraints for that slot's diners + guests: **hard** constraints (allergy, intolerance, diet) exclude recipes outright; **soft** ones (dislikes) only score down.
+  3. Exclude Recipes whose Course is set and is not `main` (unknown stays a candidate; ADR 0022). Apply constraints for that slot's diners + guests: **hard** constraints (allergy, intolerance, diet) exclude recipes outright; **soft** ones (dislikes) only score down.
   4. Score candidates: recency penalty (last N weeks), variety across cuisine/protein within the week, rating (`never` excluded, `again` boosted), use-up hints (ingredients the user said are on hand), season.
   5. Fill `yieldsLeftovers` consequences.
   Returns plan + per-slot rationale (so the agent can explain).

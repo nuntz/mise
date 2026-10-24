@@ -1,5 +1,6 @@
 import type {
   Allergen,
+  Course,
   Ingredient,
   Item,
   ItemId,
@@ -257,6 +258,7 @@ function RecipeDetail(props: {
                   effortText(current().effortMinutes),
                   current().cuisine,
                   current().mainProtein,
+                  courseText(current().course),
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -374,6 +376,10 @@ function allergensText(allergens: RecipeAllergens): string {
 
 function allergenNames(allergens: Allergen[]): string {
   return allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ");
+}
+
+function courseText(course: Course | null): string | null {
+  return course === null ? null : t(`course.${course}`);
 }
 
 function effortText(minutes: number | null): string {

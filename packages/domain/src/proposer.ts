@@ -42,6 +42,7 @@ export type ProposerRecipe = Pick<
   | "effortMinutes"
   | "cuisine"
   | "mainProtein"
+  | "course"
   | "recurring"
   | "yieldsLeftovers"
   | "importedPreference"
@@ -109,7 +110,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * eating out or no meal, are kept. Recurring Recipes are pinned first. Every other dinner gets a
  * Recipe that no Hard Constraint of anyone eating it rules out (unknown Allergens fail closed), not
  * rated "never", not planned within 2 weeks of it and within the day's Effort Budget (an unknown
- * effort passes), and safe too for whoever eats its Leftovers kept by hand.
+ * effort passes), and safe too for whoever eats its Leftovers kept by hand. Every Recipe a dinner
+ * gets, Recurring or not, is a main dish or of unknown Course (ADR 0022).
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
  * A dinner whose Recipe yields Leftovers, and has none kept, gets them in the next dinner within two
@@ -161,6 +163,7 @@ function propose(input: ProposerInput, window: number, choice: ProposalChoice): 
     if (planned().some((other) => other.recipeId === recipe.id && weekDates.has(other.date))) continue;
     const fits = input.dinners.flatMap((dinner, index) =>
       open(index) &&
+      isMain(recipe) &&
       isSafeFor(recipe, dinner) &&
       (recurrence === "weekly" || weekdayOf(dinner.date) === recurrence.weekday)
         ? [index]
@@ -198,12 +201,13 @@ function chosen(
 ): ProposedDinner {
   const dinner = input.dinners[index] as ProposerDinner;
   const budget = budgetOf(input, index);
-  const excluded: Exclusions = { conflict: 0, never: 0, recent: 0, effort: 0 };
+  const excluded: Exclusions = { conflict: 0, never: 0, course: 0, recent: 0, effort: 0 };
   const candidates: { recipe: ProposerRecipe; score: number; factors: ReasonFactor[] }[] = [];
   for (const recipe of input.recipes) {
     const daysApart = closestPlanned(recipe.id, dinner.date, nearby);
     if (!isSafeFor(recipe, dinner)) excluded.conflict++;
     else if (recipe.ratings.includes("never")) excluded.never++;
+    else if (!isMain(recipe)) excluded.course++;
     else if (daysApart !== null && daysApart < EXCLUDED_WITHIN_DAYS) excluded.recent++;
     else if (!isWithinBudget(recipe, budget)) excluded.effort++;
     else candidates.push({ recipe, ...scored(recipe, dinner, daysApart, budget, nearby, recipes, input.useUp) });
@@ -320,6 +324,11 @@ function isSafe(recipe: ProposerRecipe, people: ProposerPeople): boolean {
 /** The Recipe is safe for the dinner and for whoever eats its Leftovers kept by hand. */
 function isSafeFor(recipe: ProposerRecipe, dinner: ProposerDinner): boolean {
   return isSafe(recipe, dinner) && dinner.keptLeftovers.every((leftovers) => isSafe(recipe, leftovers));
+}
+
+/** A main dish, or a Recipe whose Course is unknown: what a dinner can be filled with. */
+function isMain(recipe: ProposerRecipe): boolean {
+  return recipe.course === null || recipe.course === "main";
 }
 
 function isWithinBudget(recipe: ProposerRecipe, budget: number): boolean {

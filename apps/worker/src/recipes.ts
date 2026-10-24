@@ -20,6 +20,7 @@ type RecipeRow = {
   effort_minutes: number | null;
   cuisine: string | null;
   main_protein: string | null;
+  course: string | null;
   recurring: string | null;
   yields_leftovers: number;
   prep_ahead: string | null;
@@ -63,14 +64,15 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     const now = new Date().toISOString();
     const { id } = sql
       .exec<{ id: number }>(
-        `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, recurring,
+        `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, course, recurring,
            yields_leftovers, prep_ahead, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         input.title,
         input.baseServings,
         input.effortMinutes,
         input.cuisine,
         input.mainProtein,
+        input.course,
         recurrenceColumn(input.recurring),
         Number(input.yieldsLeftovers),
         input.prepAhead,
@@ -96,13 +98,15 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     const fields = { ...recipe, ...changes };
     sql.exec(
       `UPDATE recipe SET title = ?, base_servings = ?, effort_minutes = ?, cuisine = ?, main_protein = ?,
-         recurring = ?, yields_leftovers = ?, prep_ahead = ?, notes = ?, updated_at = ?, edited_in_app_at = ?
+         course = ?, recurring = ?, yields_leftovers = ?, prep_ahead = ?, notes = ?, updated_at = ?,
+         edited_in_app_at = ?
        WHERE id = ?`,
       fields.title,
       fields.baseServings,
       fields.effortMinutes,
       fields.cuisine,
       fields.mainProtein,
+      fields.course,
       recurrenceColumn(fields.recurring),
       Number(fields.yieldsLeftovers),
       fields.prepAhead,
@@ -182,13 +186,14 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
 function summaries(recipes: Recipe[]): RecipeSummary[] {
   return recipes
     .sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id)
-    .map(({ id, title, tags, effortMinutes, cuisine, mainProtein, allergens, photoKey }) => ({
+    .map(({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }) => ({
       id,
       title,
       tags,
       effortMinutes,
       cuisine,
       mainProtein,
+      course,
       allergens,
       photoKey,
     }));
@@ -295,6 +300,7 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       effortMinutes: row.effort_minutes,
       cuisine: row.cuisine,
       mainProtein: row.main_protein,
+      course: row.course,
       recurring: recurrenceOf(row.recurring),
       yieldsLeftovers: row.yields_leftovers === 1,
       prepAhead: row.prep_ahead,

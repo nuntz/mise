@@ -50,8 +50,8 @@ type FlagRow = {
 
 /**
  * Upserts each Recipe on its source id, and logs the run. A Recipe whose revision is unchanged, or
- * that is in the source's trash, is skipped; one edited in Mise since it was imported is flagged for
- * a merge, not overwritten; a new one like a Recipe from another source is created and flagged as a
+ * that is in the source's trash, is skipped; one edited in Mise since it was imported (a Course
+ * corrected by hand, say) is flagged for a merge, not overwritten; a new one like a Recipe from another source is created and flagged as a
  * possible duplicate. Nothing is deleted. Returns the run, and the photos updated Recipes no longer show.
  */
 export function runImport(
@@ -171,15 +171,16 @@ function insertRecipe(
 ): number {
   const { id } = sql
     .exec<{ id: number }>(
-      `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, recurring, yields_leftovers,
-         prep_ahead, notes, photo_key, source_kind, source_id, source_revision, source_url, source_author,
-         imported_at, imported_preference, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, course, recurring,
+         yields_leftovers, prep_ahead, notes, photo_key, source_kind, source_id, source_revision, source_url,
+         source_author, imported_at, imported_preference, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       recipe.title,
       recipe.baseServings,
       recipe.effortMinutes,
       recipe.cuisine,
       recipe.mainProtein,
+      recipe.course,
       recipe.notes,
       photoKey,
       source,
@@ -200,8 +201,8 @@ function insertRecipe(
 /** Brings a Recipe up to the source's copy, leaving the fields only Mise has (recurring, leftovers, prep ahead). */
 function updateRecipe(sql: SqlStorage, id: number, recipe: ImportedRecipe, photoKey: string | null, now: string) {
   sql.exec(
-    `UPDATE recipe SET title = ?, base_servings = ?, effort_minutes = ?, cuisine = ?, main_protein = ?, notes = ?,
-       photo_key = ?, source_revision = ?, source_url = ?, source_author = ?, imported_at = ?,
+    `UPDATE recipe SET title = ?, base_servings = ?, effort_minutes = ?, cuisine = ?, main_protein = ?, course = ?,
+       notes = ?, photo_key = ?, source_revision = ?, source_url = ?, source_author = ?, imported_at = ?,
        imported_preference = ?, updated_at = ?
      WHERE id = ?`,
     recipe.title,
@@ -209,6 +210,7 @@ function updateRecipe(sql: SqlStorage, id: number, recipe: ImportedRecipe, photo
     recipe.effortMinutes,
     recipe.cuisine,
     recipe.mainProtein,
+    recipe.course,
     recipe.notes,
     photoKey,
     recipe.revision,

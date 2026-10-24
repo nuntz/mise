@@ -32,6 +32,7 @@ function recipe(id: number, fields: Partial<ProposerRecipe> = {}): ProposerRecip
     effortMinutes: 30,
     cuisine: null,
     mainProtein: null,
+    course: null,
     recurring: null,
     yieldsLeftovers: false,
     importedPreference: null,
@@ -101,10 +102,12 @@ function generator(seed: number) {
 const PROTEINS = ["chicken", "beef", "tofu", "fish", null] as const;
 const CUISINES = ["italian", "thai", "mexican", null] as const;
 const FEW_ALLERGENS = ["peanut", "milk", "wheat", "egg"] as const;
+/** Mostly mains or unknown, as a real collection is. */
+const SOME_COURSES = ["main", "main", null, null, null, "side", "dessert", "drink", "breakfast", "snack"] as const;
 
 /**
  * A random Week: Members with random Hard Constraints and dislikes, Recipes with random Allergens
- * (some unknown), efforts, tags and Ratings, dinners some Locked or decided by hand, and history.
+ * (some unknown), efforts, tags, Courses and Ratings, dinners some Locked or decided by hand, and history.
  */
 function randomWeek(seed: number): ProposerInput {
   const random = generator(seed);
@@ -127,6 +130,7 @@ function randomWeek(seed: number): ProposerInput {
       effortMinutes: random.next() < 0.2 ? null : 10 + random.int(150),
       cuisine: random.one(CUISINES),
       mainProtein: random.one(PROTEINS),
+      course: random.one(SOME_COURSES),
       recurring: random.next() < 0.05 ? "weekly" : random.next() < 0.05 ? { weekday: random.one(WEEKDAYS) } : null,
       yieldsLeftovers: random.next() < 0.3,
       importedPreference: random.one(["positive", "negative", null] as const),
@@ -233,6 +237,18 @@ describe("proposeWeek, over random Weeks", () => {
     }
   });
 
+  test("never fills a dinner with a Recipe whose Course is set and is not a main dish, nor does a re-roll", () => {
+    for (const seed of WEEKS) {
+      const week = randomWeek(seed);
+      for (const proposal of [proposeWeek(week), rerollWeek(week)]) {
+        for (const dinner of filled(proposal)) {
+          const chosen = week.recipes.find((other) => other.id === dinner.recipeId) as ProposerRecipe;
+          expect([null, "main"]).toContain(chosen.course);
+        }
+      }
+    }
+  });
+
   test("a re-roll differs from the Week as it was proposed, and keeps its Locked Slots", () => {
     for (const seed of WEEKS) {
       const week = randomWeek(seed);
@@ -313,6 +329,46 @@ describe("proposeWeek, rule by rule", () => {
       recipeId: null,
       reason: { kind: "no_candidate", excluded: { conflict: 0, never: 0, recent: 1, effort: 10 } },
     });
+  });
+
+  test("only a main dish, or a Recipe of unknown Course, is proposed for dinner", () => {
+    const lemonade = recipe(1, { course: "drink" });
+    const brownies = recipe(2, { course: "dessert" });
+    const salad = recipe(3, { course: "side" });
+    const curry = recipe(4, { course: "main" });
+    const stew = recipe(5, { course: null });
+
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const week = dinners().slice(0, 2);
+      const proposal = proposeWeek(input({ dinners: week, seed, recipes: [lemonade, brownies, salad, curry, stew] }));
+
+      expect(proposal.dinners.map((dinner) => dinner.recipeId).sort()).toEqual([4, 5]);
+      expect(proposal.dinners[0]).toMatchObject({ reason: { kind: "chosen", candidates: 2 } });
+    }
+  });
+
+  test("a dinner left unplanned counts the Recipes ruled out for not being a main dish", () => {
+    const pancakes = recipe(1, { course: "breakfast" });
+    const popcorn = recipe(2, { course: "snack" });
+    const neverAgain = recipe(3, { course: "dessert", ratings: ["never"] });
+    const slowMain = recipe(4, { course: "main", effortMinutes: 100 });
+
+    const proposal = proposeWeek(
+      input({ dinners: dinners().slice(0, 1), recipes: [pancakes, popcorn, neverAgain, slowMain] }),
+    );
+
+    expect(proposal.dinners[0]).toMatchObject({
+      kind: "unplanned",
+      reason: { kind: "no_candidate", excluded: { conflict: 0, never: 1, course: 2, recent: 0, effort: 1 } },
+    });
+  });
+
+  test("a Recurring Recipe that is not a main dish is not pinned to a dinner", () => {
+    const fridayCake = recipe(1, { course: "dessert", recurring: { weekday: "friday" } });
+
+    const proposal = proposeWeek(input({ recipes: [fridayCake, ...input().recipes.slice(1)] }));
+
+    expect(proposal.dinners.map((dinner) => dinner.recipeId)).not.toContain(1);
   });
 
   test("a Recipe planned lately is scored down, less the longer ago, until 6 weeks", () => {

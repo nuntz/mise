@@ -42,6 +42,8 @@ export const Exclusions = z.object({
   conflict: z.number().int().nonnegative(),
   /** Rated "never". */
   never: z.number().int().nonnegative(),
+  /** Not a main dish: its Course is set and is not "main". Reasons stored before Course have none. */
+  course: z.number().int().nonnegative().default(0),
   /** Planned within 2 weeks of the dinner. */
   recent: z.number().int().nonnegative(),
   /** Over the day's Effort Budget. */
