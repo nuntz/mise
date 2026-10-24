@@ -22,6 +22,7 @@ const household: Household = {
   timezone: "America/Vancouver",
   dinnerTime: "18:00",
   weekStartsOn: "monday",
+  weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
   members: [{ id: 1, name: "Robin", email: null, constraints: [] }],
@@ -92,6 +93,7 @@ function week(): Week {
   });
   return {
     startDate,
+    endDate: addDays(startDate, 6),
     slots,
     effortBudgets: DEFAULT_EFFORT_BUDGETS,
     effortBudgetOverrides: {},

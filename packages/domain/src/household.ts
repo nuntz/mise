@@ -59,7 +59,16 @@ export const DEFAULT_EFFORT_BUDGETS: EffortBudgets = {
   sunday: 90,
 };
 
+/**
+ * A change of the Household's week start (ADR 0021): Weeks start on the weekday of `from`, from
+ * `from` on. The Week that starts on `stretches`, on the old start day, runs on until the day before.
+ */
+export const WeekStartChange = z.object({ from: z.iso.date(), stretches: z.iso.date() });
+export type WeekStartChange = z.infer<typeof WeekStartChange>;
+
 export const Household = HouseholdSettings.extend({
+  /** Every change of week start, oldest first; `weekStartsOn` is the day Weeks start on since the last. */
+  weekStartChanges: z.array(WeekStartChange),
   members: z.array(Member),
   /** Its default Effort Budgets; a Week can override them. */
   effortBudgets: EffortBudgets,
@@ -85,6 +94,9 @@ export const SetupHouseholdInput = HouseholdSettings.extend({
   locale: Locale.default(HOUSEHOLD_DEFAULTS.locale),
   members: z.array(NewMember).max(50).default([]),
 }).strict();
+
+/** Changes the settings given; the rest stay as they are. A new week start applies from the next Week (ADR 0021). */
+export const UpdateHouseholdSettingsInput = HouseholdSettings.partial().strict();
 
 /** Changes the default Effort Budgets of the weekdays given. */
 export const SetEffortBudgetsInput = z.object({ budgets: z.partialRecord(Weekday, Minutes) }).strict();

@@ -133,6 +133,12 @@ const HOUSEHOLD_UNITS: Record<Units, Record<"mass" | "volume", IngredientUnit[]>
 };
 const QUARTER_CUP = (BASE_SIZES.cup as number) / 4;
 
+/** Whether `unit` is one the Household shops in. */
+export function isHouseholdUnit(units: Units, unit: IngredientUnit | null): boolean {
+  const { mass, volume } = HOUSEHOLD_UNITS[units];
+  return unit !== null && (mass.includes(unit) || volume.includes(unit));
+}
+
 /** The unit of the Household's to give `base` grams or millilitres in. */
 export function householdUnit(units: Units, family: "mass" | "volume", base: number): IngredientUnit {
   const [smallest, ...larger] = HOUSEHOLD_UNITS[units][family] as [IngredientUnit, ...IngredientUnit[]];

@@ -78,6 +78,7 @@ const en = {
   "nav.grocery": "Groceries",
   "nav.pantry": "Pantry",
   "nav.calendar": "Calendar",
+  "nav.settings": "Settings",
 
   "kitchen.title": "Kitchen mode",
   "kitchen.cook": "Cook",
@@ -496,6 +497,10 @@ const en = {
   "household.kitchenMode": "Kitchen mode on this device",
   "household.kitchenModeHint": "Near-black with bigger type, for reading at arm's length with busy hands.",
   "household.settings": "Household settings",
+  "settings.save": "Save settings",
+  "settings.saving": "Saving…",
+  "settings.weekStartHint":
+    "A new week start applies from the next Week: this Week, and any planned after it, keep their dates, and the last runs on until the first {weekday}.",
 
   "weekday.monday": "Monday",
   "weekday.tuesday": "Tuesday",

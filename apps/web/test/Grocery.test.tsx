@@ -1,6 +1,6 @@
 import {
   addDays,
-  currentWeekStart,
+  currentWeek,
   DEFAULT_EFFORT_BUDGETS,
   type GroceryLine,
   type GroceryList,
@@ -20,6 +20,7 @@ const household: Household = {
   timezone: "America/Vancouver",
   dinnerTime: "18:00",
   weekStartsOn: "monday",
+  weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
   members: [],
@@ -214,7 +215,7 @@ test("offline, ticks and added lines show at once, wait as changes to sync, and 
 });
 
 test("the Household and both Weeks' Grocery Lists open offline from what was last loaded", async () => {
-  const thisWeek = currentWeekStart(new Date(), household.timezone, household.weekStartsOn);
+  const thisWeek = currentWeek(new Date(), household.timezone, household).startDate;
   const nextWeek: GroceryList = { ...list, sections: list.sections.slice(2) };
   const answers = {
     get_grocery_list: (input: Record<string, unknown>) =>

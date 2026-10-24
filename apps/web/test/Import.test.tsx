@@ -11,6 +11,7 @@ const household: Household = {
   timezone: "America/Vancouver",
   dinnerTime: "18:00",
   weekStartsOn: "monday",
+  weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
   members: [],

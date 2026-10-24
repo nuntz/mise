@@ -1,5 +1,4 @@
 import {
-  addDays,
   type Conflict,
   type Item,
   type ItemId,
@@ -9,6 +8,7 @@ import {
   type Meal,
   type Member,
   type MemberId,
+  nextWeekStart,
   type Override,
   RATINGS,
   type Rating,
@@ -22,6 +22,7 @@ import {
   type ToolInput,
   type ToolResult,
   type Week,
+  type WeekSpan,
   weekDates,
   weekdayOf,
 } from "@mise/domain";
@@ -62,10 +63,11 @@ export function WeekPage(props: {
   const kept = () => {
     const saved = savedWeek();
     const today = localDate(new Date(), props.household.timezone);
-    return saved && addDays(saved.startDate, 7) > today ? saved : undefined;
+    return saved && saved.endDate >= today ? saved : undefined;
   };
   const [week, setWeek] = createSignal<Week | undefined>(kept());
-  const [currentStart, setCurrentStart] = createSignal<LocalDate>();
+  // The Week after the current one starts the day after it ends.
+  const [nextStart, setNextStart] = createSignal<LocalDate>();
   const [error, setError] = createSignal<string>();
   // Names the "use it up" Items a Proposal gives as reasons.
   const items = createItems(props.client);
@@ -76,14 +78,14 @@ export function WeekPage(props: {
     props.client,
     ["plan", "recipes", "household"],
     () => {
-      const start = currentStart();
-      return props.client.call("get_week", next() && start ? { date: addDays(start, 7) } : {});
+      const start = nextStart();
+      return props.client.call("get_week", next() && start ? { date: start } : {});
     },
     (result) => {
       setError(result.ok ? undefined : t("app.error"));
       if (!result.ok) return;
       if (!next()) {
-        setCurrentStart(result.value.startDate);
+        setNextStart(nextWeekStart(result.value));
         saveWeek(result.value);
       }
       setWeek(result.value);
@@ -116,9 +118,7 @@ export function WeekPage(props: {
         <div class="page-header-row">
           <div class="page-heading">
             <p class="overline">{next() ? t("week.overlineNext") : t("week.overline")}</p>
-            <h1 id="week-title">
-              {week() ? weekRange(week()?.startDate as LocalDate, props.household.locale) : t("week.title")}
-            </h1>
+            <h1 id="week-title">{week() ? weekRange(week() as Week, props.household.locale) : t("week.title")}</h1>
           </div>
           <button
             type="button"
@@ -133,7 +133,7 @@ export function WeekPage(props: {
           <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
             {t("week.this")}
           </button>
-          <button type="button" aria-pressed={next()} disabled={!currentStart()} onClick={() => show(true)}>
+          <button type="button" aria-pressed={next()} disabled={!nextStart()} onClick={() => show(true)}>
             {t("week.next")}
           </button>
         </div>
@@ -141,7 +141,7 @@ export function WeekPage(props: {
           {(shown) => (
             <>
               <nav class="day-rail" aria-label={t("week.jump")}>
-                <For each={weekDates(shown().startDate)}>
+                <For each={weekDates(shown())}>
                   {(date) => (
                     <button
                       type="button"
@@ -177,7 +177,7 @@ export function WeekPage(props: {
         {(shown) => (
           <>
             <div class="days">
-              <For each={weekDates(shown().startDate)}>
+              <For each={weekDates(shown())}>
                 {(date) => (
                   <Day
                     client={props.client}
@@ -1044,8 +1044,8 @@ function dayInitial(date: LocalDate, locale: Locale): string {
 }
 
 /** The Week as its title says it, such as "Oct 26 to Nov 1". */
-function weekRange(startDate: LocalDate, locale: Locale): string {
-  return t("week.range", { from: shortDate(startDate, locale), to: shortDate(addDays(startDate, 6), locale) });
+function weekRange(week: WeekSpan, locale: Locale): string {
+  return t("week.range", { from: shortDate(week.startDate, locale), to: shortDate(week.endDate, locale) });
 }
 
 /** A Conflict nobody has overridden, as the flag on its dinner: "Robin · Peanut". */

@@ -4,7 +4,7 @@ import { Amount, type Ingredient } from "./ingredients";
 import { ItemId, STORE_SECTIONS, StoreSection } from "./items";
 import { Recipe, RecipeId } from "./recipes";
 import type { StapleStatus } from "./staples";
-import { baseSize, householdUnit, IngredientUnit, unitFamily } from "./units";
+import { baseSize, householdUnit, IngredientUnit, isHouseholdUnit, unitFamily } from "./units";
 import { LocalDate } from "./weeks";
 
 /** How much of an Item a line needs, in one unit; null is a bare count ("2 eggs"). */
@@ -109,7 +109,7 @@ export function buildGroceryList({ slots, recipes, staples, units }: GroceryDema
   }
   const recipeNeeds = [...needs.values()].map(({ totals, ...need }) => ({
     ...need,
-    amounts: [...totals].map(([measure, total]) => inHouseholdUnits(units, measure, total)),
+    amounts: [...totals].map(([measure, total]) => totalInHouseholdUnits(units, measure, total)),
   }));
   const stapleNeeds = staples.flatMap((staple): GroceryNeed[] =>
     stapleToBuy(staple) && !needs.has(staple.item)
@@ -136,7 +136,18 @@ function measureOf(unit: IngredientUnit | null): string {
   return unit !== null && baseSize(unit) !== null ? unitFamily(unit) : (unit ?? "each");
 }
 
-function inHouseholdUnits(units: Units, measure: string, total: Total): GroceryAmount {
+/**
+ * An amount as the Household reads it: weighed or measured in the other units, it is given in its
+ * own; otherwise as it is. A list built before the Household changed its units reads in the new ones.
+ */
+export function inHouseholdUnits(amount: GroceryAmount, units: Units): GroceryAmount {
+  const size = baseSize(amount.unit);
+  if (size === null || isHouseholdUnit(units, amount.unit)) return amount;
+  const total = { unit: amount.unit, min: amount.amount.min * size, max: amount.amount.max * size };
+  return totalInHouseholdUnits(units, measureOf(amount.unit), total);
+}
+
+function totalInHouseholdUnits(units: Units, measure: string, total: Total): GroceryAmount {
   if (measure !== "mass" && measure !== "volume") {
     return { amount: { min: rounded(total.min), max: rounded(total.max) }, unit: total.unit };
   }

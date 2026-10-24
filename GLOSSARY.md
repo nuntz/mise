@@ -76,7 +76,7 @@ A verdict on a Recipe after cooking it for a Slot: again, meh or never, with an 
 ## Planning
 
 **Week**:
-The run of days from the Household's week start that is planned, shopped and reviewed together.
+The run of days from the Household's week start that is planned, shopped and reviewed together; seven days, except the one Week a change of week start makes run on to the new start day (ADR 0021).
 _Avoid_: Plan (when meaning the week itself)
 
 **Slot**:

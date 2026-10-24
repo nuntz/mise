@@ -1,10 +1,10 @@
 import {
-  addDays,
   createTickQueue,
-  currentWeekStart,
+  currentWeek,
   GroceryList,
   Household,
   type LocalDate,
+  nextWeekStart,
   QueuedChange,
   Recipe,
   type RecipeId,
@@ -77,16 +77,16 @@ export const saveRecipe = (recipe: Recipe) => write(KEYS.recipe, recipe);
  */
 export function keepGroceryLists(
   client: MiseClient,
-  household: () => Pick<Household, "timezone" | "weekStartsOn">,
+  household: () => Pick<Household, "timezone" | "weekStartsOn" | "weekStartChanges">,
 ): void {
   // Offline, what was saved is kept.
   keepFresh(
     client,
     ["grocery", "plan", "recipes", "household"],
     async () => {
-      const start = currentWeekStart(new Date(), household().timezone, household().weekStartsOn);
+      const current = currentWeek(new Date(), household().timezone, household());
       return Promise.all(
-        [start, addDays(start, 7)].map(
+        [current.startDate, nextWeekStart(current)].map(
           async (date) => [date, await client.call("get_grocery_list", { date })] as const,
         ),
       );
