@@ -4,7 +4,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
-import { keepFocusIn } from "./Week";
+import { Sheet } from "./Sheet";
 
 /** How long the note saying what was recorded stays up. */
 const NOTE_MS = 6000;
@@ -105,85 +105,71 @@ function Picker(props: {
     }
   };
 
-  const focusSearch = (sheet: HTMLElement) => queueMicrotask(() => sheet.querySelector("input")?.focus());
-
   return (
-    <div class="sheet-backdrop">
-      <div
-        class="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        ref={focusSearch}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") props.onClose();
-          if (event.key === "Tab") keepFocusIn(event.currentTarget, event);
-        }}
-      >
-        <div class="sheet-header">
-          <div class="page-heading">
-            <p class="overline">{t("pantry.overline")}</p>
-            <h2 id={titleId} class="dish-title">
-              {t("ranOut.title")}
-            </h2>
-          </div>
-          <button type="button" class="icon-button" aria-label={t("ranOut.close")} onClick={() => props.onClose()}>
-            <Icon name="close" />
-          </button>
+    <Sheet labelledBy={titleId} onEscape={() => props.onClose()}>
+      <div class="sheet-header">
+        <div class="page-heading">
+          <p class="overline">{t("pantry.overline")}</p>
+          <h2 id={titleId} class="dish-title">
+            {t("ranOut.title")}
+          </h2>
         </div>
-        <div class="sheet-body">
-          <label>
-            {t("ranOut.search")}
-            <input type="search" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
-          </label>
-          <Show when={!props.online}>
-            <p class="banner banner-amber" role="status">
-              {t("ranOut.needsConnection")}
-            </p>
-          </Show>
-          <Show when={error()}>
-            <p class="banner banner-warn" role="alert">
-              {t("app.error")}
-            </p>
-          </Show>
-          <Show when={staples()} fallback={<Show when={!error()}>{<p>{t("app.loading")}</p>}</Show>}>
-            {(all) => (
-              <Show when={all().length > 0} fallback={<p>{t("pantry.noStaples")}</p>}>
-                <ul class="rows">
-                  <For each={shown()} fallback={<li>{t("ranOut.noMatch", { query: query().trim() })}</li>}>
-                    {(staple) => (
-                      <li>
-                        <fieldset class="row-group" aria-label={staple.name}>
-                          <span>
-                            {staple.name}
-                            <span class="body-muted">
-                              {" "}
-                              · {t(`location.${staple.location}`)} · {t(`staple.${staple.status}`)}
-                            </span>
-                          </span>
-                          <For each={["low", "out"] as const}>
-                            {(status) => (
-                              <button
-                                type="button"
-                                class="button-small"
-                                disabled={busy() || !props.online}
-                                aria-pressed={staple.status === status}
-                                onClick={() => record(staple, status)}
-                              >
-                                {t(`staple.${status}`)}
-                              </button>
-                            )}
-                          </For>
-                        </fieldset>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Show>
-            )}
-          </Show>
-        </div>
+        <button type="button" class="icon-button" aria-label={t("ranOut.close")} onClick={() => props.onClose()}>
+          <Icon name="close" />
+        </button>
       </div>
-    </div>
+      <div class="sheet-body">
+        <label>
+          {t("ranOut.search")}
+          <input type="search" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
+        </label>
+        <Show when={!props.online}>
+          <p class="banner banner-amber" role="status">
+            {t("ranOut.needsConnection")}
+          </p>
+        </Show>
+        <Show when={error()}>
+          <p class="banner banner-warn" role="alert">
+            {t("app.error")}
+          </p>
+        </Show>
+        <Show when={staples()} fallback={<Show when={!error()}>{<p>{t("app.loading")}</p>}</Show>}>
+          {(all) => (
+            <Show when={all().length > 0} fallback={<p>{t("pantry.noStaples")}</p>}>
+              <ul class="rows">
+                <For each={shown()} fallback={<li>{t("ranOut.noMatch", { query: query().trim() })}</li>}>
+                  {(staple) => (
+                    <li>
+                      <fieldset class="row-group" aria-label={staple.name}>
+                        <span>
+                          {staple.name}
+                          <span class="body-muted">
+                            {" "}
+                            · {t(`location.${staple.location}`)} · {t(`staple.${staple.status}`)}
+                          </span>
+                        </span>
+                        <For each={["low", "out"] as const}>
+                          {(status) => (
+                            <button
+                              type="button"
+                              class="button-small"
+                              disabled={busy() || !props.online}
+                              aria-pressed={staple.status === status}
+                              onClick={() => record(staple, status)}
+                            >
+                              {t(`staple.${status}`)}
+                            </button>
+                          )}
+                        </For>
+                      </fieldset>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          )}
+        </Show>
+      </div>
+    </Sheet>
   );
 }
