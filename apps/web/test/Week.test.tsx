@@ -482,6 +482,42 @@ test("a Week not yet proposed can be proposed, with nothing to re-roll yet", asy
   await vi.waitFor(() => expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26" } }]));
 });
 
+test("Items to use up are picked from the catalogue and sent when proposing and re-rolling", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  const useUp = screen.getByRole("form", { name: "Use it up" });
+  const field = within(useUp).getByRole("combobox", { name: "Item on hand" });
+  await user.type(field, "baby spinach");
+  await user.click(within(useUp).getByRole("button", { name: "Add" }));
+  await user.type(field, "Rice{Enter}");
+  // Not an Item: nothing is added, and the form says why.
+  await user.type(field, "moon cheese{Enter}");
+  expect(within(useUp).getByRole("alert").textContent).toBe("No Item is called “moon cheese”.");
+  await user.clear(field);
+  expect(
+    within(useUp)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent),
+  ).toEqual([expect.stringContaining("spinach"), expect.stringContaining("rice")]);
+
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+  await user.click(within(useUp).getByRole("button", { name: "Remove rice" }));
+  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.click(within(useUp).getByRole("button", { name: "Remove spinach" }));
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      { name: "propose_week", input: { date: "2026-10-26", reroll: true, useUp: ["spinach", "rice"] } },
+      { name: "propose_week", input: { date: "2026-10-26", useUp: ["spinach"] } },
+      { name: "propose_week", input: { date: "2026-10-26", reroll: true } },
+    ]),
+  );
+});
+
 test("a dinner cooked for its Leftovers says how many to cook for, and the Leftovers what they're of", async () => {
   const week = emptyWeek("2026-10-26");
   const curryRecipe = { id: 2, title: "Curry", baseServings: 4, photoKey: null };

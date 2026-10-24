@@ -19,7 +19,7 @@ import {
   UpdateHouseholdSettingsInput,
 } from "./household";
 import { ImportFlag, ImportRun, RunPaprikaImportInput } from "./imports";
-import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection } from "./items";
+import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection, UpdateItemInput } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 import {
   DeleteRecipeInput,
@@ -172,6 +172,15 @@ export const tools = {
   /** Refuses a name or alias that already names an Item. */
   create_item: defineTool({
     input: NewItem,
+    output: Item,
+    changes: "recipes",
+  }),
+  /**
+   * Refuses a name or alias that already names another Item (`name_in_use`), and a change to a
+   * shipped Item's name, unit family or Allergens (`shipped_item`). Returns the Item.
+   */
+  update_item: defineTool({
+    input: UpdateItemInput,
     output: Item,
     changes: "recipes",
   }),
@@ -379,6 +388,7 @@ export type ToolErrorCode =
   | "not_found"
   | "email_in_use"
   | "name_in_use"
+  | "shipped_item"
   | "constraint_conflict"
   | "no_recipe"
   | "not_yet"

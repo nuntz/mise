@@ -1,4 +1,4 @@
-import type { Item, ItemId } from "@mise/domain";
+import { type Item, type ItemId, normaliseItemName } from "@mise/domain";
 import { createSignal } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
@@ -19,4 +19,10 @@ export function createItems(client: MiseClient): () => Map<ItemId, Item> {
     },
   );
   return items;
+}
+
+/** The Item a name or alias names, matched as Item names are. */
+export function itemNamed(items: Iterable<Item>, name: string): Item | undefined {
+  const wanted = normaliseItemName(name);
+  return [...items].find((item) => [item.name, ...item.aliases].some((one) => normaliseItemName(one) === wanted));
 }

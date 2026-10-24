@@ -3,8 +3,6 @@ import {
   type DueStaples,
   INGREDIENT_UNITS,
   type IngredientUnit,
-  type Item,
-  normaliseItemName,
   type RecipeId,
   STAPLE_LOCATIONS,
   STAPLE_STATUSES,
@@ -17,7 +15,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { amountText } from "./Grocery";
 import { Icon, type IconName } from "./icons";
-import { createItems } from "./items";
+import { createItems, itemNamed } from "./items";
 import { t } from "./messages";
 
 /**
@@ -372,12 +370,6 @@ function draftOf(staple: Staple): StapleDraft {
     quantity: staple.qtyPerShop ? String(staple.qtyPerShop.amount.max) : "",
     unit: staple.qtyPerShop?.unit ?? "",
   };
-}
-
-/** The Item a name or alias names, matched as Item names are. */
-function itemNamed(items: Iterable<Item>, name: string): Item | undefined {
-  const wanted = normaliseItemName(name);
-  return [...items].find((item) => [item.name, ...item.aliases].some((one) => normaliseItemName(one) === wanted));
 }
 
 /** Every Staple, each to change or remove, and a form to add one or change one. */

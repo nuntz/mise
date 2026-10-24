@@ -133,7 +133,7 @@ Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by
 - Adaptive interval (ADR 0017): starts at 14 days; `stocked` ×1.5 (max 60), `out` ÷2 (min 3), `low` unchanged. After three `out` in a row, suggest flipping to `alwaysBuy` (e.g. eggs), which then never asks.
 - After marking a dinner cooked: "anything run out?" for the Staples its Recipe uses.
 - Nudge off-cycle when the week's recipes lean on a staple.
-- Ad-hoc updates from anywhere: `record_staple_status("soy sauce", "out")`.
+- Ad-hoc updates from anywhere: `record_staple_status("soy sauce", "out")`. In the PWA, every screen's header (kitchen mode aside) has "Ran out", a searchable picker of the Staples; it needs a connection.
 - Same tool whether tapped in the PWA or spoken in voice mode. Photo-of-shelf recognition explicitly out of scope.
 
 ### 4.6 Calendar feed

@@ -136,6 +136,37 @@ describe("export and restore", () => {
     expect(await fresh.callTool("list_items", {})).toEqual(await original.callTool("list_items", {}));
   });
 
+  test("edits to Items survive a restore: a Household Item's fields, and a shipped one's aliases and section", async () => {
+    const original = freshHousehold();
+    await original.callTool("setup_household", sampleHousehold);
+    await original.callTool("create_recipe", recipe);
+    await original.callTool("create_item", {
+      name: "mystery masala",
+      section: "spices",
+      allergens: ["mustard"],
+      unitFamily: "volume",
+    });
+    await original.callTool("update_item", {
+      id: "household:1",
+      name: "house masala",
+      aliases: ["mystery masala"],
+      allergens: ["sesame"],
+      section: "international",
+    });
+    await original.callTool("update_item", { id: "ghee", aliases: ["ghee butter"], section: "international" });
+    const exported = await exportOf(original);
+
+    const fresh = freshHousehold();
+    expect((await restore(fresh, exported)).status).toBe(200);
+
+    expect(await exportOf(fresh)).toBe(exported);
+    expect(await fresh.callTool("list_items", {})).toEqual(await original.callTool("list_items", {}));
+    expect(await fresh.callTool("get_recipe", { id: 1 })).toMatchObject({
+      ok: true,
+      value: { allergens: { kind: "known", allergens: expect.arrayContaining(["sesame"]) } },
+    });
+  });
+
   test("imported Recipes, their import runs and flags survive a restore", async () => {
     const original = freshHousehold();
     await original.callTool("setup_household", sampleHousehold);
@@ -224,6 +255,7 @@ describe("export and restore", () => {
         item: [],
         item_alias: [],
         item_allergen: [],
+        item_section: [],
         import_error: [],
         import_flag: [],
         import_run: [],
@@ -370,6 +402,30 @@ describe("export and restore", () => {
     await source.callTool("resolve_ingredient", { text: "beurre", item: "butter" });
     const exported = JSON.parse(await exportOf(source));
     exported.tables.item_alias[0].item_id = "household:9";
+    const target = freshHousehold();
+
+    const response = await restore(target, JSON.stringify(exported));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+  });
+
+  test.each([
+    ["an Item the catalogue does not have", { item_id: "unobtainium" }],
+    ["a Household Item, which keeps its section itself", { item_id: "household:1" }],
+    ["no Store Section", { section: "aisle 9" }],
+  ])("restore rejects a Store Section override of %s", async (_, change) => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    await source.callTool("create_item", {
+      name: "mystery masala",
+      section: "spices",
+      allergens: [],
+      unitFamily: "volume",
+    });
+    await source.callTool("update_item", { id: "garam_masala", section: "international" });
+    const exported = JSON.parse(await exportOf(source));
+    Object.assign(exported.tables.item_section[0], change);
     const target = freshHousehold();
 
     const response = await restore(target, JSON.stringify(exported));

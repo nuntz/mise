@@ -333,6 +333,14 @@ const migrations: { version: number; statements: string[] }[] = [
     ],
   },
   {
+    version: 15,
+    statements: [
+      // The Store Section the Household keeps a shipped Item in instead of its own (ADR 0009); a
+      // Household Item keeps its section in item.
+      "CREATE TABLE item_section (item_id TEXT PRIMARY KEY, section TEXT NOT NULL)",
+    ],
+  },
+  {
     version: 16,
     statements: [
       // Each change of week start (ADR 0021): Weeks start on from_date's weekday from it on, and the

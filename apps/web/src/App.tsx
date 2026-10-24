@@ -7,12 +7,14 @@ import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
 import { HouseholdSettingsForm } from "./HouseholdSettings";
 import { ImportPage } from "./Import";
+import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
 import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
+import { RanOut } from "./RanOut";
 import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
 import { SetupForm } from "./SetupForm";
@@ -30,8 +32,8 @@ const NAV: { page: Page; icon: IconName }[] = [
 ];
 
 /** The Household's settings, each a section of the Household page. */
-type Setting = "members" | "settings" | "calendar" | "import" | "resolve" | "tag";
-const SETTINGS: Setting[] = ["members", "settings", "calendar", "import", "resolve", "tag"];
+type Setting = "members" | "settings" | "calendar" | "import" | "resolve" | "items" | "tag";
+const SETTINGS: Setting[] = ["members", "settings", "calendar", "import", "resolve", "items", "tag"];
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
@@ -126,6 +128,9 @@ export function App(props: { client: MiseClient }) {
                   <p>{t("offline.notice")}</p>
                 </div>
               </Show>
+              <header class="app-header">
+                <RanOut client={props.client} online={online()} />
+              </header>
               <main class="page">
                 {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}
                 <Show when={status() === "error" && online()}>
@@ -300,6 +305,9 @@ function HouseholdPage(props: {
         </Match>
         <Match when={setting() === "resolve"}>
           <ResolveIngredients client={props.client} />
+        </Match>
+        <Match when={setting() === "items"}>
+          <ItemsSettings client={props.client} />
         </Match>
         <Match when={setting() === "tag"}>
           <TagRecipes client={props.client} />
