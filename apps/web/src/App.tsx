@@ -6,6 +6,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
 import { ImportPage } from "./Import";
+import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
 import { MembersSettings } from "./MembersSettings";
@@ -30,8 +31,8 @@ const NAV: { page: Page; icon: IconName }[] = [
 ];
 
 /** The Household's settings, each a section of the Household page. */
-type Setting = "members" | "calendar" | "import" | "resolve" | "tag";
-const SETTINGS: Setting[] = ["members", "calendar", "import", "resolve", "tag"];
+type Setting = "members" | "calendar" | "import" | "resolve" | "items" | "tag";
+const SETTINGS: Setting[] = ["members", "calendar", "import", "resolve", "items", "tag"];
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
@@ -300,6 +301,9 @@ function HouseholdPage(props: {
         </Match>
         <Match when={setting() === "resolve"}>
           <ResolveIngredients client={props.client} />
+        </Match>
+        <Match when={setting() === "items"}>
+          <ItemsSettings client={props.client} />
         </Match>
         <Match when={setting() === "tag"}>
           <TagRecipes client={props.client} />
