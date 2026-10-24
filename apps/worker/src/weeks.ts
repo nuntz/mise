@@ -44,7 +44,7 @@ import {
   readEffortBudgets,
   readMembers,
   readSettings,
-  type Settings,
+  type SettingsAndCalendar,
 } from "./tools";
 
 type SlotRow = {
@@ -477,7 +477,7 @@ function readRatingsByRecipe(sql: SqlStorage): Map<RecipeId, Rating[]> {
 }
 
 /** The Week `date` is in; without one, the Week the Household is in today. */
-export function weekNamedBy(settings: Settings, date: LocalDate | undefined): WeekSpan {
+export function weekNamedBy(settings: SettingsAndCalendar, date: LocalDate | undefined): WeekSpan {
   return date ? weekOf(date, settings) : currentWeek(new Date(), settings);
 }
 
@@ -515,7 +515,7 @@ export function storeWeek(sql: SqlStorage, start: LocalDate): void {
  */
 function editSlot(
   sql: SqlStorage,
-  settings: Settings,
+  settings: SettingsAndCalendar,
   { date, meal }: { date: LocalDate; meal: Meal },
   given: Override[] | undefined,
   change: () => void,
@@ -582,7 +582,7 @@ function unknownMember(sql: SqlStorage, diners: MemberId[] | null | undefined): 
 }
 
 /** Stores the Slot, and its Week, as they start unless already stored, so that it can be edited. */
-function storeSlot(sql: SqlStorage, settings: Settings, date: LocalDate, meal: Meal): void {
+function storeSlot(sql: SqlStorage, settings: SettingsAndCalendar, date: LocalDate, meal: Meal): void {
   storeWeek(sql, weekOf(date, settings).startDate);
   sql.exec(
     `INSERT OR IGNORE INTO slot (date, meal, kind, diners_chosen, guests, locked)

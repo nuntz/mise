@@ -1,10 +1,8 @@
-import { type Household, type HouseholdSettings, LOCALES, UNITS, WEEKDAYS } from "@mise/domain";
+import { type Household, HouseholdSettings, LOCALES, UNITS, WEEKDAYS } from "@mise/domain";
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { t } from "./messages";
-
-const SETTINGS = ["name", "timezone", "dinnerTime", "weekStartsOn", "units", "locale"] as const;
 
 /** The settings of a Household, chosen at setup and changed after it. */
 export function HouseholdSettingsFields(props: {
@@ -74,7 +72,7 @@ export function HouseholdSettingsFields(props: {
 }
 
 function settingsOf(household: Household): HouseholdSettings {
-  return Object.fromEntries(SETTINGS.map((key) => [key, household[key]])) as HouseholdSettings;
+  return Object.fromEntries(HouseholdSettings.keyof().options.map((key) => [key, household[key]])) as HouseholdSettings;
 }
 
 /**

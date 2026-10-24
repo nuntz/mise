@@ -204,9 +204,9 @@ export function constraintOf({ kind, allergen, term }: ConstraintColumns): unkno
 }
 
 /** The Household's settings, with the changes of week start that, with them, decide its Weeks. */
-export type Settings = HouseholdSettings & WeekCalendar;
+export type SettingsAndCalendar = HouseholdSettings & WeekCalendar;
 
-export function readSettings(sql: SqlStorage): Settings | null {
+export function readSettings(sql: SqlStorage): SettingsAndCalendar | null {
   const [row] = sql.exec<HouseholdRow>("SELECT * FROM household WHERE id = 1").toArray();
   if (!row) return null;
   const settings = HouseholdSettings.parse({

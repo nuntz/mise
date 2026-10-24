@@ -27,7 +27,7 @@ import { z } from "zod";
 import { readCatalogue } from "./items";
 import { readRecipes } from "./recipes";
 import { readStaples, restockStaple } from "./staples";
-import { type Handlers, notSetUp, readSettings, type Settings } from "./tools";
+import { type Handlers, notSetUp, readSettings, type SettingsAndCalendar } from "./tools";
 import { readWeek, storeWeek, weekNamedBy } from "./weeks";
 
 type LineRow = {
@@ -190,7 +190,7 @@ export function readStoreSections(sql: SqlStorage): StoreSection[] {
  * What the Week's Grocery List is built from: its Slots with a Recipe, each for what it is cooked for
  * (its Leftovers too, even those in the next Week), those Recipes, and the Household's Staples.
  */
-function readDemand(sql: SqlStorage, settings: Settings, week: WeekSpan): GroceryDemand {
+function readDemand(sql: SqlStorage, settings: SettingsAndCalendar, week: WeekSpan): GroceryDemand {
   const slots = readWeek(sql, week).slots.flatMap((slot) =>
     slot.recipe ? [{ recipeId: slot.recipe.id, servings: slot.cookFor }] : [],
   );
@@ -238,7 +238,7 @@ export function readGroceryBuilds(sql: SqlStorage, start?: LocalDate): BuiltReco
 }
 
 /** The Week's Grocery List as shown, against the plan as it is now; null until it is built. */
-function readGroceryList(sql: SqlStorage, settings: Settings, start: LocalDate): GroceryList | null {
+function readGroceryList(sql: SqlStorage, settings: SettingsAndCalendar, start: LocalDate): GroceryList | null {
   const [built] = readGroceryBuilds(sql, start);
   if (!built) return null;
   const catalogue = readCatalogue(sql);
@@ -254,7 +254,7 @@ function readGroceryList(sql: SqlStorage, settings: Settings, start: LocalDate):
   };
 }
 
-function shownLine(sql: SqlStorage, settings: Settings, start: LocalDate, id: number): GroceryLine {
+function shownLine(sql: SqlStorage, settings: SettingsAndCalendar, start: LocalDate, id: number): GroceryLine {
   const lines = readGroceryList(sql, settings, start)?.sections.flatMap((section) => section.lines) ?? [];
   return lines.find((line) => line.id === id) as GroceryLine;
 }
