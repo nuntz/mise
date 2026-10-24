@@ -12,6 +12,8 @@ import { $ } from "bun";
 /** Domains reserved for documentation (RFC 2606), and the commit trailers' no-reply addresses. */
 const PLACEHOLDER_EMAIL = /(@example\.(com|org|net)|@users\.noreply\.github\.com|^noreply@anthropic\.com)$/i;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+/** A package at a version, as in Bun's patch files (`patches/@sentry%2Fcloudflare@11.4.0.patch`). */
+const PACKAGE_VERSION = /@\d+\.\d+\.\d+/;
 /** Shorter values would match everywhere; so would booleans and numbers, which identify no one. */
 const MIN_LENGTH = 4;
 const NOT_IDENTIFYING = /^(true|false|\d+)$/i;
@@ -33,7 +35,8 @@ for (const file of files) {
       if (lower.includes(value)) findings.push({ file, line, what: `the value of ${key}` });
     }
     for (const [email] of text.matchAll(EMAIL)) {
-      if (!PLACEHOLDER_EMAIL.test(email)) findings.push({ file, line, what: "an email address" });
+      if (!PLACEHOLDER_EMAIL.test(email) && !PACKAGE_VERSION.test(email))
+        findings.push({ file, line, what: "an email address" });
     }
   });
 }
