@@ -12,6 +12,7 @@ const recipe = {
   ingredients: ["1 ⅓ cups red lentils", "1 tbsp ghee", "1 tsp mystery masala"],
   steps: ["Simmer."],
   tags: ["vegetarian"],
+  course: "main",
   recurring: { weekday: "monday" },
 };
 
@@ -99,6 +100,7 @@ describe("export and restore", () => {
       value: { name: sampleHousehold.name, members: [{ name: "Robin" }, { name: "Alex" }, { name: "Sam" }] },
     });
     expect(await fresh.callTool("get_recipe", { id: 1 })).toEqual(await original.callTool("get_recipe", { id: 1 }));
+    expect(await fresh.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true, value: { course: "main" } });
     expect(await fresh.callTool("get_week", { date: "2026-10-26" })).toEqual(
       await original.callTool("get_week", { date: "2026-10-26" }),
     );
@@ -228,7 +230,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 16,
+      schemaVersion: 17,
       tables: {
         calendar_token: [],
         household: [

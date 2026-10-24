@@ -1,4 +1,4 @@
-import { type Recipe, type ToolInput, WEEKDAYS, type Weekday } from "@mise/domain";
+import { COURSES, type Course, type Recipe, type ToolInput, WEEKDAYS, type Weekday } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
@@ -14,6 +14,7 @@ type RecipeDraft = {
   effortMinutes: string;
   cuisine: string;
   mainProtein: string;
+  course: "" | Course;
   recurring: "" | "weekly" | Weekday;
   yieldsLeftovers: boolean;
   prepAhead: string;
@@ -29,6 +30,7 @@ const emptyRecipe = (): RecipeDraft => ({
   effortMinutes: "",
   cuisine: "",
   mainProtein: "",
+  course: "",
   recurring: "",
   yieldsLeftovers: false,
   prepAhead: "",
@@ -45,6 +47,7 @@ function draftOf(recipe: Recipe): RecipeDraft {
     effortMinutes: recipe.effortMinutes === null ? "" : String(recipe.effortMinutes),
     cuisine: recipe.cuisine ?? "",
     mainProtein: recipe.mainProtein ?? "",
+    course: recipe.course ?? "",
     recurring: recipe.recurring === null ? "" : recipe.recurring === "weekly" ? "weekly" : recipe.recurring.weekday,
     yieldsLeftovers: recipe.yieldsLeftovers,
     prepAhead: recipe.prepAhead ?? "",
@@ -67,6 +70,7 @@ function recipeOf(draft: RecipeDraft): Required<ToolInput<"create_recipe">> {
     effortMinutes: draft.effortMinutes.trim() === "" ? null : Number(draft.effortMinutes),
     cuisine: text(draft.cuisine),
     mainProtein: text(draft.mainProtein),
+    course: draft.course === "" ? null : draft.course,
     recurring: draft.recurring === "" ? null : draft.recurring === "weekly" ? "weekly" : { weekday: draft.recurring },
     yieldsLeftovers: draft.yieldsLeftovers,
     prepAhead: text(draft.prepAhead),
@@ -158,6 +162,17 @@ export function RecipeForm(props: {
           onInput={(e) => update("mainProtein", e.currentTarget.value)}
         />
       </label>
+      <label>
+        {t("recipeForm.course")}
+        <select
+          value={draft().course}
+          onChange={(e) => update("course", e.currentTarget.value as RecipeDraft["course"])}
+        >
+          <option value="">{t("recipeForm.courseUnknown")}</option>
+          <For each={COURSES}>{(course) => <option value={course}>{t(`course.${course}`)}</option>}</For>
+        </select>
+      </label>
+      <small>{t("recipeForm.courseHint")}</small>
       <label>
         {t("recipeForm.recurring")}
         <select

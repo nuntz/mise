@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { paprikaExport, SAMPLE_JPEG, SAMPLE_PAPRIKA_RECIPES } from "../../../fixtures/paprika";
 import { type PaprikaEntry, readPaprikaExport } from "./paprika";
 
-const [dal, chicken, toast, brownies] = SAMPLE_PAPRIKA_RECIPES as [
+const [dal, chicken, toast, brownies, lemonade] = SAMPLE_PAPRIKA_RECIPES as [
+  Record<string, unknown>,
   Record<string, unknown>,
   Record<string, unknown>,
   Record<string, unknown>,
@@ -33,6 +34,7 @@ describe("reading a Paprika export", () => {
       "Sheet-pan Chicken.paprikarecipe",
       "Soggy Toast.paprikarecipe",
       "Binned Brownies.paprikarecipe",
+      "Fizzy Lemonade.paprikarecipe",
     ]);
     expect(entries[0]).toEqual({
       entry: "Weeknight Dal.paprikarecipe",
@@ -48,6 +50,7 @@ describe("reading a Paprika export", () => {
         effortMinutes: 35,
         cuisine: "indian",
         mainProtein: null,
+        course: "main",
         notes: "A pot of comfort.\n\nDouble the garlic.",
         url: "https://recipes.example.com/dal",
         author: "The Example Kitchen",
@@ -142,6 +145,46 @@ describe("categories", () => {
 
   test("that name neither leave them unset", async () => {
     expect(await mapped({ ...toast, categories: ["Dessert"] })).toMatchObject({ cuisine: null, mainProtein: null });
+  });
+
+  test("set the Course of a Recipe filed under drinks", async () => {
+    expect((await mapped(lemonade)).course).toBe("drink");
+  });
+
+  test.each([
+    ["Desserts", "dessert"],
+    ["Baking", "dessert"],
+    ["Drinks", "drink"],
+    ["Beverages", "drink"],
+    ["Cocktails", "drink"],
+    ["Breakfast", "breakfast"],
+    ["Brunch", "breakfast"],
+    ["Sides", "side"],
+    ["Sauces", "side"],
+    ["Condiments", "side"],
+    ["Dips", "side"],
+    ["Snacks", "snack"],
+    ["Appetizers", "snack"],
+    ["Main", "main"],
+    ["Dinner", "main"],
+    ["Weeknight", "main"],
+  ] as const)("read %p as the Course %p", async (category, course) => {
+    expect((await mapped({ ...toast, categories: [category] })).course).toBe(course);
+  });
+
+  test("set the Course from the first that names one", async () => {
+    expect((await mapped({ ...toast, categories: ["Italian", "Desserts", "Dinner"] })).course).toBe("dessert");
+  });
+
+  test("leave the Course unknown when none names one, whatever the title or Ingredients", async () => {
+    const recipe = await mapped({
+      ...toast,
+      name: "Lemonade Cake",
+      ingredients: "1 cup lemonade",
+      categories: ["Kids"],
+    });
+
+    expect(recipe.course).toBeNull();
   });
 });
 

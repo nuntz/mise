@@ -45,6 +45,10 @@ A substance from the canonical list (peanut, milk, sesame, …) that a Hard Cons
 **Recipe**:
 A dish Mise can plan, with ingredients, steps and a base number of servings.
 
+**Course**:
+What a Recipe is served as: a main dish, side, dessert, drink, breakfast or snack, or unknown. It belongs to the Recipe, not to a Slot: pancakes are breakfast even when eaten at dinner, and a Slot's meal says only when it is eaten. Only a main, or a Recipe of unknown Course, is proposed for dinner (ADR 0022).
+_Avoid_: Meal, category (when meaning the Course), type
+
 **Item**:
 A canonical grocery thing ("garlic", "eggs", "soy sauce") with its aliases, store section and Allergens.
 _Avoid_: Product, food, ingredient (when meaning the canonical thing)

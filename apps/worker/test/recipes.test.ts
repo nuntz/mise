@@ -62,6 +62,7 @@ describe("hand-entered Recipes", () => {
       effortMinutes: null,
       cuisine: null,
       mainProtein: null,
+      course: null,
       recurring: null,
       yieldsLeftovers: false,
       prepAhead: null,
@@ -113,6 +114,7 @@ describe("hand-entered Recipes", () => {
       effortMinutes: 25,
       cuisine: "Canadian",
       mainProtein: "egg",
+      course: "breakfast",
       recurring: { weekday: "sunday" },
       yieldsLeftovers: true,
       prepAhead: "Mix the dry ingredients the night before.",
@@ -122,6 +124,21 @@ describe("hand-entered Recipes", () => {
     await household.callTool("create_recipe", { ...pancakes, ...fields });
 
     expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true, value: fields });
+  });
+
+  test("a Recipe's Course is unknown until someone sets it, and can be changed or cleared", async () => {
+    const household = await setUpHousehold();
+    const created = recipeOf(await household.callTool("create_recipe", pancakes));
+
+    const set = recipeOf(await household.callTool("update_recipe", { id: created.id, course: "breakfast" }));
+    const changed = recipeOf(await household.callTool("update_recipe", { id: created.id, course: "dessert" }));
+    const cleared = recipeOf(await household.callTool("update_recipe", { id: created.id, course: null }));
+
+    expect([created.course, set.course, changed.course, cleared.course]).toEqual([null, "breakfast", "dessert", null]);
+    expect(await household.callTool("update_recipe", { id: created.id, course: "dinner" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" },
+    });
   });
 
   test("reading a Recipe that doesn't exist is refused", async () => {

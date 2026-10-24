@@ -126,6 +126,23 @@ describe("proposing a Week", () => {
     expect(dinners(week).filter((dinner) => dinner.reason?.kind === "no_candidate")).toHaveLength(1);
   });
 
+  test("proposes only mains or Recipes of unknown Course, and takes a Course corrected by hand", async () => {
+    const household = await setUpHousehold();
+    for (let id = 3; id <= 13; id++) await household.callTool("update_recipe", { id, course: "dessert" });
+
+    const before = await propose(household);
+
+    expect(new Set(dinners(before).map((dinner) => dinner.recipe?.id ?? null))).toEqual(new Set([2, null]));
+    expect(dinners(before)[1]).toMatchObject({
+      reason: { kind: "no_candidate", excluded: { conflict: 1, never: 0, course: 11, recent: 1, effort: 0 } },
+    });
+
+    await household.callTool("update_recipe", { id: 3, course: "main" });
+    const after = await propose(household);
+
+    expect(dinners(after).map((dinner) => dinner.recipe?.id)).toContain(3);
+  });
+
   test("refuses a 'use it up' Item that doesn't exist", async () => {
     const household = await setUpHousehold();
 

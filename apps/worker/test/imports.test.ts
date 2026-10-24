@@ -61,15 +61,21 @@ describe("importing a Paprika export", () => {
       id: 1,
       source: "paprika",
       startedAt: expect.any(String),
-      created: 3,
+      created: 4,
       updated: 0,
       skipped: 1,
       flagged: 0,
       errors: [],
     });
     const imported = await recipes(household);
-    expect(imported.map((recipe) => recipe.title)).toEqual(["Sheet-pan Chicken", "Soggy Toast", "Weeknight Dal"]);
-    const weeknightDal = imported[2] as Recipe;
+    expect(imported.map((recipe) => recipe.title)).toEqual([
+      "Fizzy Lemonade",
+      "Sheet-pan Chicken",
+      "Soggy Toast",
+      "Weeknight Dal",
+    ]);
+    expect(imported.map((recipe) => recipe.course)).toEqual(["drink", null, null, "main"]);
+    const weeknightDal = imported[3] as Recipe;
     expect(weeknightDal).toMatchObject({
       title: "Weeknight Dal",
       baseServings: 4,
@@ -109,7 +115,7 @@ describe("importing again", () => {
 
     const again = succeeded<ImportRun>(await importFile(household, sampleExport));
 
-    expect(again).toMatchObject({ id: 2, created: 0, updated: 0, skipped: 4, flagged: 0, errors: [] });
+    expect(again).toMatchObject({ id: 2, created: 0, updated: 0, skipped: 5, flagged: 0, errors: [] });
     expect(await recipes(household)).toEqual(before);
     expect(succeeded<ImportRun[]>(await household.callTool("list_import_runs", {})).map((run) => run.id)).toEqual([
       2, 1,
@@ -167,6 +173,28 @@ describe("importing again", () => {
         },
       ],
     });
+  });
+
+  test("a Course corrected in Mise is kept when Paprika's copy changes", async () => {
+    const household = await setUpHousehold();
+    await importFile(household, await paprikaExport([{ ...toast, categories: ["Snacks"] }]));
+    await household.callTool("update_recipe", { id: 1, course: "breakfast" });
+
+    const run = succeeded<ImportRun>(
+      await importFile(household, await paprikaExport([{ ...toast, hash: "changed", categories: ["Desserts"] }])),
+    );
+
+    expect(run).toMatchObject({ updated: 0, flagged: 1 });
+    expect(await recipes(household)).toMatchObject([{ course: "breakfast" }]);
+  });
+
+  test("a Recipe not edited in Mise takes the Course of Paprika's changed categories", async () => {
+    const household = await setUpHousehold();
+    await importFile(household, await paprikaExport([{ ...toast, categories: ["Snacks"] }]));
+
+    await importFile(household, await paprikaExport([{ ...toast, hash: "changed", categories: ["Desserts"] }]));
+
+    expect(await recipes(household)).toMatchObject([{ course: "dessert" }]);
   });
 
   test("a Recipe Mise changed only by resolving its Ingredients still takes Paprika's changes", async () => {

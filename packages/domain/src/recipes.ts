@@ -39,6 +39,15 @@ export function recipeAllergens(
   return unresolved > 0 ? { kind: "unknown", atLeast: allergens, unresolved } : { kind: "known", allergens };
 }
 
+/**
+ * What a Recipe is served as: a main dish, or one served with or around it. Not the meal of a Slot:
+ * pancakes are breakfast whichever meal they are eaten at. Only a main, or a Recipe of unknown
+ * Course, is proposed for dinner (ADR 0022).
+ */
+export const COURSES = ["main", "side", "dessert", "drink", "breakfast", "snack"] as const;
+export const Course = z.enum(COURSES);
+export type Course = z.infer<typeof Course>;
+
 const Title = z.string().trim().min(1).max(200);
 const Label = z.string().trim().min(1).max(100);
 /** Lines as typed: trimmed, blank ones dropped. */
@@ -69,6 +78,8 @@ export const RecipeFields = {
     .nullable(),
   cuisine: Label.nullable(),
   mainProtein: Label.nullable(),
+  /** What it is served as, or null when unknown. */
+  course: Course.nullable(),
   recurring: Recurrence.nullable(),
   yieldsLeftovers: z.boolean(),
   /** What to do the day before, such as "soak the beans". */
@@ -127,6 +138,7 @@ export const RecipeSummary = Recipe.pick({
   effortMinutes: true,
   cuisine: true,
   mainProtein: true,
+  course: true,
   allergens: true,
   photoKey: true,
 });
@@ -143,6 +155,7 @@ export const NewRecipe = z
     effortMinutes: RecipeFields.effortMinutes.default(null),
     cuisine: RecipeFields.cuisine.default(null),
     mainProtein: RecipeFields.mainProtein.default(null),
+    course: RecipeFields.course.default(null),
     recurring: RecipeFields.recurring.default(null),
     yieldsLeftovers: RecipeFields.yieldsLeftovers.default(false),
     prepAhead: RecipeFields.prepAhead.default(null),
@@ -163,6 +176,7 @@ export const UpdateRecipeInput = z
     effortMinutes: RecipeFields.effortMinutes.optional(),
     cuisine: RecipeFields.cuisine.optional(),
     mainProtein: RecipeFields.mainProtein.optional(),
+    course: RecipeFields.course.optional(),
     recurring: RecipeFields.recurring.optional(),
     yieldsLeftovers: RecipeFields.yieldsLeftovers.optional(),
     prepAhead: RecipeFields.prepAhead.optional(),

@@ -43,6 +43,7 @@ const pasta: RecipeSummary = {
   effortMinutes: 20,
   cuisine: null,
   mainProtein: null,
+  course: null,
   allergens: { kind: "known", allergens: ["wheat"] },
   photoKey: "photos/pasta",
 };
@@ -104,7 +105,7 @@ function proposedWeek(): Week {
     },
   });
   Object.assign(week.slots[5] as Slot, {
-    reason: { kind: "no_candidate", excluded: { conflict: 3, never: 0, recent: 2, effort: 1 } },
+    reason: { kind: "no_candidate", excluded: { conflict: 3, never: 0, course: 4, recent: 2, effort: 1 } },
   });
   return {
     ...week,
@@ -556,7 +557,7 @@ test("a proposed Week shows why each dinner was chosen, and asks to be reviewed"
   const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
   expect(
     within(tuesday).getByText(
-      "No Recipe fits: 3 conflict with someone eating, 2 planned within 2 weeks, 1 over the Effort Budget.",
+      "No Recipe fits: 3 conflict with someone eating, 4 not a main dish, 2 planned within 2 weeks, 1 over the Effort Budget.",
     ),
   ).toBeTruthy();
 

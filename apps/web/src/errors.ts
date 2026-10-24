@@ -28,6 +28,7 @@ const recipeFields: Record<string, MessageKey> = {
   effortMinutes: "recipeForm.effortMinutes",
   cuisine: "recipeForm.cuisine",
   mainProtein: "recipeForm.mainProtein",
+  course: "recipeForm.course",
   recurring: "recipeForm.recurring",
   prepAhead: "recipeForm.prepAhead",
 };

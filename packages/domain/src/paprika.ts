@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { normaliseItemName } from "./items";
-import { ImportedPreference, IngredientLines, RecipeFields } from "./recipes";
+import { type Course, ImportedPreference, IngredientLines, RecipeFields } from "./recipes";
 import { decompress, readZip } from "./zip";
 
 /** A Recipe read from a source, mapped onto Mise's fields, before it is stored. */
@@ -17,6 +17,7 @@ export const ImportedRecipe = z.object({
   effortMinutes: RecipeFields.effortMinutes,
   cuisine: RecipeFields.cuisine,
   mainProtein: RecipeFields.mainProtein,
+  course: RecipeFields.course,
   notes: RecipeFields.notes,
   url: z.string().trim().min(1).max(2000).nullable(),
   author: z.string().trim().min(1).max(200).nullable(),
@@ -105,6 +106,7 @@ function mapPaprikaRecipe(json: unknown, fallbackRevision: string): Mapped {
     effortMinutes: effortOf(paprika),
     cuisine: firstSynonym(categories, CUISINES),
     mainProtein: firstSynonym(categories, PROTEINS),
+    course: firstSynonym(categories, COURSES),
     notes: notes || null,
     url: text(paprika.source_url) || null,
     author: text(paprika.source) || null,
@@ -254,16 +256,29 @@ const PROTEINS = synonyms({
   beans: ["beans", "legumes"],
 });
 
-function synonyms(table: Record<string, string[]>): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const [value, names] of Object.entries(table)) {
+/**
+ * Category names that say a Recipe's Course. Only categories are read, never the title or
+ * Ingredients: a wrong guess would keep a dinner out of every Proposal (ADR 0022).
+ */
+const COURSES = synonyms<Course>({
+  main: ["main", "mains", "main course", "main dish", "dinner", "dinners", "weeknight"],
+  side: ["side", "sides", "side dish", "side dishes", "sauce", "sauces", "condiment", "condiments", "dip", "dips"],
+  dessert: ["dessert", "desserts", "baking"],
+  drink: ["drink", "drinks", "beverage", "beverages", "cocktail", "cocktails"],
+  breakfast: ["breakfast", "brunch"],
+  snack: ["snack", "snacks", "appetizer", "appetizers", "starter", "starters"],
+});
+
+function synonyms<T extends string>(table: Record<T, string[]>): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const [value, names] of Object.entries(table) as [T, string[]][]) {
     for (const name of names) map.set(normaliseItemName(name), value);
   }
   return map;
 }
 
 /** The value the first category with a synonym stands for. */
-function firstSynonym(categories: string[], table: Map<string, string>): string | null {
+function firstSynonym<T extends string>(categories: string[], table: Map<string, T>): T | null {
   for (const category of categories) {
     const value = table.get(normaliseItemName(category));
     if (value) return value;

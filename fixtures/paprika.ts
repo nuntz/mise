@@ -96,6 +96,23 @@ export const SAMPLE_PAPRIKA_RECIPES: PaprikaRecipeJson[] = [
     photo_data: null,
     photos: [],
   },
+  {
+    uid: "3C4D5E6F-7A8B-4C9D-8E0F-1A2B3C4D5E6F",
+    name: "Fizzy Lemonade",
+    ingredients: "3 lemons\n4 tbsp sugar\n1 l sparkling water",
+    directions: "Squeeze the lemons.\nStir in the sugar and top up with sparkling water.",
+    servings: "4",
+    total_time: "",
+    prep_time: "",
+    cook_time: "",
+    rating: 0,
+    on_favorites: false,
+    in_trash: false,
+    categories: ["Drinks", "Summer"],
+    hash: "1e30ade1e30ade1e30ade1e30ade1e30ade1e30ade1e30ade1e30ade1e30ade0",
+    photo_data: null,
+    photos: [],
+  },
 ];
 
 /** An entry given as its bytes, for testing entries that are not gzipped JSON. */

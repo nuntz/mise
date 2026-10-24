@@ -348,6 +348,13 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE TABLE week_start_change (from_date TEXT PRIMARY KEY, stretches TEXT NOT NULL)",
     ],
   },
+  {
+    version: 17,
+    statements: [
+      // What a Recipe is served as (ADR 0022); NULL when unknown, as every Recipe is until set.
+      "ALTER TABLE recipe ADD COLUMN course TEXT",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {
