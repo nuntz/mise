@@ -13,4 +13,4 @@ Correcting a Course by hand is the repair path. The Recipe form has a Course pic
 - Recipes typed into Mise, and those imported before the Course existed, have a null Course and are proposed as before. A migration adds the column, and the backup carries it like any other column (ADR 0006).
 - Reasons stored before the Course existed have no `course` count. They read it as 0.
 - Only dinners are proposed, so the Course matters only there for now. Once the Proposer fills other meals, it is the Course that says what fits them, not the Slot's meal alone.
-- A dessert or drink can still be put in a dinner Slot by hand. The rule only binds what the Proposer chooses.
+- A dessert or drink can still be put in a dinner Slot by hand. The rule only binds what the Proposer chooses, so it does not fill the next dinner with the Leftovers of one Locked there.
