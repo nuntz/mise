@@ -247,6 +247,7 @@ const en = {
   "suggestion.existing": "Another name for {item} ({allergens})",
   "suggestion.new": "A new Item: {name}, in {section}, with {allergens}",
   "suggestion.noAllergens": "no Allergens",
+  "suggestion.stateNone": 'To accept it, choose Edit and tick "Contains none of these" if that is right.',
   "suggestion.accept": "Accept",
   "suggestion.edit": "Edit",
   "suggestion.dismiss": "Dismiss",

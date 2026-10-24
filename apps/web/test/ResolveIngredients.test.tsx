@@ -271,13 +271,21 @@ test("a Suggestion of a new Item with no Allergens is accepted only once a perso
   const gochujang = await screen.findByRole("article", { name: "gochujang" });
   const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
   expect(suggestion.textContent).toContain("with no Allergens");
+  expect(suggestion.textContent).toContain(
+    'To accept it, choose Edit and tick "Contains none of these" if that is right.',
+  );
   expect(within(suggestion).queryByRole("button", { name: "Accept" })).toBeNull();
   await user.click(within(suggestion).getByRole("button", { name: "Edit" }));
   expect(within(gochujang).getByRole<HTMLInputElement>("checkbox", { name: "Contains none of these" }).checked).toBe(
     false,
   );
-  await user.click(within(gochujang).getByRole("button", { name: "Accept" }));
+  const accept = within(gochujang).getByRole("button", { name: "Accept" });
+  await user.click(accept);
   expect(calls.some((call) => call.name === "accept_suggestion")).toBe(false);
+  // Said beside the button pressed, not above the group where it goes unseen.
+  const alert = within(gochujang).getByRole("alert");
+  expect(alert.textContent).toBe('Tick the Allergens it contains, or "Contains none of these".');
+  expect(accept.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await user.click(within(gochujang).getByRole("checkbox", { name: "Contains none of these" }));
   await user.click(within(gochujang).getByRole("button", { name: "Accept" }));
 

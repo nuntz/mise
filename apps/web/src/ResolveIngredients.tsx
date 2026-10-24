@@ -175,9 +175,6 @@ function GroupRow(props: {
       <ul>
         <For each={props.group.lines}>{(line) => <li>{line}</li>}</For>
       </ul>
-      <Show when={error()}>
-        <p role="alert">{error()}</p>
-      </Show>
       <Show when={props.group.text !== "" && props.suggestion}>
         {(suggestion) => (
           <SuggestionPanel
@@ -254,6 +251,10 @@ function GroupRow(props: {
           />
         </Match>
       </Switch>
+      {/* Below the forms and buttons, beside whichever was pressed. */}
+      <Show when={error()}>
+        <p role="alert">{error()}</p>
+      </Show>
     </article>
   );
 }
@@ -272,6 +273,9 @@ function SuggestionPanel(props: {
   onDismiss: () => void;
 }) {
   const heading = createUniqueId();
+  // "None" must be said by a person (ADR 0009): a new Item without Allergens is accepted from Edit.
+  const acceptable = () =>
+    props.suggestion.suggested.kind === "existing" || props.suggestion.suggested.allergens.length > 0;
   const summary = () => {
     const suggested = props.suggestion.suggested;
     if (suggested.kind === "new") {
@@ -296,9 +300,11 @@ function SuggestionPanel(props: {
       <h4 id={heading}>{t("suggestion.label")}</h4>
       <p>{t("suggestion.disclosure")}</p>
       <p>{summary()}</p>
+      <Show when={!acceptable()}>
+        <p>{t("suggestion.stateNone")}</p>
+      </Show>
       <Show when={props.actions}>
-        {/* "None" must be said by a person (ADR 0009): a new Item without Allergens is accepted from Edit. */}
-        <Show when={props.suggestion.suggested.kind === "existing" || props.suggestion.suggested.allergens.length > 0}>
+        <Show when={acceptable()}>
           <button type="button" onClick={() => props.onAccept()}>
             {t("suggestion.accept")}
           </button>
