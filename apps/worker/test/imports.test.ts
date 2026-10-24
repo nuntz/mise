@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { ImportRun, Recipe, ToolResult } from "@mise/domain";
+import type { ImportRun, Recipe, ToolResult, Week } from "@mise/domain";
 import { describe, expect, onTestFinished, test } from "vitest";
 import { paprikaExport, SAMPLE_JPEG, SAMPLE_PAPRIKA_RECIPES, utf8 } from "../../../fixtures/paprika";
 import sampleExport from "../../../fixtures/sample.paprikarecipes";
@@ -104,6 +104,27 @@ describe("importing a Paprika export", () => {
     expect(photo.httpMetadata?.contentType).toBe("image/jpeg");
     expect(new Uint8Array(await photo.arrayBuffer())).toEqual(SAMPLE_JPEG);
     expect(await household.callTool("list_import_runs", {})).toEqual({ ok: true, value: [run] });
+  });
+});
+
+describe("proposing from an import", () => {
+  test("never fills a dinner with the drink it filed under Drinks, while a main is proposed", async () => {
+    const household = env.Household.getByName(crypto.randomUUID());
+    await household.callTool("setup_household", { name: "The Example Family", members: [{ name: "Robin" }] });
+    onTestFinished(() => deletePhotos());
+    await importFile(household, sampleExport);
+    const byTitle = new Map((await recipes(household)).map((recipe) => [recipe.title, recipe.id]));
+
+    const week = succeeded<Week>(await household.callTool("propose_week", { date: "2026-10-26" }));
+
+    const dinners = week.slots.filter((slot) => slot.meal === "dinner");
+    expect(dinners.map((dinner) => dinner.recipe?.id)).toContain(byTitle.get("Weeknight Dal"));
+    expect(dinners.map((dinner) => dinner.recipe?.id)).not.toContain(byTitle.get("Fizzy Lemonade"));
+    const unplanned = dinners.filter((dinner) => dinner.kind === "unplanned");
+    expect(unplanned).not.toHaveLength(0);
+    for (const dinner of unplanned) {
+      expect(dinner.reason).toMatchObject({ kind: "no_candidate", excluded: { course: 1 } });
+    }
   });
 });
 
