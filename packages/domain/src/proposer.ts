@@ -163,7 +163,7 @@ function propose(input: ProposerInput, window: number, choice: ProposalChoice): 
     if (planned().some((other) => other.recipeId === recipe.id && weekDates.has(other.date))) continue;
     const fits = input.dinners.flatMap((dinner, index) =>
       open(index) &&
-      isMain(recipe) &&
+      canFillDinner(recipe) &&
       isSafeFor(recipe, dinner) &&
       (recurrence === "weekly" || weekdayOf(dinner.date) === recurrence.weekday)
         ? [index]
@@ -207,7 +207,7 @@ function chosen(
     const daysApart = closestPlanned(recipe.id, dinner.date, nearby);
     if (!isSafeFor(recipe, dinner)) excluded.conflict++;
     else if (recipe.ratings.includes("never")) excluded.never++;
-    else if (!isMain(recipe)) excluded.course++;
+    else if (!canFillDinner(recipe)) excluded.course++;
     else if (daysApart !== null && daysApart < EXCLUDED_WITHIN_DAYS) excluded.recent++;
     else if (!isWithinBudget(recipe, budget)) excluded.effort++;
     else candidates.push({ recipe, ...scored(recipe, dinner, daysApart, budget, nearby, recipes, input.useUp) });
@@ -250,7 +250,7 @@ function placeLeftovers(
   // What a dinner already cooked was cooked for is history.
   if (!recipe?.yieldsLeftovers || source.cooked || source.keptLeftovers.length > 0) return;
   // A dessert Locked by hand is no dinner the day after.
-  if (!isMain(recipe)) return;
+  if (!canFillDinner(recipe)) return;
   const diners = dinersKey(source);
   const at = input.dinners.findIndex(
     (dinner, other) =>
@@ -329,7 +329,7 @@ function isSafeFor(recipe: ProposerRecipe, dinner: ProposerDinner): boolean {
 }
 
 /** A main dish, or a Recipe whose Course is unknown: what a dinner can be filled with. */
-function isMain(recipe: ProposerRecipe): boolean {
+function canFillDinner(recipe: ProposerRecipe): boolean {
   return recipe.course === null || recipe.course === "main";
 }
 

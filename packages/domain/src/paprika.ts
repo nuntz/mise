@@ -264,7 +264,7 @@ const PROTEINS = synonyms({
  * Only categories that rarely hold a dinner: "Baking" (lasagna, pot pie), "Sauces" (bolognese)
  * and "Brunch" (shakshuka) are left out, so they leave the Course unknown and a candidate.
  */
-const COURSES = synonyms<Course>({
+const COURSE_CATEGORIES = synonyms<Course>({
   main: ["main", "mains", "main course", "main dish", "dinner", "dinners", "weeknight"],
   side: ["side", "sides", "side dish", "side dishes", "condiment", "condiments", "dip", "dips"],
   dessert: ["dessert", "desserts"],
@@ -279,7 +279,7 @@ const COURSES = synonyms<Course>({
  * unknown (ADR 0022).
  */
 function courseOf(categories: string[]): Course | null {
-  const courses = new Set(categories.flatMap((category) => COURSES.get(normaliseItemName(category)) ?? []));
+  const courses = new Set(categories.flatMap((category) => COURSE_CATEGORIES.get(normaliseItemName(category)) ?? []));
   if (courses.has("main")) return "main";
   return courses.size === 1 ? ([...courses][0] as Course) : null;
 }
