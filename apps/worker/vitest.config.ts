@@ -18,7 +18,16 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
       // A fictional Access team and application; identity.test.ts signs tokens for them.
-      miniflare: { bindings: { ACCESS_TEAM_DOMAIN: "mise-test.cloudflareaccess.com", ACCESS_AUD: "test-audience" } },
+      miniflare: {
+        bindings: {
+          ACCESS_TEAM_DOMAIN: "mise-test.cloudflareaccess.com",
+          ACCESS_AUD: "test-audience",
+          // `bun run check:export` points this at a downloaded export for test/stored-export.test.ts.
+          ...(process.env.MISE_STORED_EXPORT && {
+            STORED_EXPORT: readFileSync(process.env.MISE_STORED_EXPORT, "utf8"),
+          }),
+        },
+      },
     }),
   ],
   test: {
