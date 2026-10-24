@@ -246,8 +246,10 @@ class HouseholdAgent extends Agent<Env> {
       const suggestions = await this.suggest(textsToSuggest(this.ctx.storage.sql, input.texts));
       return { ok: true, value: { suggestions, remaining: remainingToSuggest(this.ctx.storage.sql) } };
     } catch (error) {
-      if (error instanceof LlmError) return { ok: false, error: { code: "model_failed", message: error.message } };
-      throw error;
+      if (!(error instanceof LlmError)) throw error;
+      // The screen only says the model failed; the deployer finds why in Sentry.
+      Sentry.captureException(error);
+      return { ok: false, error: { code: "model_failed", message: error.message } };
     }
   }
 

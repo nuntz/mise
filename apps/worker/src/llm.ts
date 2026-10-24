@@ -82,7 +82,7 @@ const SYSTEM_PROMPT = [
   `Answer only by calling ${SUGGEST_TOOL}.`,
 ].join("\n");
 
-/** An `Llm` that asks a Claude model through pi-ai, forcing one tool call with the answers. */
+/** An `Llm` that asks a Claude model through pi-ai, for one tool call with the answers. */
 export function claudeLlm(models: Models, model: Model<Api>): Llm {
   const { $schema: _, ...parameters } = z.toJSONSchema(z.object({ suggestions: z.array(ModelAnswer) }));
   return {
@@ -100,7 +100,9 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
             },
           ],
         },
-        { toolChoice: { type: "tool", name: SUGGEST_TOOL }, maxTokens: 16_000 },
+        // Not forced with `toolChoice`: Sonnet always thinks, and Anthropic refuses a forced tool
+        // call while a model thinks. The prompt asks for the tool, and an answer without it fails.
+        { maxTokens: 32_000 },
       );
       if (message.stopReason === "error" || message.stopReason === "aborted") {
         throw new LlmError(message.errorMessage ?? message.stopReason);

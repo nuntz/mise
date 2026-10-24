@@ -6,8 +6,8 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { FakeLlm, type Llm, LlmError, SHIPPED_ITEMS, type SuggestedItem } from "@mise/domain";
-import { describe, expect, test } from "vitest";
-import { claudeLlm } from "../src/llm";
+import { describe, expect, test, vi } from "vitest";
+import { claudeLlm, openLlm, useLlm } from "../src/llm";
 
 type Answers = Record<string, SuggestedItem>;
 
@@ -122,5 +122,30 @@ describe("the Claude adapter", () => {
     await expect(
       claudeLlm(models, faux.getModel()).makeSuggestions({ names: ["tahini paste"], catalogue: SHIPPED_ITEMS.items }),
     ).rejects.toThrow(LlmError);
+  });
+});
+
+describe("the deployed LLM", () => {
+  test("asks a model that always thinks without forcing the tool, which Anthropic refuses", async () => {
+    // The request is answered here, so no test reaches Anthropic.
+    const sent: Record<string, unknown>[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return Response.json(
+        { type: "error", error: { type: "invalid_request_error", message: "test" } },
+        { status: 400 },
+      );
+    });
+    useLlm(undefined);
+
+    await expect(
+      openLlm({ ANTHROPIC_API_KEY: "test-key" }).makeSuggestions({ names: ["beurre"], catalogue: SHIPPED_ITEMS.items }),
+    ).rejects.toThrow(LlmError);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ model: "claude-sonnet-5-5", thinking: { type: "adaptive" } });
+    // Only "auto" works with thinking: a forced tool ("tool" or "any") is a 400 on every request.
+    expect([undefined, "auto"]).toContain((sent[0]?.tool_choice as { type?: string } | undefined)?.type);
+    vi.restoreAllMocks();
   });
 });
