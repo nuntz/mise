@@ -44,9 +44,9 @@ type ConstraintRow = ConstraintColumns & { member_id: number };
 
 /**
  * Tools that need more than SQLite, which the household runs itself: a Paprika import reads R2;
- * Suggestions and a text import ask the model.
+ * Suggestions and a text import ask the model; a link import fetches the page, and may ask it too.
  */
-export type HouseholdToolName = "run_paprika_import" | "request_suggestions" | "import_text";
+export type HouseholdToolName = "run_paprika_import" | "request_suggestions" | "import_text" | "import_url";
 
 export type Handlers = {
   [N in Exclude<ToolName, HouseholdToolName>]: (

@@ -390,6 +390,7 @@ export function effortText(minutes: number | null): string {
 function sourceText(recipe: Recipe): string | null {
   if (recipe.source.kind === "manual") return null;
   if (recipe.source.kind === "text") return t("recipe.importedText");
+  if (recipe.source.kind === "url") return t("recipe.importedLink", { url: recipe.source.url });
   const from = recipe.source.author ?? recipe.source.url;
   return from ? t("recipe.importedFrom", { from }) : t("recipe.imported");
 }

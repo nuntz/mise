@@ -3,6 +3,7 @@ import {
   type Draft,
   type Household,
   type ImportFlag,
+  type ImportRun,
   type Recipe,
   STORE_SECTIONS,
   type Suggestion,
@@ -99,6 +100,17 @@ const suggestion: Suggestion = {
   suggestedAt: "2026-10-24T19:00:00.000Z",
 };
 
+const filledRun: ImportRun = {
+  id: 4,
+  source: "text",
+  startedAt: "2026-10-24T19:05:00.000Z",
+  created: 0,
+  updated: 1,
+  skipped: 0,
+  flagged: 0,
+  errors: [],
+};
+
 /** A client with what waits on a person, that records every tool call made. */
 function fakeClient(waiting: { drafts?: Draft[]; flags?: ImportFlag[]; suggestions?: Suggestion[] }) {
   const calls: { name: string; input: unknown }[] = [];
@@ -124,6 +136,18 @@ function fakeClient(waiting: { drafts?: Draft[]; flags?: ImportFlag[]; suggestio
         drafts = drafts.filter((draft) => draft.recipe.id !== id);
         queueMicrotask(() => notify("recipes"));
         return { ok: true, value: { ...dal, draft: false } };
+      }
+      case "import_text": {
+        // Like the real tool, it fills only a link-only Draft.
+        const { draft } = input as { draft: number };
+        const target = drafts.find((listed) => listed.recipe.id === draft)?.recipe;
+        if (target?.source.kind !== "url" || target.ingredients.length > 0) {
+          return { ok: false, error: { code: "not_found", message: `No link-only Draft with id ${draft}` } };
+        }
+        const filled = { ...dal, id: draft, source: target.source };
+        drafts = drafts.map((listed) => (listed.recipe.id === draft ? { ...listed, recipe: filled } : listed));
+        queueMicrotask(() => notify("recipes"));
+        return { ok: true, value: { run: filledRun, recipe: { id: draft, title: filled.title } } };
       }
       case "update_recipe": {
         const changed = { ...dal, ...(input as Partial<Recipe>), ingredients: dal.ingredients };
@@ -215,7 +239,7 @@ test("lists Import Flags, those of Drafts shown on the Draft instead, and Sugges
     within(flagged)
       .getAllByRole("listitem")
       .map((item) => item.textContent),
-  ).toEqual(["Our Toast changed in Paprika, but was edited in Mise, so it was left alone."]);
+  ).toEqual(["Our Toast changed at its source after it was edited or accepted in Mise, so it was left alone."]);
   const suggested = screen.getByRole("list", { name: "Suggestions" });
   expect(within(suggested).getByText(/mystery masala/).textContent).toBe(
     "mystery masala: A new Item: garam masala, in Spices, with no Allergens",
@@ -231,4 +255,30 @@ test("says when nothing is waiting", async () => {
   await openReview(client);
 
   expect(await screen.findByText("Nothing is waiting on you.")).toBeTruthy();
+});
+
+test("a link-only Draft shows its link, and its recipe's text is pasted into it there", async () => {
+  const link = "https://recipes.example.com/sticky-toffee-pudding";
+  const linkOnly: Recipe = {
+    ...dal,
+    id: 11,
+    title: "Sticky toffee pudding",
+    ingredients: [],
+    steps: [],
+    notes: null,
+    source: { kind: "url", url: link, author: null, importedAt: "2026-10-24T19:00:00.000Z" },
+  };
+  const { client, calls } = fakeClient({ drafts: [{ recipe: linkOnly, duplicateOf: [] }] });
+  await openReview(client);
+
+  const draft = await screen.findByRole("article", { name: "Sticky toffee pudding" });
+  expect(within(draft).getByRole("link", { name: link }).getAttribute("href")).toBe(link);
+  expect(within(draft).getByText(/could not read a recipe at its link/)).toBeTruthy();
+  expect(within(draft).queryByRole("button", { name: "Accept" })).toBeNull();
+
+  await userEvent.type(within(draft).getByLabelText("The recipe's text, for Sticky toffee pudding"), "1 cup dates");
+  await userEvent.click(within(draft).getByRole("button", { name: "Fill in the Draft" }));
+
+  expect(calls).toContainEqual({ name: "import_text", input: { text: "1 cup dates", draft: 11 } });
+  expect(await screen.findByText("1 tsp mystery masala")).toBeTruthy();
 });

@@ -78,8 +78,8 @@ function mapPaprikaRecipe(json: unknown, fallbackRevision: string): Mapped {
     steps: lines(paprika.directions),
     tags: categories,
     effortMinutes: effortOf(paprika),
-    cuisine: firstSynonym(categories, CUISINES),
-    mainProtein: firstSynonym(categories, PROTEINS),
+    cuisine: cuisineOf(categories),
+    mainProtein: mainProteinOf(categories),
     course: courseOf(categories),
     notes: notes || null,
     url: text(paprika.source_url) || null,
@@ -125,7 +125,7 @@ function flag(value: unknown): boolean {
 }
 
 /** The first whole number in the text ("Serves 4–6" → 4, "Makes 12 muffins" → 12). */
-function servingsOf(servings: string): number {
+export function servingsOf(servings: string): number {
   const first = /\d+/.exec(servings);
   const count = first ? Number(first[0]) : 0;
   return count >= 1 && count <= 100 ? count : FALLBACK_SERVINGS;
@@ -252,7 +252,7 @@ const COURSE_CATEGORIES = synonyms<Course>({
  * on; otherwise unknown. A wrong Course keeps a dinner out of every Proposal, so doubt leaves it
  * unknown (ADR 0022).
  */
-function courseOf(categories: string[]): Course | null {
+export function courseOf(categories: string[]): Course | null {
   const courses = new Set(categories.flatMap((category) => COURSE_CATEGORIES.get(normaliseItemName(category)) ?? []));
   if (courses.has("main")) return "main";
   return courses.size === 1 ? ([...courses][0] as Course) : null;
@@ -264,6 +264,16 @@ function synonyms<T extends string>(table: Record<T, string[]>): Map<string, T> 
     for (const name of names) map.set(normaliseItemName(name), value);
   }
   return map;
+}
+
+/** The cuisine the first category naming one says. */
+export function cuisineOf(categories: string[]): string | null {
+  return firstSynonym(categories, CUISINES);
+}
+
+/** The main protein the first category naming one says. */
+export function mainProteinOf(categories: string[]): string | null {
+  return firstSynonym(categories, PROTEINS);
 }
 
 /** The value the first category with a synonym stands for. */
@@ -299,7 +309,7 @@ function photoOf(data: unknown): { photo: ImportedPhoto | null } | { error: stri
 }
 
 /** Recognises an image from its first bytes. */
-function imageType(bytes: Uint8Array): ImageType | null {
+export function imageType(bytes: Uint8Array): ImageType | null {
   const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   if (ascii(0, 8) === "\x89PNG\r\n\x1a\n") return "image/png";

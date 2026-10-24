@@ -1,4 +1,4 @@
-import type { ImportError, ImportFlag, ImportRun } from "@mise/domain";
+import type { ImportError, ImportFlag, ImportRun, ToolOutput } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
@@ -6,8 +6,8 @@ import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
 /**
- * Paste a recipe's text, import a Paprika export, and see past imports and the Recipes they flagged.
- * `onReview` opens the Review screen, where a pasted recipe waits as a Draft.
+ * Paste a link or a recipe's text, import a Paprika export, and see past imports and the Recipes
+ * they flagged. `onReview` opens the Review screen, where what the model read waits as a Draft.
  */
 export function ImportPage(props: { client: MiseClient; onReview: () => void }) {
   const [runs, setRuns] = createSignal<ImportRun[]>();
@@ -51,6 +51,7 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
 
   return (
     <section>
+      <PasteLink client={props.client} onReview={props.onReview} />
       <PasteRecipe client={props.client} onReview={props.onReview} />
       <h2>{t("import.title")}</h2>
       <p>{t("import.intro")}</p>
@@ -119,6 +120,161 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
         </ul>
       </Show>
     </section>
+  );
+}
+
+/** A link to a recipe page, imported as a Recipe, a Draft, or a link-only Draft to fill with its text. */
+function PasteLink(props: { client: MiseClient; onReview: () => void }) {
+  const [url, setUrl] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const [imported, setImported] = createSignal<{ link: string; output: ToolOutput<"import_url"> }>();
+
+  const importLink = async (event: SubmitEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    setImported(undefined);
+    try {
+      const link = url().trim();
+      const result = await props.client.call("import_url", { url: link });
+      if (!result.ok)
+        setError(result.error.code === "invalid_input" ? t("link.invalid") : errorText(result.error, "recipe"));
+      else {
+        setImported({ link, output: result.value });
+        setUrl("");
+      }
+    } catch {
+      setError(t("app.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={importLink}>
+      <h2>{t("link.title")}</h2>
+      <p>{t("link.intro")}</p>
+      <label>
+        {t("link.url")}
+        <input type="url" required maxLength={2000} value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
+      </label>
+      <button type="submit" disabled={busy()}>
+        {busy() ? t("link.importing") : t("link.import")}
+      </button>
+      <Show when={error()}>
+        <p role="alert">{error()}</p>
+      </Show>
+      <Show when={imported()}>
+        {(imported) => {
+          const output = () => imported().output;
+          return (
+            <Show
+              when={!output().recipe.linkOnly}
+              fallback={
+                <>
+                  <p role="status">{linkOnlyText(output(), imported().link)}</p>
+                  <FillDraft client={props.client} draft={output().recipe} onReview={props.onReview} />
+                </>
+              }
+            >
+              <p role="status">{linkText(output(), imported().link)}</p>
+              <Show when={output().recipe.draft && output().run.created + output().run.updated > 0}>
+                <button type="button" class="button-secondary" onClick={() => props.onReview()}>
+                  {t("paste.review")}
+                </button>
+              </Show>
+            </Show>
+          );
+        }}
+      </Show>
+    </form>
+  );
+}
+
+/** What importing a link did, for a link that is not link-only. */
+function linkText(output: ToolOutput<"import_url">, link: string): string {
+  const { run, recipe } = output;
+  const title = { title: recipe.title };
+  if (run.created + run.updated === 0) {
+    if (run.flagged > 0) return t("link.leftAlone", title);
+    const reason = linkError(output, link);
+    return reason ? t("link.keptBecause", { ...title, reason }) : t("link.unchanged", title);
+  }
+  return recipe.draft ? t("paste.done", title) : t("link.recipe", title);
+}
+
+function linkOnlyText(output: ToolOutput<"import_url">, link: string): string {
+  const { recipe } = output;
+  const reason = linkError(output, link);
+  return reason
+    ? t("link.linkOnlyBecause", { title: recipe.title, reason })
+    : t("link.linkOnly", { title: recipe.title });
+}
+
+/** Why the link could not be read, when the run says: its error about the link itself, not about the photo. */
+function linkError({ run }: ToolOutput<"import_url">, link: string): string | undefined {
+  return run.errors.find((error) => error.entry === link)?.message;
+}
+
+/**
+ * The text of the recipe at a link-only Draft's link, pasted for the model to read into that Draft.
+ * Exported for the Review screen, which offers it on each link-only Draft.
+ */
+export function FillDraft(props: { client: MiseClient; draft: { id: number; title: string }; onReview?: () => void }) {
+  const [text, setText] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const [made, setMade] = createSignal<string>();
+
+  const read = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await props.client.call("import_text", { text: text(), draft: props.draft.id });
+      if (!result.ok)
+        setError(result.error.code === "model_failed" ? t("paste.failed") : errorText(result.error, "recipe"));
+      else if (!result.value.recipe) setError(t("paste.noRecipe"));
+      else setMade(result.value.recipe.title);
+    } catch {
+      setError(t("app.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Show
+      when={made()}
+      fallback={
+        // Not a form of its own: it may sit inside the link's form.
+        <div>
+          <label>
+            {t("fill.text", { title: props.draft.title })}
+            <textarea rows={6} maxLength={20_000} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
+          </label>
+          <button type="button" disabled={busy() || text().trim() === ""} onClick={() => void read()}>
+            {busy() ? t("paste.reading") : t("fill.read")}
+          </button>
+          <Show when={error()}>
+            <p role="alert">{error()}</p>
+          </Show>
+        </div>
+      }
+    >
+      {(title) => (
+        <>
+          <p role="status">{t("paste.done", { title: title() })}</p>
+          <Show when={props.onReview}>
+            {(onReview) => (
+              <button type="button" class="button-secondary" onClick={() => onReview()()}>
+                {t("paste.review")}
+              </button>
+            )}
+          </Show>
+        </>
+      )}
+    </Show>
   );
 }
 

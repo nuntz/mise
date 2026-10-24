@@ -1,10 +1,18 @@
-import type { Draft, ImportFlag, Item, ItemId, Suggestion, ToolResult } from "@mise/domain";
+import {
+  type Draft,
+  type ImportFlag,
+  type Item,
+  type ItemId,
+  isLinkOnly,
+  type Suggestion,
+  type ToolResult,
+} from "@mise/domain";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
-import { flagText } from "./Import";
+import { FillDraft, flagText } from "./Import";
 import { createItems } from "./items";
 import { t } from "./messages";
 import { RecipeForm } from "./RecipeForm";
@@ -91,13 +99,21 @@ export function ReviewPage(props: { client: MiseClient; onResolve: () => void })
   );
 }
 
-/** A Draft with what to check before accepting it, edited in place. */
+/**
+ * A Draft with what to check before accepting it, edited in place; a link-only Draft with its link
+ * and a place to paste its recipe's text instead.
+ */
 function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<ItemId, Item> }) {
   const heading = createUniqueId();
   const [editing, setEditing] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const recipe = () => props.draft.recipe;
+  /** The link of a link-only Draft; null for any other. */
+  const link = () => {
+    const { source } = recipe();
+    return source.kind === "url" && isLinkOnly(recipe()) ? source.url : null;
+  };
 
   const act = async (change: () => Promise<ToolResult<unknown>>) => {
     setBusy(true);
@@ -122,12 +138,26 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
           courseText(recipe().course) ?? t("review.courseUnknown"),
         ].join(" · ")}
       </p>
-      <p>{t("review.aiRead")}</p>
+      <Show when={link()} fallback={<p>{t("review.aiRead")}</p>}>
+        {(url) => (
+          <>
+            <p>{t("review.linkOnly")}</p>
+            <p>
+              <a href={url()} target="_blank" rel="noopener noreferrer">
+                {url()}
+              </a>
+            </p>
+          </>
+        )}
+      </Show>
       <For each={props.draft.duplicateOf}>{(other) => <p>{t("review.duplicate", { title: other.title })}</p>}</For>
       <Show
         when={editing()}
         fallback={
           <>
+            <Show when={link()}>
+              <FillDraft client={props.client} draft={recipe()} />
+            </Show>
             <ul class="ingredients">
               {/* How Mise read each line, so a guessed amount is seen before it can be shopped. */}
               <For each={recipe().ingredients}>
@@ -138,13 +168,16 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
                 )}
               </For>
             </ul>
-            <button
-              type="button"
-              disabled={busy()}
-              onClick={() => void act(() => props.client.call("accept_draft", { id: recipe().id }))}
-            >
-              {t("review.accept")}
-            </button>
+            {/* A link-only Draft has nothing to plan until its recipe's text is added. */}
+            <Show when={!link()}>
+              <button
+                type="button"
+                disabled={busy()}
+                onClick={() => void act(() => props.client.call("accept_draft", { id: recipe().id }))}
+              >
+                {t("review.accept")}
+              </button>
+            </Show>
             <button type="button" class="button-secondary" disabled={busy()} onClick={() => setEditing(true)}>
               {t("review.edit")}
             </button>

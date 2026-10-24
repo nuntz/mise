@@ -227,6 +227,24 @@ test("a Recipe read from pasted text says so, and never that it came from Paprik
   expect(screen.queryByText(/Paprika/)).toBeNull();
 });
 
+test("a Recipe imported from a link names its page", async () => {
+  const linked: Recipe = {
+    ...toast,
+    source: {
+      kind: "url",
+      url: "https://kitchen.example.com/toast/",
+      author: null,
+      importedAt: "2026-10-24T12:00:00.000Z",
+    },
+  };
+  const { client } = fakeClient([linked]);
+  await openRecipes(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
+
+  expect(await screen.findByText("Imported from https://kitchen.example.com/toast/.")).toBeTruthy();
+});
+
 test("editing a Recipe starts from what it has and saves the changes", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([toast]);

@@ -1,6 +1,6 @@
 /**
  * Runs the real model on recorded fixtures, so that a prompt or model change can be checked by hand:
- * Suggestions for Unresolved names, and recipes read from pasted text. It calls a model and costs
+ * Suggestions for Unresolved names, and recipes read from pasted text and from recorded pages. It calls a model and costs
  * money, so it never runs in CI (CODING_STANDARDS.md).
  *
  *   ANTHROPIC_API_KEY=… bun run eval
@@ -8,16 +8,20 @@
  * Prints each name and text with what the model answered, and exits non-zero if any falls short of
  * the fixture's expectation.
  */
+
+import { readFileSync } from "node:fs";
 import {
   type Allergen,
   type Course,
   type ItemId,
   type RecipeReading,
+  readRecipePage,
   SHIPPED_ITEMS,
   type SuggestedItem,
   suggestItems,
 } from "@mise/domain";
 import pasted from "../../../fixtures/eval/pasted-recipes.json";
+import recorded from "../../../fixtures/eval/recipe-pages.json";
 import fixture from "../../../fixtures/eval/unresolved-names.json";
 import { openLlm } from "../src/llm";
 
@@ -60,15 +64,25 @@ for (const { name, expect } of fixture.names as { name: string; expect: Expectat
 }
 console.log(`\n${fixture.names.length - misses} of ${fixture.names.length} as expected.\n`);
 
+// A page is read as an import reads it: its text, for the model.
+const pages = recorded.pages.map(({ name, page, expect }) => ({
+  name,
+  text: readRecipePage(
+    readFileSync(`${import.meta.dir}/../../../fixtures/pages/${page}`, "utf8"),
+    "https://example.com/",
+  ).text,
+  expect,
+}));
+const texts = [...pasted.texts, ...pages] as { name: string; text: string; expect: ReadingExpectation }[];
 let readingMisses = 0;
-for (const { name, text, expect } of pasted.texts as { name: string; text: string; expect: ReadingExpectation }[]) {
+for (const { name, text, expect } of texts) {
   const reading = await llm.readRecipe({ text });
   const problems = readingShortfalls(expect, reading);
   if (problems.length > 0) readingMisses++;
   console.log(`${problems.length > 0 ? "✗" : "✓"} ${name}: ${JSON.stringify(reading)}`);
   for (const problem of problems) console.log(`    ${problem}`);
 }
-console.log(`\n${pasted.texts.length - readingMisses} of ${pasted.texts.length} read as expected.`);
+console.log(`\n${texts.length - readingMisses} of ${texts.length} read as expected.`);
 process.exit(misses + readingMisses > 0 ? 1 : 0);
 
 /** What the reading lacks against the expectation. */

@@ -3,8 +3,8 @@ import { normaliseItemName } from "./items";
 import type { RecipeReading } from "./llm";
 import { ImportedPreference, IngredientLines, Recipe, RecipeFields, RecipeId } from "./recipes";
 
-/** The sources an import reads; more arrive with the Drive, URL and video imports. */
-export const ImportSource = z.enum(["paprika", "text"]);
+/** The sources an import reads; more arrive with the Drive and video imports. */
+export const ImportSource = z.enum(["paprika", "text", "url"]);
 export type ImportSource = z.infer<typeof ImportSource>;
 
 /** Something an import could not read: a file of the export, or the export itself (`entry` null). */
@@ -110,8 +110,13 @@ export const FALLBACK_SERVINGS = 4;
 /** The longest text `import_text` reads: what a Recipe's notes, which keep it, can hold. */
 const MAX_PASTED_TEXT = 20_000;
 
-/** Pasted text (a caption, a message, a Doc's contents), for the model to read into a Draft Recipe. */
-export const ImportTextInput = z.object({ text: z.string().trim().min(1).max(MAX_PASTED_TEXT) }).strict();
+/**
+ * Pasted text (a caption, a message, a Doc's contents), for the model to read into a Draft Recipe;
+ * or into the link-only Draft `draft`, to fill it.
+ */
+export const ImportTextInput = z
+  .object({ text: z.string().trim().min(1).max(MAX_PASTED_TEXT), draft: RecipeId.optional() })
+  .strict();
 
 export const ImportTextOutput = z.object({
   run: ImportRun,
@@ -126,11 +131,23 @@ export const ImportTextOutput = z.object({
  */
 export function importedFromText(text: string, reading: Extract<RecipeReading, { isRecipe: true }>): ImportedRecipe {
   const key = `text:${contentHash(text)}`;
+  return importedFromReading(reading, {
+    externalId: key,
+    revision: key,
+    notes: text.slice(0, MAX_PASTED_TEXT),
+    url: null,
+  });
+}
+
+/** What the model read, as a Recipe from the source named by `from`. */
+export function importedFromReading(
+  reading: Extract<RecipeReading, { isRecipe: true }>,
+  from: Pick<ImportedRecipe, "externalId" | "revision" | "notes" | "url">,
+): ImportedRecipe {
   const clip = (lines: string[], most: number, length: number) =>
     lines.slice(0, most).map((line) => line.slice(0, length));
   return ImportedRecipe.parse({
-    externalId: key,
-    revision: key,
+    ...from,
     title: reading.title.slice(0, 200),
     baseServings: Math.min(reading.servings ?? FALLBACK_SERVINGS, 100),
     ingredients: clip(reading.ingredients, 200, 500),
@@ -140,13 +157,31 @@ export function importedFromText(text: string, reading: Extract<RecipeReading, {
     cuisine: null,
     mainProtein: null,
     course: reading.course,
-    notes: text.slice(0, MAX_PASTED_TEXT),
-    url: null,
     author: null,
     importedPreference: null,
     inTrash: false,
   });
 }
+
+/** A link to a recipe page, to import. */
+export const ImportUrlInput = z
+  .object({
+    url: z
+      .string()
+      .trim()
+      .max(2000)
+      .pipe(z.url({ protocol: /^https?$/ })),
+  })
+  .strict();
+
+export const ImportUrlOutput = z.object({
+  run: ImportRun,
+  /**
+   * The Recipe the link made or updated, or the one it made before: a Recipe, a Draft the model
+   * read, or a link-only Draft (`linkOnly`) waiting for the recipe's text.
+   */
+  recipe: RecipeRef.extend({ draft: z.boolean(), linkOnly: z.boolean() }),
+});
 
 /** A Draft Recipe waiting on a person, with the Recipes an import flagged it as a possible duplicate of. */
 export const Draft = z.object({ recipe: Recipe, duplicateOf: z.array(RecipeRef) });

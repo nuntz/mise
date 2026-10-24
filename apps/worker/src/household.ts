@@ -15,6 +15,7 @@ import {
   type ImportRun,
   importedFromText,
   importUploadKey,
+  isLinkOnly,
   isToolName,
   LlmError,
   localDate,
@@ -40,12 +41,13 @@ import { agentModels, miseExtension, recentChat } from "./agent";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed } from "./calendar";
 import { callerFrom } from "./identity";
-import { type PreparedRecipe, runImport } from "./imports";
+import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport } from "./imports";
 import { readCatalogue } from "./items";
+import { fetchPhoto, readLink } from "./links";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
 import { sentryOptions } from "./observability";
-import { photoInUse, photoKeyOf, setPhotoKey } from "./recipes";
+import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { type HouseholdToolName, handlers } from "./tools";
 
@@ -154,6 +156,7 @@ class HouseholdAgent extends Agent<Env> {
       return this.requestSuggestions(parsed.value as ParsedToolInput<"request_suggestions">);
     }
     if (name === "import_text") return this.importText(parsed.value as ParsedToolInput<"import_text">);
+    if (name === "import_url") return this.importUrl(parsed.value as ParsedToolInput<"import_url">);
     const toolName = name as Exclude<ToolName, HouseholdToolName>;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
@@ -214,16 +217,8 @@ class HouseholdAgent extends Agent<Env> {
       if (photo && photo.bytes.byteLength > MAX_PHOTO_BYTES) photoError = "The photo is larger than 10 MB";
       if (photoError) errors.push({ entry: entry.entry, message: photoError });
       // An unchanged Recipe is skipped, so its photo is not stored again.
-      const unchanged =
-        sql
-          .exec(
-            "SELECT 1 FROM recipe WHERE source_kind = 'paprika' AND source_id = ? AND source_revision = ?",
-            recipe.externalId,
-            recipe.revision,
-          )
-          .toArray().length > 0;
       let photoKey: string | null | undefined = null;
-      if (photoError || unchanged) photoKey = undefined;
+      if (photoError || isUnchanged(sql, "paprika", recipe)) photoKey = undefined;
       else if (photo) photoKey = await this.storeImportedPhoto(photo, stored);
       prepared.push({ recipe, photoKey, draft: false });
     }
@@ -243,10 +238,21 @@ class HouseholdAgent extends Agent<Env> {
 
   /**
    * Has the model read pasted text, then imports what it read as a Draft, in one transaction, as a
-   * Paprika import is. Like one, it asks for Suggestions for the new Unresolved texts once it has answered.
+   * Paprika import is; or, given `draft`, fills that link-only Draft with it. Like an import, it asks
+   * for Suggestions for the new Unresolved texts once it has answered.
    */
   private async importText(input: ParsedToolInput<"import_text">): Promise<ToolResult<ToolOutput<"import_text">>> {
     const startedAt = new Date().toISOString();
+    const { sql } = this.ctx.storage;
+    const linkOnly = (id: number) => {
+      const recipe = readRecipe(sql, id);
+      return recipe && isLinkOnly(recipe);
+    };
+    const noDraft = {
+      ok: false,
+      error: { code: "not_found", message: `No link-only Draft with id ${input.draft}` },
+    } as const;
+    if (input.draft !== undefined && !linkOnly(input.draft)) return noDraft;
     let reading: RecipeReading;
     try {
       reading = await openLlm(this.env).readRecipe({ text: input.text });
@@ -255,25 +261,67 @@ class HouseholdAgent extends Agent<Env> {
       Sentry.captureException(error);
       return { ok: false, error: { code: "model_failed", message: error.message } };
     }
-    const { sql } = this.ctx.storage;
     const recipe = reading.isRecipe ? importedFromText(input.text, reading) : null;
     const outcome = this.ctx.storage.transactionSync(() => {
-      const imported = recipe
-        ? runImport(sql, "text", startedAt, [{ recipe, photoKey: null, draft: true }], [])
-        : runImport(sql, "text", startedAt, [], [{ entry: null, message: "The text holds no recipe" }]);
-      const [made] = recipe
-        ? sql
-            .exec<{ id: number; title: string }>(
-              "SELECT id, title FROM recipe WHERE source_kind = 'text' AND source_id = ?",
-              recipe.externalId,
-            )
-            .toArray()
-        : [];
-      return { ...imported, made, newTexts: newTextsIn(sql, imported.written), revision: this.bumpRevision() };
+      // The Draft may have been filled or discarded while the model read.
+      if (recipe && input.draft !== undefined && !linkOnly(input.draft)) return null;
+      const imported = !recipe
+        ? runImport(sql, "text", startedAt, [], [{ entry: null, message: "The text holds no recipe" }])
+        : input.draft !== undefined
+          ? fillDraft(sql, input.draft, recipe, startedAt)
+          : runImport(sql, "text", startedAt, [{ recipe, photoKey: null, draft: true }], []);
+      const made =
+        recipe &&
+        (input.draft !== undefined ? readRecipe(sql, input.draft) : readRecipeFrom(sql, "text", recipe.externalId));
+      return {
+        ...imported,
+        made: made && { id: made.id, title: made.title },
+        newTexts: newTextsIn(sql, imported.written),
+        revision: this.bumpRevision(),
+      };
     });
+    if (!outcome) return noDraft;
     this.notify("recipes", outcome.revision);
     if (outcome.newTexts.length > 0) await this.schedule(0, "suggestAfterImport", { texts: outcome.newTexts });
     return { ok: true, value: { run: outcome.run, recipe: outcome.made ?? null } };
+  }
+
+  /**
+   * Fetches a link and imports what it read (see `readLink`) in one transaction, its photo stored
+   * first as a Paprika import's are. Like one, it asks for Suggestions for the new Unresolved texts
+   * once it has answered.
+   */
+  private async importUrl(input: ParsedToolInput<"import_url">): Promise<ToolResult<ToolOutput<"import_url">>> {
+    const startedAt = new Date().toISOString();
+    const { sql } = this.ctx.storage;
+    const link = await readLink(sql, input.url, openLlm(this.env));
+    const errors = [...link.errors];
+    const stored: string[] = [];
+    let photoKey: string | null | undefined = null;
+    // A skipped Recipe's photo is not fetched again.
+    if (isUnchanged(sql, "url", link.recipe)) photoKey = undefined;
+    else if (link.image) {
+      const photo = await fetchPhoto(link.image);
+      if ("error" in photo) {
+        errors.push({ entry: link.image, message: photo.error });
+        photoKey = undefined;
+      } else photoKey = await this.storeImportedPhoto(photo, stored);
+    }
+
+    const outcome = this.ctx.storage.transactionSync(() => {
+      const imported = runImport(sql, "url", startedAt, [{ recipe: link.recipe, photoKey, draft: link.draft }], errors);
+      return {
+        ...imported,
+        made: readRecipeFrom(sql, "url", link.recipe.externalId) as Recipe,
+        newTexts: newTextsIn(sql, imported.written),
+        revision: this.bumpRevision(),
+      };
+    });
+    this.notify("recipes", outcome.revision);
+    if (outcome.newTexts.length > 0) await this.schedule(0, "suggestAfterImport", { texts: outcome.newTexts });
+    for (const key of [...outcome.replacedPhotos, ...stored]) await this.deletePhoto(key);
+    const { id, title, draft } = outcome.made;
+    return { ok: true, value: { run: outcome.run, recipe: { id, title, draft, linkOnly: isLinkOnly(outcome.made) } } };
   }
 
   /** Asks the model for one batch of Suggestions; see `RequestSuggestionsInput`. */

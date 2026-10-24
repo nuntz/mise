@@ -109,6 +109,14 @@ export const RecipeSource = z.discriminatedUnion("kind", [
   }),
   /** Pasted text an LLM read; the text itself is kept in the Recipe's notes. */
   z.object({ kind: z.literal("text"), importedAt: z.iso.datetime() }),
+  /** A page imported from its link; importing the link again updates this Recipe. */
+  z.object({
+    kind: z.literal("url"),
+    /** The page's canonical URL. */
+    url: z.string(),
+    author: z.string().nullable(),
+    importedAt: z.iso.datetime(),
+  }),
 ]);
 export type RecipeSource = z.infer<typeof RecipeSource>;
 
@@ -136,6 +144,14 @@ export const Recipe = z.object({
   cookCount: z.number().int().nonnegative(),
 });
 export type Recipe = z.infer<typeof Recipe>;
+
+/**
+ * A link-only Draft: a link Mise could not read a recipe from, kept with its title (and photo, if
+ * the page had one) until someone adds the recipe's text.
+ */
+export function isLinkOnly(recipe: Pick<Recipe, "draft" | "source" | "ingredients">): boolean {
+  return recipe.draft && recipe.source.kind === "url" && recipe.ingredients.length === 0;
+}
 
 /** What a search lists for each Recipe. */
 export const RecipeSummary = Recipe.pick({

@@ -60,6 +60,17 @@ const flags: ImportFlag[] = [
   },
 ];
 
+const linkRun: ImportRun = {
+  ...today,
+  id: 4,
+  source: "url",
+  created: 1,
+  updated: 0,
+  skipped: 0,
+  flagged: 0,
+  errors: [],
+};
+
 const pastedRun: ImportRun = {
   ...today,
   id: 3,
@@ -72,7 +83,9 @@ const pastedRun: ImportRun = {
 };
 
 /** A client with one past import that records every upload and tool call made. */
-function fakeClient(options: { upload?: string | null; importText?: unknown; runs?: ImportRun[] } = {}) {
+function fakeClient(
+  options: { upload?: string | null; importText?: unknown; importUrl?: unknown; runs?: ImportRun[] } = {},
+) {
   const calls: { name: string; input: unknown }[] = [];
   const uploads: Blob[] = [];
   let runs = options.runs ?? [lastWeek];
@@ -95,6 +108,8 @@ function fakeClient(options: { upload?: string | null; importText?: unknown; run
           return { ok: true, value: today };
         case "import_text":
           return options.importText;
+        case "import_url":
+          return options.importUrl;
         case "list_drafts":
         case "list_suggestions":
           return { ok: true, value: [] };
@@ -173,7 +188,9 @@ test("importing a Paprika export uploads it, runs the import and shows what it d
   expect(within(errors).getByText("Broken.paprikarecipe: The file is not JSON")).toBeTruthy();
   const flagged = screen.getByRole("list", { name: "Flagged Recipes" });
   expect(
-    await within(flagged).findByText("Our Toast changed in Paprika, but was edited in Mise, so it was left alone."),
+    await within(flagged).findByText(
+      "Our Toast changed at its source after it was edited or accepted in Mise, so it was left alone.",
+    ),
   ).toBeTruthy();
 });
 
@@ -232,4 +249,131 @@ test("pasted text the model could not read says to try again", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
 
   expect((await screen.findByRole("alert")).textContent).toBe("The text could not be read just now; try again later.");
+});
+
+const DAL_LINK = "https://kitchen.example.com/recipes/red-lentil-dal/";
+
+async function pasteLink(url = DAL_LINK) {
+  await userEvent.type(await screen.findByLabelText("Link to a recipe"), url);
+  await userEvent.click(screen.getByRole("button", { name: "Import the link" }));
+}
+
+test("a pasted link with a recipe Mise can read lands in the Recipes", async () => {
+  const { client, calls } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: { run: linkRun, recipe: { id: 11, title: "Red Lentil Dal", draft: false, linkOnly: false } },
+    },
+  });
+  await openImport(client);
+
+  await pasteLink();
+
+  expect(calls).toContainEqual({ name: "import_url", input: { url: DAL_LINK } });
+  expect((await screen.findByRole("status")).textContent).toBe("Red Lentil Dal is in your Recipes.");
+  expect((screen.getByLabelText("Link to a recipe") as HTMLInputElement).value).toBe("");
+});
+
+test("a pasted link the model read waits on the Review screen as a Draft", async () => {
+  const { client } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: { run: linkRun, recipe: { id: 12, title: "Shepherd's Pie", draft: true, linkOnly: false } },
+    },
+  });
+  await openImport(client);
+
+  await pasteLink();
+
+  expect((await screen.findByRole("status")).textContent).toBe(
+    "Shepherd's Pie is waiting on the Review screen as a Draft, until someone checks it.",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Review it" }));
+  expect(await screen.findByRole("heading", { name: "Waiting on you" })).toBeTruthy();
+});
+
+test("a link Mise could not read is kept, and its recipe's text can be pasted into it", async () => {
+  const { client, calls } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: {
+        run: { ...linkRun, errors: [{ entry: DAL_LINK, message: "The page was refused by its site (HTTP 403)" }] },
+        recipe: { id: 13, title: "Red lentil dal", draft: true, linkOnly: true },
+      },
+    },
+    importText: { ok: true, value: { run: pastedRun, recipe: { id: 13, title: "Red Lentil Dal" } } },
+  });
+  await openImport(client);
+
+  await pasteLink();
+
+  expect((await screen.findByRole("status")).textContent).toBe(
+    "Mise could not read a recipe at that link (The page was refused by its site (HTTP 403)), so it kept the link as a Draft: Red lentil dal. Paste the recipe's text to fill it in.",
+  );
+  await userEvent.type(screen.getByLabelText("The recipe's text, for Red lentil dal"), "1 cup red lentils");
+  await userEvent.click(screen.getByRole("button", { name: "Fill in the Draft" }));
+  expect(calls).toContainEqual({ name: "import_text", input: { text: "1 cup red lentils", draft: 13 } });
+  expect(
+    await screen.findByText("Red Lentil Dal is waiting on the Review screen as a Draft, until someone checks it."),
+  ).toBeTruthy();
+});
+
+test("a link imported before, and unchanged, says nothing changed", async () => {
+  const { client } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: {
+        run: { ...linkRun, created: 0, skipped: 1 },
+        recipe: { id: 11, title: "Red Lentil Dal", draft: false, linkOnly: false },
+      },
+    },
+  });
+  await openImport(client);
+
+  await pasteLink();
+
+  expect((await screen.findByRole("status")).textContent).toBe("Red Lentil Dal is already in Mise, unchanged.");
+});
+
+test("a link whose Recipe was edited in Mise since says it was left alone", async () => {
+  const { client } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: {
+        run: { ...linkRun, created: 0, flagged: 1 },
+        recipe: { id: 11, title: "Red Lentil Dal", draft: false, linkOnly: false },
+      },
+    },
+  });
+  await openImport(client);
+
+  await pasteLink();
+
+  expect((await screen.findByRole("status")).textContent).toBe(
+    "Red Lentil Dal changed at its link, but was edited or accepted in Mise, so it was left alone and flagged.",
+  );
+});
+
+test("a link imported before that can't be read now says it kept the Recipe, and why", async () => {
+  const { client } = fakeClient({
+    importUrl: {
+      ok: true,
+      value: {
+        run: {
+          ...linkRun,
+          created: 0,
+          skipped: 1,
+          errors: [{ entry: DAL_LINK, message: "The page was refused by its site (HTTP 403)" }],
+        },
+        recipe: { id: 11, title: "Red Lentil Dal", draft: false, linkOnly: false },
+      },
+    },
+  });
+  await openImport(client);
+
+  await pasteLink();
+
+  expect((await screen.findByRole("status")).textContent).toBe(
+    "Red Lentil Dal is already in Mise, kept as it was: the link could not be read again (The page was refused by its site (HTTP 403)).",
+  );
 });

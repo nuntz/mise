@@ -69,8 +69,12 @@ An LLM's guess at the Item an Unresolved Ingredient refers to: an existing Item,
 _Avoid_: Proposal (that is a Week's), tag
 
 **Draft Recipe**:
-An imported Recipe kept but not yet accepted by a person, because an LLM read it from an unreliable source (a video's caption, a screenshot, pasted text). It is never proposed, planned or shopped until accepted, and can be discarded.
+An imported Recipe kept but not yet accepted by a person, because an LLM read it from an unreliable source (a video's caption, a screenshot, pasted text, a web page without recipe data), or because nothing could be read at its link (a Link-only Draft). It is never proposed, planned or shopped until accepted, and can be discarded.
 _Avoid_: Pending recipe, review item
+
+**Link-only Draft**:
+A Draft Recipe that holds only a link, its title and its photo if the page had one, because Mise could not read a recipe there (the site refused it, or its page holds none). It waits for someone to paste the recipe's text into it.
+_Avoid_: Bookmark, stub
 
 **Imported Preference**:
 How much the Household liked a Recipe before Mise, carried over from its source; separate from Ratings made in Mise.

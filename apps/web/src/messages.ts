@@ -312,6 +312,23 @@ const en = {
   "unitFamily.volume": "Volume",
   "unitFamily.count": "Count",
 
+  "link.title": "Import a link",
+  "link.intro": "Paste a link to a recipe page. Mise reads its recipe, or keeps the link as a Draft if it can't.",
+  "link.url": "Link to a recipe",
+  "link.import": "Import the link",
+  "link.importing": "Importing…",
+  "link.recipe": "{title} is in your Recipes.",
+  "link.unchanged": "{title} is already in Mise, unchanged.",
+  "link.keptBecause": "{title} is already in Mise, kept as it was: the link could not be read again ({reason}).",
+  "link.leftAlone":
+    "{title} changed at its link, but was edited or accepted in Mise, so it was left alone and flagged.",
+  "link.linkOnly":
+    "Mise could not read a recipe at that link, so it kept the link as a Draft: {title}. Paste the recipe's text to fill it in.",
+  "link.linkOnlyBecause":
+    "Mise could not read a recipe at that link ({reason}), so it kept the link as a Draft: {title}. Paste the recipe's text to fill it in.",
+  "link.invalid": "That is not a link to a web page.",
+  "fill.text": "The recipe's text, for {title}",
+  "fill.read": "Fill in the Draft",
   "paste.title": "Paste a recipe",
   "paste.intro":
     "Paste a recipe's text: a caption, a message, a Doc. AI reads it into a Draft, which is never planned or shopped until someone checks it on the Review screen.",
@@ -327,6 +344,7 @@ const en = {
   "review.drafts": "Drafts",
   "review.aiRead":
     "Read by AI, so it may be wrong or incomplete. Check the title, Ingredients, servings, time and Course: until accepted it is never planned or shopped.",
+  "review.linkOnly": "Mise could not read a recipe at its link. Paste the recipe's text to fill it in.",
   "review.duplicate": "It may be the same as {title}, which you already have.",
   "review.courseUnknown": "Course unknown",
   "review.accept": "Accept",
@@ -349,9 +367,10 @@ const en = {
   "import.run": "{when}, {source}: {counts}",
   "import.source.paprika": "Paprika",
   "import.source.text": "pasted text",
+  "import.source.url": "a link",
   "import.runErrors": "{count} not imported",
   "import.flags": "Flagged Recipes",
-  "import.merge": "{title} changed in Paprika, but was edited in Mise, so it was left alone.",
+  "import.merge": "{title} changed at its source after it was edited or accepted in Mise, so it was left alone.",
   "import.duplicate": "{title} may be the same as {other}. Both are kept.",
 
   "tag.title": "Tag Recipes",
@@ -400,6 +419,7 @@ const en = {
   "recipe.photoFailed": "The photo could not be saved.",
   "recipe.imported": "Imported from Paprika.",
   "recipe.importedFrom": "Imported from Paprika; source: {from}.",
+  "recipe.importedLink": "Imported from {url}.",
   "recipe.importedText": "Read by AI from pasted text, kept in the notes.",
   "recipe.draft": "That Recipe is a Draft: accept it on the Review screen to plan it.",
 

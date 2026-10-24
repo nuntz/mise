@@ -10,6 +10,7 @@ export * from "./ingredients";
 export * from "./items";
 export * from "./llm";
 export * from "./members";
+export * from "./pages";
 export * from "./paprika";
 export * from "./proposals";
 export * from "./proposer";

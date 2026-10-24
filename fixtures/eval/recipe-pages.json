@@ -1,0 +1,16 @@
+{
+  "about": "Recorded pages without schema.org Recipe data (in `fixtures/pages`), for `bun run eval` to read as Mise reads them: their text, by the model. Each has what a good reading holds, as in `pasted-recipes.json`.",
+  "pages": [
+    {
+      "name": "a blog post without JSON-LD",
+      "page": "no-json-ld.html",
+      "expect": {
+        "isRecipe": true,
+        "title": "Shepherd",
+        "ingredients": ["500 g lamb mince", "1 onion, diced", "2 carrots, diced", "1 kg potatoes", "50 g butter"],
+        "servings": 6,
+        "course": "main"
+      }
+    }
+  ]
+}

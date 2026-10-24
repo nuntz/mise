@@ -107,7 +107,7 @@ All sources share: source reader (structured fields, or the LLM extracting the R
 |---|---|---|---|
 | Paprika `.paprikarecipes` | Upload in PWA | zip → gzipped JSON per recipe; fields map directly; photo base64 → R2 | `uid` / `hash` (fallback: content hash) |
 | Google Drive folder (Docs) | Service account with folder shared to it; nightly DO alarm + "sync now" | Export Doc as `text/markdown` (zipped HTML when it holds an image; the first image is the photo) → LLM to Recipe text; subfolders → tags (same mapping as Paprika categories); "is this a recipe?" gate | `docId` / `modifiedTime` |
-| URL | Paste a link in the PWA; iOS Shortcut in the share sheet opening `/share?url=…` in Safari (behind Access) | schema.org `Recipe` JSON-LD first; LLM on page text as fallback; `og:image` | `canonicalUrl` / `fetchedAt` |
+| URL | Paste a link in the PWA; iOS Shortcut in the share sheet opening `/share?url=…` in Safari (behind Access) | schema.org `Recipe` JSON-LD first; LLM on page text as fallback; `og:image` | `canonicalUrl` / content hash (of the JSON-LD Recipe and its photo, else of the page text) |
 | TikTok / Instagram | Same as URL | Tier 1: oEmbed caption + thumbnail (TikTok only; Instagram oEmbed needs Meta app review, so Instagram is link-only + tier 3). Tier 2: external job runner (yt-dlp → Whisper transcript → frame samples → LLM). Tier 3: paste caption / one or more screenshots → vision. Always a Draft; review must make fixing amounts fast. | `videoUrl` |
 | Manual | PWA form, or dictated to the agent | — | — |
 

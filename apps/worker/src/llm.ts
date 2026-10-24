@@ -88,9 +88,11 @@ const SYSTEM_PROMPT = [
 const READ_TOOL = "read_recipe";
 
 const READ_PROMPT = [
-  "You read recipes for a family meal planner, from text someone pasted: a video caption, a message, a document.",
+  "You read recipes for a family meal planner, from text someone pasted (a video caption, a message, a document)",
+  "or the text of a web page.",
   "Say whether it holds a recipe someone could cook from. A caption that only says the recipe is elsewhere",
-  '("recipe in bio", "link in comments") holds none.',
+  '("recipe in bio", "link in comments") holds none. On a web page, read only the recipe, never its story,',
+  "comments, adverts or links to other recipes.",
   "Copy each ingredient line exactly as written, with its amount, unit and notes: the planner parses the lines",
   "itself, so never rewrite, convert, merge or complete them. Leave out headings and emoji-only lines.",
   "Give servings and the cooking time only when the text says them.",
@@ -166,7 +168,7 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
 }
 
 function readPrompt({ text }: ReadRecipeRequest): string {
-  return ["The pasted text:", "<text>", text, "</text>"].join("\n");
+  return ["The text:", "<text>", text, "</text>"].join("\n");
 }
 
 function prompt({ names, catalogue }: SuggestionRequest): string {

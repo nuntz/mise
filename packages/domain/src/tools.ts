@@ -25,6 +25,8 @@ import {
   ImportRun,
   ImportTextInput,
   ImportTextOutput,
+  ImportUrlInput,
+  ImportUrlOutput,
   RunPaprikaImportInput,
 } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection, UpdateItemInput } from "./items";
@@ -248,11 +250,26 @@ export const tools = {
    * Reads pasted text with the model (ADR 0023) into a Draft Recipe, logged as an Import Run of source
    * `text`, and flagged if it looks like a Recipe already kept. Text pasted before is skipped, and text
    * holding no recipe creates nothing, logged as the run's error. Refuses with `model_failed` when the
-   * model fails, logging nothing.
+   * model fails, logging nothing. With `draft`, fills that link-only Draft instead, keeping its link
+   * (an edit in Mise, so importing the link again flags it rather than overwriting it); refuses
+   * anything else (`not_found`).
    */
   import_text: defineTool({
     input: ImportTextInput,
     output: ImportTextOutput,
+    changes: "recipes",
+  }),
+  /**
+   * Fetches a recipe page and imports it, logged as an Import Run of source `url`, upserted on the
+   * page's canonical URL. A schema.org Recipe in its JSON-LD makes a Recipe, with the Recipe's photo
+   * (else the page's `og:image`); otherwise the model reads the page's text into a Draft. A page that
+   * can't be fetched, or holds no recipe, or that the model fails to read, makes a link-only Draft, so
+   * the link is never lost; why is logged as the run's error. Importing an unchanged page again is
+   * skipped, without asking the model.
+   */
+  import_url: defineTool({
+    input: ImportUrlInput,
+    output: ImportUrlOutput,
     changes: "recipes",
   }),
   /** Draft Recipes, newest first. */
