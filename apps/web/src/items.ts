@@ -21,8 +21,18 @@ export function createItems(client: MiseClient): () => Map<ItemId, Item> {
   return items;
 }
 
+/**
+ * Whether `text` is one of `names` (an Item's name and aliases, say), or with "part" is in one of
+ * them, matched as Item names are.
+ */
+export function nameMatches(names: readonly string[], text: string, match: "whole" | "part"): boolean {
+  const wanted = normaliseItemName(text);
+  return names.some((name) =>
+    match === "whole" ? normaliseItemName(name) === wanted : normaliseItemName(name).includes(wanted),
+  );
+}
+
 /** The Item a name or alias names, matched as Item names are. */
 export function itemNamed(items: Iterable<Item>, name: string): Item | undefined {
-  const wanted = normaliseItemName(name);
-  return [...items].find((item) => [item.name, ...item.aliases].some((one) => normaliseItemName(one) === wanted));
+  return [...items].find((item) => nameMatches([item.name, ...item.aliases], name, "whole"));
 }

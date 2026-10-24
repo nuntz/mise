@@ -1,8 +1,9 @@
-import { normaliseItemName, type Staple, type StapleStatus } from "@mise/domain";
+import type { Staple, StapleStatus } from "@mise/domain";
 import { createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
+import { nameMatches } from "./items";
 import { t } from "./messages";
 import { Sheet } from "./Sheet";
 
@@ -84,8 +85,7 @@ function Picker(props: {
   );
 
   const shown = () => {
-    const wanted = normaliseItemName(query());
-    return (staples() ?? []).filter((staple) => normaliseItemName(staple.name).includes(wanted));
+    return (staples() ?? []).filter((staple) => nameMatches([staple.name], query(), "part"));
   };
 
   const record = async (staple: Staple, status: StapleStatus) => {

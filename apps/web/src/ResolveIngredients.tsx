@@ -15,7 +15,7 @@ import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
-import { createItems } from "./items";
+import { createItems, itemNamed } from "./items";
 import { t } from "./messages";
 
 /** Unresolved Ingredients grouped by text, most frequent first; each group resolves in one go. */
@@ -145,10 +145,7 @@ function MapForm(props: {
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    const wanted = normaliseItemName(name());
-    const item = [...props.items.values()].find((candidate) =>
-      [candidate.name, ...candidate.aliases].some((known) => normaliseItemName(known) === wanted),
-    );
+    const item = itemNamed(props.items.values(), name());
     if (item) props.onPicked(item);
     else props.onUnknown();
   };
