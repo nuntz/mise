@@ -14,3 +14,7 @@ Correcting a Course by hand is the repair path. The Recipe form has a Course pic
 - Reasons stored before the Course existed have no `course` count. They read it as 0.
 - Only dinners are proposed, so the Course matters only there for now. Once the Proposer fills other meals, it is the Course that says what fits them, not the Slot's meal alone.
 - A dessert or drink can still be put in a dinner Slot by hand. The rule only binds what the Proposer chooses, so it does not fill the next dinner with the Leftovers of one Locked there.
+
+## Amendment: Draft Recipes (Drop 2)
+
+A Recipe the LLM read (a page without JSON-LD, a video's caption, a screenshot, pasted text) lands as a Draft Recipe, and the LLM fills in its Course along with the rest. That is a guess from the title and the Ingredients, which this ADR otherwise rules out, but a Draft is never proposed until a person accepts it, and accepting it shows the Course to correct. The guess is reviewed before it can keep a dinner out of a Proposal. Recipes imported from structured data (Paprika, JSON-LD) still work their Course out from categories only.
