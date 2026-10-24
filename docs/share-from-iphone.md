@@ -18,11 +18,24 @@ In the Shortcuts app:
    other apps share a link inside text). Set "If there's no input" to **Stop and Respond**.
 3. Add **Get URLs from Input**, with **Shortcut Input** as its input.
 4. Add **Get Item from List**, set to **First Item** of the URLs.
-5. Add **URL Encode**, set to **Encode** the item from the list.
-6. Add **Text**, and type `https://mise.example.com/share?url=` followed by the **URL Encoded Text**
-   variable (tap the variable bar above the keyboard). Use your own host in place of
-   `mise.example.com`.
-7. Add **Open URLs**, with the **Text** as its input.
+5. Add **URL Encode**, set to **Encode**, with the **Item from List** variable as its input. It holds
+   only the shared link, never your host: Mise's address goes in the next action.
+6. Add a separate **Text** action (search the actions for "Text"). Type
+   `https://mise.example.com/share?url=` in it, then insert the **URL Encoded Text** variable right
+   after the `=`, with no space (tap the variable bar above the keyboard). Use your own host in place
+   of `mise.example.com`.
+7. Add **Open URLs**, with the **Text** variable as its input.
+
+When it's done, the shortcut reads:
+
+```
+Receive URLs and 2 more from Share Sheet
+Get URLs from Shortcut Input
+Get First Item from URLs
+URL Encode  Item from List
+Text  https://mise.example.com/share?url=[URL Encoded Text]
+Open  Text
+```
 
 Tap **Done**. Sharing from Safari, TikTok or any other app now lists **Mise** in the share sheet
 (scroll the row of actions to the end and tap **Edit Actions** to move it up).
