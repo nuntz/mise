@@ -164,10 +164,10 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
                 <button
                   type="button"
                   class="button-small"
-                  aria-label={t("useUp.remove", { name: nameOf(id) })}
+                  aria-label={t("useUp.removeItem", { name: nameOf(id) })}
                   onClick={() => props.onChange(props.picked.filter((other) => other !== id))}
                 >
-                  {t("member.remove")}
+                  {t("useUp.remove")}
                 </button>
               </li>
             )}

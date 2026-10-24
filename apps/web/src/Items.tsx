@@ -173,7 +173,7 @@ function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void })
         </label>
       </Show>
       <label>
-        {t("items.otherNames")}
+        {t("item.otherNames")}
         <input value={aliases()} onInput={(e) => setAliases(e.currentTarget.value)} />
       </label>
       <small>
