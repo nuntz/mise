@@ -1,0 +1,108 @@
+diff --git a/build/cjs/dev/durableobject.js b/build/cjs/dev/durableobject.js
+index 5c2be3f18a190e3d9845e754921bbfc769b62a39..6a619cea0fea17108e93134bdfd9e7f556ae8c91 100644
+--- a/build/cjs/dev/durableobject.js
++++ b/build/cjs/dev/durableobject.js
+@@ -20,7 +20,13 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   const instrumentedEnv = instrumentEnv.instrumentEnv(env, options$1);
+   const prototype = newTarget.prototype ?? target.prototype;
+   const cachedFrameworkManagedMethods = frameworkManagedMethodsCache.get(prototype);
+-  const methodsBeforeConstruction = cachedFrameworkManagedMethods ? void 0 : resolvePrototypeMethods(prototype);
++  // Keep the original methods across constructor failures: Agents may already have
++  // wrapped them before storage initialization throws (for example at a quota limit).
++  let methodsBeforeConstruction = methodsBeforeConstructionCache.get(prototype);
++  if (!cachedFrameworkManagedMethods && !methodsBeforeConstruction) {
++    methodsBeforeConstruction = resolvePrototypeMethods(prototype);
++    methodsBeforeConstructionCache.set(prototype, methodsBeforeConstruction);
++  }
+   const obj = invocationScope.withConstructionIsolationScope(
+     () => Reflect.construct(target, [context, instrumentedEnv], newTarget)
+   );
+@@ -34,6 +40,7 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   return { obj, options: options$1, context, frameworkManagedMethods };
+ }
+ const frameworkManagedMethodsCache = /* @__PURE__ */ new WeakMap();
++const methodsBeforeConstructionCache = /* @__PURE__ */ new WeakMap();
+ function resolvePrototypeMethods(prototype) {
+   const methods = /* @__PURE__ */ new Map();
+   for (let current = prototype; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+diff --git a/build/cjs/prod/durableobject.js b/build/cjs/prod/durableobject.js
+index 5c2be3f18a190e3d9845e754921bbfc769b62a39..6a619cea0fea17108e93134bdfd9e7f556ae8c91 100644
+--- a/build/cjs/prod/durableobject.js
++++ b/build/cjs/prod/durableobject.js
+@@ -20,7 +20,13 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   const instrumentedEnv = instrumentEnv.instrumentEnv(env, options$1);
+   const prototype = newTarget.prototype ?? target.prototype;
+   const cachedFrameworkManagedMethods = frameworkManagedMethodsCache.get(prototype);
+-  const methodsBeforeConstruction = cachedFrameworkManagedMethods ? void 0 : resolvePrototypeMethods(prototype);
++  // Keep the original methods across constructor failures: Agents may already have
++  // wrapped them before storage initialization throws (for example at a quota limit).
++  let methodsBeforeConstruction = methodsBeforeConstructionCache.get(prototype);
++  if (!cachedFrameworkManagedMethods && !methodsBeforeConstruction) {
++    methodsBeforeConstruction = resolvePrototypeMethods(prototype);
++    methodsBeforeConstructionCache.set(prototype, methodsBeforeConstruction);
++  }
+   const obj = invocationScope.withConstructionIsolationScope(
+     () => Reflect.construct(target, [context, instrumentedEnv], newTarget)
+   );
+@@ -34,6 +40,7 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   return { obj, options: options$1, context, frameworkManagedMethods };
+ }
+ const frameworkManagedMethodsCache = /* @__PURE__ */ new WeakMap();
++const methodsBeforeConstructionCache = /* @__PURE__ */ new WeakMap();
+ function resolvePrototypeMethods(prototype) {
+   const methods = /* @__PURE__ */ new Map();
+   for (let current = prototype; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+diff --git a/build/esm/dev/durableobject.js b/build/esm/dev/durableobject.js
+index e3af09e3b623dcf0179a9c4524e84d7b1ecab891..7e180edf13f1b5e7d91421b2f807a545709b50c5 100644
+--- a/build/esm/dev/durableobject.js
++++ b/build/esm/dev/durableobject.js
+@@ -18,7 +18,13 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   const instrumentedEnv = instrumentEnv(env, options);
+   const prototype = newTarget.prototype ?? target.prototype;
+   const cachedFrameworkManagedMethods = frameworkManagedMethodsCache.get(prototype);
+-  const methodsBeforeConstruction = cachedFrameworkManagedMethods ? void 0 : resolvePrototypeMethods(prototype);
++  // Keep the original methods across constructor failures: Agents may already have
++  // wrapped them before storage initialization throws (for example at a quota limit).
++  let methodsBeforeConstruction = methodsBeforeConstructionCache.get(prototype);
++  if (!cachedFrameworkManagedMethods && !methodsBeforeConstruction) {
++    methodsBeforeConstruction = resolvePrototypeMethods(prototype);
++    methodsBeforeConstructionCache.set(prototype, methodsBeforeConstruction);
++  }
+   const obj = withConstructionIsolationScope(
+     () => Reflect.construct(target, [context, instrumentedEnv], newTarget)
+   );
+@@ -32,6 +38,7 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   return { obj, options, context, frameworkManagedMethods };
+ }
+ const frameworkManagedMethodsCache = /* @__PURE__ */ new WeakMap();
++const methodsBeforeConstructionCache = /* @__PURE__ */ new WeakMap();
+ function resolvePrototypeMethods(prototype) {
+   const methods = /* @__PURE__ */ new Map();
+   for (let current = prototype; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+diff --git a/build/esm/prod/durableobject.js b/build/esm/prod/durableobject.js
+index e3af09e3b623dcf0179a9c4524e84d7b1ecab891..7e180edf13f1b5e7d91421b2f807a545709b50c5 100644
+--- a/build/esm/prod/durableobject.js
++++ b/build/esm/prod/durableobject.js
+@@ -18,7 +18,13 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   const instrumentedEnv = instrumentEnv(env, options);
+   const prototype = newTarget.prototype ?? target.prototype;
+   const cachedFrameworkManagedMethods = frameworkManagedMethodsCache.get(prototype);
+-  const methodsBeforeConstruction = cachedFrameworkManagedMethods ? void 0 : resolvePrototypeMethods(prototype);
++  // Keep the original methods across constructor failures: Agents may already have
++  // wrapped them before storage initialization throws (for example at a quota limit).
++  let methodsBeforeConstruction = methodsBeforeConstructionCache.get(prototype);
++  if (!cachedFrameworkManagedMethods && !methodsBeforeConstruction) {
++    methodsBeforeConstruction = resolvePrototypeMethods(prototype);
++    methodsBeforeConstructionCache.set(prototype, methodsBeforeConstruction);
++  }
+   const obj = withConstructionIsolationScope(
+     () => Reflect.construct(target, [context, instrumentedEnv], newTarget)
+   );
+@@ -32,6 +38,7 @@ function constructInstrumentedDurableObject(target, ctx, env, newTarget, options
+   return { obj, options, context, frameworkManagedMethods };
+ }
+ const frameworkManagedMethodsCache = /* @__PURE__ */ new WeakMap();
++const methodsBeforeConstructionCache = /* @__PURE__ */ new WeakMap();
+ function resolvePrototypeMethods(prototype) {
+   const methods = /* @__PURE__ */ new Map();
+   for (let current = prototype; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
