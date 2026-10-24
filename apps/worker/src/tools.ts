@@ -76,7 +76,38 @@ export const handlers: Handlers = {
     return { ok: true, value: readHousehold(sql) as Household };
   },
 
-  update_household_settings: (sql, input) => updateSettings(sql, input),
+  /**
+   * A new week start applies from the next Week (ADR 0021): the current Week and those already
+   * stored after it keep their dates, judged by today in the new timezone.
+   */
+  update_household_settings: (sql, input) => {
+    const settings = readSettings(sql);
+    if (!settings) return notSetUp();
+    const updated = { ...settings, ...input };
+    if (input.weekStartsOn !== undefined) {
+      const created = sql
+        .exec<{ start_date: string }>("SELECT start_date FROM week")
+        .toArray()
+        .map((row) => row.start_date);
+      const today = localDate(new Date(), updated.timezone);
+      const changes = changeWeekStart(settings, updated.weekStartsOn, today, created);
+      sql.exec("DELETE FROM week_start_change");
+      for (const change of changes) {
+        sql.exec("INSERT INTO week_start_change (from_date, stretches) VALUES (?, ?)", change.from, change.stretches);
+      }
+    }
+    sql.exec(
+      `UPDATE household SET name = ?, timezone = ?, dinner_time = ?, week_starts_on = ?, units = ?, locale = ?
+       WHERE id = 1`,
+      updated.name,
+      updated.timezone,
+      updated.dinnerTime,
+      updated.weekStartsOn,
+      updated.units,
+      updated.locale,
+    );
+    return { ok: true, value: readHousehold(sql) as Household };
+  },
 
   set_effort_budgets: (sql, input) => {
     if (!readSettings(sql)) return notSetUp();
@@ -223,39 +254,6 @@ export function readSettings(sql: SqlStorage): SettingsAndCalendar | null {
     .map((row) => ({ from: row.from_date, stretches: row.stretches }));
   // Parsed with the week start, so changes that would leave a date in no Week, or in two, throw.
   return { ...settings, ...WeekCalendar.parse({ weekStartsOn: settings.weekStartsOn, weekStartChanges }) };
-}
-
-/**
- * Changes the settings given. A new week start applies from the next Week (ADR 0021): the current
- * Week and those already stored after it keep their dates, judged by today in the new timezone.
- */
-function updateSettings(sql: SqlStorage, input: Partial<HouseholdSettings>): ToolResult<Household> {
-  const settings = readSettings(sql);
-  if (!settings) return notSetUp();
-  const updated = { ...settings, ...input };
-  if (input.weekStartsOn !== undefined) {
-    const created = sql
-      .exec<{ start_date: string }>("SELECT start_date FROM week")
-      .toArray()
-      .map((row) => row.start_date);
-    const today = localDate(new Date(), updated.timezone);
-    const changes = changeWeekStart(settings, updated.weekStartsOn, today, created);
-    sql.exec("DELETE FROM week_start_change");
-    for (const change of changes) {
-      sql.exec("INSERT INTO week_start_change (from_date, stretches) VALUES (?, ?)", change.from, change.stretches);
-    }
-  }
-  sql.exec(
-    `UPDATE household SET name = ?, timezone = ?, dinner_time = ?, week_starts_on = ?, units = ?, locale = ?
-     WHERE id = 1`,
-    updated.name,
-    updated.timezone,
-    updated.dinnerTime,
-    updated.weekStartsOn,
-    updated.units,
-    updated.locale,
-  );
-  return { ok: true, value: readHousehold(sql) as Household };
 }
 
 function readHousehold(sql: SqlStorage): Household | null {
