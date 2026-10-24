@@ -212,6 +212,21 @@ test("an imported Recipe shows its notes and where it came from", async () => {
   expect(screen.getByText("Imported from Paprika; source: The Example Kitchen.")).toBeTruthy();
 });
 
+test("a Recipe read from pasted text says so, and never that it came from Paprika", async () => {
+  const pasted: Recipe = {
+    ...toast,
+    notes: "Toast, serves 2",
+    source: { kind: "text", importedAt: "2026-10-24T12:00:00.000Z" },
+  };
+  const { client } = fakeClient([pasted]);
+  await openRecipes(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
+
+  expect(await screen.findByText("Read by AI from pasted text, kept in the notes.")).toBeTruthy();
+  expect(screen.queryByText(/Paprika/)).toBeNull();
+});
+
 test("editing a Recipe starts from what it has and saves the changes", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([toast]);

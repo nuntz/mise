@@ -87,14 +87,8 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
         )}
       </Show>
 
-      <Show when={flags().length > 0}>
-        <h3 id="import-flags">{t("import.flags")}</h3>
-        <ul aria-labelledby="import-flags">
-          <For each={flags()}>{(flag) => <li>{flagText(flag)}</li>}</For>
-        </ul>
-      </Show>
-
-      <h3 id="import-runs">{t("import.runs")}</h3>
+      {/* Every source's runs, pasted text's too: not only Paprika's, whose section ends here. */}
+      <h2 id="import-runs">{t("import.runs")}</h2>
       <Show when={runs()}>
         {(listed) => (
           <Show when={listed().length > 0} fallback={<p>{t("import.noRuns")}</p>}>
@@ -102,7 +96,11 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
               <For each={listed()}>
                 {(run) => (
                   <li>
-                    {t("import.run", { when: whenText(run.startedAt), counts: countsText(run) })}
+                    {t("import.run", {
+                      when: whenText(run.startedAt),
+                      source: t(`import.source.${run.source}`),
+                      counts: countsText(run),
+                    })}
                     <Show when={run.errors.length > 0}>
                       {" · "}
                       {t("import.runErrors", { count: String(run.errors.length) })}
@@ -113,6 +111,12 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
             </ul>
           </Show>
         )}
+      </Show>
+      <Show when={flags().length > 0}>
+        <h3 id="import-flags">{t("import.flags")}</h3>
+        <ul aria-labelledby="import-flags">
+          <For each={flags()}>{(flag) => <li>{flagText(flag)}</li>}</For>
+        </ul>
       </Show>
     </section>
   );

@@ -60,11 +60,22 @@ const flags: ImportFlag[] = [
   },
 ];
 
+const pastedRun: ImportRun = {
+  ...today,
+  id: 3,
+  source: "text",
+  created: 1,
+  updated: 0,
+  skipped: 0,
+  flagged: 0,
+  errors: [],
+};
+
 /** A client with one past import that records every upload and tool call made. */
-function fakeClient(options: { upload?: string | null; importText?: unknown } = {}) {
+function fakeClient(options: { upload?: string | null; importText?: unknown; runs?: ImportRun[] } = {}) {
   const calls: { name: string; input: unknown }[] = [];
   const uploads: Blob[] = [];
-  let runs = [lastWeek];
+  let runs = options.runs ?? [lastWeek];
   const { client, notify } = createFakeClient(
     async (name: string, input: unknown) => {
       calls.push({ name, input });
@@ -120,6 +131,29 @@ test("lists past imports and what they flagged", async () => {
   expect(within(flagged).getByText("Weeknight Dal may be the same as Weeknight dal!. Both are kept.")).toBeTruthy();
 });
 
+test("past imports say what each read, apart from the Paprika import", async () => {
+  const { client } = fakeClient({
+    importText: { ok: true, value: { run: pastedRun, recipe: { id: 9, title: "Grandma's dal" } } },
+  });
+  await openImport(client);
+
+  const runs = await screen.findByRole("list", { name: "Past imports" });
+  expect(within(runs).getByText(/Paprika: 120 created/)).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Past imports" }).tagName).toBe("H2");
+});
+
+test("a pasted recipe's run says it came from pasted text, not Paprika", async () => {
+  const { client } = fakeClient({
+    importText: { ok: true, value: { run: pastedRun, recipe: { id: 9, title: "Grandma's dal" } } },
+    runs: [pastedRun],
+  });
+  await openImport(client);
+
+  const runs = await screen.findByRole("list", { name: "Past imports" });
+  expect(within(runs).getByText(/pasted text: 1 created/)).toBeTruthy();
+  expect(within(runs).queryByText(/Paprika/)).toBeNull();
+});
+
 test("importing a Paprika export uploads it, runs the import and shows what it did", async () => {
   const { client, calls, uploads } = fakeClient();
   await openImport(client);
@@ -152,17 +186,6 @@ test("an upload that fails says so and runs nothing", async () => {
   expect((await screen.findByRole("alert")).textContent).toBe("The export could not be uploaded.");
   expect(calls.map((call) => call.name)).not.toContain("run_paprika_import");
 });
-
-const pastedRun: ImportRun = {
-  ...today,
-  id: 3,
-  source: "text",
-  created: 1,
-  updated: 0,
-  skipped: 0,
-  flagged: 0,
-  errors: [],
-};
 
 test("pasting a recipe's text reads it into a Draft, and goes to the Review screen to check it", async () => {
   const { client, calls } = fakeClient({
