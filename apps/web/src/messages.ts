@@ -233,6 +233,7 @@ const en = {
   "item.name": "Name",
   "item.section": "Store Section",
   "item.unitFamily": "Measured by",
+  "item.otherNames": "Other names",
   "item.allergens": "Allergens",
   "item.allergensHint":
     "Check the label. Every Recipe using this Item is planned as containing exactly these Allergens.",
@@ -255,7 +256,6 @@ const en = {
   "items.edit": "Edit",
   "items.save": "Save",
   "items.cancel": "Cancel",
-  "items.otherNames": "Other names",
   "items.otherNamesHint": "Separate them with commas. Ingredients written with any of them resolve to this Item.",
   "items.otherNamesShipped": "Separate them with commas. It also ships as: {aliases}.",
   "items.shippedSection": "It ships in {section}. Choose that to put it back.",
@@ -384,14 +384,16 @@ const en = {
   "week.otherMealsNone": "Not planned",
   "week.groceryList": "Grocery List",
   "week.proposeAgain": "Propose again",
+  "week.emptyTitle": "Nothing planned yet",
+  "week.emptyBody": "Mise can pick dinners that suit everyone who is eating, or you can choose day by day.",
+
   "useUp.title": "Use it up",
   "useUp.hint": "Items on hand: proposing favours dinners that use them, never ones that don't suit who's eating.",
   "useUp.item": "Item on hand",
   "useUp.add": "Add",
-  "useUp.remove": "Remove {name}",
+  "useUp.remove": "Remove",
+  "useUp.removeItem": "Remove {name}",
   "useUp.noSuchItem": "No Item is called “{name}”.",
-  "week.emptyTitle": "Nothing planned yet",
-  "week.emptyBody": "Mise can pick dinners that suit everyone who is eating, or you can choose day by day.",
 
   "effort.title": "Effort Budgets",
   "effort.hint":

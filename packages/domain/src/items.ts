@@ -33,6 +33,16 @@ export const HouseholdItemId = z.custom<HouseholdItemId>(
   "Not a Household Item",
 );
 
+/** The key of the Household Item stored in row `row`. */
+export function householdItemId(row: number): HouseholdItemId {
+  return `household:${row}`;
+}
+
+/** The row a Household Item's key names. */
+export function householdItemRow(id: HouseholdItemId): number {
+  return Number(id.slice("household:".length));
+}
+
 export const ItemId = z.union([ShippedItemId, HouseholdItemId]);
 export type ItemId = z.infer<typeof ItemId>;
 

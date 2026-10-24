@@ -1,9 +1,8 @@
 import {
   ALLERGENS,
   type Allergen,
-  ITEMS,
   type Item,
-  normaliseItemName,
+  SHIPPED_ITEMS,
   STORE_SECTIONS,
   type StoreSection,
   UNIT_FAMILIES,
@@ -14,10 +13,8 @@ import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
+import { nameMatches } from "./items";
 import { t } from "./messages";
-
-/** The shipped Items by key, for telling the names they ship with from the Household's. */
-const SHIPPED = new Map(ITEMS.map((item) => [item.id, item]));
 
 /** Every Item, shipped or the Household's own, searchable, each edited in place. */
 export function ItemsSettings(props: { client: MiseClient }) {
@@ -38,12 +35,7 @@ export function ItemsSettings(props: { client: MiseClient }) {
   );
 
   const shown = createMemo(() => {
-    const wanted = normaliseItemName(query());
-    const items = loaded.items ?? [];
-    if (wanted === "") return items;
-    return items.filter((item) =>
-      [item.name, ...item.aliases].some((name) => normaliseItemName(name).includes(wanted)),
-    );
+    return (loaded.items ?? []).filter((item) => nameMatches([item.name, ...item.aliases], query(), "part"));
   });
 
   return (
@@ -76,7 +68,7 @@ export function ItemsSettings(props: { client: MiseClient }) {
 
 function ItemRow(props: { client: MiseClient; item: Item }) {
   const [editing, setEditing] = createSignal(false);
-  const shipped = () => SHIPPED.get(props.item.id);
+  const shipped = () => SHIPPED_ITEMS.item(props.item.id);
 
   return (
     <article aria-label={props.item.name}>
@@ -111,7 +103,7 @@ function ItemRow(props: { client: MiseClient; item: Item }) {
  * only by saying it has none, as when the Item was created: every Recipe using it trusts them.
  */
 function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void }) {
-  const shipped = SHIPPED.get(props.item.id);
+  const shipped = SHIPPED_ITEMS.item(props.item.id);
   const ownAliases = shipped
     ? props.item.aliases.filter((alias) => !shipped.aliases.includes(alias))
     : props.item.aliases;
@@ -181,7 +173,7 @@ function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void })
         </label>
       </Show>
       <label>
-        {t("items.otherNames")}
+        {t("item.otherNames")}
         <input value={aliases()} onInput={(e) => setAliases(e.currentTarget.value)} />
       </label>
       <small>
@@ -195,15 +187,7 @@ function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void })
           <For each={STORE_SECTIONS}>{(value) => <option value={value}>{t(`section.${value}`)}</option>}</For>
         </select>
       </label>
-      <Show
-        when={!shipped}
-        fallback={
-          <>
-            <small>{t("items.shippedSection", { section: t(`section.${shipped?.section ?? "pantry"}`) })}</small>
-            <p>{t("items.shippedAllergens")}</p>
-          </>
-        }
-      >
+      <Show when={!shipped}>
         <label>
           {t("item.unitFamily")}
           <select value={unitFamily()} onChange={(e) => setUnitFamily(e.currentTarget.value as UnitFamily)}>
@@ -246,6 +230,14 @@ function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void })
             </label>
           </Show>
         </fieldset>
+      </Show>
+      <Show when={shipped}>
+        {(item) => (
+          <>
+            <small>{t("items.shippedSection", { section: t(`section.${item().section}`) })}</small>
+            <p>{t("items.shippedAllergens")}</p>
+          </>
+        )}
       </Show>
       <button type="submit" disabled={busy()}>
         {t("items.save")}

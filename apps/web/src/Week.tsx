@@ -44,6 +44,7 @@ import {
   reasonText,
   whoName,
 } from "./Proposal";
+import { Sheet } from "./Sheet";
 
 /**
  * The current and next Week, each day's dinner first, with every Slot editable by hand. Offline it is
@@ -835,78 +836,49 @@ function ConflictOverrides(props: {
     const who = whoName(only.who, props.household);
     return t(only.cause === "contains" ? "conflict.sheetTitle" : "conflict.sheetTitleMaybe", { who });
   };
-  const focusFirst = (sheet: HTMLElement) => queueMicrotask(() => sheet.querySelector("input")?.focus());
-
   return (
     <Show when={props.conflicts.length > 0}>
-      <div class="sheet-backdrop">
-        <div
-          class="sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          ref={focusFirst}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") props.onChangeIt();
-            if (event.key === "Tab") keepFocusIn(event.currentTarget, event);
-          }}
-        >
-          <div class="sheet-header sheet-header-warn">
-            <Icon name="warning" />
-            <div class="page-heading">
-              <p class="overline">{t("conflict.overline")}</p>
-              <h2 id={titleId} class="dish-title">
-                {title()}
-              </h2>
-            </div>
-          </div>
-          <div class="sheet-body">
-            <div class="stack" role="alert">
-              <p>{t("conflict.refused")}</p>
-              <For each={props.conflicts}>{(conflict) => <p>{props.describe(conflict)}</p>}</For>
-            </div>
-            <For each={overridable(props.conflicts)}>
-              {(conflict) => (
-                <label>
-                  {t("conflict.reason", conflictParams(conflict, props.household))}
-                  <input
-                    required
-                    maxLength={500}
-                    value={props.reasons[overrideKey(conflict)] ?? ""}
-                    onInput={(e) =>
-                      props.onChange({ ...props.reasons, [overrideKey(conflict)]: e.currentTarget.value })
-                    }
-                  />
-                </label>
-              )}
-            </For>
-            <button type="button" class="button-primary" onClick={() => props.onChangeIt()}>
-              {t("conflict.changeIt")}
-            </button>
-            <button type="submit" class="button-secondary" disabled={props.busy}>
-              {props.busy ? t("slot.saving") : t("conflict.saveAnyway")}
-            </button>
-            <button type="button" class="button-quiet" onClick={() => props.onCancel()}>
-              {t("slot.cancel")}
-            </button>
+      <Sheet labelledBy={titleId} onEscape={() => props.onChangeIt()}>
+        <div class="sheet-header sheet-header-warn">
+          <Icon name="warning" />
+          <div class="page-heading">
+            <p class="overline">{t("conflict.overline")}</p>
+            <h2 id={titleId} class="dish-title">
+              {title()}
+            </h2>
           </div>
         </div>
-      </div>
+        <div class="sheet-body">
+          <div class="stack" role="alert">
+            <p>{t("conflict.refused")}</p>
+            <For each={props.conflicts}>{(conflict) => <p>{props.describe(conflict)}</p>}</For>
+          </div>
+          <For each={overridable(props.conflicts)}>
+            {(conflict) => (
+              <label>
+                {t("conflict.reason", conflictParams(conflict, props.household))}
+                <input
+                  required
+                  maxLength={500}
+                  value={props.reasons[overrideKey(conflict)] ?? ""}
+                  onInput={(e) => props.onChange({ ...props.reasons, [overrideKey(conflict)]: e.currentTarget.value })}
+                />
+              </label>
+            )}
+          </For>
+          <button type="button" class="button-primary" onClick={() => props.onChangeIt()}>
+            {t("conflict.changeIt")}
+          </button>
+          <button type="submit" class="button-secondary" disabled={props.busy}>
+            {props.busy ? t("slot.saving") : t("conflict.saveAnyway")}
+          </button>
+          <button type="button" class="button-quiet" onClick={() => props.onCancel()}>
+            {t("slot.cancel")}
+          </button>
+        </div>
+      </Sheet>
     </Show>
   );
-}
-
-/** Tab and Shift+Tab go round the sheet's controls, not out to the page under it. */
-export function keepFocusIn(sheet: HTMLElement, event: KeyboardEvent) {
-  const controls = [...sheet.querySelectorAll<HTMLElement>("input, button:not(:disabled)")];
-  const [first, last] = [controls[0], controls.at(-1)];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last?.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first?.focus();
-  }
 }
 
 /** Save and Cancel; while a refusal's sheet is up, it has them instead. */

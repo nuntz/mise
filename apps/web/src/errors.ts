@@ -38,7 +38,7 @@ const itemFields: Record<string, MessageKey> = {
   unitFamily: "item.unitFamily",
   allergens: "item.allergens",
   text: "item.name",
-  aliases: "items.otherNames",
+  aliases: "item.otherNames",
   item: "resolve.item",
 };
 

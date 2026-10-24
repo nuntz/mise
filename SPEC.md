@@ -162,6 +162,7 @@ plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), ma
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
 pantry:    list_staples, list_due_staples, record_staple_status, upsert_staple, remove_staple
 household: get_household, update_household_settings, update_member_constraints, set_effort_budgets, set_store_section_order, check_slot_constraints
+items:     list_items, create_item, update_item, list_unresolved_ingredients, resolve_ingredient
 imports:   run_paprika_import, list_import_runs, list_import_flags, sync_drive_folder, enqueue_video_import, list_review_queue, resolve_review_item
 calendar:  rotate_calendar_token
 * = requires confirmation

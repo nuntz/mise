@@ -410,6 +410,53 @@ describe("export and restore", () => {
     expect(await response.json()).toMatchObject({ code: "invalid_export" });
   });
 
+  /** An export of a Household whose Weeks start on `weekStartsOn` after `changes`, as rows. */
+  async function withWeekStartChanges(weekStartsOn: string, changes: { from_date: string; stretches: string }[]) {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    const exported = JSON.parse(await exportOf(source));
+    exported.tables.household[0].week_starts_on = weekStartsOn;
+    exported.tables.week_start_change = changes;
+    return JSON.stringify(exported);
+  }
+
+  // Monday 2026-10-26's Week runs on to Wednesday 2026-11-04; Weeks start on Thursdays after.
+  const toThursday = { from_date: "2026-11-05", stretches: "2026-10-26" };
+
+  test("restore keeps the changes of week start, and so the same Weeks", async () => {
+    const target = freshHousehold();
+
+    expect((await restore(target, await withWeekStartChanges("thursday", [toThursday]))).status).toBe(200);
+
+    expect(await target.callTool("get_household", {})).toMatchObject({
+      ok: true,
+      value: { weekStartsOn: "thursday", weekStartChanges: [{ from: "2026-11-05", stretches: "2026-10-26" }] },
+    });
+  });
+
+  test.each([
+    ["stretches a Week that starts after it", "thursday", [{ from_date: "2026-10-22", stretches: "2026-10-26" }]],
+    ["stretches a Week no further than seven days", "thursday", [{ from_date: "2026-10-29", stretches: "2026-10-26" }]],
+    ["leaves Weeks starting on another day than the Household's", "friday", [toThursday]],
+    [
+      "stretches a Week that does not start on the day Weeks start on then",
+      "saturday",
+      [toThursday, { from_date: "2026-11-21", stretches: "2026-11-09" }],
+    ],
+    [
+      "stretches a Week from before the previous change",
+      "saturday",
+      [toThursday, { from_date: "2026-11-07", stretches: "2026-10-29" }],
+    ],
+  ])("restore rejects a change of week start that %s", async (_, weekStartsOn, changes) => {
+    const target = freshHousehold();
+
+    const response = await restore(target, await withWeekStartChanges(weekStartsOn, changes));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_export" });
+  });
+
   test.each([
     ["an Item the catalogue does not have", { item_id: "unobtainium" }],
     ["a Household Item, which keeps its section itself", { item_id: "household:1" }],
