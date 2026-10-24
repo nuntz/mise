@@ -5,6 +5,7 @@ import {
   type GroceryLine,
   type GroceryList,
   type Household,
+  MEALS,
   STORE_SECTIONS,
   type ToolResult,
 } from "@mise/domain";
@@ -243,6 +244,53 @@ test("the Household and both Weeks' Grocery Lists open offline from what was las
   await user.click(screen.getByRole("button", { name: "Week" }));
   await user.click(screen.getByRole("button", { name: "Household" }));
   expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+});
+
+test("a Household and Week saved before week starts could change still open the Grocery List offline", async () => {
+  // As a device kept them before Household.weekStartChanges and Week.endDate existed.
+  const { weekStartChanges: _, ...oldHousehold } = household;
+  const thisWeek = currentWeek(new Date(), household.timezone, household).startDate;
+  localStorage.setItem("mise.household", JSON.stringify(oldHousehold));
+  localStorage.setItem(
+    "mise.week",
+    JSON.stringify({
+      startDate: thisWeek,
+      slots: [0, 1, 2, 3, 4, 5, 6].flatMap((day) =>
+        MEALS.map((meal) => ({
+          date: addDays(thisWeek, day),
+          meal,
+          kind: "unplanned",
+          recipe: null,
+          note: null,
+          diners: [],
+          dinersAreDefault: true,
+          guests: 0,
+          guestConstraints: [],
+          servings: 0,
+          cookFor: 0,
+          leftoversOf: null,
+          leftovers: [],
+          locked: false,
+          conflicts: [],
+          reason: null,
+          cookedAt: null,
+          ratings: [],
+        })),
+      ),
+      effortBudgets: DEFAULT_EFFORT_BUDGETS,
+      effortBudgetOverrides: {},
+      proposalSeed: null,
+      reviewed: false,
+    }),
+  );
+  localStorage.setItem("mise.groceryLists", JSON.stringify({ [thisWeek]: list }));
+
+  const user = userEvent.setup();
+  render(() => <App client={fakeClient({}, { online: false }).client} />);
+  // The saved Week still shows, as seven days.
+  expect(await screen.findAllByRole("region", { name: /^[A-Z][a-z]+day, / })).toHaveLength(7);
+  await user.click(screen.getByRole("button", { name: "Groceries" }));
+  expect(await screen.findByRole("checkbox", { name: "3 clove garlic" })).toBeTruthy();
 });
 
 test("the Store Sections can be put in walking order", async () => {

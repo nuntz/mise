@@ -1,4 +1,5 @@
 import {
+  addDays,
   createTickQueue,
   currentWeek,
   GroceryList,
@@ -21,8 +22,25 @@ import { keepFresh } from "./fresh";
  * current Week, the current and next Week's Grocery Lists, the last Recipe viewed, and the Grocery
  * List changes not yet sent. The service worker caches the app itself; the data comes over the WebSocket, which it
  * can't see, so the page keeps it here. Each is checked against its schema when read, so one saved
- * by an older version of Mise is ignored rather than shown wrong.
+ * by an older version of Mise is ignored rather than shown wrong, unless it can be brought up to date.
  */
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+/** Saved before its week start could change: it never has. */
+const SavedHousehold = z.preprocess(
+  (saved) => (isObject(saved) && !("weekStartChanges" in saved) ? { ...saved, weekStartChanges: [] } : saved),
+  Household,
+);
+
+/** Saved before Weeks could run on past seven days: it is seven days long. */
+const SavedWeek = z.preprocess(
+  (saved) =>
+    isObject(saved) && !("endDate" in saved) && typeof saved.startDate === "string"
+      ? { ...saved, endDate: addDays(saved.startDate, 6) }
+      : saved,
+  Week,
+);
 
 const GroceryLists = z.record(z.string(), GroceryList.nullable());
 
@@ -53,11 +71,11 @@ function write(key: string, value: unknown): void {
   }
 }
 
-export const savedHousehold = () => read(KEYS.household, Household);
+export const savedHousehold = () => read(KEYS.household, SavedHousehold);
 export const saveHousehold = (household: Household) => write(KEYS.household, household);
 
 /** The current Week as last loaded, shown read-only while the household can't be reached. */
-export const savedWeek = () => read(KEYS.week, Week);
+export const savedWeek = () => read(KEYS.week, SavedWeek);
 export const saveWeek = (week: Week) => write(KEYS.week, week);
 
 /** The Grocery List last loaded for the Week starting `date`: null if it had none, undefined if unknown. */
