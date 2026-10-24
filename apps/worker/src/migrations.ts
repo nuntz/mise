@@ -332,6 +332,14 @@ const migrations: { version: number; statements: string[] }[] = [
       "CREATE TABLE calendar_token (id INTEGER PRIMARY KEY CHECK (id = 1), token TEXT NOT NULL)",
     ],
   },
+  {
+    version: 15,
+    statements: [
+      // The Store Section the Household keeps a shipped Item in instead of its own (ADR 0009); a
+      // Household Item keeps its section in item.
+      "CREATE TABLE item_section (item_id TEXT PRIMARY KEY, section TEXT NOT NULL)",
+    ],
+  },
 ];
 
 export function migrate(storage: DurableObjectStorage): void {

@@ -1,8 +1,12 @@
 import {
+  type Allergen,
   Item,
   ItemCatalogue,
   type ItemId,
   normaliseItemName,
+  SHIPPED_ITEMS,
+  ShippedItemId,
+  StoreSection,
   type ToolResult,
   type UnresolvedGroup,
 } from "@mise/domain";
@@ -17,7 +21,7 @@ type AliasRow = { item_id: string; alias: string };
 
 type UnresolvedRow = { recipe_id: number; title: string; raw: string; name: string };
 
-type ItemTools = "list_unresolved_ingredients" | "resolve_ingredient" | "create_item" | "list_items";
+type ItemTools = "list_unresolved_ingredients" | "resolve_ingredient" | "create_item" | "update_item" | "list_items";
 
 /** The Item tools, against the household's SQLite. */
 export const itemHandlers: Pick<Handlers, ItemTools> = {
@@ -65,33 +69,74 @@ export const itemHandlers: Pick<Handlers, ItemTools> = {
         input.unitFamily,
       )
       .one();
-    input.allergens.forEach((allergen, position) => {
-      sql.exec("INSERT INTO item_allergen (item_id, position, allergen) VALUES (?, ?, ?)", id, position, allergen);
-    });
+    writeAllergens(sql, id, input.allergens);
     const key: ItemId = `household:${id}`;
-    // Each name once: an alias that reads the same as the name or an earlier alias adds nothing.
-    const names = new Set([normaliseItemName(input.name)]);
-    for (const alias of input.aliases) {
-      if (names.has(normaliseItemName(alias))) continue;
-      names.add(normaliseItemName(alias));
-      sql.exec("INSERT INTO item_alias (item_id, alias) VALUES (?, ?)", key, alias);
-    }
+    writeAliases(sql, key, [input.name], input.aliases);
     const updated = readCatalogue(sql);
     resolveLines(sql, updated);
     return { ok: true, value: updated.item(key) as Item };
   },
 
+  update_item: (sql, input) => {
+    const catalogue = readCatalogue(sql);
+    const item = catalogue.item(input.id);
+    if (!item) return itemNotFound(input.id);
+    const shipped = SHIPPED_ITEMS.item(input.id);
+    if (shipped && (input.name !== undefined || input.unitFamily !== undefined || input.allergens !== undefined)) {
+      return {
+        ok: false,
+        error: {
+          code: "shipped_item",
+          message: `${shipped.name} ships with Mise: only its aliases and Store Section can change`,
+        },
+      };
+    }
+    const taken = [input.name, ...(input.aliases ?? [])].find((name) => {
+      const named = name === undefined ? null : catalogue.named(name);
+      return named !== null && named !== input.id;
+    });
+    if (taken !== undefined) return nameInUse(taken);
+
+    const name = input.name ?? item.name;
+    if (shipped) {
+      if (input.section !== undefined) {
+        sql.exec("DELETE FROM item_section WHERE item_id = ?", input.id);
+        if (input.section !== shipped.section) {
+          sql.exec("INSERT INTO item_section (item_id, section) VALUES (?, ?)", input.id, input.section);
+        }
+      }
+    } else {
+      const row = householdRowId(input.id);
+      sql.exec(
+        "UPDATE item SET name = ?, section = ?, unit_family = ? WHERE id = ?",
+        name,
+        input.section ?? item.section,
+        input.unitFamily ?? item.unitFamily,
+        row,
+      );
+      if (input.allergens) writeAllergens(sql, row, input.allergens);
+    }
+    if (input.aliases) {
+      sql.exec("DELETE FROM item_alias WHERE item_id = ?", input.id);
+      writeAliases(sql, input.id, shipped ? [shipped.name, ...shipped.aliases] : [name], input.aliases);
+    }
+    const updated = readCatalogue(sql);
+    resolveLines(sql, updated);
+    return { ok: true, value: updated.item(input.id) as Item };
+  },
+
   list_items: (sql) => ({ ok: true, value: readCatalogue(sql).items }),
 };
 
-/**
- * The Household's Item catalogue: the shipped Items plus its own and the aliases it added. Parsed, so
- * bad rows throw (a `ZodError`), such as an alias of an Item the catalogue does not have.
- */
 export function itemNotFound<T>(id: ItemId): ToolResult<T> {
   return { ok: false, error: { code: "not_found", message: `No Item ${id}` } };
 }
 
+/**
+ * The Household's Item catalogue: the shipped Items plus its own, the aliases it added and the Store
+ * Sections it chose for shipped ones. Parsed, so bad rows throw (a `ZodError`), such as an alias of an
+ * Item the catalogue does not have.
+ */
 export function readCatalogue(sql: SqlStorage): ItemCatalogue {
   const allergens = sql
     .exec<AllergenRow>("SELECT item_id, allergen FROM item_allergen ORDER BY item_id, position")
@@ -114,7 +159,12 @@ export function readCatalogue(sql: SqlStorage): ItemCatalogue {
     .exec<AliasRow>("SELECT item_id, alias FROM item_alias ORDER BY id")
     .toArray()
     .map((row) => Alias.parse({ item: row.item_id, alias: row.alias }));
-  return new ItemCatalogue(items, aliases);
+  const Override = z.object({ item: ShippedItemId, section: StoreSection });
+  const sections = sql
+    .exec<{ item_id: string; section: string }>("SELECT item_id, section FROM item_section ORDER BY item_id")
+    .toArray()
+    .map((row) => Override.parse({ item: row.item_id, section: row.section }));
+  return new ItemCatalogue(items, aliases, sections);
 }
 
 /** Resolves every Unresolved Ingredient that `catalogue` now matches. Returns how many it resolved. */
@@ -137,6 +187,32 @@ function resolveLines(sql: SqlStorage, catalogue: ItemCatalogue): number {
     resolved++;
   }
   return resolved;
+}
+
+/** Replaces a Household Item's Allergens. */
+function writeAllergens(sql: SqlStorage, row: number, allergens: readonly Allergen[]): void {
+  sql.exec("DELETE FROM item_allergen WHERE item_id = ?", row);
+  allergens.forEach((allergen, position) => {
+    sql.exec("INSERT INTO item_allergen (item_id, position, allergen) VALUES (?, ?, ?)", row, position, allergen);
+  });
+}
+
+/**
+ * Adds the Household's aliases of an Item, each name once: an alias that reads the same as one of
+ * `own` (the names the Item already has) or an earlier alias adds nothing.
+ */
+function writeAliases(sql: SqlStorage, item: ItemId, own: readonly string[], aliases: readonly string[]): void {
+  const names = new Set(own.map(normaliseItemName));
+  for (const alias of aliases) {
+    if (names.has(normaliseItemName(alias))) continue;
+    names.add(normaliseItemName(alias));
+    sql.exec("INSERT INTO item_alias (item_id, alias) VALUES (?, ?)", item, alias);
+  }
+}
+
+/** The row of a Household Item's key. */
+function householdRowId(id: ItemId): number {
+  return Number(id.slice("household:".length));
 }
 
 function nameInUse<T>(name: string): ToolResult<T> {

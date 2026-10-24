@@ -139,6 +139,9 @@ function singular(word: string): string {
 /** A name the Household gave an Item, shipped or its own. */
 export type ItemAlias = { item: ItemId; alias: string };
 
+/** The Store Section the Household keeps a shipped Item in, instead of the one it ships with. */
+export type SectionOverride = { item: ShippedItemId; section: StoreSection };
+
 /**
  * The Items a Household's Ingredients can resolve to: the shipped catalogue, plus the Household's own
  * Items and the aliases it added. Where a name of the Household's and a shipped one read the same, the
@@ -148,8 +151,17 @@ export class ItemCatalogue {
   readonly #items = new Map<ItemId, Item>();
   readonly #byName = new Map<string, ItemId>();
 
-  constructor(householdItems: readonly Item[] = [], aliases: readonly ItemAlias[] = []) {
+  constructor(
+    householdItems: readonly Item[] = [],
+    aliases: readonly ItemAlias[] = [],
+    sections: readonly SectionOverride[] = [],
+  ) {
     for (const item of [...ITEMS, ...householdItems]) this.#items.set(item.id, item);
+    for (const { item, section } of sections) {
+      const found = this.#items.get(item);
+      if (!found) throw new Error(`No Item ${item} to put in ${section}`);
+      this.#items.set(item, { ...found, section });
+    }
     for (const { item, alias } of aliases) {
       const found = this.#items.get(item);
       if (!found) throw new Error(`No Item ${item} to alias as "${alias}"`);
@@ -240,3 +252,30 @@ export const NewItem = z
   })
   .strict();
 export type NewItem = z.output<typeof NewItem>;
+
+/**
+ * Changes to an Item; each field left out stays as it is. A Household Item can change in every field.
+ * A shipped Item can only gain aliases and have its Store Section overridden: its name, unit family
+ * and Allergens are corrected by release (ADR 0009). Unresolved Ingredients resolve to any name it
+ * gains.
+ */
+export const UpdateItemInput = z
+  .object({
+    id: ItemId,
+    name: ItemName.optional(),
+    /** The Household's names for it, replacing those it gave before. A shipped Item keeps its own too. */
+    aliases: z.array(ItemName).max(50).optional(),
+    /** For a shipped Item, its own section ends an override. */
+    section: StoreSection.optional(),
+    unitFamily: UnitFamily.optional(),
+    /**
+     * Each once, in canonical order, replacing every one it had: an empty list says it has none. A
+     * Recipe trusts them, so an Allergen is only taken away by listing what it has without it.
+     */
+    allergens: z
+      .array(Allergen)
+      .transform((chosen) => ALLERGENS.filter((allergen) => chosen.includes(allergen)))
+      .optional(),
+  })
+  .strict();
+export type UpdateItemInput = z.output<typeof UpdateItemInput>;

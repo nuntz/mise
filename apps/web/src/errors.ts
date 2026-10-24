@@ -38,7 +38,7 @@ const itemFields: Record<string, MessageKey> = {
   unitFamily: "item.unitFamily",
   allergens: "item.allergens",
   text: "item.name",
-  aliases: "item.name",
+  aliases: "items.otherNames",
   item: "resolve.item",
 };
 
@@ -66,6 +66,8 @@ export function errorText(error: ToolError, form: Form): string {
       return t("member.emailInUse");
     case "name_in_use":
       return t("item.nameInUse");
+    case "shipped_item":
+      return t("item.shippedItem");
     case "not_found":
       return t(
         form === "recipe"
