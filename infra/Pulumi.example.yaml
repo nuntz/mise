@@ -20,6 +20,11 @@
 #        mise:googleClientId: 000000000000-example.apps.googleusercontent.com
 #        mise:googleClientSecret:
 #          fn::secret: GOCSPX-example
+#        # The Anthropic API key the chat's agent runs on (console.anthropic.com → API keys). Set a
+#        # monthly spend limit in the Anthropic console (Settings → Limits): Mise has no cap of its own.
+#        # Without a key the chat answers nothing.
+#        mise:anthropicApiKey:
+#          fn::secret: sk-ant-api03-example
 #        # Optional: report errors and traces to Sentry.
 #        # mise:sentryDsn:
 #        #   fn::secret: https://<public-key>@<org>.ingest.sentry.io/<project>

@@ -1,7 +1,12 @@
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import {
   type Caller,
   type ChangeNotice,
   ChangeTopic,
+  ChatInput,
+  type ChatMessage,
+  type ChatReply,
   changeTopicOf,
   exportKey,
   type Household as HouseholdData,
@@ -24,6 +29,8 @@ import {
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
+import { PiHarness } from "agents/harness/pi";
+import { agentModels, miseExtension, recentChat } from "./agent";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed } from "./calendar";
 import { callerFrom } from "./identity";
@@ -42,6 +49,9 @@ const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 /** Not a type a form can send, so another site needs a CORS preflight, which is refused (ADR 0011). */
 const UPLOAD_TYPES = new Set(["application/octet-stream", "application/zip"]);
 
+/** How many of the conversation's latest turns the chat shows. */
+const RECENT_CHAT_TURNS = 100;
+
 const RESTORE_STATUS: Record<RestoreError["code"], number> = {
   invalid_export: 400,
   schema_mismatch: 409,
@@ -53,10 +63,32 @@ type ConnectionState = { caller: Caller | null };
 
 /** The household Durable Object: the one place Mise's data lives. */
 class HouseholdAgent extends Agent<Env> {
+  private readonly models = agentModels(this.env);
+
+  /**
+   * The agent: one shared Pi conversation, kept in Pi's own `pi_` tables beside ours. It reaches
+   * Mise's data only through the tools, called as the PWA calls them.
+   */
+  private readonly harness = new PiHarness({
+    harness: ({ storage, context, onWake }) => {
+      const registry = createRegistry();
+      // As no one for now: which Member is speaking reaches the tools with the speaker records (#31, story 45).
+      registry.install(miseExtension((name, input) => this.invokeTool(name, input, null)));
+      return Harness.open(
+        storage,
+        // A failed run answers nothing more: later messages are not run against a stale question.
+        { models: this.models.models, registry, onWake, settings: { afterFailedRun: "withdraw" } },
+        context,
+      );
+    },
+    defaults: { model: this.models.model },
+  });
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // Runs before any request, RPC call or WebSocket message is served.
     void ctx.blockConcurrencyWhile(async () => migrate(ctx.storage));
+    this.lifecycle.use(this.harness);
   }
 
   override async onStart(): Promise<void> {
@@ -72,12 +104,38 @@ class HouseholdAgent extends Agent<Env> {
   /** The single entry point to every tool (ADR 0002). Input is validated against the registry. */
   @callable()
   async callTool(name: string, input: unknown): Promise<ToolResult<unknown>> {
-    // One span per tool, named but without its input: inputs are Household data.
-    const spanName = `tool ${isToolName(name) ? name : "unknown"}`;
-    return Sentry.startSpan({ name: spanName, op: "mise.tool" }, () => this.runTool(name, input));
+    return this.invokeTool(name, input, this.callerOf(getCurrentAgent().connection));
   }
 
-  private async runTool(name: string, input: unknown): Promise<ToolResult<unknown>> {
+  /** Sends a Member's message to the agent and waits for its answer. */
+  @callable()
+  async chat(text: unknown): Promise<ChatReply> {
+    const message = ChatInput.safeParse(text);
+    if (!message.success)
+      return { ok: false, error: { code: "invalid_input", message: "Send a message to the agent" } };
+    const answer = await this.harness.prompt(message.data);
+    if (answer.status !== "done") {
+      return { ok: false, error: { code: "unanswered", message: answer.reason ?? "The agent did not answer" } };
+    }
+    return { ok: true, value: { role: "agent", text: answer.text ?? "" } };
+  }
+
+  /** The latest turns of the Household's conversation with the agent, oldest first. */
+  @callable()
+  async conversation(): Promise<ChatMessage[]> {
+    // The harness opened Pi with its root conversation, so `root` finds it rather than making one.
+    const pi = await this.harness.pi();
+    return recentChat(await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS);
+  }
+
+  /** A tool call, as `caller`; the agent's calls come here too. */
+  private async invokeTool(name: string, input: unknown, caller: Caller | null): Promise<ToolResult<unknown>> {
+    // One span per tool, named but without its input: inputs are Household data.
+    const spanName = `tool ${isToolName(name) ? name : "unknown"}`;
+    return Sentry.startSpan({ name: spanName, op: "mise.tool" }, () => this.runTool(name, input, caller));
+  }
+
+  private async runTool(name: string, input: unknown, caller: Caller | null): Promise<ToolResult<unknown>> {
     const parsed = parseToolInput(name, input);
     if (!parsed.ok) return parsed;
     if (name === "run_paprika_import") {
@@ -89,7 +147,7 @@ class HouseholdAgent extends Agent<Env> {
       input: unknown,
       context: ToolContext,
     ) => ToolResult<unknown>;
-    const context: ToolContext = { caller: this.callerOf(getCurrentAgent().connection) };
+    const context: ToolContext = { caller };
     const topic = changeTopicOf(toolName);
 
     let outcome: { result: ToolResult<unknown>; revision?: number };

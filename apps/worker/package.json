@@ -9,9 +9,12 @@
     "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p scripts"
   },
   "dependencies": {
+    "@earendil-works/chord": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-durable": "1.4.0",
     "@mise/domain": "workspace:*",
     "@sentry/cloudflare": "11.4.0",
-    "agents": "0.29.0",
+    "agents": "0.30.1",
     "jose": "6.2.13",
     "zod": "4.6.7"
   },

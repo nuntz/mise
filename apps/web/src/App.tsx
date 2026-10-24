@@ -2,6 +2,7 @@ import { type Household, type QueuedChange, RecipeId } from "@mise/domain";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CalendarSettings } from "./Calendar";
+import { Chat } from "./Chat";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
@@ -130,6 +131,7 @@ export function App(props: { client: MiseClient }) {
               </Show>
               <header class="app-header">
                 <RanOut client={props.client} online={online()} />
+                <Chat client={props.client} online={online()} />
               </header>
               <main class="page">
                 {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}

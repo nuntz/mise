@@ -16,6 +16,7 @@ const accessTeamDomain = config.require("accessTeamDomain");
 const allowedEmails = config.getObject<string[]>("allowedEmails") ?? [];
 const allowedEmailDomain = config.get("allowedEmailDomain");
 const sentryDsn = config.getSecret("sentryDsn");
+const anthropicApiKey = config.getSecret("anthropicApiKey");
 
 if (allowedEmails.length === 0 && !allowedEmailDomain) {
   throw new Error("Set mise:allowedEmails or mise:allowedEmailDomain: otherwise no one can sign in");
@@ -81,10 +82,11 @@ const domain = (await workerExists())
 /** For CI: who wrangler deploys as, and the secrets it uploads with the Worker. */
 export const cloudflareAccountId = pulumi.secret(accountId);
 export const workerSecrets = pulumi.secret(
-  pulumi.all([app.aud, sentryDsn]).apply(([aud, dsn]) => ({
+  pulumi.all([app.aud, sentryDsn, anthropicApiKey]).apply(([aud, dsn, anthropic]) => ({
     ACCESS_TEAM_DOMAIN: accessTeamDomain,
     ACCESS_AUD: aud,
     ...(dsn ? { SENTRY_DSN: dsn } : {}),
+    ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
   })),
 );
 export const hostnameBound = domain !== undefined;

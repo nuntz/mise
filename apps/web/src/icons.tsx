@@ -102,6 +102,7 @@ const PATHS = {
       <path d="M2 10h20M9 6c0-1 1-2 1-3M14 6c0-1 1-2 1-3" />
     </>
   ),
+  chat: () => <path d="M4 5h16v11H10l-6 4z" />,
   list: () => <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
   calendarPlus: () => (
     <>

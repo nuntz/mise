@@ -1,6 +1,8 @@
 import {
   ChangeNotice,
   type ChangeTopic,
+  type ChatMessage,
+  type ChatReply,
   HOUSEHOLD_AGENT,
   PAPRIKA_UPLOAD_PATH,
   type RecipeId,
@@ -26,6 +28,10 @@ export type MiseClient = {
    * the first attempt to connect fails, it counts as reachable. Returns an unsubscribe function.
    */
   onConnection(listener: (online: boolean) => void): () => void;
+  /** Sends a message to the agent and resolves with its answer, which can take a while. */
+  chat(text: string): Promise<ChatReply>;
+  /** The latest turns of the Household's conversation with the agent, oldest first. */
+  conversation(): Promise<ChatMessage[]>;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
   photoUrl(recipeId: RecipeId, photoKey: string): string;
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
@@ -36,6 +42,9 @@ export type MiseClient = {
   close(): void;
 };
 
+/** How long an answer from the agent may take: a model turn or several, each with its tool calls. */
+const CHAT_TIMEOUT_MS = 120_000;
+
 export function createMiseClient(host = window.location.host): MiseClient {
   const agent = new AgentClient({ ...HOUSEHOLD_AGENT, host });
 
@@ -43,6 +52,10 @@ export function createMiseClient(host = window.location.host): MiseClient {
     call: (name, input) => agent.call("callTool", [name, input]),
 
     subscribe: (topics, refetch) => subscribeTo(agent, topics, refetch),
+
+    chat: (text) => agent.call("chat", [text], { timeout: CHAT_TIMEOUT_MS }),
+
+    conversation: () => agent.call("conversation", []),
 
     onConnection(listener) {
       // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".

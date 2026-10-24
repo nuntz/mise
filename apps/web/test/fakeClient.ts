@@ -10,7 +10,12 @@ type Call = (name: string, input: Record<string, unknown>) => unknown;
  */
 export function createFakeClient(
   call: Call,
-  { online = true, ...rest }: { online?: boolean } & Partial<Pick<MiseClient, "photoUrl" | "uploadExport">> = {},
+  {
+    online = true,
+    chat,
+    conversation,
+    ...rest
+  }: { online?: boolean } & Partial<Pick<MiseClient, "photoUrl" | "uploadExport" | "chat" | "conversation">> = {},
 ) {
   const connection = { online };
   const subscriptions = new Set<{ topics: readonly ChangeTopic[]; refetch: () => void }>();
@@ -26,6 +31,16 @@ export function createFakeClient(
       if (!connection.online) throw new Error("Connection closed");
       return call(name, input);
     }) as MiseClient["call"],
+    async chat(text) {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!chat) throw new Error("Unexpected chat");
+      return chat(text);
+    },
+    async conversation() {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!conversation) throw new Error("Unexpected conversation");
+      return conversation();
+    },
     subscribe(topics, refetch) {
       const subscription = { topics, refetch };
       subscriptions.add(subscription);
