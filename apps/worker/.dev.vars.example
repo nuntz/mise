@@ -3,3 +3,6 @@
 DEV_CALLER_EMAIL=cook@example.com
 # The Anthropic key the chat's agent runs on; without it the chat answers nothing.
 # ANTHROPIC_API_KEY=sk-ant-api03-example
+# The Drive folder whose Docs become Drafts (README → Google Drive folder); without both, no sync.
+# GOOGLE_SERVICE_ACCOUNT_KEY={"client_email":"mise-drive@example.com","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"}
+# DRIVE_FOLDER_ID=0BxExampleFolderId

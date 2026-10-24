@@ -524,7 +524,8 @@ describe("importing a TikTok", () => {
     await runInDurableObject(household, async (_household, state) => {
       state.storage.sql.exec("UPDATE recipe SET source_revision = source_id WHERE id = ?", linkOnly.id);
       state.storage.sql.exec("DELETE FROM schema_version WHERE version >= 20");
-      migrate(state.storage);
+      // Migration 20 again, and only it: later ones made their tables already.
+      migrate(state.storage, 20);
     });
 
     captioned = true;

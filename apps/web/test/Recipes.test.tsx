@@ -355,3 +355,14 @@ test("a link to a Recipe, as the calendar feed gives, opens it", async () => {
   expect(await screen.findByRole("heading", { name: "Toast" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Recipes" }).getAttribute("aria-current")).toBe("page");
 });
+
+test("a Recipe read from a Google Doc links to the Doc", async () => {
+  const doc = "https://docs.google.com/document/d/1SoupDocId/edit";
+  const fromDrive: Recipe = { ...toast, source: { kind: "gdrive", url: doc, importedAt: "2026-10-24T12:00:00.000Z" } };
+  const { client } = fakeClient([fromDrive]);
+  await openRecipes(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Toast" }));
+
+  expect(await screen.findByText(`Read by AI from a Google Doc in the Drive folder: ${doc}.`)).toBeTruthy();
+});

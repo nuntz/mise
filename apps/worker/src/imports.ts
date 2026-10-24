@@ -58,8 +58,9 @@ type FlagRow = {
  * that is in the source's trash, is skipped; one edited in Mise since it was imported (a Course
  * corrected by hand, say), or accepted by a person when what comes now is a Draft the model read,
  * is flagged for a merge, not overwritten; a new one like a Recipe from
- * another source is created and flagged as a possible duplicate. Nothing is deleted. Returns the
- * run, the Recipes it created or updated, and the photos updated Recipes no longer show.
+ * another source is created and flagged as a possible duplicate. Nothing is deleted. `skipped`
+ * counts what the source skipped before reading it (a Drive Doc unchanged since it was read). Returns
+ * the run, the Recipes it created or updated, and the photos updated Recipes no longer show.
  */
 export function runImport(
   sql: SqlStorage,
@@ -67,6 +68,7 @@ export function runImport(
   startedAt: string,
   prepared: PreparedRecipe[],
   errors: ImportError[],
+  skipped = 0,
 ): { run: ImportRun; written: RecipeId[]; replacedPhotos: string[] } {
   const { id: runId } = sql
     .exec<{ id: number }>(
@@ -76,7 +78,7 @@ export function runImport(
       startedAt,
     )
     .one();
-  const counts = { created: 0, updated: 0, skipped: 0, flagged: 0 };
+  const counts = { created: 0, updated: 0, skipped, flagged: 0 };
   const replacedPhotos: string[] = [];
   const written: RecipeId[] = [];
   const catalogue = readCatalogue(sql);

@@ -120,6 +120,13 @@ export const RecipeSource = z.discriminatedUnion("kind", [
     author: z.string().nullable(),
     importedAt: z.iso.datetime(),
   }),
+  /** A Google Doc in the Drive folder, an LLM read; syncing the folder again updates this Recipe. */
+  z.object({
+    kind: z.literal("gdrive"),
+    /** Where the Doc opens. */
+    url: z.string(),
+    importedAt: z.iso.datetime(),
+  }),
   /** Screenshots an LLM read together; they are not kept. */
   z.object({ kind: z.literal("screenshot"), importedAt: z.iso.datetime() }),
 ]);

@@ -287,6 +287,20 @@ export const tools = {
     output: ImportUrlOutput,
     changes: "recipes",
   }),
+  /**
+   * Reads the Google Docs in the Drive folder shared with the deployment's service account, and its
+   * subfolders, logged as an Import Run of source `gdrive`; the household also runs it every night.
+   * The model reads each new or changed Doc (ADR 0023) into a Draft Recipe, upserted on the Doc's id
+   * at its modified time, with its first image as the photo and its subfolders as tags. A Doc that
+   * holds no recipe is logged as the run's error, with its link, and skipped until it changes; so is
+   * a Draft discarded in Mise. A Doc removed from the folder leaves its Recipe. Refuses with
+   * `not_configured` when the deployment has no service account key or folder.
+   */
+  sync_drive_folder: defineTool({
+    input: z.object({}).strict(),
+    output: ImportRun,
+    changes: "recipes",
+  }),
   /** Draft Recipes, newest first. */
   list_drafts: defineTool({
     input: z.object({}).strict(),
@@ -499,7 +513,8 @@ export type ToolErrorCode =
   | "not_built"
   | "not_earlier"
   | "draft_recipe"
-  | "model_failed";
+  | "model_failed"
+  | "not_configured";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */
 export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };

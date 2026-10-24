@@ -391,6 +391,7 @@ function sourceText(recipe: Recipe): string | null {
   if (recipe.source.kind === "manual") return null;
   if (recipe.source.kind === "text") return t("recipe.importedText");
   if (recipe.source.kind === "screenshot") return t("recipe.importedScreenshots");
+  if (recipe.source.kind === "gdrive") return t("recipe.importedDoc", { url: recipe.source.url });
   if (recipe.source.kind === "tiktok") {
     const { url, author } = recipe.source;
     return author ? t("recipe.importedTikTokBy", { url, author }) : t("recipe.importedTikTok", { url });

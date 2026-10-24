@@ -3,6 +3,7 @@ export * from "./calendar";
 export * from "./caller";
 export * from "./chat";
 export * from "./conflicts";
+export * from "./drive";
 export * from "./grocery";
 export * from "./household";
 export * from "./imports";

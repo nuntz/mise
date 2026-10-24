@@ -8,7 +8,12 @@ import {
   type ChatMessage,
   type ChatReply,
   changeTopicOf,
+  DRIVE_SYNC_TIME,
+  type DriveDoc,
+  docLink,
+  docText,
   exportKey,
+  firstDocImage,
   type Household as HouseholdData,
   type ImportError,
   type ImportedPhoto,
@@ -16,6 +21,7 @@ import {
   type ImportRun,
   type ImportSource,
   imageType,
+  importedFromDoc,
   importedFromScreenshots,
   importedFromText,
   importUploadKey,
@@ -25,6 +31,7 @@ import {
   type Llm,
   LlmError,
   localDate,
+  MAX_PASTED_TEXT,
   MAX_SCREENSHOT_BYTES,
   MAX_SCREENSHOTS_BYTES,
   NIGHTLY_EXPORT_TIME,
@@ -51,6 +58,7 @@ import { PiHarness } from "agents/harness/pi";
 import { agentModels, miseExtension, recentChat } from "./agent";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed } from "./calendar";
+import { type Drive, DriveError, driveRevision, openDrive, recordDriveDocs } from "./drive";
 import { callerFrom } from "./identity";
 import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport } from "./imports";
 import { readCatalogue } from "./items";
@@ -71,6 +79,12 @@ const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 /** Not a type a form can send, so another site needs a CORS preflight, which is refused (ADR 0011). */
 const UPLOAD_TYPES = new Set(["application/octet-stream", "application/zip"]);
 
+/**
+ * The most Docs one Drive sync reads: each is a request to the model, and a sync must finish well
+ * within the time a scheduled run is given. The rest are read by the next sync.
+ */
+const MAX_DOCS_PER_SYNC = 25;
+
 /** How many of the conversation's latest turns the chat shows. */
 const RECENT_CHAT_TURNS = 100;
 
@@ -86,6 +100,8 @@ type ConnectionState = { caller: Caller | null };
 /** The household Durable Object: the one place Mise's data lives. */
 class HouseholdAgent extends Agent<Env> {
   private readonly models = agentModels(this.env);
+  /** The Drive sync running, if one is: "sync now" during the nightly sync answers with its run. */
+  private driveSync: Promise<ImportRun> | null = null;
 
   /**
    * The agent: one shared Pi conversation, kept in Pi's own `pi_` tables beside ours. It reaches
@@ -114,7 +130,7 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   override async onStart(): Promise<void> {
-    await this.scheduleNightlyExport();
+    await this.scheduleNightly();
   }
 
   /** Remembers who opened the connection, as the Worker resolved them, for every tool call it makes. */
@@ -171,6 +187,7 @@ class HouseholdAgent extends Agent<Env> {
     if (name === "import_screenshots") {
       return this.importScreenshots(parsed.value as ParsedToolInput<"import_screenshots">);
     }
+    if (name === "sync_drive_folder") return this.syncDriveFolder();
     const toolName = name as Exclude<ToolName, HouseholdToolName>;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
@@ -197,7 +214,7 @@ class HouseholdAgent extends Agent<Env> {
     if (topic && revision !== undefined) {
       this.notify(topic, revision);
       // The Household's timezone decides when the export runs.
-      if (topic === "household") await this.scheduleNightlyExport();
+      if (topic === "household") await this.scheduleNightly();
     }
     // Photos live in R2, outside the transaction: a deleted Recipe's goes once the deletion is committed.
     if (toolName === "delete_recipe" && result.ok) await this.deletePhoto((result.value as Recipe).photoKey);
@@ -393,6 +410,103 @@ class HouseholdAgent extends Agent<Env> {
     return { ok: true, value: { run: outcome.run, recipe: { id, title, draft, linkOnly: isLinkOnly(outcome.made) } } };
   }
 
+  /** Syncs the Drive folder (see `readDriveFolder`), or answers with the sync already running. */
+  private async syncDriveFolder(): Promise<ToolResult<ImportRun>> {
+    const drive = openDrive(this.env);
+    if (!drive) {
+      return { ok: false, error: { code: "not_configured", message: "No Drive folder is set up for Mise" } };
+    }
+    this.driveSync ??= this.readDriveFolder(drive).finally(() => {
+      this.driveSync = null;
+    });
+    return { ok: true, value: await this.driveSync };
+  }
+
+  /**
+   * Has the model read each Doc in the Drive folder that changed since it was last read, and imports
+   * what it read as Drafts in one transaction, their photos stored first, as a Paprika import does. A
+   * Doc that holds no recipe is logged with its link and recorded as read, so it is skipped until it
+   * changes. A Doc that Drive or the model failed on is logged and not recorded, so the next sync
+   * reads it again. Drive's own failure is logged as the run's error.
+   */
+  private async readDriveFolder(drive: Drive): Promise<ImportRun> {
+    const startedAt = new Date().toISOString();
+    const { sql } = this.ctx.storage;
+    const errors: ImportError[] = [];
+    const prepared: PreparedRecipe[] = [];
+    const stored: string[] = [];
+    const docsRead: DriveDoc[] = [];
+    let skipped = 0;
+
+    let docs: DriveDoc[] = [];
+    try {
+      docs = await drive.listDocs();
+    } catch (error) {
+      if (!(error instanceof DriveError)) throw error;
+      errors.push({ entry: null, message: error.message });
+    }
+    const changed = docs.filter((doc) => driveRevision(sql, doc.id) !== doc.modifiedTime);
+    skipped += docs.length - changed.length;
+    const llm = openLlm(this.env);
+    for (const doc of changed.slice(0, MAX_DOCS_PER_SYNC)) {
+      const entry = docLink(doc.id);
+      try {
+        const { text, hasImage } = docText(await drive.markdown(doc.id));
+        const reading: RecipeReading = text
+          ? await llm.readRecipe({ text: text.slice(0, MAX_PASTED_TEXT) })
+          : { isRecipe: false };
+        if (!reading.isRecipe) {
+          errors.push({ entry, message: `${doc.name} holds no recipe` });
+          docsRead.push(doc);
+          skipped++;
+          continue;
+        }
+        let photoKey: string | null | undefined = null;
+        if (hasImage) {
+          const photo = await firstDocImage(await drive.zippedHtml(doc.id));
+          if (photo && photo.bytes.byteLength > MAX_PHOTO_BYTES) {
+            errors.push({
+              entry,
+              message: `${doc.name}'s first image is larger than ${MAX_PHOTO_BYTES / 1024 / 1024} MB`,
+            });
+            photoKey = undefined;
+          } else if (photo) photoKey = await this.storeImportedPhoto(photo, stored);
+        }
+        prepared.push({ recipe: importedFromDoc(doc, reading), photoKey, draft: true });
+        docsRead.push(doc);
+      } catch (error) {
+        if (!(error instanceof DriveError) && !(error instanceof LlmError)) throw error;
+        if (error instanceof LlmError) Sentry.captureException(error);
+        errors.push({ entry, message: `${doc.name}: ${error.message}` });
+      }
+    }
+    const waiting = changed.length - MAX_DOCS_PER_SYNC;
+    if (waiting > 0) errors.push({ entry: null, message: `${waiting} more Docs are read on the next sync` });
+
+    const outcome = this.ctx.storage.transactionSync(() => {
+      const imported = runImport(sql, "gdrive", startedAt, prepared, errors, skipped);
+      recordDriveDocs(sql, docsRead);
+      return { ...imported, newTexts: newTextsIn(sql, imported.written), revision: this.bumpRevision() };
+    });
+    this.notify("recipes", outcome.revision);
+    if (outcome.newTexts.length > 0) await this.schedule(0, "suggestAfterImport", { texts: outcome.newTexts });
+    for (const key of [...outcome.replacedPhotos, ...stored]) await this.deletePhoto(key);
+    return outcome.run;
+  }
+
+  /** Syncs the Drive folder, if there is one, then schedules tomorrow's. Run by the scheduler every night. */
+  async nightlyDriveSync(): Promise<void> {
+    try {
+      if (this.household()) await this.syncDriveFolder();
+    } catch (error) {
+      // The scheduler swallows callback errors, so report them here.
+      Sentry.captureException(error);
+      throw error;
+    } finally {
+      await this.scheduleNightly();
+    }
+  }
+
   /** Asks the model for one batch of Suggestions; see `RequestSuggestionsInput`. */
   private async requestSuggestions(
     input: ParsedToolInput<"request_suggestions">,
@@ -465,7 +579,7 @@ class HouseholdAgent extends Agent<Env> {
       throw error;
     } finally {
       // A failed night must not stop the next one.
-      await this.scheduleNightlyExport();
+      await this.scheduleNightly();
     }
   }
 
@@ -511,7 +625,7 @@ class HouseholdAgent extends Agent<Env> {
 
     const revision = this.bumpRevision();
     for (const topic of ChangeTopic.options) this.notify(topic, revision);
-    await this.scheduleNightlyExport();
+    await this.scheduleNightly();
     return Response.json({ ok: true });
   }
 
@@ -603,21 +717,27 @@ class HouseholdAgent extends Agent<Env> {
     if (key && !photoInUse(this.ctx.storage.sql, key)) await this.env.BUCKET.delete(key);
   }
 
+  /** Keeps the nightly export at 03:00 and the Drive sync at 04:00, in the Household's timezone. */
+  private async scheduleNightly(): Promise<void> {
+    await this.scheduleDaily("nightlyExport", NIGHTLY_EXPORT_TIME);
+    await this.scheduleDaily("nightlyDriveSync", DRIVE_SYNC_TIME);
+  }
+
   /**
-   * Keeps exactly one upcoming export, at the next 03:00 in the Household's timezone. Only future
-   * runs are reconciled, so the run in progress is left for the scheduler to complete.
+   * Keeps exactly one upcoming run of `callback`, at the next `time` in the Household's timezone.
+   * Only future runs are reconciled, so the run in progress is left for the scheduler to complete.
    */
-  private async scheduleNightlyExport(): Promise<void> {
+  private async scheduleDaily(callback: "nightlyExport" | "nightlyDriveSync", time: string): Promise<void> {
     const household = this.household();
     const now = new Date();
     const upcoming = (await this.listSchedules()).filter(
-      (schedule) => schedule.callback === "nightlyExport" && schedule.time * 1000 > now.getTime(),
+      (schedule) => schedule.callback === callback && schedule.time * 1000 > now.getTime(),
     );
-    const next = household && nextOccurrence(now, NIGHTLY_EXPORT_TIME, household.timezone);
+    const next = household && nextOccurrence(now, time, household.timezone);
     if (next && upcoming.length === 1 && upcoming[0]?.time === next.getTime() / 1000) return;
 
     for (const schedule of upcoming) await this.cancelSchedule(schedule.id);
-    if (next) await this.schedule(next, "nightlyExport");
+    if (next) await this.schedule(next, callback);
   }
 
   /** The caller over a WebSocket; RPC from inside the deployment (tests, scheduled jobs) has none. */

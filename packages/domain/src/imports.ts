@@ -3,8 +3,8 @@ import { normaliseItemName } from "./items";
 import type { RecipeReading } from "./llm";
 import { ImportedPreference, IngredientLines, Recipe, RecipeFields, RecipeId } from "./recipes";
 
-/** The sources an import reads; Drive arrives with its own import. */
-export const ImportSource = z.enum(["paprika", "text", "url", "tiktok", "instagram", "screenshot"]);
+/** The sources an import reads. */
+export const ImportSource = z.enum(["paprika", "gdrive", "text", "url", "tiktok", "instagram", "screenshot"]);
 export type ImportSource = z.infer<typeof ImportSource>;
 
 /** Something an import could not read: a file of the export, or the export itself (`entry` null). */

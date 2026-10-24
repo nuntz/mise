@@ -371,6 +371,14 @@ const en = {
   "review.discard": "Discard",
   "review.suggestions": "Suggestions",
   "review.resolve": "Resolve them",
+  "drive.title": "Google Drive folder",
+  "drive.intro":
+    "Docs dropped in the shared Drive folder, or in its subfolders, become Drafts every night. Sync now to read them straight away.",
+  "drive.sync": "Sync Drive now",
+  "drive.syncing": "Syncing…",
+  "drive.done": "Synced: {counts}.",
+  "drive.errors": "Not imported from Drive",
+  "drive.notConfigured": "No Drive folder is set up for Mise. The README says how to connect one.",
   "import.title": "Import from Paprika",
   "import.intro":
     "In Paprika, export your Recipes (all of them, with photos) and choose the .paprikarecipes file here. Importing again brings in what changed; nothing is ever deleted.",
@@ -385,6 +393,7 @@ const en = {
   "import.noRuns": "Nothing imported yet.",
   "import.run": "{when}, {source}: {counts}",
   "import.source.paprika": "Paprika",
+  "import.source.gdrive": "Google Drive",
   "import.source.text": "pasted text",
   "import.source.url": "a link",
   "import.source.tiktok": "TikTok",
@@ -446,6 +455,7 @@ const en = {
   "recipe.importedTikTok": "Read by AI from a TikTok: {url}.",
   "recipe.importedTikTokBy": "Read by AI from a TikTok by {author}: {url}.",
   "recipe.importedScreenshots": "Read by AI from screenshots.",
+  "recipe.importedDoc": "Read by AI from a Google Doc in the Drive folder: {url}.",
   "recipe.draft": "That Recipe is a Draft: accept it on the Review screen to plan it.",
 
   "recipeForm.title": "Title",

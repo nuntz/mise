@@ -299,6 +299,15 @@ say "An Anthropic API key for the chat's agent (console.anthropic.com → API ke
 say "Set a monthly spend limit there too (Settings → Limits): Mise has no cap of its own."
 ask_secret ANTHROPIC_API_KEY "Anthropic API key (blank to skip; the chat then answers nothing):" || true
 write_env ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}"
+say "Optional: a Google Drive folder whose Docs become Drafts (README → Google Drive folder has the steps)."
+ask DRIVE_KEY_FILE "Path to the service account's JSON key file (blank to skip):" || true
+DRIVE_KEY_FILE="${DRIVE_KEY_FILE/#\~/$HOME}"
+if [[ -n "${DRIVE_KEY_FILE:-}" ]]; then
+  [[ -r "$DRIVE_KEY_FILE" ]] || { warn "Can't read $DRIVE_KEY_FILE. Re-run with the key file's path."; exit 1; }
+  ask DRIVE_FOLDER_ID "Drive folder id (the end of the folder's URL):"
+fi
+write_env DRIVE_KEY_FILE "${DRIVE_KEY_FILE:-}"
+write_env DRIVE_FOLDER_ID "${DRIVE_FOLDER_ID:-}"
 say "Optional: a Sentry DSN for error reports (sentry.io → Project → Settings → Client Keys)."
 ask_secret SENTRY_DSN "Sentry DSN (blank to skip):" || true
 write_env SENTRY_DSN "${SENTRY_DSN:-}"
@@ -324,6 +333,11 @@ definition=$(mktemp); trap 'rm -f "$definition"' EXIT
   printf '    mise:googleClientId: %s\n' "$(yaml_str "$GOOGLE_CLIENT_ID")"
   printf '    mise:googleClientSecret:\n      fn::secret: %s\n' "$(yaml_str "$GOOGLE_CLIENT_SECRET")"
   [[ -n "${ANTHROPIC_API_KEY:-}" ]] && printf '    mise:anthropicApiKey:\n      fn::secret: %s\n' "$(yaml_str "$ANTHROPIC_API_KEY")"
+  if [[ -n "${DRIVE_KEY_FILE:-}" && -n "${DRIVE_FOLDER_ID:-}" ]]; then
+    printf '    mise:driveFolderId: %s\n' "$(yaml_str "$DRIVE_FOLDER_ID")"
+    # The key's JSON on one line: its private key's line breaks are escaped inside the JSON.
+    printf '    mise:googleServiceAccountKey:\n      fn::secret: %s\n' "$(yaml_str "$(tr -d '\n' < "$DRIVE_KEY_FILE")")"
+  fi
   [[ -n "${SENTRY_DSN:-}" ]] && printf '    mise:sentryDsn:\n      fn::secret: %s\n' "$(yaml_str "$SENTRY_DSN")"
   true
 } > "$definition"

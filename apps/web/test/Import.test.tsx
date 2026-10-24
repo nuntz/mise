@@ -89,6 +89,7 @@ function fakeClient(
     importText?: unknown;
     importUrl?: unknown;
     importScreenshots?: unknown;
+    syncDrive?: unknown;
     screenshotUploads?: boolean;
     runs?: ImportRun[];
   } = {},
@@ -120,6 +121,8 @@ function fakeClient(
           return options.importUrl;
         case "import_screenshots":
           return options.importScreenshots;
+        case "sync_drive_folder":
+          return options.syncDrive;
         case "list_drafts":
         case "list_suggestions":
           return { ok: true, value: [] };
@@ -473,4 +476,53 @@ test("past imports name TikTok, Instagram and screenshots", async () => {
   expect(within(runs).getByText(/screenshots: 1 created/)).toBeTruthy();
   expect(within(runs).getByText(/TikTok: 1 created/)).toBeTruthy();
   expect(within(runs).getByText(/Instagram: 1 created/)).toBeTruthy();
+});
+
+const NOTES_DOC = "https://docs.google.com/document/d/1NotesDocId/edit";
+
+const driveRun: ImportRun = {
+  ...today,
+  id: 6,
+  source: "gdrive",
+  created: 1,
+  updated: 0,
+  skipped: 4,
+  flagged: 0,
+  errors: [{ entry: NOTES_DOC, message: "Shopping notes holds no recipe" }],
+};
+
+test("syncing the Drive folder shows what it did, with a link to each Doc it did not import", async () => {
+  const { client, calls } = fakeClient({ syncDrive: { ok: true, value: driveRun } });
+  await openImport(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Sync Drive now" }));
+
+  expect(calls).toContainEqual({ name: "sync_drive_folder", input: {} });
+  expect(await screen.findByText("Synced: 1 created, 0 updated, 4 skipped, 0 flagged.")).toBeTruthy();
+  const skipped = screen.getByRole("list", { name: "Not imported from Drive" });
+  expect(within(skipped).getByRole("link", { name: NOTES_DOC })).toHaveProperty("href", NOTES_DOC);
+  expect(within(skipped).getByText(/Shopping notes holds no recipe/)).toBeTruthy();
+});
+
+test("syncing says so when the deployment has no Drive folder", async () => {
+  const { client } = fakeClient({
+    syncDrive: { ok: false, error: { code: "not_configured", message: "No Drive folder is set up for Mise" } },
+  });
+  await openImport(client);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Sync Drive now" }));
+
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "No Drive folder is set up for Mise. The README says how to connect one.",
+  );
+});
+
+test("a past Drive sync lists the Docs it did not import, with their links", async () => {
+  const { client } = fakeClient({ runs: [driveRun] });
+  await openImport(client);
+
+  const runs = await screen.findByRole("list", { name: "Past imports" });
+  expect(within(runs).getByText(/Google Drive: 1 created/)).toBeTruthy();
+  await userEvent.click(within(runs).getByText("1 not imported"));
+  expect(within(runs).getByRole("link", { name: NOTES_DOC })).toHaveProperty("href", NOTES_DOC);
 });

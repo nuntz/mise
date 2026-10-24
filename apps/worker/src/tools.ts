@@ -18,6 +18,7 @@ import {
 } from "@mise/domain";
 import { calendarHandlers, readCalendarToken } from "./calendar";
 import { draftHandlers } from "./drafts";
+import { readDriveDocs } from "./drive";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
@@ -44,14 +45,16 @@ type ConstraintRow = ConstraintColumns & { member_id: number };
 
 /**
  * Tools that need more than SQLite, which the household runs itself: a Paprika import reads R2;
- * Suggestions and a text import ask the model; a link import fetches the page, and may ask it too.
+ * Suggestions and a text import ask the model; a link import fetches the page, and may ask it too;
+ * a Drive sync reads the Drive folder and asks the model.
  */
 export type HouseholdToolName =
   | "run_paprika_import"
   | "request_suggestions"
   | "import_text"
   | "import_url"
-  | "import_screenshots";
+  | "import_screenshots"
+  | "sync_drive_folder";
 
 export type Handlers = {
   [N in Exclude<ToolName, HouseholdToolName>]: (
@@ -200,6 +203,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readGroceryLines(sql);
   readStaples(sql);
   readCalendarToken(sql);
+  readDriveDocs(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {

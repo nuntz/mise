@@ -388,6 +388,15 @@ const migrations: { version: number; statements: string[] }[] = [
          AND NOT EXISTS (SELECT 1 FROM recipe_ingredient WHERE recipe_ingredient.recipe_id = recipe.id)`,
     ],
   },
+  {
+    version: 21,
+    statements: [
+      // The modified time of each Doc in the Drive folder that a sync last read, recipe or not: the
+      // sync skips a Doc until it changes, so a Doc that holds no recipe, or whose Draft was
+      // discarded, is not read again every night.
+      "CREATE TABLE drive_doc (doc_id TEXT PRIMARY KEY, modified_time TEXT NOT NULL)",
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

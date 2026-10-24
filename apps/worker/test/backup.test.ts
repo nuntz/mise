@@ -231,9 +231,10 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 20,
+      schemaVersion: 21,
       tables: {
         calendar_token: [],
+        drive_doc: [],
         household: [
           {
             id: 1,
@@ -559,15 +560,16 @@ describe("replaying an export before a deploy", () => {
 });
 
 describe("nightly export", () => {
-  test("setting up the Household schedules the export for 03:00 Household time", async () => {
+  test("setting up the Household schedules the export for 03:00 and the Drive sync for 04:00 Household time", async () => {
     const household = freshHousehold();
     await household.callTool("setup_household", { name: "The Example Family", timezone: "Asia/Tokyo" });
 
     const schedules = await household.listSchedules();
 
-    const expected = nextOccurrence(new Date(), "03:00", "Asia/Tokyo");
+    const at = (time: string) => nextOccurrence(new Date(), time, "Asia/Tokyo").getTime() / 1000;
     expect(schedules).toEqual([
-      expect.objectContaining({ callback: "nightlyExport", time: expected.getTime() / 1000 }),
+      expect.objectContaining({ callback: "nightlyExport", time: at("03:00") }),
+      expect.objectContaining({ callback: "nightlyDriveSync", time: at("04:00") }),
     ]);
   });
 
@@ -581,7 +583,10 @@ describe("nightly export", () => {
 
     const stored = await env.BUCKET.get(key);
     expect(await stored?.text()).toBe(await exportOf(household));
-    expect(await household.listSchedules()).toEqual([expect.objectContaining({ callback: "nightlyExport" })]);
+    expect(await household.listSchedules()).toEqual([
+      expect.objectContaining({ callback: "nightlyExport" }),
+      expect.objectContaining({ callback: "nightlyDriveSync" }),
+    ]);
   });
 
   test("nothing is scheduled before the Household is set up", async () => {

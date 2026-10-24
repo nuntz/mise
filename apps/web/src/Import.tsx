@@ -7,15 +7,15 @@ import {
   type ToolError,
   type ToolOutput,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, Show } from "solid-js";
+import { createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
 /**
- * Paste a link or a recipe's text, import screenshots or a Paprika export, and see past imports and the Recipes
- * they flagged. `onReview` opens the Review screen, where what the model read waits as a Draft.
+ * Paste a link or a recipe's text, import screenshots, sync the Drive folder or import a Paprika export, and see
+ * past imports and the Recipes they flagged. `onReview` opens the Review screen, where what the model read waits as a Draft.
  */
 export function ImportPage(props: { client: MiseClient; onReview: () => void }) {
   const [runs, setRuns] = createSignal<ImportRun[]>();
@@ -62,6 +62,7 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
       <PasteLink client={props.client} onReview={props.onReview} />
       <PasteRecipe client={props.client} onReview={props.onReview} />
       <ImportScreenshots client={props.client} onReview={props.onReview} />
+      <DriveSync client={props.client} />
       <h2>{t("import.title")}</h2>
       <p>{t("import.intro")}</p>
       <label>
@@ -112,8 +113,12 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
                       counts: countsText(run),
                     })}
                     <Show when={run.errors.length > 0}>
-                      {" · "}
-                      {t("import.runErrors", { count: String(run.errors.length) })}
+                      <details>
+                        <summary>{t("import.runErrors", { count: String(run.errors.length) })}</summary>
+                        <ul>
+                          <For each={run.errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
+                        </ul>
+                      </details>
                     </Show>
                   </li>
                 )}
@@ -129,6 +134,55 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
         </ul>
       </Show>
     </section>
+  );
+}
+
+/** Reads the Drive folder now rather than tonight, and shows what the sync did. */
+function DriveSync(props: { client: MiseClient }) {
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const [run, setRun] = createSignal<ImportRun>();
+
+  const sync = async () => {
+    setBusy(true);
+    setError(undefined);
+    setRun(undefined);
+    try {
+      const result = await props.client.call("sync_drive_folder", {});
+      if (result.ok) setRun(result.value);
+      else
+        setError(result.error.code === "not_configured" ? t("drive.notConfigured") : errorText(result.error, "recipe"));
+    } catch {
+      setError(t("app.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2>{t("drive.title")}</h2>
+      <p>{t("drive.intro")}</p>
+      <button type="button" disabled={busy()} onClick={() => void sync()}>
+        {busy() ? t("drive.syncing") : t("drive.sync")}
+      </button>
+      <Show when={error()}>
+        <p role="alert">{error()}</p>
+      </Show>
+      <Show when={run()}>
+        {(run) => (
+          <>
+            <p role="status">{t("drive.done", { counts: countsText(run()) })}</p>
+            <Show when={run().errors.length > 0}>
+              <h3 id="drive-errors">{t("drive.errors")}</h3>
+              <ul aria-labelledby="drive-errors">
+                <For each={run().errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
+              </ul>
+            </Show>
+          </>
+        )}
+      </Show>
+    </div>
   );
 }
 
@@ -460,8 +514,20 @@ function countsText(run: ImportRun): string {
   });
 }
 
-function errorLine(problem: ImportError): string {
-  return `${problem.entry ?? t("import.wholeFile")}: ${problem.message}`;
+/** What an import could not read, and where: a link when that is a page, such as a Drive Doc. */
+function errorLine(problem: ImportError): JSX.Element {
+  const entry = problem.entry;
+  if (entry === null || !/^https?:\/\//.test(entry)) {
+    return `${entry ?? t("import.wholeFile")}: ${problem.message}`;
+  }
+  return (
+    <>
+      <a href={entry} target="_blank" rel="noopener noreferrer">
+        {entry}
+      </a>
+      {`: ${problem.message}`}
+    </>
+  );
 }
 
 export function flagText(flag: ImportFlag): string {

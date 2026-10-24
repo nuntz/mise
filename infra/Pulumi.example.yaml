@@ -25,6 +25,12 @@
 #        # Without a key the chat answers nothing.
 #        mise:anthropicApiKey:
 #          fn::secret: sk-ant-api03-example
+#        # Optional: a Google Drive folder whose Docs become Drafts every night (README → Google Drive
+#        # folder). The id is the end of the folder's URL; the key is the service account's JSON key,
+#        # on one line, and the folder must be shared with the service account's email.
+#        # mise:driveFolderId: 0BxExampleFolderId
+#        # mise:googleServiceAccountKey:
+#        #   fn::secret: '{"type":"service_account","client_email":"mise-drive@example.com","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"}'
 #        # Optional: report errors and traces to Sentry.
 #        # mise:sentryDsn:
 #        #   fn::secret: https://<public-key>@<org>.ingest.sentry.io/<project>

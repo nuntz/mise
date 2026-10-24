@@ -48,6 +48,20 @@ An iOS Shortcut puts "Mise" in the iPhone share sheet: it opens `/share?url=…`
 
 "Ask Mise" in the header opens a chat with an agent on Claude (Anthropic). It reads and changes the Household only through the same tools the screens use. It needs the `mise:anthropicApiKey` setting, which becomes the `ANTHROPIC_API_KEY` Worker secret; without it the chat answers nothing. **Set a monthly spend limit in the Anthropic console** (Settings → Limits): Mise has no cap of its own. For `wrangler dev`, put the key in `apps/worker/.dev.vars`.
 
+## Google Drive folder
+
+A shared Google Drive folder can be Mise's inbox: anyone drops a Google Doc in it, and by the next morning the Doc is a Draft Recipe waiting on the review screen. "Sync Drive now" on the Import screen reads it straight away. Subfolders become tags, read as Paprika categories are ("Desserts", "Indian"); a flat folder works too. The first image in a Doc becomes the Recipe's photo. A Doc that holds no recipe is listed in the run log, with its link, and skipped until it changes. An edited Doc updates its Draft, or raises an Import Flag if its Recipe was edited or accepted in Mise. A Doc removed from the folder leaves its Recipe in Mise. Mise never writes to the folder. Only Google Docs are read: a shortcut, a PDF or a Word file in the folder is ignored, so convert or copy it into a Doc.
+
+Mise reads the folder as a Google Cloud service account, so any Google account can share a folder with it, with no Workspace admin needed. To connect one:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), pick or create a project and enable the **Google Drive API** (APIs & Services → Library).
+2. Create a service account (IAM & Admin → Service Accounts → Create). It needs no roles. Open it, then Keys → Add key → Create new key → JSON, and keep the downloaded file safe: it is the key.
+3. In Google Drive, share the folder with the service account's email (`<name>@<project>.iam.gserviceaccount.com`) as a **Viewer**.
+4. Copy the folder's id, the end of its URL: `https://drive.google.com/drive/folders/<folder id>`.
+5. Add both to your ESC environment, as `infra/Pulumi.example.yaml` shows: `mise:driveFolderId`, and `mise:googleServiceAccountKey` as a secret holding the key file's JSON on one line. `bun run wizard` asks for the key file and the folder id and does this for you. They become the `DRIVE_FOLDER_ID` and `GOOGLE_SERVICE_ACCOUNT_KEY` Worker secrets on the next deploy.
+
+The sync runs at 04:00 Household time, after the nightly export. The model reads each new or changed Doc, so the Anthropic key is needed too. One sync reads at most 25 Docs, and the next one carries on. Without both settings there is no sync, and "Sync Drive now" says so.
+
 ## Backup and restore
 
 At 03:00 Household time the household Durable Object writes a JSON export of all Household data to R2 at `exports/<date>.json` (ADR 0006). To take one by hand or restore one into a fresh deployment:

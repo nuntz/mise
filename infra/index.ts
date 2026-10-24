@@ -17,7 +17,13 @@ const allowedEmails = config.getObject<string[]>("allowedEmails") ?? [];
 const allowedEmailDomain = config.get("allowedEmailDomain");
 const sentryDsn = config.getSecret("sentryDsn");
 const anthropicApiKey = config.getSecret("anthropicApiKey");
+// The Drive folder sync: both or neither.
+const googleServiceAccountKey = config.getSecret("googleServiceAccountKey");
+const driveFolderId = config.get("driveFolderId");
 
+if (Boolean(googleServiceAccountKey) !== Boolean(driveFolderId)) {
+  throw new Error("Set both mise:googleServiceAccountKey and mise:driveFolderId for the Drive sync, or neither");
+}
 if (allowedEmails.length === 0 && !allowedEmailDomain) {
   throw new Error("Set mise:allowedEmails or mise:allowedEmailDomain: otherwise no one can sign in");
 }
@@ -82,12 +88,15 @@ const domain = (await workerExists())
 /** For CI: who wrangler deploys as, and the secrets it uploads with the Worker. */
 export const cloudflareAccountId = pulumi.secret(accountId);
 export const workerSecrets = pulumi.secret(
-  pulumi.all([app.aud, sentryDsn, anthropicApiKey]).apply(([aud, dsn, anthropic]) => ({
-    ACCESS_TEAM_DOMAIN: accessTeamDomain,
-    ACCESS_AUD: aud,
-    ...(dsn ? { SENTRY_DSN: dsn } : {}),
-    ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
-  })),
+  pulumi
+    .all([app.aud, sentryDsn, anthropicApiKey, googleServiceAccountKey])
+    .apply(([aud, dsn, anthropic, driveKey]) => ({
+      ACCESS_TEAM_DOMAIN: accessTeamDomain,
+      ACCESS_AUD: aud,
+      ...(dsn ? { SENTRY_DSN: dsn } : {}),
+      ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
+      ...(driveKey && driveFolderId ? { GOOGLE_SERVICE_ACCOUNT_KEY: driveKey, DRIVE_FOLDER_ID: driveFolderId } : {}),
+    })),
 );
 export const hostnameBound = domain !== undefined;
 

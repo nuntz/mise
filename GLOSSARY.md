@@ -79,6 +79,10 @@ _Avoid_: Bookmark, stub
 **Imported Preference**:
 How much the Household liked a Recipe before Mise, carried over from its source; separate from Ratings made in Mise.
 
+**Drive Folder**:
+The shared Google Drive folder whose Google Docs become Draft Recipes, every night or on "sync now": an inbox, not a mirror, so nothing is written back to it, and a Doc removed from it leaves its Recipe.
+_Avoid_: Drive sync folder, mirror
+
 **Import Run**:
 One import of a source's export, logged with how many Recipes it created, updated, skipped and flagged, and what it could not read.
 

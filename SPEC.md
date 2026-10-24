@@ -111,7 +111,7 @@ All sources share: source reader (structured fields, or the LLM extracting the R
 | TikTok / Instagram | Same as URL | Tier 1: oEmbed caption + thumbnail (TikTok only; Instagram oEmbed needs Meta app review, so Instagram is link-only + tier 3). TikTok's oEmbed answers stopped carrying the caption and thumbnail (seen October 2026), so in practice a TikTok lands link-only too and is filled by tier 3; Mise still reads a caption if one comes back, and asks again each time the video is shared. Mise does not scrape TikTok's pages. Tier 2: external job runner (yt-dlp → Whisper transcript → frame samples → LLM). Tier 3: paste caption / one or more screenshots → vision. Always a Draft; review must make fixing amounts fast. | `videoUrl` |
 | Manual | PWA form, or dictated to the agent | — | — |
 
-Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by morning. No reverse sync. A Doc that fails the recipe gate is skipped and listed in the run log (with a link), and skipped again until it changes. An edited Doc updates its Recipe or Draft (or flags a merge if edited in Mise); a Doc removed from the folder leaves its Recipe in Mise.
+Drive folder is an **inbox**, not a mirror: anyone drops a Doc in, it appears by morning. No reverse sync. A Doc that fails the recipe gate is skipped and listed in the run log (with a link), and skipped again until it changes. An edited Doc updates its Draft (or flags a merge if its Recipe was edited in Mise, or accepted, as for every source the LLM reads); a Doc removed from the folder leaves its Recipe in Mise.
 
 Web Share Target is not used: iOS does not support it, while a pasted link and a Shortcut work on every phone.
 
