@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
-import { exportKey, localDate, nextOccurrence } from "@mise/domain";
+import { EXPORT_FORMAT_VERSION, exportKey, localDate, nextOccurrence } from "@mise/domain";
 import { describe, expect, onTestFinished, test } from "vitest";
 import { paprikaExport, SAMPLE_PAPRIKA_RECIPES } from "../../../fixtures/paprika";
 import sampleHousehold from "../../../fixtures/sample-household.json";
+import { replay } from "./replay";
 
 const householdUrl = "http://mise.example.com/agents/household/household";
 
@@ -508,6 +509,51 @@ describe("export and restore", () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "schema_mismatch" });
+  });
+});
+
+describe("replaying an export before a deploy", () => {
+  test("an export reads back under this code", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    await source.callTool("create_recipe", recipe);
+
+    expect(await replay(JSON.parse(await exportOf(source)))).toEqual({ ok: true });
+  });
+
+  test("an export from an earlier schema version is migrated, then read back", async () => {
+    const exported = {
+      format: "mise.household-export",
+      version: EXPORT_FORMAT_VERSION,
+      schemaVersion: 1,
+      tables: {
+        household: [
+          {
+            id: 1,
+            name: "The Example Household",
+            timezone: "America/Vancouver",
+            dinner_time: "18:00",
+            week_starts_on: "monday",
+            units: "metric",
+            locale: "en-CA",
+          },
+        ],
+      },
+      sequences: {},
+      photoKeys: [],
+    };
+
+    expect(await replay(exported)).toEqual({ ok: true });
+  });
+
+  test("stored rows this code cannot read are reported, as a parser made stricter would leave them", async () => {
+    const source = freshHousehold();
+    await source.callTool("setup_household", sampleHousehold);
+    const exported = JSON.parse(await exportOf(source));
+    const intolerance = exported.tables.member_constraint.find((c: { kind: string }) => c.kind === "intolerance");
+    intolerance.allergen = null;
+
+    expect(await replay(exported)).toMatchObject({ ok: false, error: { code: "invalid_export" } });
   });
 });
 

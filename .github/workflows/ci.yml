@@ -64,6 +64,14 @@ jobs:
       - name: Check no private values are committed
         run: pulumi config --cwd infra --show-secrets --json | bun run check:private -
 
+      # Replays the latest nightly export through this code's migrations and parsers, so a change
+      # that cannot read the stored Household stops here instead of breaking it (CODING_STANDARDS.md).
+      - name: Check this code reads the stored Household
+        run: |
+          account="$(pulumi stack output --cwd infra cloudflareAccountId --show-secrets)"
+          echo "::add-mask::$account"
+          CLOUDFLARE_ACCOUNT_ID="$account" bun run check:export
+
       - name: pulumi up
         run: pulumi up --cwd infra --yes --skip-preview
 

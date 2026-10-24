@@ -357,12 +357,13 @@ const migrations: { version: number; statements: string[] }[] = [
   },
 ];
 
-export function migrate(storage: DurableObjectStorage): void {
+/** Brings the database up to `upTo`, by default the latest version. */
+export function migrate(storage: DurableObjectStorage, upTo = Number.POSITIVE_INFINITY): void {
   storage.transactionSync(() => {
     storage.sql.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)");
     const current = schemaVersion(storage.sql);
     for (const migration of migrations) {
-      if (migration.version <= current) continue;
+      if (migration.version <= current || migration.version > upTo) continue;
       for (const statement of migration.statements) storage.sql.exec(statement);
       storage.sql.exec("INSERT INTO schema_version (version) VALUES (?)", migration.version);
     }

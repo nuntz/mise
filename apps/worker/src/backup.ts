@@ -1,6 +1,6 @@
 import { EXPORT_FORMAT_VERSION, HouseholdExport } from "@mise/domain";
 import { z } from "zod";
-import { schemaVersion } from "./migrations";
+import { migrate, schemaVersion } from "./migrations";
 import { parseStoredHousehold } from "./tools";
 
 /**
@@ -77,6 +77,45 @@ export function restoreHousehold(storage: DurableObjectStorage, input: unknown):
   }
 }
 
+/**
+ * Loads an export into an empty database at the export's own schema version, then migrates it and
+ * reads it back, which is what a deploy does to the stored Household. `check:export` replays the
+ * latest nightly export this way before each deploy, so code that cannot read the stored data
+ * never ships.
+ */
+export function replayExport(storage: DurableObjectStorage, input: unknown): RestoreResult {
+  const parsed = HouseholdExport.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: { code: "invalid_export", message: "Not a Mise household export" } };
+  }
+  const data = parsed.data;
+  const { sql } = storage;
+
+  migrate(storage, data.schemaVersion);
+  const tables = householdTables(sql);
+  if (Object.keys(data.tables).sort().join() !== tables.join()) {
+    return { ok: false, error: { code: "invalid_export", message: "The export's tables do not match the schema" } };
+  }
+
+  try {
+    const loaded = storage.transactionSync(() => {
+      const loaded = loadRows(sql, tables, data);
+      if (loaded.ok) {
+        restoreSequences(sql, tables, data.sequences);
+        checkReferences(sql);
+      }
+      return loaded;
+    });
+    if (!loaded.ok) return loaded;
+    migrate(storage);
+    readBack(sql);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof InvalidExport) return { ok: false, error: { code: "invalid_export", message: error.message } };
+    throw error;
+  }
+}
+
 function loadRows(sql: SqlStorage, tables: string[], data: HouseholdExport): RestoreResult {
   if (tables.some((table) => sql.exec(`SELECT 1 FROM "${table}" LIMIT 1`).toArray().length > 0)) {
     return { ok: false, error: { code: "not_empty", message: "Restore only loads into an empty household" } };
@@ -120,21 +159,27 @@ function restoreSequences(sql: SqlStorage, tables: string[], exported: Household
 
 /** The AUTOINCREMENT counters of the household tables, by table name. */
 function sequences(sql: SqlStorage, tables: string[]): HouseholdExport["sequences"] {
+  // SQLite creates sqlite_sequence with the first AUTOINCREMENT table; early schema versions have none.
+  if (sql.exec("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'").toArray().length === 0) return {};
   const rows = sql.exec<{ name: string; seq: number }>("SELECT name, seq FROM sqlite_sequence ORDER BY name").toArray();
   return Object.fromEntries(rows.filter(({ name }) => tables.includes(name)).map(({ name, seq }) => [name, seq]));
 }
 
 /** Reads the restored household through the domain parsers, so a household no tool can read is never committed. */
 function readBack(sql: SqlStorage): void {
-  // Foreign keys are only checked on commit (see loadRows), too late to refuse the export cleanly.
-  if (sql.exec("PRAGMA foreign_key_check").toArray().length > 0) {
-    throw new InvalidExport("The export holds rows that refer to rows it does not have");
-  }
+  checkReferences(sql);
   try {
     parseStoredHousehold(sql);
   } catch (error) {
     if (error instanceof z.ZodError) throw new InvalidExport("The export holds data that is not valid Household data");
     throw error;
+  }
+}
+
+/** Foreign keys are only checked on commit (see loadRows), too late to refuse the export cleanly. */
+function checkReferences(sql: SqlStorage): void {
+  if (sql.exec("PRAGMA foreign_key_check").toArray().length > 0) {
+    throw new InvalidExport("The export holds rows that refer to rows it does not have");
   }
 }
 
