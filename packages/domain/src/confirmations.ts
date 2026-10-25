@@ -1,18 +1,26 @@
+import { z } from "zod";
 import type { ConflictWho, Override } from "./conflicts";
 import type { Allergen, Constraint, Member } from "./members";
 import type { LocalDate, Meal, SlotKind } from "./weeks";
+
+export const ConfirmationId = z.number().int().positive();
 
 /**
  * A call the agent made that only a person's tap runs (ADR 0024): the chat shows it as a button
  * saying what will happen.
  */
-export type PendingConfirmation = { id: number; summary: string };
+export const PendingConfirmation = z.object({ id: ConfirmationId, summary: z.string().min(1) });
+export type PendingConfirmation = z.infer<typeof PendingConfirmation>;
 
 /**
- * Pending until tapped, then done; expired once the state it describes changes, so a tap never runs
- * a call against something other than what its button said.
+ * Pending until tapped, then done; cancelled when the person no longer wants it; expired once the
+ * state it describes changes, so a tap never runs a call against something other than what its
+ * button said.
  */
-export type ConfirmationStatus = "pending" | "done" | "expired";
+export type ConfirmationStatus = "pending" | "done" | "cancelled" | "expired";
+
+/** Withdraws a confirmation still waiting for a tap. Cancelling only ever makes plans safer. */
+export const CancelConfirmationInput = z.object({ id: ConfirmationId }).strict();
 
 /** A Hard Constraint, which always names an Allergen. */
 type HardConstraint = Extract<Constraint, { kind: "allergy" | "intolerance" | "diet" }>;

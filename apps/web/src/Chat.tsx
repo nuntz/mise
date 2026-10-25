@@ -104,14 +104,15 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
     setError("answer");
   };
 
-  // A tap on a confirmation runs the call the agent asked for; only a person can (ADR 0024).
-  const confirm = async (id: number) => {
+  // A tap on a confirmation runs the call the agent asked for, which only a person can (ADR 0024), or
+  // cancels it.
+  const tap = async (answer: () => Promise<ToolResult<unknown>>) => {
     if (tapping()) return;
     setError(undefined);
     setTapping(true);
     let result: ToolResult<unknown> | undefined;
     try {
-      result = await props.client.confirm(id);
+      result = await answer();
     } catch {
       // Shown as not gone through below.
     }
@@ -148,9 +149,24 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
                           <span class="visually-hidden">: </span>
                         </span>
                         <Show when={turn.status === "pending"} fallback={<span>{turn.summary}</span>}>
-                          <button type="button" disabled={tapping()} onClick={() => void confirm(turn.id)}>
-                            {turn.summary}
-                          </button>
+                          <div class="chat-confirmation-actions">
+                            <button
+                              type="button"
+                              disabled={tapping()}
+                              onClick={() => void tap(() => props.client.confirm(turn.id))}
+                            >
+                              {turn.summary}
+                            </button>
+                            <button
+                              type="button"
+                              class="button-quiet"
+                              disabled={tapping()}
+                              aria-label={t("chat.confirmation.cancelLabel", { summary: turn.summary })}
+                              onClick={() => void tap(() => props.client.call("cancel_confirmation", { id: turn.id }))}
+                            >
+                              {t("chat.confirmation.cancel")}
+                            </button>
+                          </div>
                         </Show>
                       </li>
                     ) : (

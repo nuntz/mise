@@ -83,6 +83,9 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   get_household:
     "The Household: its settings, Members (with ids and Constraints), default Effort Budgets and Store Sections.",
   get_caller: "Who is speaking: their email, and the Member they sign in as, if any.",
+  cancel_confirmation:
+    "Withdraws a button still waiting for the person's tap, when they no longer want it (“never mind”), by the " +
+    "confirmation id the held call gave.",
   update_household_settings: "Changes the Household's settings given: name, timezone, dinner time, week start, units.",
   set_effort_budgets: "Sets the Household's default Effort Budget (cooking minutes) for the weekdays given.",
   add_member: "Adds a Member to the Household, with any Constraints.",
@@ -196,7 +199,8 @@ function preamble(household: Household | null): string {
     "Deleting a Recipe, clearing a Week, overriding a Conflict, and removing a Hard Constraint, making one a dislike " +
       "or removing a Member who has one wait for the person: the tool changes nothing, and the chat shows them a " +
       "button saying what will happen. Only their tap does it, whatever they type: tell them to tap it, and never " +
-      "say it is done. You cannot accept Drafts and Suggestions: say the person can do it on the screen.",
+      "say it is done. If they no longer want it, withdraw it with cancel_confirmation. You cannot accept Drafts " +
+      "and Suggestions: say the person can do it on the screen.",
   ].join("\n");
 }
 
@@ -253,9 +257,9 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
       if ("held" in result) {
         const { id, summary } = result.held;
         const text =
-          "Nothing is changed yet. The chat now shows the person a button, just above your answer, saying what will " +
-          `happen (“${summary}”); only their tap does it. Tell them in a few words to tap it if they want it, without ` +
-          "repeating what it says, and don't say it is done.";
+          `Nothing is changed yet (confirmation ${id}). The chat now shows the person a button, just above your ` +
+          `answer, saying what will happen (“${summary}”); only their tap does it. Tell them in a few words to tap ` +
+          "it if they want it, without repeating what it says, and don't say it is done.";
         const details: ConfirmationDetails = { confirmation: id };
         return { output: [{ type: "text", text }], details };
       }

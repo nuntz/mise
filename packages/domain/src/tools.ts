@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CalendarToken } from "./calendar";
 import { type Caller, ResolvedCaller } from "./caller";
+import { CancelConfirmationInput, PendingConfirmation } from "./confirmations";
 import { type Conflict, SlotConflict } from "./conflicts";
 import {
   AddGroceryLineInput,
@@ -85,7 +86,7 @@ import {
  * the Unresolved Ingredients they are for and resolve them when accepted. "plan" is the Weeks and their Slots;
  * "grocery" their Grocery Lists and the Household's Staples, which the lists buy and their Have Ticks
  * restock; the lists also depend on the plan, the Recipes and the Household. "chat" is the Household's
- * conversation with the agent, announced once each turn is answered; no tool changes it.
+ * conversation with the agent, announced once each turn is answered, and its confirmations.
  */
 export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery", "chat"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
@@ -503,6 +504,15 @@ export const tools = {
     input: z.object({}).strict(),
     output: CalendarToken,
     changes: "household",
+  }),
+  /**
+   * Withdraws a confirmation the agent asked for that still waits for a tap (ADR 0024), from the chat
+   * or by the agent when told "never mind". Refuses one no longer waiting (`not_found`). Returns it.
+   */
+  cancel_confirmation: defineTool({
+    input: CancelConfirmationInput,
+    output: PendingConfirmation,
+    changes: "chat",
   }),
   get_caller: defineTool({
     input: z.object({}).strict(),

@@ -17,6 +17,7 @@ import {
   WeekCalendar,
 } from "@mise/domain";
 import { calendarHandlers, readCalendarToken } from "./calendar";
+import { cancelConfirmation } from "./confirmations";
 import { draftHandlers } from "./drafts";
 import { readDriveDocs } from "./drive";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
@@ -177,6 +178,9 @@ export const handlers: Handlers = {
   ...groceryHandlers,
   ...stapleHandlers,
   ...calendarHandlers,
+
+  // Called when the call is made, so that confirmations.ts, which reads through these handlers, can import them.
+  cancel_confirmation: (sql, input) => cancelConfirmation(sql, input.id),
 
   get_caller: (sql, _input, { caller }) => ({
     ok: true,

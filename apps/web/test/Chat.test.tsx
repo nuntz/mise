@@ -8,7 +8,7 @@ import {
   STORE_SECTIONS,
   type ToolResult,
 } from "@mise/domain";
-import { render, screen, within } from "@solidjs/testing-library";
+import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test } from "vitest";
 import { App } from "../src/App";
@@ -41,10 +41,11 @@ function fakeClient(
 ) {
   const conversation = [...earlier];
   const confirmed: number[] = [];
+  const cancelled: number[] = [];
   const sent: string[] = [];
   const sentFrom: ChatWhere[] = [];
   const fake = createFakeClient(
-    async (name) => {
+    async (name, input) => {
       switch (name) {
         case "get_household":
           return { ok: true, value: household };
@@ -56,6 +57,17 @@ function fakeClient(
           return { ok: true, value: null };
         case "list_due_staples":
           return { ok: true, value: { due: 0, staples: [] } };
+        case "cancel_confirmation": {
+          const id = input.id as number;
+          cancelled.push(id);
+          const index = conversation.findIndex((message) => message.role === "confirmation" && message.id === id);
+          const turn = conversation[index];
+          if (turn?.role !== "confirmation") return { ok: false, error: { code: "not_found", message: "" } };
+          conversation[index] = { ...turn, status: "cancelled" };
+          // The household announces the conversation once a confirmation is cancelled.
+          queueMicrotask(() => fake.notify("chat"));
+          return { ok: true, value: { id, summary: turn.summary } };
+        }
         default:
           throw new Error(`Unexpected tool ${name}`);
       }
@@ -75,7 +87,7 @@ function fakeClient(
       },
     },
   );
-  return { ...fake, sent, sentFrom, conversation, confirmed };
+  return { ...fake, sent, sentFrom, conversation, confirmed, cancelled };
 }
 
 function messageBox(chat: HTMLElement): HTMLTextAreaElement {
@@ -281,4 +293,20 @@ test("a confirmation that has expired shows no button, and a tap refused says so
   expect((await within(chat).findByRole("alert")).textContent).toBe(
     "That has changed since Mise asked. Ask again if you still want it.",
   );
+});
+
+test("a confirmation can be cancelled from the chat", async () => {
+  const { client, conversation, cancelled } = fakeClient(
+    [{ role: "confirmation", id: 3, summary: "Delete “Satay”", status: "pending" }],
+    async () => ({ ok: true, value: { role: "agent", text: "" } }),
+  );
+  render(() => <App client={client} />);
+  const chat = await openChat();
+
+  await userEvent.click(await within(chat).findByRole("button", { name: "Cancel: Delete “Satay”" }));
+
+  expect(cancelled).toEqual([3]);
+  expect(conversation).toEqual([{ role: "confirmation", id: 3, summary: "Delete “Satay”", status: "cancelled" }]);
+  await waitFor(() => expect(within(chat).getByRole("listitem").textContent).toBe("Cancelled: Delete “Satay”"));
+  expect(within(chat).queryByRole("button", { name: "Delete “Satay”" })).toBeNull();
 });

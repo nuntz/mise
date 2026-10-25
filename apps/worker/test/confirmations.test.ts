@@ -4,7 +4,7 @@ import type { ChatMessage, ChatWhere, Household, ToolResult } from "@mise/domain
 import { afterEach, describe, expect, test } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
-import { caller, dinnerOn, familyHousehold, type HouseholdStub, scriptModel } from "./scripted";
+import { caller, dinnerOn, familyHousehold, type HouseholdStub, scriptModel, textOf } from "./scripted";
 
 // Monday 26 October 2026 to Sunday 1 November.
 const MONDAY = "2026-10-26";
@@ -61,6 +61,41 @@ describe("what the agent can't do without a person's tap (ADR 0024)", () => {
     expect(await confirmations(household)).toEqual([
       { role: "confirmation", id: 1, summary: "Delete “Satay”", status: "done" },
     ]);
+  });
+
+  test("told “never mind”, the agent withdraws the confirmation, and a tap then runs nothing", async () => {
+    const deleter = caller([["delete_recipe", { id: 1, confirm: true }]]);
+    const canceller = caller([["cancel_confirmation", { id: 1 }]]);
+    scriptModel((context, ...rest) => {
+      const asked = [...context.messages].reverse().find((message) => message.role === "user");
+      return (textOf(asked).endsWith("Never mind") ? canceller : deleter)(context, ...rest);
+    });
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+    await robin.rpc("chat", ["Delete the Satay", { screen: "recipes" }]);
+
+    await robin.rpc("chat", ["Never mind", { screen: "recipes" }]);
+    const tapped = await robin.rpc("confirm", [1]);
+
+    expect(await confirmations(household)).toEqual([
+      { role: "confirmation", id: 1, summary: "Delete “Satay”", status: "cancelled" },
+    ]);
+    expect(tapped).toMatchObject({ ok: false, error: { code: "not_found" } });
+    expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true });
+  });
+
+  test("a person can cancel a confirmation from the chat; one no longer waiting can't be", async () => {
+    scriptModel(caller([["delete_recipe", { id: 1, confirm: true }]]));
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+    await robin.rpc("chat", ["Delete the Satay", { screen: "recipes" }]);
+
+    const cancelled = await robin.call("cancel_confirmation", { id: 1 });
+    const again = await robin.call("cancel_confirmation", { id: 1 });
+
+    expect(cancelled).toMatchObject({ ok: true, value: { id: 1, summary: "Delete “Satay”" } });
+    expect(again).toMatchObject({ ok: false, error: { code: "not_found" } });
+    expect(await confirmations(household)).toMatchObject([{ status: "cancelled" }]);
   });
 
   test("a confirmation expires when what it describes changes, and its tap is then refused", async () => {

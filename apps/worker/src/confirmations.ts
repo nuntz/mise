@@ -93,6 +93,16 @@ export function takeConfirmation(sql: SqlStorage, id: unknown): ToolResult<{ nam
   return { ok: true, value: { name: row.tool, input } };
 }
 
+/** Withdraws a held call still waiting for its tap. */
+export function cancelConfirmation(sql: SqlStorage, id: number): ToolResult<PendingConfirmation> {
+  const row = readRow(sql, id);
+  if (row?.status !== "pending") {
+    return { ok: false, error: { code: "not_found", message: "Nothing is waiting for that tap" } };
+  }
+  sql.exec("UPDATE pending_confirmation SET status = 'cancelled' WHERE id = ?", id);
+  return { ok: true, value: { id, summary: row.summary } };
+}
+
 /** Gives back a held call `takeConfirmation` claimed, when running it was refused. */
 export function releaseConfirmation(sql: SqlStorage, id: number): void {
   sql.exec("UPDATE pending_confirmation SET status = 'pending' WHERE id = ?", id);
