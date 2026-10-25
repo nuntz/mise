@@ -426,6 +426,7 @@ const en = {
   "recipes.new": "New Recipe",
   "recipe.back": "All Recipes",
   "recipe.overline": "Recipe",
+  "recipeSheet.close": "Close the Recipe",
   "recipe.cook": "Cook in kitchen mode",
   "recipes.overline": "Mise · Recipes",
   "recipe.edit": "Edit Recipe",

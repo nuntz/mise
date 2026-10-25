@@ -929,6 +929,45 @@ details[open] > summary::after {
   font: var(--type-title);
 }
 
+/* A Slot's title opens its Recipe; on a card its tap area stretches over the photo, or the thumb. */
+.dish-card,
+.compact {
+  position: relative;
+}
+
+.dish-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dish-open {
+  display: inline;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+:is(.dish-card, .compact) .dish-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+}
+
+:is(.dish-card, .compact) .dish-open:focus-visible {
+  box-shadow: none;
+}
+
+:is(.dish-card, .compact) .dish-open:focus-visible::after {
+  box-shadow: var(--focus-ring);
+}
+
 .compact {
   display: grid;
   grid-template-columns: var(--thumb) minmax(0, 1fr);

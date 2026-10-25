@@ -5,6 +5,8 @@ import {
   ITEMS,
   MEALS,
   type Member,
+  parseIngredient,
+  type Recipe,
   type RecipeSummary,
   type Slot,
   STORE_SECTIONS,
@@ -48,6 +50,25 @@ const pasta: RecipeSummary = {
   photoKey: "photos/pasta",
 };
 const curry: RecipeSummary = { ...pasta, id: 2, title: "Curry", photoKey: null };
+
+const pastaRecipe: Recipe = {
+  ...pasta,
+  baseServings: 4,
+  ingredients: ["200 g spaghetti", "2 cloves garlic, minced", "salt to taste"].map((raw) => parseIngredient(raw)),
+  steps: ["Boil the spaghetti.", "Fry the garlic and toss it through."],
+  recurring: null,
+  yieldsLeftovers: false,
+  prepAhead: "Make the sauce the night before",
+  notes: "Basil from the garden",
+  source: { kind: "manual" },
+  importedPreference: null,
+  createdAt: "2026-10-21T12:00:00.000Z",
+  updatedAt: "2026-10-21T12:00:00.000Z",
+  editedInAppAt: null,
+  draft: false,
+  lastCookedAt: null,
+  cookCount: 0,
+};
 
 function emptyWeek(startDate: string): Week {
   return {
@@ -145,6 +166,8 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         return { ok: true, value: input.date === "2026-11-02" ? emptyWeek("2026-11-02") : thisWeek };
       case "search_recipes":
         return { ok: true, value: [curry, pasta] };
+      case "get_recipe":
+        return { ok: true, value: pastaRecipe };
       case "set_slot":
       case "set_guests":
       case "lock_slot":
@@ -179,6 +202,7 @@ const writes = (calls: { name: string; input: unknown }[]) =>
         "get_week",
         "get_grocery_list",
         "search_recipes",
+        "get_recipe",
         "list_items",
         "list_staples",
         "list_due_staples",
@@ -202,6 +226,97 @@ test("the Week opens first: each day's dinner with its photo, breakfast and lunc
   const otherMeals = within(tuesday).getByText("Breakfast and lunch").closest("details");
   expect(otherMeals?.open).toBe(false);
   expect(within(screen.getByRole("region", { name: "Monday, October 26" })).getByText("Nothing planned")).toBeTruthy();
+});
+
+/** This Week with Tuesday's dinner the Pasta for 6: the household and 3 Guests. */
+function pastaForSix(): Week {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: "photos/pasta" },
+    guests: 3,
+    servings: 6,
+    cookFor: 6,
+  });
+  return week;
+}
+
+test("a dinner's Recipe opens over the Week, its Ingredients scaled to what the Slot is cooked for", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: pastaForSix() }) });
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  expect(within(sheet).getByText("For 6. The Recipe makes 4.")).toBeTruthy();
+  const ingredients = within(sheet).getByRole("list", { name: "Ingredients" });
+  expect(
+    within(ingredients)
+      .getAllByRole("listitem")
+      .map((line) => line.textContent),
+  ).toEqual(["300 g spaghetti", "3 cloves garlic, minced", "salt to taste"]);
+});
+
+test("a Recipe opened over the Week is cooked from there, for as many as its Slot", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: pastaForSix() }) });
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  await user.click(await within(sheet).findByRole("button", { name: "Cook" }));
+
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+  await user.click(within(kitchen).getByRole("button", { name: "Ingredients" }));
+  expect(within(kitchen).getByText("For 6. The Recipe makes 4.")).toBeTruthy();
+});
+
+test("a Recipe opened over the Week shows how it's made, can't be changed there, and closes back to the Week", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient();
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  expect(within(sheet).getByText("Prep ahead: Make the sauce the night before")).toBeTruthy();
+  const steps = within(sheet).getByRole("list", { name: "Steps" });
+  expect(
+    within(steps)
+      .getAllByRole("listitem")
+      .map((step) => step.textContent),
+  ).toEqual(["Boil the spaghetti.", "Fry the garlic and toss it through."]);
+  expect(within(sheet).getByText("Basil from the garden")).toBeTruthy();
+  expect(within(sheet).queryByRole("button", { name: "Edit Recipe" })).toBeNull();
+  expect(within(sheet).queryByRole("button", { name: "Delete Recipe" })).toBeNull();
+
+  await user.click(within(sheet).getByRole("button", { name: "Close the Recipe" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("region", { name: "Tuesday, October 27" })).toBeTruthy();
+});
+
+test("breakfast's Recipe opens over the Week from the folded strip too", async () => {
+  const user = userEvent.setup();
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[3] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookFor: 3,
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByText("Breakfast and lunch"));
+  const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
+  await user.click(within(breakfast).getByRole("button", { name: "Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  expect(await within(sheet).findByText("For 3. The Recipe makes 4.")).toBeTruthy();
 });
 
 test("next Week is a tap away", async () => {
@@ -345,6 +460,38 @@ test("each Slot shows its Conflicts: blocking ones as warnings, overridden ones 
   expect(within(tuesday).getByRole("alert").textContent).toBe(
     "Maybe not safe for the Guests (Milk, Intolerance): Stew has Unresolved Ingredients, so its Allergens are unknown. Resolve them under Resolve Ingredients.",
   );
+});
+
+test("a Recipe opened over the Week shows its Slot's Conflicts first, overridden ones with their reason", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient({
+    get_week: (input) => {
+      if (input.date) return undefined;
+      const week = emptyWeek("2026-10-26");
+      Object.assign(week.slots[5] as Slot, {
+        kind: "recipe",
+        recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+        guests: 1,
+        conflicts: [
+          { ...robinsPeanut, override: "Hers without the peanut butter" },
+          { who: "guests", allergen: "milk", constraint: "intolerance", cause: "unknown", override: null },
+        ],
+      });
+      return { ok: true, value: week };
+    },
+  });
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  expect(within(sheet).getByRole("alert").textContent).toBe(
+    "Maybe not safe for the Guests (Milk, Intolerance): Pasta has Unresolved Ingredients, so its Allergens are unknown. Resolve them under Resolve Ingredients.",
+  );
+  expect(
+    within(sheet).getByText("Planned anyway for Robin (Peanut, Allergy): Hers without the peanut butter"),
+  ).toBeTruthy();
 });
 
 test("a change refused for a Conflict names the person and the Allergen, and saves anyway with a reason", async () => {
@@ -542,6 +689,31 @@ test("a dinner cooked for its Leftovers says how many to cook for, and the Lefto
   const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
   expect(within(dinner).getByRole("heading", { name: "Leftovers of Curry" })).toBeTruthy();
   expect(within(dinner).getByText("Leftovers of Monday's dinner, cooked for both.")).toBeTruthy();
+});
+
+test("Leftovers open the Recipe they're of, scaled as it's cooked, with nothing to cook", async () => {
+  const user = userEvent.setup();
+  const week = emptyWeek("2026-10-26");
+  const pastaOnMonday = { id: 1, title: "Pasta", baseServings: 4, photoKey: null };
+  Object.assign(week.slots[2] as Slot, {
+    kind: "recipe",
+    recipe: pastaOnMonday,
+    cookFor: 6,
+    leftovers: [{ date: "2026-10-27", meal: "dinner" }],
+  });
+  Object.assign(week.slots[5] as Slot, {
+    kind: "leftovers",
+    leftoversOf: { date: "2026-10-26", meal: "dinner", recipe: pastaOnMonday },
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Leftovers of Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  expect(await within(sheet).findByText("For 6. The Recipe makes 4.")).toBeTruthy();
+  expect(within(sheet).queryByRole("button", { name: "Cook" })).toBeNull();
 });
 
 test("a proposed Week shows why each dinner was chosen, and asks to be reviewed", async () => {
@@ -756,6 +928,40 @@ test("offline, the Week last loaded opens read-only: it can be cooked from, not 
   expect(within(tuesday).queryByRole("button", { name: "Mark cooked" })).toBeNull();
   expect((screen.getByRole("button", { name: "Propose dinners" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("offline, a Recipe opened over the Week before opens again from this device", async () => {
+  const user = userEvent.setup();
+  const online = fakeClient();
+  render(() => <App client={online.client} />);
+  await user.click(
+    within(await screen.findByRole("region", { name: "Tuesday, October 27" })).getByRole("button", { name: "Pasta" }),
+  );
+  await within(await screen.findByRole("dialog", { name: "Pasta" })).findByRole("list", { name: "Ingredients" });
+  cleanup();
+
+  const offline: MiseClient = {
+    ...online.client,
+    call: (async () => {
+      throw new Error("Connection closed");
+    }) as MiseClient["call"],
+    onConnection(listener) {
+      listener(false);
+      return () => {};
+    },
+  };
+  render(() => <App client={offline} />);
+  await user.click(
+    within(await screen.findByRole("region", { name: "Tuesday, October 27" })).getByRole("button", { name: "Pasta" }),
+  );
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const ingredients = within(sheet).getByRole("list", { name: "Ingredients" });
+  expect(
+    within(ingredients)
+      .getAllByRole("listitem")
+      .map((line) => line.textContent),
+  ).toEqual(["200 g spaghetti", "2 cloves garlic, minced", "salt to taste"]);
 });
 
 test("offline, a Week kept from before that has ended isn't shown as this one", async () => {

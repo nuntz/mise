@@ -72,11 +72,7 @@ export function KitchenMode(props: {
                 >
                   <div class="step">
                     <h2>{t("recipe.ingredients")}</h2>
-                    <p class="meta">
-                      {servings() === open().baseServings
-                        ? t("kitchen.asWritten", { count: String(servings()) })
-                        : t("kitchen.scaled", { count: String(servings()), base: String(open().baseServings) })}
-                    </p>
+                    <p class="meta">{scaledForText(servings(), open().baseServings)}</p>
                     <ul class="ingredients kitchen-ingredients" aria-label={t("recipe.ingredients")}>
                       <For each={open().ingredients}>
                         {(ingredient) => (
@@ -166,8 +162,15 @@ function keepScreenAwake() {
   });
 }
 
+/** Who a Recipe's Ingredients are scaled for: `servings`, against the `base` it is written for. */
+export function scaledForText(servings: number, base: number): string {
+  return servings === base
+    ? t("kitchen.asWritten", { count: String(servings) })
+    : t("kitchen.scaled", { count: String(servings), base: String(base) });
+}
+
 /** An Ingredient line with its amount scaled `by`, the rest as written; unscaled, the line as written. */
-function scaledLine(ingredient: Ingredient, by: number, locale: string): string {
+export function scaledLine(ingredient: Ingredient, by: number, locale: string): string {
   const { amount, unit, name, note } = scaleIngredient(ingredient, by);
   if (by === 1 || !amount) return ingredient.raw;
   const number = (value: number) => kitchenNumber(value, locale);

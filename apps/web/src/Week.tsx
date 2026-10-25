@@ -44,7 +44,14 @@ import {
   reasonText,
   whoName,
 } from "./Proposal";
+import { RecipeSheet } from "./RecipeSheet";
 import { Sheet } from "./Sheet";
+
+/**
+ * The Recipe a Slot holds, or that its Leftovers are of, opened over the Week and scaled to the
+ * `servings` it is cooked for.
+ */
+type OpenRecipe = { id: RecipeId; servings: number; slot: Slot };
 
 /**
  * The current and next Week, each day's dinner first, with every Slot editable by hand. Offline it is
@@ -76,6 +83,15 @@ export function WeekPage(props: {
   // Names the "use it up" Items a Proposal gives as reasons.
   const items = createItems(props.client);
   const readOnly = () => !props.online;
+  const [opened, setOpened] = createSignal<OpenRecipe>();
+  const open = (slot: Slot) => {
+    const recipe = slot.recipe ?? slot.leftoversOf?.recipe;
+    if (!recipe) return;
+    // Leftovers are cooked on the Slot they're of; one in another Week isn't here, so as written.
+    const of = slot.leftoversOf;
+    const cooked = of ? week()?.slots.find((s) => s.date === of.date && s.meal === of.meal) : slot;
+    setOpened({ id: recipe.id, servings: cooked?.cookFor || recipe.baseServings, slot });
+  };
 
   // Slots show their Recipes' titles and photos, and follow the default Diners: every Member.
   const refetch = keepFresh(
@@ -191,6 +207,7 @@ export function WeekPage(props: {
                     today={date === today()}
                     readOnly={readOnly()}
                     onCook={props.onCook}
+                    onOpen={open}
                     slots={shown().slots.filter((slot) => slot.date === date)}
                   />
                 )}
@@ -203,6 +220,20 @@ export function WeekPage(props: {
               </button>
             </Show>
           </>
+        )}
+      </Show>
+      <Show when={opened()} keyed>
+        {(open) => (
+          <RecipeSheet
+            client={props.client}
+            id={open.id}
+            servings={open.servings}
+            locale={props.household.locale}
+            onCook={open.slot.recipe ? props.onCook : undefined}
+            onClose={() => setOpened(undefined)}
+          >
+            <SlotConflicts household={props.household} slot={open.slot} />
+          </RecipeSheet>
         )}
       </Show>
     </section>
@@ -250,6 +281,7 @@ function Day(props: {
   today: boolean;
   readOnly: boolean;
   onCook: (recipe: RecipeId, servings: number) => void;
+  onOpen: (slot: Slot) => void;
   slots: Slot[];
 }) {
   const title = () => dayTitle(props.date, props.household.locale);
@@ -265,6 +297,7 @@ function Day(props: {
       today={props.today}
       readOnly={props.readOnly}
       onCook={props.onCook}
+      onOpen={props.onOpen}
       prominent={prominent}
     />
   );
@@ -324,6 +357,7 @@ function SlotView(props: {
   today: boolean;
   readOnly: boolean;
   onCook: (recipe: RecipeId, servings: number) => void;
+  onOpen: (slot: Slot) => void;
   prominent?: boolean;
 }) {
   const [editing, setEditing] = createSignal(false);
@@ -341,7 +375,7 @@ function SlotView(props: {
         when={props.prominent}
         fallback={
           <p>
-            <strong>{meal()}</strong>: {slotTitle(props.slot)}
+            <strong>{meal()}</strong>: <OpenTitle slot={props.slot} onOpen={props.onOpen} />
           </p>
         }
       >
@@ -352,7 +386,7 @@ function SlotView(props: {
               <SlotThumb client={props.client} slot={props.slot} />
               <div class="dish">
                 <p class="overline">{props.day}</p>
-                <h3 class="dish-title">{slotTitle(props.slot)}</h3>
+                <DishTitle slot={props.slot} onOpen={props.onOpen} />
                 <p class="meta">{servingsText(props.slot, props.household)}</p>
                 <Show when={flag()}>
                   {(shown) => (
@@ -366,7 +400,7 @@ function SlotView(props: {
           }
         >
           {(recipe) => (
-            <>
+            <div class="dish-card">
               <div class="photo">
                 <Show when={recipe().photoKey} fallback={<PlateGlyph size={64} />}>
                   {(key) => (
@@ -382,10 +416,10 @@ function SlotView(props: {
                 </Show>
               </div>
               <div class="dish">
-                <h3 class="dish-title">{slotTitle(props.slot)}</h3>
+                <DishTitle slot={props.slot} onOpen={props.onOpen} />
                 <p class="meta">{servingsText(props.slot, props.household)}</p>
               </div>
-            </>
+            </div>
           )}
         </Show>
       </Show>
@@ -400,26 +434,7 @@ function SlotView(props: {
       <Show when={props.slot.reason}>
         {(reason) => <p class="meta">{reasonText(reason(), props.household, props.items)}</p>}
       </Show>
-      <For each={props.slot.conflicts}>
-        {(conflict) => (
-          <Show
-            when={conflict.override}
-            fallback={
-              <p class="alert" role="alert">
-                {conflictText(conflict, props.household, slotTitle(props.slot))}
-              </p>
-            }
-          >
-            {(reason) => (
-              <p class="chips">
-                <span class="chip chip-warn">
-                  {t("conflict.overridden", { ...conflictParams(conflict, props.household), reason: reason() })}
-                </span>
-              </p>
-            )}
-          </Show>
-        )}
-      </For>
+      <SlotConflicts household={props.household} slot={props.slot} />
       <Show when={props.slot.note}>{(note) => <p>{note()}</p>}</Show>
       <Show
         when={editing()}
@@ -456,6 +471,52 @@ function SlotView(props: {
         />
       </Show>
     </section>
+  );
+}
+
+/** A Slot card's title, opening its Recipe as `OpenTitle` does; on a card, tapping its photo does too. */
+function DishTitle(props: { slot: Slot; onOpen: (slot: Slot) => void }) {
+  return (
+    <h3 class="dish-title">
+      <OpenTitle slot={props.slot} onOpen={props.onOpen} />
+    </h3>
+  );
+}
+
+/** A Slot's title: a button opening its Recipe, or the one its Leftovers are of, if it has one. */
+function OpenTitle(props: { slot: Slot; onOpen: (slot: Slot) => void }) {
+  return (
+    <Show when={props.slot.recipe ?? props.slot.leftoversOf?.recipe} fallback={slotTitle(props.slot)}>
+      <button type="button" class="dish-open" onClick={() => props.onOpen(props.slot)}>
+        {slotTitle(props.slot)}
+      </button>
+    </Show>
+  );
+}
+
+/** A Slot's Conflicts: blocking ones as warnings, overridden ones with their reason. */
+function SlotConflicts(props: { household: Household; slot: Slot }) {
+  return (
+    <For each={props.slot.conflicts}>
+      {(conflict) => (
+        <Show
+          when={conflict.override}
+          fallback={
+            <p class="alert" role="alert">
+              {conflictText(conflict, props.household, slotTitle(props.slot))}
+            </p>
+          }
+        >
+          {(reason) => (
+            <p class="chips">
+              <span class="chip chip-warn">
+                {t("conflict.overridden", { ...conflictParams(conflict, props.household), reason: reason() })}
+              </span>
+            </p>
+          )}
+        </Show>
+      )}
+    </For>
   );
 }
 

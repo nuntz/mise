@@ -119,6 +119,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ### 4.3 Weekly plan
 - Week view: dinner row prominent with photo; breakfast/lunch collapsed strip. One or two weeks ahead (`planHorizonWeeks`).
+- Tapping a Slot's Recipe (or the one its Leftovers are of) opens it in a sheet over the Week, read-only: Ingredients scaled to what the Slot is cooked for, steps, notes, Prep-ahead note, and the Slot's Conflicts first; Cook goes to Kitchen mode at the same servings (not from Leftovers).
 - Manual edit: drag/replace recipe, set kind, set diners/guests per slot or per day, lock, note.
 - **Proposer (deterministic, no LLM):** `propose_week(date?, useUp?, reroll?)` (ADR 0013)
   1. Pin recurring favourites and locked slots.
