@@ -292,8 +292,9 @@ function asOneObject(schema: JsonSchema): JsonSchema {
   const properties: Record<string, unknown[]> = {};
   for (const alternative of alternatives) {
     for (const [key, property] of Object.entries(alternative.properties ?? {})) {
-      const seen = (properties[key] ??= []);
+      const seen = properties[key] ?? [];
       if (!seen.some((other) => JSON.stringify(other) === JSON.stringify(property))) seen.push(property);
+      properties[key] = seen;
     }
   }
   const required = alternatives
