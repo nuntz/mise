@@ -78,7 +78,7 @@ import { readCatalogue } from "./items";
 import { fetchPhoto, readLink } from "./links";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
-import { sentryOptions, sentryTelemetry } from "./observability";
+import { piReports, reportWakeErrors, sentryOptions, sentryTelemetry } from "./observability";
 import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { type HouseholdToolName, handlers } from "./tools";
@@ -107,6 +107,9 @@ const RESTORE_STATUS: Record<RestoreError["code"], number> = {
   schema_mismatch: 409,
   not_empty: 409,
 };
+
+// Once per isolate: the channel is shared by every Household it runs.
+reportWakeErrors();
 
 /** What the household remembers about each WebSocket; it survives hibernation. */
 type ConnectionState = { caller: Caller | null };
@@ -140,8 +143,9 @@ class HouseholdAgent extends Agent<Env> {
           onWake,
           // A failed run answers nothing more: later messages are not run against a stale question.
           settings: { afterFailedRun: "withdraw", compaction: agentCompaction(this.models) },
-          // Runs and model requests are traced, without what anyone said.
+          // Runs and model requests are traced, and pi's own failures reported, without what anyone said.
           telemetry: sentryTelemetry(),
+          onReport: piReports(),
         },
         context,
       );

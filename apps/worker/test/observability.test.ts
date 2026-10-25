@@ -1,6 +1,15 @@
+import { channel } from "node:diagnostics_channel";
 import type { ErrorEvent } from "@sentry/cloudflare";
 import { describe, expect, test } from "vitest";
-import { type SentrySpan, scrubEvent, scrubSpan, sentryOptions, sentryTelemetry } from "../src/observability";
+import {
+  piReports,
+  reportWakeErrors,
+  type SentrySpan,
+  scrubEvent,
+  scrubSpan,
+  sentryOptions,
+  sentryTelemetry,
+} from "../src/observability";
 
 describe("Sentry scrubbing", () => {
   test("an error event keeps what went wrong and drops who it happened to", () => {
@@ -142,5 +151,58 @@ describe("the agent's traces", () => {
     );
 
     expect(tracer.spans[0]?.status).toEqual({ code: 2, message: "internal_error" });
+  });
+});
+
+describe("pi's own failures", () => {
+  /** A stand-in for Sentry's `captureMessage` that keeps what each report was given. */
+  function recordingCapture() {
+    const reports: { message: string; context: unknown }[] = [];
+    const capture = (message: string, context: unknown) => void reports.push({ message, context });
+    return { reports, capture };
+  }
+
+  test("a task pi parked or that faulted reaches Sentry by its kind, never by its error", () => {
+    const { reports, capture } = recordingCapture();
+    const onReport = piReports(capture);
+    const task = { id: 7 as never, kind: "pi.tool", conversationId: 1 as never };
+
+    onReport(new Error("Robin asked about peanuts"), {
+      type: "task_faulted",
+      task,
+      extension: "mise",
+      reason: "threw",
+    });
+    onReport(new Error("Robin asked about peanuts"), { type: "task_parked", task, extension: "mise" });
+    onReport(new Error("Robin asked about peanuts"), { type: "session_failed" });
+
+    expect(reports).toEqual([
+      {
+        message: "pi task_faulted",
+        context: {
+          level: "error",
+          tags: { "pi.report": "task_faulted", "pi.task": "pi.tool", "pi.extension": "mise", "pi.reason": "threw" },
+        },
+      },
+      {
+        message: "pi task_parked",
+        context: { level: "error", tags: { "pi.report": "task_parked", "pi.task": "pi.tool", "pi.extension": "mise" } },
+      },
+      { message: "pi session_failed", context: { level: "error", tags: { "pi.report": "session_failed" } } },
+    ]);
+  });
+
+  test("pi failing to wake reaches Sentry, without the error's text", () => {
+    const { reports, capture } = recordingCapture();
+    const stop = reportWakeErrors(capture);
+
+    channel("agents:lifecycle").publish({ type: "pi:wake_error", payload: { error: "Robin asked about peanuts" } });
+    channel("agents:lifecycle").publish({ type: "pi:something_else", payload: {} });
+    stop();
+    channel("agents:lifecycle").publish({ type: "pi:wake_error", payload: { error: "after stopping" } });
+
+    expect(reports).toEqual([
+      { message: "pi wake_error", context: { level: "error", tags: { "pi.report": "wake_error" } } },
+    ]);
   });
 });

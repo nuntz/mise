@@ -1,3 +1,4 @@
+import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import type { HarnessOptions } from "@earendil-works/pi-durable";
 import type { CloudflareOptions, Event } from "@sentry/cloudflare";
 import * as Sentry from "@sentry/cloudflare";
@@ -131,4 +132,46 @@ function defined(attributes: PiAttributes | undefined): SpanAttributes {
   return Object.fromEntries(
     Object.entries(attributes ?? {}).filter(([, value]) => value !== undefined),
   ) as SpanAttributes;
+}
+
+type OnReport = NonNullable<HarnessOptions["onReport"]>;
+type ReportInfo = Parameters<OnReport>[1];
+
+/** Sentry's `captureMessage`, as far as pi's reports use it. */
+export type CaptureMessage = (message: string, context: { level: "error"; tags: Record<string, string> }) => unknown;
+
+/**
+ * pi's reports of its own failures (a failed session, a task that faulted or that its restart limit
+ * parked, an extension or host callback that threw) as Sentry messages: what happened, and the task
+ * kind, extension and callback it names, never the error, whose text can quote what someone said.
+ * A parked task waits for `retry()`, run by hand.
+ */
+export function piReports(capture: CaptureMessage = Sentry.captureMessage as CaptureMessage): OnReport {
+  return (_error, info) => void capture(`pi ${info.type}`, { level: "error", tags: reportTags(info) });
+}
+
+function reportTags(info: ReportInfo): Record<string, string> {
+  const named = info as { task?: { kind: string }; extension?: string; reason?: string; callback?: string };
+  return Object.fromEntries(
+    Object.entries({
+      "pi.report": info.type,
+      "pi.task": named.task?.kind,
+      "pi.extension": named.extension,
+      "pi.reason": named.reason,
+      "pi.callback": named.callback,
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+}
+
+/**
+ * Reports pi failing to wake (as when it cannot be opened) to Sentry, without the error's text. The
+ * harness retries the wake itself; this makes a run of failures visible. Returns how to stop.
+ */
+export function reportWakeErrors(capture: CaptureMessage = Sentry.captureMessage as CaptureMessage): () => void {
+  const lifecycle = (event: unknown) => {
+    if ((event as { type?: unknown }).type !== "pi:wake_error") return;
+    capture("pi wake_error", { level: "error", tags: { "pi.report": "wake_error" } });
+  };
+  subscribe("agents:lifecycle", lifecycle);
+  return () => void unsubscribe("agents:lifecycle", lifecycle);
 }
