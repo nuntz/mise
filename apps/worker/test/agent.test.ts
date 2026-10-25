@@ -1,17 +1,15 @@
 import { env } from "cloudflare:workers";
 import {
-  createModels,
   type FauxResponseFactory,
   fauxAssistantMessage,
-  fauxProvider,
   fauxToolCall,
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
-import type { JsonObject } from "@earendil-works/pi-durable";
-import type { ChatWhere, Slot, ToolResult, Week } from "@mise/domain";
+import type { ChatWhere } from "@mise/domain";
 import { afterEach, describe, expect, test } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
+import { caller, dinnerOn, familyHousehold, lastText, scriptModel, textOf, weekOf } from "./scripted";
 
 // Monday 26 October 2026 to Sunday 1 November.
 const MONDAY = "2026-10-26";
@@ -21,8 +19,6 @@ const FRIDAY = "2026-10-30";
 
 const ON_THE_WEEK: ChatWhere = { screen: "week", week: MONDAY };
 
-type HouseholdStub = ReturnType<typeof env.Household.getByName>;
-
 /** A Household whose Thursday dinner is Lemon chicken. */
 async function householdWithThursdayDinner() {
   const household = env.Household.getByName(crypto.randomUUID());
@@ -30,51 +26,6 @@ async function householdWithThursdayDinner() {
   await household.callTool("create_recipe", { title: "Lemon chicken", baseServings: 4, ingredients: ["1 chicken"] });
   await household.callTool("set_slot", { date: THURSDAY, meal: "dinner", kind: "recipe", recipeId: 1 });
   return household;
-}
-
-/**
- * A Household of Robin (robin@example.com, allergic to peanut), Alex (alex@example.com) and Sam,
- * Members 1, 2 and 3. Recipe 1 is Satay (peanut); Recipes 2 to 9 are rice bowls, safe for everyone.
- */
-async function familyHousehold() {
-  const household = env.Household.getByName(crypto.randomUUID());
-  await household.callTool("setup_household", {
-    name: "The Example Family",
-    members: [
-      { name: "Robin", email: "robin@example.com", constraints: [{ kind: "allergy", allergen: "peanut" }] },
-      { name: "Alex", email: "alex@example.com" },
-      { name: "Sam" },
-    ],
-  });
-  await household.callTool("create_recipe", {
-    title: "Satay",
-    baseServings: 4,
-    ingredients: ["2 tbsp peanut butter"],
-    effortMinutes: 30,
-  });
-  for (let index = 2; index <= 9; index++) {
-    await household.callTool("create_recipe", {
-      title: `Rice bowl ${index}`,
-      baseServings: 4,
-      ingredients: ["400 g rice"],
-      effortMinutes: 30,
-    });
-  }
-  return household;
-}
-
-type Message = TranscriptContext["messages"][number];
-
-/** The text of a message's content. */
-function textOf(message: Message | undefined): string {
-  const content = message?.content;
-  if (typeof content === "string") return content;
-  return (content ?? []).map((block) => ("text" in block ? block.text : "")).join("");
-}
-
-/** The text of the newest message, of whatever role. */
-function lastText(context: TranscriptContext): string {
-  return textOf(context.messages.at(-1));
 }
 
 /** Everything a request shows the model, as one text. */
@@ -114,46 +65,6 @@ function dinnerReader(): FauxResponseFactory {
     const dinner = week.slots.find((slot) => slot.date === THURSDAY && slot.meal === "dinner");
     return fauxAssistantMessage(`Thursday's dinner is ${dinner?.recipe?.title ?? "not planned"}.`);
   };
-}
-
-/**
- * A scripted model that answers each message by making `calls` one after the other, then saying what
- * the last tool returned, or "Refused: <the error>" if it failed.
- */
-function caller(calls: [string, JsonObject][]): FauxResponseFactory {
-  return (context) => {
-    const fromLast = [...context.messages].reverse().findIndex((message) => message.role === "user");
-    const made = context.messages.slice(-fromLast - 1).filter((message) => message.role === "toolResult");
-    const failed = made.find((message) => (message as { isError?: boolean }).isError);
-    if (failed) return fauxAssistantMessage(`Refused: ${textOf(failed)}`);
-    const next = calls[made.length];
-    if (!next) return fauxAssistantMessage(`Done: ${lastText(context)}`);
-    return fauxAssistantMessage(fauxToolCall(...next), { stopReason: "toolUse" });
-  };
-}
-
-/**
- * Puts the agent of households started from now on a faux model that answers every request with
- * `respond`. A household's models are fixed when it starts, so script the model before using it.
- */
-function scriptModel(respond: FauxResponseFactory, { contextWindow }: { contextWindow?: number } = {}) {
-  const faux = fauxProvider({ models: [{ id: "scripted", contextWindow }] });
-  const models = createModels();
-  models.setProvider(faux.provider);
-  // Each request takes the next scripted response; one factory per request it might make.
-  faux.setResponses(Array.from({ length: 200 }, () => respond));
-  useAgentModels(() => ({ models, model: faux.getModel() }));
-  return faux;
-}
-
-async function weekOf(household: HouseholdStub, date: string): Promise<Week> {
-  const result = (await household.callTool("get_week", { date })) as ToolResult<unknown>;
-  if (!result.ok) throw new Error(result.error.message);
-  return result.value as Week;
-}
-
-async function dinnerOn(household: HouseholdStub, date: string): Promise<Slot | undefined> {
-  return (await weekOf(household, date)).slots.find((slot) => slot.date === date && slot.meal === "dinner");
 }
 
 afterEach(() => useAgentModels(undefined));
@@ -255,6 +166,13 @@ describe("what the agent is told", () => {
       "build_grocery_list",
       "import_url",
       "import_text",
+      // Wait for a person's tap (ADR 0024).
+      "delete_recipe",
+      "clear_week",
+      "update_member",
+      "update_member_constraints",
+      "remove_member",
+      "link_leftovers",
     ]) {
       expect(tools).toContain(tool);
     }
@@ -264,12 +182,6 @@ describe("what the agent is told", () => {
       // Uploads come over HTTP, which the agent can't make.
       "run_paprika_import",
       "import_screenshots",
-      // Need a person's tap, which the chat can't offer yet (ADR 0024, #40).
-      "delete_recipe",
-      "clear_week",
-      "update_member",
-      "update_member_constraints",
-      "remove_member",
       // Only a person accepts what a model read or suggested (ADR 0023), or states an Item's Allergens.
       "accept_suggestion",
       "accept_draft",
@@ -427,7 +339,7 @@ describe("typical turns", () => {
     expect(await household.callTool("list_drafts", {})).toMatchObject({ value: [{ recipe: { draft: true } }] });
   });
 
-  test("an Override is refused, and the Slot stays as it was", async () => {
+  test("an Override waits for a person's tap, and the Slot stays as it was", async () => {
     scriptModel(
       caller([
         [
@@ -446,7 +358,7 @@ describe("typical turns", () => {
 
     const reply = await household.chat("Plan Satay Friday anyway", ON_THE_WEEK);
 
-    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringMatching(/^Refused: /) } });
+    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringMatching(/^Done: Nothing is changed yet/) } });
     expect(await dinnerOn(household, FRIDAY)).toMatchObject({ recipe: null });
   });
 

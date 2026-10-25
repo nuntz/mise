@@ -16,6 +16,10 @@ _Avoid_: User, person
 The signed-in person a tool call is made for, known by the email Cloudflare Access vouched for; not necessarily a Member.
 _Avoid_: User, current user
 
+**Pending Confirmation**:
+A call the agent made that only a person's tap runs (a delete, a cleared Week, an Override, or loosening a Hard Constraint), shown in the chat as a button saying what will happen; it expires once what it describes changes.
+_Avoid_: Approval, consent
+
 **Diner**:
 A Member eating a particular Slot.
 _Avoid_: Eater, attendee

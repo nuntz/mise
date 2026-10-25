@@ -412,6 +412,23 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 23,
+    statements: [
+      // Calls the agent made that wait for a person's tap (ADR 0024): the tool and its input as the
+      // agent sent them, what the button says, the state it describes as it was then (JSON, compared
+      // when tapped), and whether it is 'pending', 'done' or 'expired'.
+      `CREATE TABLE pending_confirmation (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool TEXT NOT NULL,
+        input TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        state TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

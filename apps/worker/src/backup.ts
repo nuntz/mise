@@ -9,7 +9,11 @@ import { parseStoredHousehold } from "./tools";
  * are backed up without touching this file.
  */
 const NOT_HOUSEHOLD_DATA = /^(sqlite_|_cf_|cf_|pi_)/;
-const BOOKKEEPING = new Set(["schema_version", "revision"]);
+/**
+ * Our own bookkeeping, and Pending Confirmations (ADR 0024): they are tapped in the conversation, which
+ * lives in Pi's tables and is not exported, so a restored Household has no chat to tap them in.
+ */
+const NOT_EXPORTED = new Set(["schema_version", "revision", "pending_confirmation"]);
 
 export type RestoreError = {
   code: "invalid_export" | "schema_mismatch" | "not_empty";
@@ -190,5 +194,5 @@ function householdTables(sql: SqlStorage): string[] {
     .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
     .toArray()
     .map((table) => table.name)
-    .filter((name) => !NOT_HOUSEHOLD_DATA.test(name) && !BOOKKEEPING.has(name));
+    .filter((name) => !NOT_HOUSEHOLD_DATA.test(name) && !NOT_EXPORTED.has(name));
 }

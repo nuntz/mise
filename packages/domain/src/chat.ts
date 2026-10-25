@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ConfirmationStatus } from "./confirmations";
 import { LocalDate, weekdayOf } from "./weeks";
 
 /** The longest message a Member can send the agent. */
@@ -21,9 +22,13 @@ export type ChatWhere = z.infer<typeof ChatWhere>;
 /**
  * One turn of the Household's shared conversation with the agent, as the chat shows it. A Member's
  * turn names who said it: the Member's name, the Caller's email when no Member signs in with it, or
- * null when no one signed in (calls from inside the deployment).
+ * null when no one signed in (calls from inside the deployment). A confirmation is a call the agent
+ * made that waits for a person's tap (ADR 0024), shown where the agent made it.
  */
-export type ChatMessage = { role: "member"; speaker: string | null; text: string } | { role: "agent"; text: string };
+export type ChatMessage =
+  | { role: "member"; speaker: string | null; text: string }
+  | { role: "agent"; text: string }
+  | { role: "confirmation"; id: number; summary: string; status: ConfirmationStatus };
 
 /** The agent's answer, or why there is none (the model failed, or the message was refused). */
 export type ChatReply =

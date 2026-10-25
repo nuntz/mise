@@ -217,6 +217,12 @@ const en = {
   "chat.send": "Send",
   "chat.waiting": "Mise is thinking…",
   "chat.unanswered": "Mise couldn't answer that. Try again.",
+  "chat.confirmation.pending": "Tap to confirm",
+  "chat.confirmation.done": "Done",
+  "chat.confirmation.expired": "No longer applies",
+  "chat.confirmation.changed": "That has changed since Mise asked. Ask again if you still want it.",
+  "chat.confirmation.answered": "That has already been done.",
+  "chat.confirmation.failed": "That didn't go through. Try again.",
   "chat.disclaimer": "Mise's answers come from an AI model reading your plan. Check anything that matters.",
 
   "ranOut.action": "Ran out",

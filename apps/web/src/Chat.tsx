@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatWhere } from "@mise/domain";
+import type { ChatMessage, ChatWhere, ToolResult } from "@mise/domain";
 import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
@@ -27,16 +27,29 @@ export function Chat(props: { client: MiseClient; online: boolean; where: () => 
   );
 }
 
+const ERRORS = {
+  load: "app.error",
+  answer: "chat.unanswered",
+  changed: "chat.confirmation.changed",
+  answered: "chat.confirmation.answered",
+  unconfirmed: "chat.confirmation.failed",
+} as const;
+
+/** Why a tap on a confirmation was refused: what it describes changed, or someone already tapped it. */
+const TAP_ERRORS: Partial<Record<string, "changed" | "answered">> = { expired: "changed", not_found: "answered" };
+
 /**
  * The Household's shared conversation with the agent, and a message to add to it; a sheet over the
- * page. Turns others send show as the conversation changes.
+ * page. Turns others send show as the conversation changes. A call the agent asked to make that waits
+ * for a person shows as a button saying what it will do.
  */
 function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose: () => void }) {
   const titleId = createUniqueId();
   const [turns, setTurns] = createSignal<ChatMessage[]>();
   const [draft, setDraft] = createSignal("");
   const [waiting, setWaiting] = createSignal(false);
-  const [error, setError] = createSignal<"load" | "answer">();
+  const [error, setError] = createSignal<"load" | "answer" | "changed" | "answered" | "unconfirmed">();
+  const [tapping, setTapping] = createSignal(false);
   let log!: HTMLDivElement;
 
   // The newest turn, or the note that Mise is thinking, stays in view as the conversation grows.
@@ -91,6 +104,22 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
     setError("answer");
   };
 
+  // A tap on a confirmation runs the call the agent asked for; only a person can (ADR 0024).
+  const confirm = async (id: number) => {
+    if (tapping()) return;
+    setError(undefined);
+    setTapping(true);
+    let result: ToolResult<unknown> | undefined;
+    try {
+      result = await props.client.confirm(id);
+    } catch {
+      // Shown as not gone through below.
+    }
+    setTapping(false);
+    if (!result?.ok) setError(TAP_ERRORS[result?.error.code ?? ""] ?? "unconfirmed");
+    void refetch();
+  };
+
   return (
     <Sheet labelledBy={titleId} class="sheet-chat" onEscape={() => props.onClose()}>
       <div class="sheet-header">
@@ -111,15 +140,31 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
             <Show when={shown().length > 0} fallback={<p class="body-muted">{t("chat.empty")}</p>}>
               <ol class="chat-turns">
                 <For each={shown()}>
-                  {(turn) => (
-                    <li class={`chat-turn chat-turn-${turn.role}`}>
-                      <span class="chat-speaker">
-                        {turn.role === "agent" ? t("chat.speaker.agent") : (turn.speaker ?? t("chat.speaker.someone"))}
-                        <span class="visually-hidden">: </span>
-                      </span>
-                      {turn.text}
-                    </li>
-                  )}
+                  {(turn) =>
+                    turn.role === "confirmation" ? (
+                      <li class={`chat-turn chat-turn-confirmation chat-confirmation-${turn.status}`}>
+                        <span class="chat-speaker">
+                          {t(`chat.confirmation.${turn.status}`)}
+                          <span class="visually-hidden">: </span>
+                        </span>
+                        <Show when={turn.status === "pending"} fallback={<span>{turn.summary}</span>}>
+                          <button type="button" disabled={tapping()} onClick={() => void confirm(turn.id)}>
+                            {turn.summary}
+                          </button>
+                        </Show>
+                      </li>
+                    ) : (
+                      <li class={`chat-turn chat-turn-${turn.role}`}>
+                        <span class="chat-speaker">
+                          {turn.role === "agent"
+                            ? t("chat.speaker.agent")
+                            : (turn.speaker ?? t("chat.speaker.someone"))}
+                          <span class="visually-hidden">: </span>
+                        </span>
+                        {turn.text}
+                      </li>
+                    )
+                  }
                 </For>
               </ol>
             </Show>
@@ -133,7 +178,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
         <Show when={error()}>
           {(failed) => (
             <p class="banner banner-warn" role="alert">
-              {t(failed() === "load" ? "app.error" : "chat.unanswered")}
+              {t(ERRORS[failed()])}
             </p>
           )}
         </Show>

@@ -767,6 +767,19 @@ details[open] > summary::after {
   background: var(--surface-raised);
 }
 
+.chat-turn-confirmation {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border: var(--hairline) solid var(--line);
+}
+
+.chat-confirmation-expired {
+  color: var(--ink-muted);
+}
+
 .chat-speaker {
   display: block;
   font: var(--type-label);

@@ -231,7 +231,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 22,
+      schemaVersion: 23,
       tables: {
         calendar_token: [],
         chat_turn: [],

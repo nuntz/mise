@@ -58,9 +58,18 @@ import {
 import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
 import { PiHarness } from "agents/harness/pi";
-import { agentModels, miseExtension, recentChat, TURN_ENTRY, type TurnData, turnBeingAnswered } from "./agent";
+import {
+  type AgentCallResult,
+  agentModels,
+  miseExtension,
+  recentChat,
+  TURN_ENTRY,
+  type TurnData,
+  turnBeingAnswered,
+} from "./agent";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed } from "./calendar";
+import { confirmationShown, holdIfGuarded, releaseConfirmation, takeConfirmation } from "./confirmations";
 import { type Drive, DriveError, driveRevision, openDrive, recordDriveDocs } from "./drive";
 import { callerFrom } from "./identity";
 import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport } from "./imports";
@@ -203,21 +212,73 @@ class HouseholdAgent extends Agent<Env> {
     // The harness opened Pi with its root conversation, so `root` finds it rather than making one.
     const pi = await this.harness.pi();
     const { sql } = this.ctx.storage;
-    return recentChat(await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS, (turn) => speakerOfTurn(sql, turn));
+    return recentChat(await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS, {
+      speakerOf: (turn) => speakerOfTurn(sql, turn),
+      confirmation: (id) => confirmationShown(sql, id),
+    });
   }
 
-  /** A tool call, as `caller`; the agent's calls come here too. */
+  /**
+   * A person's tap on a confirmation the chat shows (ADR 0024): runs the call the agent made, as the
+   * Caller who tapped, if it is still pending and what it describes is unchanged. Refuses one already
+   * run or unknown (`not_found`), and one whose state has changed (`expired`). Every screen is told,
+   * so the button shows what became of it.
+   */
+  @callable()
+  async confirm(id: unknown): Promise<ToolResult<unknown>> {
+    const caller = this.callerOf(getCurrentAgent().connection);
+    const { sql } = this.ctx.storage;
+    const taken = this.ctx.storage.transactionSync(() => takeConfirmation(sql, id));
+    if (!taken.ok) {
+      if (taken.error.code === "expired") this.notify("chat", this.bumpRevision());
+      return taken;
+    }
+    // Claimed, so a second tap finds nothing, however long the call takes. Nothing else runs between
+    // the check and the call: no I/O is awaited before the call's own transaction.
+    const result = await this.invokeTool(taken.value.name, taken.value.input, caller, "client");
+    if (result.ok) this.notify("chat", this.bumpRevision());
+    else releaseConfirmation(sql, id as number);
+    return result;
+  }
+
+  /**
+   * A tool call, as `caller`; the agent's calls come here too. One from the agent that needs a
+   * person's tap is held instead of run (ADR 0024).
+   */
+  private async invokeTool(
+    name: string,
+    input: unknown,
+    caller: Caller | null,
+    calledBy: "client",
+  ): Promise<ToolResult<unknown>>;
+  private async invokeTool(
+    name: string,
+    input: unknown,
+    caller: Caller | null,
+    calledBy: "agent",
+  ): Promise<AgentCallResult>;
   private async invokeTool(
     name: string,
     input: unknown,
     caller: Caller | null,
     calledBy: "agent" | "client",
-  ): Promise<ToolResult<unknown>> {
+  ): Promise<AgentCallResult> {
     // One span per tool, named but without its input: inputs are Household data.
     const spanName = `tool ${isToolName(name) ? name : "unknown"}`;
     // Whether the agent or a client (a screen, or RPC from inside the deployment) made it.
     const attributes = { "mise.called_by": calledBy };
-    return Sentry.startSpan({ name: spanName, op: "mise.tool", attributes }, () => this.runTool(name, input, caller));
+    return Sentry.startSpan({ name: spanName, op: "mise.tool", attributes }, () => {
+      if (calledBy === "agent" && isToolName(name)) {
+        const parsed = parseToolInput(name, input);
+        if (!parsed.ok) return parsed;
+        const held = this.ctx.storage.transactionSync(() =>
+          holdIfGuarded(this.ctx.storage.sql, name, input, parsed.value),
+        );
+        if (!held.ok) return held;
+        if (held.value) return { held: held.value };
+      }
+      return this.runTool(name, input, caller);
+    });
   }
 
   private async runTool(name: string, input: unknown, caller: Caller | null): Promise<ToolResult<unknown>> {

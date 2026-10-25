@@ -14,9 +14,13 @@ export function createFakeClient(
     online = true,
     chat,
     conversation,
+    confirm,
     ...rest
   }: { online?: boolean } & Partial<
-    Pick<MiseClient, "photoUrl" | "uploadExport" | "uploadScreenshot" | "chat" | "conversation" | "signedIn">
+    Pick<
+      MiseClient,
+      "photoUrl" | "uploadExport" | "uploadScreenshot" | "chat" | "conversation" | "confirm" | "signedIn"
+    >
   > = {},
 ) {
   const connection = { online };
@@ -49,6 +53,14 @@ export function createFakeClient(
       if (!connection.online) throw new Error("Connection closed");
       if (!conversation) throw new Error("Unexpected conversation");
       return conversation();
+    },
+    async confirm(id) {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!confirm) throw new Error("Unexpected confirm");
+      const result = await confirm(id);
+      // The household announces the conversation once a tap has run its call, or found it expired.
+      if (result.ok || result.error.code === "expired") notifyAll("chat");
+      return result;
     },
     subscribe(topics, refetch) {
       const subscription = { topics, refetch };

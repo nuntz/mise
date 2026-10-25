@@ -90,11 +90,21 @@ import {
 export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery", "chat"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
+/**
+ * When a call from the agent waits for a person's tap instead of running (ADR 0024): always, for the
+ * destructive tools; when it carries an Override; or when it loosens a Hard Constraint (removes one,
+ * makes it a dislike, or removes a Member who has one). A call from a screen runs at once: the PWA
+ * asks in its own dialogs.
+ */
+export type ConfirmationCase = "always" | "override" | "loosening";
+
 type ToolDefinition = {
   input: z.ZodType;
   output: z.ZodType;
   /** The topic a successful call changes; absent for read-only tools. */
   changes?: ChangeTopic;
+  /** When a call from the agent needs a person's tap; absent for tools that never do. */
+  confirm?: ConfirmationCase;
 };
 
 function defineTool<const T extends ToolDefinition>(definition: T): T {
@@ -136,18 +146,21 @@ export const tools = {
     input: UpdateMemberInput,
     output: Member,
     changes: "household",
+    confirm: "loosening",
   }),
   /** Replaces the Member's Constraints with the list given. */
   update_member_constraints: defineTool({
     input: UpdateMemberConstraintsInput,
     output: Member,
     changes: "household",
+    confirm: "loosening",
   }),
   /** Returns the Member as it was before removal. */
   remove_member: defineTool({
     input: RemoveMemberInput,
     output: Member,
     changes: "household",
+    confirm: "loosening",
   }),
   create_recipe: defineTool({
     input: NewRecipe,
@@ -168,6 +181,7 @@ export const tools = {
     input: DeleteRecipeInput,
     output: Recipe,
     changes: "recipes",
+    confirm: "always",
   }),
   /** Recipes in title order; Drafts are left out, for `list_drafts`. */
   search_recipes: defineTool({
@@ -340,18 +354,21 @@ export const tools = {
     input: SetSlotInput,
     output: Slot,
     changes: "plan",
+    confirm: "override",
   }),
   /** Returns the Slots changed: one, or the day's three. Refuses new Conflicts as `set_slot` does. */
   set_diners: defineTool({
     input: SetDinersInput,
     output: z.array(Slot),
     changes: "plan",
+    confirm: "override",
   }),
   /** Refuses new Conflicts as `set_slot` does. */
   set_guests: defineTool({
     input: SetGuestsInput,
     output: Slot,
     changes: "plan",
+    confirm: "override",
   }),
   /**
    * Refuses a Slot to link to that is not earlier (`not_earlier`), holds no Recipe (`no_recipe`) or a
@@ -361,6 +378,7 @@ export const tools = {
     input: LinkLeftoversInput,
     output: Slot,
     changes: "plan",
+    confirm: "override",
   }),
   /** Read-only: what a change would conflict with, before making it. */
   check_slot_constraints: defineTool({
@@ -381,6 +399,7 @@ export const tools = {
     input: ClearWeekInput,
     output: Week,
     changes: "plan",
+    confirm: "always",
   }),
   /**
    * Fills the Week's dinners that aren't Locked or decided by hand, with a reason for each; see
@@ -522,7 +541,8 @@ export type ToolErrorCode =
   | "not_earlier"
   | "draft_recipe"
   | "model_failed"
-  | "not_configured";
+  | "not_configured"
+  | "expired";
 
 /** A Conflict a change was refused for, and the Slot it would have been in. */
 export type RefusedConflict = Conflict & { date: LocalDate; meal: Meal };
@@ -541,6 +561,12 @@ export type ToolResult<T> = { ok: true; value: T } | { ok: false; error: ToolErr
 export function changeTopicOf(name: ToolName): ChangeTopic | undefined {
   const definition: ToolDefinition = tools[name];
   return definition.changes;
+}
+
+/** When a call to this tool from the agent needs a person's tap, if it ever does. */
+export function confirmationCaseOf(name: ToolName): ConfirmationCase | undefined {
+  const definition: ToolDefinition = tools[name];
+  return definition.confirm;
 }
 
 export function isToolName(name: unknown): name is ToolName {

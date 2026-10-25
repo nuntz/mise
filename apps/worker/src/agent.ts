@@ -11,11 +11,13 @@ import type {
 import {
   type Caller,
   type ChatMessage,
+  type ConfirmationStatus,
   type Constraint,
   capitalised,
   type Household,
   ItemId,
   localDate,
+  type PendingConfirmation,
   type ToolName,
   type ToolResult,
   tools,
@@ -55,20 +57,27 @@ export function agentModels(env: Env): AgentModels {
 export const TURN_ENTRY = "mise.turn";
 export type TurnData = { turn: number; text: string };
 
+/** A tool call from the agent: its result, or the confirmation it waits for, held instead of run (ADR 0024). */
+export type AgentCallResult = ToolResult<unknown> | { held: PendingConfirmation };
+
 /** What the agent needs from the household. */
 export type AgentHost = {
-  /** A tool call through the household's validated entry point (ADR 0002), made as `caller`. */
-  callTool(name: ToolName, input: unknown, caller: Caller | null): Promise<ToolResult<unknown>>;
+  /**
+   * A tool call through the household's validated entry point (ADR 0002), made as `caller`; held for
+   * a person's tap when it needs one.
+   */
+  callTool(name: ToolName, input: unknown, caller: Caller | null): Promise<AgentCallResult>;
   /** The Caller of the turn the conversation is answering: the one its tools run as. */
   speakerIn(conversation: ConversationId): Promise<Caller | null>;
 };
 
 /**
  * The tools the agent is offered, each described for the model. Left out: `setup_household`, which
- * would recreate the Household; tools that take an upload, which comes over HTTP; deleting, clearing
- * and changing Members, which need a person's tap (ADR 0024, #40); accepting a Suggestion or a
- * Draft, resolving an Ingredient or stating an Item's Allergens, which only a person does (ADR 0023);
- * and rotating the calendar token, which stops every subscribed calendar until it is added again.
+ * would recreate the Household (ADR 0024); tools that take an upload, which comes over HTTP;
+ * accepting a Suggestion or a Draft, resolving an Ingredient or stating an Item's Allergens, which
+ * only a person does (ADR 0023); and rotating the calendar token, which stops every subscribed
+ * calendar until it is added again. Deleting, clearing, Overrides and loosening a Hard Constraint are
+ * offered, and wait for a person's tap (ADR 0024).
  */
 const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   get_household:
@@ -77,10 +86,18 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   update_household_settings: "Changes the Household's settings given: name, timezone, dinner time, week start, units.",
   set_effort_budgets: "Sets the Household's default Effort Budget (cooking minutes) for the weekdays given.",
   add_member: "Adds a Member to the Household, with any Constraints.",
+  update_member:
+    "Changes a Member's name, sign-in email or Constraints (the list given replaces theirs). Loosening a Hard " +
+    "Constraint waits for the person's tap.",
+  update_member_constraints:
+    "Replaces a Member's Constraints with the list given. Removing a Hard Constraint, or making one a dislike, " +
+    "waits for the person's tap; adding one doesn't.",
+  remove_member: "Removes a Member. Removing one with a Hard Constraint waits for the person's tap.",
   search_recipes: "Recipes whose title matches `query`, or with `tag`, in title order. Drafts are left out.",
   get_recipe: "One Recipe in full: Ingredients, steps, servings, time, Course and tags.",
   create_recipe: "Creates a Recipe from a title, base servings and Ingredient lines as written.",
   update_recipe: "Changes the fields given of a Recipe, or of a Draft before a person accepts it.",
+  delete_recipe: "Deletes a Recipe, once the person taps to confirm; pass `confirm: true`.",
   list_untagged_recipes: "Recipes missing a cuisine or a main protein.",
   list_unresolved_ingredients: "Ingredient lines no Item matches, grouped by text, most frequent first.",
   request_suggestions:
@@ -101,14 +118,22 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "with its Recipe, Diners, Guests, Conflicts, whether it is Locked, and the Proposer's `reason` for a proposed one.",
   set_slot:
     "Sets what a Slot is: a Recipe (not a Draft), leftovers, eating out, unplanned or skipped. Refused with " +
-    "`constraint_conflict` if it would bring a Conflict.",
+    "`constraint_conflict` if it would bring a Conflict, unless `overrides` gives the person's reason for each, " +
+    "which waits for their tap.",
   set_diners:
     "Sets which Members eat a Slot, or every meal of a day when `meal` is left out; null goes back to everyone. " +
-    "Refused with `constraint_conflict` if it would bring a Conflict.",
-  set_guests: "Sets how many Guests eat a Slot, and their Constraints. Refused if it would bring a Conflict.",
-  link_leftovers: "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both.",
+    "Refused with `constraint_conflict` if it would bring a Conflict; `overrides` as for set_slot.",
+  set_guests:
+    "Sets how many Guests eat a Slot, and their Constraints. Refused if it would bring a Conflict; `overrides` as " +
+    "for set_slot.",
+  link_leftovers:
+    "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. `overrides` as " +
+    "for set_slot.",
   check_slot_constraints: "What Conflicts a change to a Slot would bring, without making it.",
   lock_slot: "Locks a Slot so proposing the Week again keeps it, or unlocks it.",
+  clear_week:
+    "Puts every Slot of the Week back as it starts, Locked ones too, but not cooked ones, once the person taps " +
+    "to confirm; pass `confirm: true`.",
   propose_week:
     "Fills the Week's dinners that aren't Locked or decided by hand, each with a reason. `reroll: true` proposes " +
     "again differently; `useUp` lists Item ids on hand, to favour Recipes that use them.",
@@ -134,9 +159,6 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   record_staple_status:
     "Records an Item as stocked, low or out (“we're out of cumin”), making it a Staple if it isn't one yet.",
 };
-
-/** The tools that can carry Overrides, which only a person's tap may record (ADR 0024). */
-const OVERRIDABLE: ReadonlySet<ToolName> = new Set(["set_slot", "set_diners", "set_guests", "link_leftovers"]);
 
 /** Mise as a Pi extension: who the agent works for, and the tools it may call. */
 export function miseExtension(host: AgentHost): Extension {
@@ -167,9 +189,12 @@ function preamble(household: Household | null): string {
       "Earlier turns may be out of date: people change things on the screens too. Check with a tool before " +
       "relying on what was said or done earlier, and when a tool disagrees with the conversation, the tool is right.",
     "To explain a Proposal, use only each Slot's `reason` from `get_week`; don't invent others.",
-    "When a change is refused for a Conflict, say who and which Allergen. You cannot override a Conflict, delete " +
-      "anything, clear a Week, change or remove Members' Constraints, or accept Drafts and Suggestions: say the person " +
-      "can do it on the screen.",
+    "When a change is refused for a Conflict, say who and which Allergen. Override it only with the reason the " +
+      "person gave for planning it anyway.",
+    "Deleting a Recipe, clearing a Week, overriding a Conflict, and removing a Hard Constraint, making one a dislike " +
+      "or removing a Member who has one wait for the person: the tool changes nothing, and the chat shows them a " +
+      "button saying what will happen. Only their tap does it, whatever they type: tell them to tap it, and never " +
+      "say it is done. You cannot accept Drafts and Suggestions: say the person can do it on the screen.",
   ].join("\n");
 }
 
@@ -195,12 +220,13 @@ function describeConstraint(constraint: Constraint): string {
 
 async function household(host: AgentHost): Promise<Household | null> {
   const result = await host.callTool("get_household", {}, null);
-  return result.ok ? (result.value as Household | null) : null;
+  return "ok" in result && result.ok ? (result.value as Household | null) : null;
 }
 
 /**
  * A registry tool as Pi offers it: its input schema from the registry, the call through the household
- * as the turn's speaker. Overrides are left out of the schema, and refused if sent anyway.
+ * as the turn's speaker. A call held for a person's tap tells the model so, and names its confirmation
+ * in the result's details, where the chat finds it.
  */
 function agentTool(name: ToolName, description: string, host: AgentHost): ToolRegistration {
   const inputSchema = z.toJSONSchema(tools[name].input, {
@@ -219,30 +245,25 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
   return {
     name,
     description,
-    parameters: Type.Unsafe(OVERRIDABLE.has(name) ? withoutOverrides(schema) : schema),
+    parameters: Type.Unsafe(schema),
     async execute(args, api) {
-      if (OVERRIDABLE.has(name) && typeof args === "object" && args !== null && "overrides" in args) {
-        throw new Error("Only a person can override a Conflict, on the Week screen. Tell them who and which Allergen.");
-      }
       const result = await host.callTool(name, args, await host.speakerIn(api.conversationId));
+      if ("held" in result) {
+        const { id, summary } = result.held;
+        const text =
+          `Nothing is changed yet. The chat shows the person a button, “${summary}”, and only their tap does it. ` +
+          "Tell them to tap it if they want it; don't say it is done.";
+        const details: ConfirmationDetails = { confirmation: id };
+        return { output: [{ type: "text", text }], details };
+      }
       if (!result.ok) throw new Error(JSON.stringify(result.error));
       return { output: [{ type: "text", text: JSON.stringify(result.value) }] };
     },
   };
 }
 
-type JsonSchema = { properties?: Record<string, unknown>; anyOf?: JsonSchema[]; oneOf?: JsonSchema[] };
-
-/** A tool's input schema without `overrides`, in each of its alternatives. */
-function withoutOverrides(schema: JsonSchema): JsonSchema {
-  const { overrides: _, ...properties } = schema.properties ?? {};
-  return {
-    ...schema,
-    ...(schema.properties && { properties }),
-    ...(schema.anyOf && { anyOf: schema.anyOf.map(withoutOverrides) }),
-    ...(schema.oneOf && { oneOf: schema.oneOf.map(withoutOverrides) }),
-  };
-}
+/** What a held call's tool result keeps for the chat: the confirmation it waits for. */
+type ConfirmationDetails = { confirmation: number };
 
 /**
  * The turn the conversation is answering: the newest Member's turn placed in it. Turns are answered
@@ -260,44 +281,64 @@ export async function turnBeingAnswered(conversation: Conversation): Promise<num
   return null;
 }
 
+/** What the chat shows a transcript entry with: who said each turn, and what became of each confirmation. */
+export type ChatLookups = {
+  speakerOf(turn: number): string | null;
+  confirmation(id: number): { summary: string; status: ConfirmationStatus } | null;
+};
+
 /**
  * The newest `count` turns of the conversation as the chat shows them, oldest first, each Member's
- * turn with its speaker as `speakerOf` names them. Read from its whole history: what compaction
- * summarised for the model stays in the chat.
+ * turn with its speaker and each confirmation as `lookups` give them. Read from its whole history:
+ * what compaction summarised for the model stays in the chat.
  */
 export async function recentChat(
   conversation: Conversation,
   count: number,
-  speakerOf: (turn: number) => string | null,
+  lookups: ChatLookups,
 ): Promise<ChatMessage[]> {
   let messages: ChatMessage[] = [];
   let cursor: Cursor | undefined;
   do {
     // Newest first.
     const page = await conversation.entries({}, 100, cursor, BACKGROUND_CONTEXT);
-    messages = [...chatMessages([...page.items].reverse(), speakerOf), ...messages];
+    messages = [...chatMessages([...page.items].reverse(), lookups), ...messages];
     cursor = page.next;
   } while (cursor && messages.length < count);
   return messages.slice(-count);
 }
 
-/** Entries as the chat shows them: what Members said and the agent's answers, in the entries' order. */
-function chatMessages(entries: readonly EntryRecord[], speakerOf: (turn: number) => string | null): ChatMessage[] {
+/**
+ * Entries as the chat shows them, in their order: what Members said, the agent's answers, and the
+ * confirmations its held calls wait for, where it made them.
+ */
+function chatMessages(entries: readonly EntryRecord[], lookups: ChatLookups): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const entry of entries) {
     if (entry.kind === TURN_ENTRY) {
       const { turn, text } = entry.data as TurnData;
-      messages.push({ role: "member", speaker: speakerOf(turn), text });
+      messages.push({ role: "member", speaker: lookups.speakerOf(turn), text });
       continue;
     }
-    if (entry.kind !== "pi.assistant") continue;
+    if (entry.kind !== "pi.assistant" && entry.kind !== "pi.tool-result") continue;
     for (const message of entry.model ?? []) {
+      if (message.role === "toolResult") {
+        const id = confirmationIn(message.details);
+        const shown = id === null ? null : lookups.confirmation(id);
+        if (id !== null && shown) messages.push({ role: "confirmation", id, ...shown });
+      }
       if (message.role !== "assistant") continue;
       const text = textOf(message.content);
       if (text) messages.push({ role: "agent", text });
     }
   }
   return messages;
+}
+
+/** The confirmation a tool result's details name, if they name one. */
+function confirmationIn(details: unknown): number | null {
+  const id = (details as Partial<ConfirmationDetails> | undefined)?.confirmation;
+  return typeof id === "number" ? id : null;
 }
 
 function textOf(content: string | readonly { type: string; text?: string }[]): string {

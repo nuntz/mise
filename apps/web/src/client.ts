@@ -38,6 +38,11 @@ export type MiseClient = {
   chat(text: string, where: ChatWhere): Promise<ChatReply>;
   /** The latest turns of the Household's conversation with the agent, oldest first. */
   conversation(): Promise<ChatMessage[]>;
+  /**
+   * A person's tap on a confirmation the agent asked for (ADR 0024): runs the call it holds, as them.
+   * Refused once run (`not_found`) or once what it describes has changed (`expired`).
+   */
+  confirm(id: number): Promise<ToolResult<unknown>>;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
   photoUrl(recipeId: RecipeId, photoKey: string): string;
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
@@ -75,6 +80,8 @@ export function createMiseClient(host = window.location.host): MiseClient {
     chat: (text, where) => agent.call("chat", [text, where], { timeout: CHAT_TIMEOUT_MS }),
 
     conversation: () => agent.call("conversation", []),
+
+    confirm: (id) => agent.call<ToolResult<unknown>>("confirm", [id]),
 
     onConnection(listener) {
       // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".

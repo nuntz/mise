@@ -6,6 +6,7 @@ import {
   DEFAULT_EFFORT_BUDGETS,
   type Household,
   STORE_SECTIONS,
+  type ToolResult,
 } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
@@ -28,10 +29,18 @@ const household: Household = {
 
 /**
  * A client for a Household whose conversation with the agent starts as `earlier`; each message gets
- * `reply`, and joins the conversation with the agent's answer, as the household keeps it.
+ * `reply`, and joins the conversation with the agent's answer, as the household keeps it. A tap on a
+ * confirmation gets `confirm`.
  */
-function fakeClient(earlier: ChatMessage[], reply: (text: string) => Promise<ChatReply>) {
+function fakeClient(
+  earlier: ChatMessage[],
+  reply: (text: string) => Promise<ChatReply>,
+  confirm: (id: number) => ToolResult<unknown> = () => {
+    throw new Error("Unexpected confirm");
+  },
+) {
   const conversation = [...earlier];
+  const confirmed: number[] = [];
   const sent: string[] = [];
   const sentFrom: ChatWhere[] = [];
   const fake = createFakeClient(
@@ -60,9 +69,13 @@ function fakeClient(earlier: ChatMessage[], reply: (text: string) => Promise<Cha
         if (answer.ok) conversation.push({ role: "member", speaker: "Robin", text }, answer.value);
         return answer;
       },
+      confirm: async (id) => {
+        confirmed.push(id);
+        return confirm(id);
+      },
     },
   );
-  return { ...fake, sent, sentFrom, conversation };
+  return { ...fake, sent, sentFrom, conversation, confirmed };
 }
 
 function messageBox(chat: HTMLElement): HTMLTextAreaElement {
@@ -223,4 +236,49 @@ test("someone else's turn shows once the conversation changes", async () => {
   notify("chat");
 
   expect(await within(chat).findByText("Just the two of us Friday")).toBeTruthy();
+});
+
+test("a confirmation the agent asked for shows as a button saying what will happen; a tap runs it", async () => {
+  const { client, conversation, confirmed } = fakeClient(
+    [
+      { role: "member", speaker: "Robin", text: "Delete the Satay" },
+      { role: "confirmation", id: 7, summary: "Delete “Satay”", status: "pending" },
+      { role: "agent", text: "Tap the button to delete it." },
+    ],
+    async () => ({ ok: true, value: { role: "agent", text: "" } }),
+    (id) => {
+      const index = conversation.findIndex((message) => message.role === "confirmation" && message.id === id);
+      conversation[index] = { role: "confirmation", id, summary: "Delete “Satay”", status: "done" };
+      return { ok: true, value: {} };
+    },
+  );
+  render(() => <App client={client} />);
+  const chat = await openChat();
+
+  await userEvent.click(await within(chat).findByRole("button", { name: "Delete “Satay”" }));
+
+  expect(confirmed).toEqual([7]);
+  expect(await within(chat).findByText((_, element) => element?.textContent === "Done: Delete “Satay”")).toBeTruthy();
+  expect(within(chat).queryByRole("button", { name: "Delete “Satay”" })).toBeNull();
+});
+
+test("a confirmation that has expired shows no button, and a tap refused says so", async () => {
+  const { client } = fakeClient(
+    [
+      { role: "confirmation", id: 1, summary: "Delete “Satay”", status: "expired" },
+      { role: "confirmation", id: 2, summary: "Clear the Week of Monday, October 26", status: "pending" },
+    ],
+    async () => ({ ok: true, value: { role: "agent", text: "" } }),
+    () => ({ ok: false, error: { code: "expired", message: "" } }),
+  );
+  render(() => <App client={client} />);
+  const chat = await openChat();
+
+  await within(chat).findByText("Delete “Satay”");
+  expect(within(chat).queryByRole("button", { name: "Delete “Satay”" })).toBeNull();
+  await userEvent.click(within(chat).getByRole("button", { name: "Clear the Week of Monday, October 26" }));
+
+  expect((await within(chat).findByRole("alert")).textContent).toBe(
+    "That has changed since Mise asked. Ask again if you still want it.",
+  );
 });
