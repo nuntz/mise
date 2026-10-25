@@ -308,6 +308,16 @@ if [[ -n "${DRIVE_KEY_FILE:-}" ]]; then
 fi
 write_env DRIVE_KEY_FILE "${DRIVE_KEY_FILE:-}"
 write_env DRIVE_FOLDER_ID "${DRIVE_FOLDER_ID:-}"
+say "Notifications need a VAPID key, which Mise makes and keeps (README → Notifications)."
+VAPID_PRIVATE_KEY="$(_existing VAPID_PRIVATE_KEY || true)"
+if [[ -n "$VAPID_PRIVATE_KEY" ]]; then
+  note "Keeping the VAPID key from an earlier run: a new one would turn notifications off on every device."
+else
+  # A P-256 private key, PKCS#8 DER, base64 on one line.
+  VAPID_PRIVATE_KEY=$(openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n')
+  note "Made a new VAPID key."
+fi
+write_env VAPID_PRIVATE_KEY "$VAPID_PRIVATE_KEY"
 say "Optional: a Sentry DSN for error reports (sentry.io → Project → Settings → Client Keys)."
 ask_secret SENTRY_DSN "Sentry DSN (blank to skip):" || true
 write_env SENTRY_DSN "${SENTRY_DSN:-}"
@@ -338,6 +348,7 @@ definition=$(mktemp); trap 'rm -f "$definition"' EXIT
     # The key's JSON on one line: its private key's line breaks are escaped inside the JSON.
     printf '    mise:googleServiceAccountKey:\n      fn::secret: %s\n' "$(yaml_str "$(tr -d '\n' < "$DRIVE_KEY_FILE")")"
   fi
+  printf '    mise:vapidPrivateKey:\n      fn::secret: %s\n' "$(yaml_str "$VAPID_PRIVATE_KEY")"
   [[ -n "${SENTRY_DSN:-}" ]] && printf '    mise:sentryDsn:\n      fn::secret: %s\n' "$(yaml_str "$SENTRY_DSN")"
   true
 } > "$definition"

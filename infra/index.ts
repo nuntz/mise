@@ -20,6 +20,8 @@ const anthropicApiKey = config.getSecret("anthropicApiKey");
 // The Drive folder sync: both or neither.
 const googleServiceAccountKey = config.getSecret("googleServiceAccountKey");
 const driveFolderId = config.get("driveFolderId");
+// Notifications: the VAPID key devices subscribe with. A new one turns them off on every device.
+const vapidPrivateKey = config.getSecret("vapidPrivateKey");
 
 if (Boolean(googleServiceAccountKey) !== Boolean(driveFolderId)) {
   throw new Error("Set both mise:googleServiceAccountKey and mise:driveFolderId for the Drive sync, or neither");
@@ -89,13 +91,15 @@ const domain = (await workerExists())
 export const cloudflareAccountId = pulumi.secret(accountId);
 export const workerSecrets = pulumi.secret(
   pulumi
-    .all([app.aud, sentryDsn, anthropicApiKey, googleServiceAccountKey])
-    .apply(([aud, dsn, anthropic, driveKey]) => ({
+    .all([app.aud, sentryDsn, anthropicApiKey, googleServiceAccountKey, vapidPrivateKey])
+    .apply(([aud, dsn, anthropic, driveKey, vapid]) => ({
       ACCESS_TEAM_DOMAIN: accessTeamDomain,
       ACCESS_AUD: aud,
       ...(dsn ? { SENTRY_DSN: dsn } : {}),
       ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
       ...(driveKey && driveFolderId ? { GOOGLE_SERVICE_ACCOUNT_KEY: driveKey, DRIVE_FOLDER_ID: driveFolderId } : {}),
+      // Push services may contact the deployment at its own address.
+      ...(vapid ? { VAPID_PRIVATE_KEY: vapid, VAPID_SUBJECT: `https://${hostname}` } : {}),
     })),
 );
 export const hostnameBound = domain !== undefined;

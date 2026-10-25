@@ -31,6 +31,11 @@
 #        # mise:driveFolderId: 0BxExampleFolderId
 #        # mise:googleServiceAccountKey:
 #        #   fn::secret: '{"type":"service_account","client_email":"mise-drive@example.com","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"}'
+#        # Notifications (README → Notifications): a P-256 private key, PKCS#8, base64 on one line. Make
+#        # it once and keep it: a new key turns notifications off on every device. Without it, none.
+#        #   openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'
+#        mise:vapidPrivateKey:
+#          fn::secret: MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgExample
 #        # Optional: report errors and traces to Sentry.
 #        # mise:sentryDsn:
 #        #   fn::secret: https://<public-key>@<org>.ingest.sentry.io/<project>

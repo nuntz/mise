@@ -141,7 +141,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ### 4.5 Pantry check-in (staples)
 - No quantities. Status + `lastChecked` + adaptive `checkEvery`.
-- Session asks only items **due** (`lastChecked + checkEvery` passed, or `low`), capped at ~10, ordered by location (pantry → fridge → freezer). Saturday nudge: "pantry check: 6 items".
+- Session asks only items **due** (`lastChecked + checkEvery` passed, or `low`), capped at ~10, ordered by location (pantry → fridge → freezer). Nudge with the weekly proposal, two days before the Week starts (Saturday for a Monday start): "pantry check: 6 items".
 - Adaptive interval (ADR 0017): starts at 14 days; `stocked` ×1.5 (max 60), `out` ÷2 (min 3), `low` unchanged. After three `out` in a row, suggest flipping to `alwaysBuy` (e.g. eggs), which then never asks.
 - After marking a dinner cooked: "anything run out?" for the Staples its Recipe uses.
 - Nudge off-cycle when the week's recipes lean on a staple.
@@ -166,7 +166,8 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ### 4.9 Notifications
 - Web push only (installed PWA; no email fallback): weekly plan proposed, pantry check due, prep-ahead reminder (day before), something waiting on the review screen, Drive sync flagged a conflict. Each device opts in, with a toggle per kind; no per-Member routing.
-- Weekly proposal: two days before the next Week starts, at a morning hour in the Household's timezone, a household alarm runs `propose_week` for that Week if none of its dinners are planned yet (it never re-rolls one someone started), then pushes "next week is proposed, review it".
+- Weekly proposal: two days before the next Week starts, at 08:00 in the Household's timezone, a household alarm runs `propose_week` for that Week if none of its dinners are planned yet (it never re-rolls one someone started), then pushes "next week is proposed, review it". The day follows the Household's Weeks as they are that morning, so a new week start moves it (ADR 0021). The same morning pushes the pantry check if Staples are due; every morning pushes tomorrow's dinner's Prep-ahead note.
+- Pushes are sent from the household with VAPID and encrypted per device (ADR 0025); the devices are in the export.
 
 ## 5. Tool catalogue (shared by PWA, agent, and future integrations)
 
@@ -182,6 +183,7 @@ items:     list_items, create_item, update_item, list_unresolved_ingredients, re
 imports:   run_paprika_import, import_url, import_text, import_screenshots, list_import_runs, list_import_flags,
            sync_drive_folder, enqueue_video_import
 calendar:  rotate_calendar_token
+notify:    get_push_key, subscribe_push, get_push_device, unsubscribe_push   (a device's own; not offered to the agent)
 * = requires confirmation (from the agent: a tapped confirmation, ADR 0024; so do Overrides, a Member's new name or sign-in email, and loosening a Hard Constraint)
 ```
 

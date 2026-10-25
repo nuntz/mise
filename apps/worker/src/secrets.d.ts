@@ -15,6 +15,14 @@ interface Secrets {
   GOOGLE_SERVICE_ACCOUNT_KEY?: string;
   /** The id of the Drive folder Docs are dropped in: the end of its URL. */
   DRIVE_FOLDER_ID?: string;
+  /**
+   * The deployment's VAPID key (RFC 8292): a P-256 private key, PKCS#8, as PEM or bare base64. Every
+   * device subscribes with its public key, so a new key turns notifications off on every device.
+   * Without it, or without `VAPID_SUBJECT`, there are no notifications.
+   */
+  VAPID_PRIVATE_KEY?: string;
+  /** Who push services can reach about Mise's notifications: the deployment's `https://` address. */
+  VAPID_SUBJECT?: string;
   /** Local development only (`.dev.vars`): the email to act as, since `wrangler dev` has no Access. */
   DEV_CALLER_EMAIL?: string;
 }

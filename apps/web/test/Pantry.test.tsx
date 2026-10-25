@@ -9,7 +9,7 @@ import {
 } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
@@ -95,6 +95,15 @@ test("a banner says when a pantry check is due, and opens it", async () => {
   await user.click(within(banner).getByRole("button", { name: "Check now" }));
 
   expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+});
+
+test("a link to the pantry check, as its notification gives, opens it", async () => {
+  window.history.replaceState(null, "", "/?pantry");
+  onTestFinished(() => window.history.replaceState(null, "", "/"));
+  render(() => <App client={fakeClient().client} />);
+
+  expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+  expect(window.location.search).toBe("");
 });
 
 test("no banner when nothing is due", async () => {

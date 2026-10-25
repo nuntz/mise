@@ -16,6 +16,7 @@ export * from "./pages";
 export * from "./paprika";
 export * from "./proposals";
 export * from "./proposer";
+export * from "./push";
 export * from "./recipes";
 export * from "./staples";
 export * from "./suggestions";

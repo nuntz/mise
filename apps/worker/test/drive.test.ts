@@ -14,6 +14,8 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { SAMPLE_JPEG, utf8, zip } from "../../../fixtures/paprika";
 import { googleDrive, type ServiceAccountKey, useDrive } from "../src/drive";
 import { useLlm } from "../src/llm";
+import { usePush, webPush } from "../src/push";
+import { newDevice, pretendPushService, subscriptionOf, vapidKey } from "./pushService";
 
 type HouseholdStub = ReturnType<typeof env.Household.getByName>;
 
@@ -434,6 +436,7 @@ describe("syncing the Drive folder", () => {
     expect(await household.listSchedules()).toEqual([
       expect.objectContaining({ callback: "nightlyExport" }),
       expect.objectContaining({ callback: "nightlyDriveSync" }),
+      expect.objectContaining({ callback: "morningPushes" }),
     ]);
   });
 
@@ -473,5 +476,63 @@ describe("syncing the Drive folder", () => {
     });
 
     expect(response.status).toBe(400);
+  });
+});
+
+describe("a Drive sync's notifications", () => {
+  /** A device that gets every Drive and review notification, through a pretend push service. */
+  async function subscribedDevice(household: HouseholdStub) {
+    const key = await vapidKey();
+    const service = pretendPushService(key.publicKey, "https://mise.example.com");
+    usePush(() => webPush({ privateKey: key.secret, subject: "https://mise.example.com" }, service.fetch));
+    const device = await newDevice("https://push.example.com/send/kitchen-tablet");
+    service.add(device);
+    await household.callTool("subscribe_push", {
+      ...subscriptionOf(device),
+      kinds: ["review_waiting", "drive_flagged"],
+    });
+    return () => service.received(device.endpoint);
+  }
+
+  test("tells the devices what waits for review once Docs became Drafts", async () => {
+    pretendGoogle([soupDoc()]);
+    withReading(soup);
+    const household = await newHousehold();
+    const received = await subscribedDevice(household);
+
+    await sync(household);
+
+    await vi.waitFor(() =>
+      expect(received()).toEqual([
+        { kind: "review_waiting", title: "Waiting for review", body: "1 Draft Recipe.", url: "/?review" },
+      ]),
+    );
+  });
+
+  test("tells the devices when it flagged Recipes edited in Mise, and says nothing when nothing changed", async () => {
+    const files = [soupDoc()];
+    pretendGoogle(files);
+    const llm = withReading(soup);
+    const household = await newHousehold();
+    await sync(household);
+    const [draft] = (await drafts(household)) as [Recipe];
+    succeeded(await household.callTool("accept_draft", { id: draft.id }));
+    const received = await subscribedDevice(household);
+
+    await sync(household);
+    files[0] = soupDoc({ modifiedTime: "2026-10-23T07:00:00.000Z" });
+    llm.reading = { ...soup, title: "Lentil Soup, Revised" };
+    await sync(household);
+
+    await vi.waitFor(() =>
+      expect(received()).toEqual([
+        {
+          kind: "drive_flagged",
+          title: "Drive sync flagged 1 Recipe",
+          body: "Changed in Drive after being edited in Mise, or like a Recipe already kept. Look them over.",
+          url: "/?review",
+        },
+      ]),
+    );
   });
 });

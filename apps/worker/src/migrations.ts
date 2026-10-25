@@ -429,6 +429,21 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 24,
+    statements: [
+      // Each device that turned notifications on: its push service endpoint, its keys (RFC 8291,
+      // base64url), and the kinds it gets (a JSON array). Devices are not Members: every one gets
+      // every kind it chose.
+      `CREATE TABLE push_subscription (
+        endpoint TEXT PRIMARY KEY,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        kinds TEXT NOT NULL,
+        subscribed_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

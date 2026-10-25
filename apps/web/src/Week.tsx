@@ -66,6 +66,8 @@ export function WeekPage(props: {
   onCook: (recipe: RecipeId, servings: number) => void;
   /** Told the start of the Week shown, or undefined while none is. */
   onWeekShown?: (start: LocalDate | undefined) => void;
+  /** Opens on next Week, once the current one has said when that starts, as a notification's link asks. */
+  openNext?: boolean;
 }) {
   const [next, setNext] = createSignal(false);
   // The current Week kept on this device shows at once, and for as long as the household can't be
@@ -79,6 +81,8 @@ export function WeekPage(props: {
   createEffect(() => props.onWeekShown?.(week()?.startDate));
   // The Week after the current one starts the day after it ends.
   const [nextStart, setNextStart] = createSignal<LocalDate>();
+  // Whether a link has opened next Week already: it does so only once.
+  let openedNext = false;
   const [error, setError] = createSignal<string>();
   // Names the "use it up" Items a Proposal gives as reasons.
   const items = createItems(props.client);
@@ -107,6 +111,11 @@ export function WeekPage(props: {
       if (!next()) {
         setNextStart(nextWeekStart(result.value));
         saveWeek(result.value);
+        if (props.openNext && !openedNext) {
+          openedNext = true;
+          show(true);
+          return;
+        }
       }
       setWeek(result.value);
     },

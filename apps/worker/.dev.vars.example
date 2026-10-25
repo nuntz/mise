@@ -6,3 +6,7 @@ DEV_CALLER_EMAIL=cook@example.com
 # The Drive folder whose Docs become Drafts (README → Google Drive folder); without both, no sync.
 # GOOGLE_SERVICE_ACCOUNT_KEY={"client_email":"mise-drive@example.com","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"}
 # DRIVE_FOLDER_ID=0BxExampleFolderId
+# Notifications (README → Notifications): a VAPID key and who push services may contact; without both, none.
+# Push needs the built app's service worker, so check it on a deployment rather than in `wrangler dev`.
+# VAPID_PRIVATE_KEY=MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgExample
+# VAPID_SUBJECT=https://mise.example.com

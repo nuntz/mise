@@ -138,6 +138,10 @@ _Avoid_: Shuffle, regenerate
 **Prep-ahead note**:
 What a Recipe needs doing the day before, such as soaking beans; the Calendar Feed shows it as its own event that day.
 
+**Notification**:
+A web push to every device that turned on its kind (next week proposed, pantry check due, Prep-ahead note, waiting for review, Drive sync flagged a Recipe); devices choose, not Members.
+_Avoid_: Alert, nudge, reminder
+
 **Calendar Feed**:
 The plan's dinners as an iCalendar subscription, read without signing in by whoever has its token; read-only.
 _Avoid_: Calendar sync, export

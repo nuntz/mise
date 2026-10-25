@@ -79,6 +79,7 @@ const en = {
   "nav.grocery": "Groceries",
   "nav.pantry": "Pantry",
   "nav.calendar": "Calendar",
+  "nav.notifications": "Notifications",
   "nav.settings": "Settings",
 
   "kitchen.title": "Kitchen mode",
@@ -105,6 +106,31 @@ const en = {
     "Calendars subscribed with the current link will stop updating. Everyone will need to subscribe again with the new one.",
   "calendar.rotateConfirm": "Rotate now",
   "calendar.cancel": "Cancel",
+
+  "notifications.title": "Notifications",
+  "notifications.intro":
+    "Each phone, tablet or computer chooses its own. Every device that turns them on gets them, whoever signed in on it.",
+  "notifications.turnOn": "Turn on notifications on this device",
+  "notifications.turningOn": "Turning on…",
+  "notifications.turnOff": "Turn off on this device",
+  "notifications.kinds": "Notify this device about",
+  "notifications.unsupported":
+    "This browser can't get notifications from Mise. On an iPhone or iPad, add Mise to the Home Screen (Share → Add to Home Screen), open it from there, and come back here.",
+  "notifications.denied":
+    "Notifications are blocked for Mise on this device. Allow them in the device's settings for Mise, then try again.",
+  "notifications.notConfigured":
+    "This Mise hasn't been set up to send notifications: it needs a push key (README → Notifications).",
+  "notifications.kind.weekly_proposal": "Next week proposed",
+  "notifications.kind.weekly_proposal.hint":
+    "Two days before a Week starts, if nobody has planned it, Mise proposes it.",
+  "notifications.kind.checkin_due": "Pantry check due",
+  "notifications.kind.checkin_due.hint": "With next week's proposal, when Staples are due for a look.",
+  "notifications.kind.prep_ahead": "Prep ahead",
+  "notifications.kind.prep_ahead.hint": "The morning before a dinner whose Recipe needs something done the day before.",
+  "notifications.kind.review_waiting": "Waiting for review",
+  "notifications.kind.review_waiting.hint": "Draft Recipes from the Drive folder, and Suggestions after an import.",
+  "notifications.kind.drive_flagged": "Drive sync flagged a Recipe",
+  "notifications.kind.drive_flagged.hint": "A Doc changed after its Recipe was edited in Mise, or looks like one kept.",
 
   "offline.notice":
     "Offline: showing what was last loaded. Ticks and lines you add are kept and sync when the connection comes back.",

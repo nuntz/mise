@@ -16,7 +16,7 @@ import {
 } from "@mise/domain";
 import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
@@ -329,6 +329,21 @@ test("next Week is a tap away", async () => {
 
   await screen.findByRole("region", { name: "Monday, November 2" });
   expect(calls.filter((call) => call.name === "get_week").at(-1)?.input).toEqual({ date: "2026-11-02" });
+});
+
+test("a link to next Week, as the weekly proposal's notification gives, opens it once", async () => {
+  window.history.replaceState(null, "", "/?week=next");
+  onTestFinished(() => window.history.replaceState(null, "", "/"));
+  const { client } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+
+  await screen.findByRole("region", { name: "Monday, November 2" });
+  expect(screen.getByRole("button", { name: "Next Week" }).getAttribute("aria-pressed")).toBe("true");
+  expect(window.location.search).toBe("");
+
+  await user.click(screen.getByRole("button", { name: "This Week" }));
+  await screen.findByRole("region", { name: "Monday, October 26" });
 });
 
 test("editing a dinner sends what changed in one change to the Slot, then the Lock", async () => {

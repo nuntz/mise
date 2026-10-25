@@ -13,6 +13,7 @@ import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
 import { MembersSettings } from "./MembersSettings";
 import { t } from "./messages";
+import { NotificationSettings } from "./Notifications";
 import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
 import { RanOut } from "./RanOut";
@@ -34,31 +35,66 @@ const NAV: { page: Page; icon: IconName }[] = [
 ];
 
 /** The Household's settings, each a section of the Household page. */
-type Setting = "members" | "settings" | "calendar" | "review" | "import" | "resolve" | "items" | "tag";
-const SETTINGS: Setting[] = ["members", "settings", "calendar", "review", "import", "resolve", "items", "tag"];
+type Setting =
+  | "members"
+  | "settings"
+  | "calendar"
+  | "notifications"
+  | "review"
+  | "import"
+  | "resolve"
+  | "items"
+  | "tag";
+const SETTINGS: Setting[] = [
+  "members",
+  "settings",
+  "calendar",
+  "notifications",
+  "review",
+  "import",
+  "resolve",
+  "items",
+  "tag",
+];
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
 
-/** What a link opens: a Recipe, or one of the Household's settings. */
-type Opening = { page: "recipes"; recipe: RecipeId } | { page: "household"; setting: Setting };
+/**
+ * What a link opens: a Recipe, next Week, the pantry check, or one of the Household's settings.
+ * Calendar events and notifications link here.
+ */
+type Opening =
+  | { page: "recipes"; recipe: RecipeId }
+  | { page: "week"; next: true }
+  | { page: "pantry" }
+  | { page: "household"; setting: Setting };
+
+/** The query each link is made of. */
+const LINK_PARAMS = ["recipe", "review", "week", "pantry"];
 
 /**
- * What a link asks to open, if anything: a Recipe (`/?recipe=<id>`, as calendar events give) or the
- * Review screen (`/?review`, as the share page gives). The query is dropped once read, so the
- * address doesn't keep reopening it.
+ * What a link asks to open, if anything: a Recipe (`/?recipe=<id>`, as calendar events give), the
+ * Review screen (`/?review`, as the share page gives), next Week (`/?week=next`) or the pantry check
+ * (`/?pantry`), as notifications give. The query is dropped once read, so the address doesn't keep
+ * reopening it.
  */
 function openFromLink(): Opening | undefined {
   const params = new URLSearchParams(window.location.search);
-  if (!params.has("recipe") && !params.has("review")) return undefined;
+  if (!LINK_PARAMS.some((param) => params.has(param))) return undefined;
   const id = RecipeId.safeParse(Number(params.get("recipe")));
   const opening: Opening | undefined = params.has("recipe")
     ? id.success
       ? { page: "recipes", recipe: id.data }
       : undefined
-    : { page: "household", setting: "review" };
-  params.delete("recipe");
-  params.delete("review");
+    : params.has("review")
+      ? { page: "household", setting: "review" }
+      : params.has("pantry")
+        ? { page: "pantry" }
+        : params.get("week") === "next"
+          ? { page: "week", next: true }
+          : undefined;
+  for (const param of LINK_PARAMS) params.delete(param);
   const query = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
   return opening;
@@ -74,6 +110,10 @@ export function App(props: { client: MiseClient }) {
   const openedRecipe = () => {
     const opened = opening();
     return opened?.page === "recipes" ? opened.recipe : undefined;
+  };
+  const openedNextWeek = () => {
+    const opened = opening();
+    return opened?.page === "week" && opened.next;
   };
   const openedSetting = () => {
     const opened = opening();
@@ -195,6 +235,7 @@ export function App(props: { client: MiseClient }) {
                       onGrocery={() => go("grocery")}
                       onCook={cook}
                       onWeekShown={setWeekShown}
+                      openNext={openedNextWeek()}
                     />
                   </Match>
                   <Match when={page() === "grocery"}>
@@ -335,6 +376,9 @@ function HouseholdPage(props: {
         </Match>
         <Match when={setting() === "calendar"}>
           <CalendarSettings client={props.client} />
+        </Match>
+        <Match when={setting() === "notifications"}>
+          <NotificationSettings client={props.client} />
         </Match>
         <Match when={setting() === "review"}>
           <ReviewPage client={props.client} onResolve={() => setSetting("resolve")} />

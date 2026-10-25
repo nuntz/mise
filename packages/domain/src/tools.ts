@@ -34,6 +34,7 @@ import {
 } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection, UpdateItemInput } from "./items";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
+import { PushDevice, PushDeviceInput, PushKey, SubscribePushInput } from "./push";
 import {
   DeleteRecipeInput,
   GetRecipeInput,
@@ -104,7 +105,10 @@ export type ConfirmationCase = "always" | "slot" | "member";
 type ToolDefinition = {
   input: z.ZodType;
   output: z.ZodType;
-  /** The topic a successful call changes; absent for read-only tools. */
+  /**
+   * The topic a successful call changes; absent for read-only tools, and for a device's own
+   * notification settings, which no other screen shows.
+   */
   changes?: ChangeTopic;
   /** When a call from the agent needs a person's tap; absent for tools that never do. */
   confirm?: ConfirmationCase;
@@ -515,6 +519,29 @@ export const tools = {
     input: CancelConfirmationInput,
     output: PendingConfirmation,
     changes: "chat",
+  }),
+  /** The key a device subscribes to notifications with. Refuses with `not_configured` when the deployment has none. */
+  get_push_key: defineTool({
+    input: z.object({}).strict(),
+    output: PushKey,
+  }),
+  /**
+   * Turns notifications on for this device, for the kinds given, or changes its kinds. Every device
+   * subscribed gets every kind it chose, whoever signed in on it.
+   */
+  subscribe_push: defineTool({
+    input: SubscribePushInput,
+    output: PushDevice,
+  }),
+  /** The device subscribed at this endpoint, or null if none is. */
+  get_push_device: defineTool({
+    input: PushDeviceInput,
+    output: PushDevice.nullable(),
+  }),
+  /** Turns notifications off for the device. Refuses one not subscribed (`not_found`). Returns it as it was. */
+  unsubscribe_push: defineTool({
+    input: PushDeviceInput,
+    output: PushDevice,
   }),
   get_caller: defineTool({
     input: z.object({}).strict(),

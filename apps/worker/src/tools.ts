@@ -23,6 +23,7 @@ import { readDriveDocs } from "./drive";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
+import { pushHandlers, readPushSubscriptions } from "./pushDevices";
 import { readRecipes, recipeHandlers } from "./recipes";
 import { readStaples, stapleHandlers } from "./staples";
 import { readSuggestions, suggestionHandlers } from "./suggestions";
@@ -48,7 +49,7 @@ type ConstraintRow = ConstraintColumns & { member_id: number };
 /**
  * Tools that need more than SQLite, which the household runs itself: a Paprika import reads R2;
  * Suggestions and a text import ask the model; a link import fetches the page, and may ask it too;
- * a Drive sync reads the Drive folder and asks the model.
+ * a Drive sync reads the Drive folder and asks the model; the push key is a Worker secret.
  */
 export type HouseholdToolName =
   | "run_paprika_import"
@@ -56,7 +57,8 @@ export type HouseholdToolName =
   | "import_text"
   | "import_url"
   | "import_screenshots"
-  | "sync_drive_folder";
+  | "sync_drive_folder"
+  | "get_push_key";
 
 export type Handlers = {
   [N in Exclude<ToolName, HouseholdToolName>]: (
@@ -178,6 +180,7 @@ export const handlers: Handlers = {
   ...groceryHandlers,
   ...stapleHandlers,
   ...calendarHandlers,
+  ...pushHandlers,
 
   // Called when the call is made, so that confirmations.ts, which reads through these handlers, can import them.
   cancel_confirmation: (sql, input) => cancelConfirmation(sql, input.id),
@@ -210,6 +213,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readCalendarToken(sql);
   readDriveDocs(sql);
   readChatTurns(sql);
+  readPushSubscriptions(sql);
 }
 
 function insertMember(sql: SqlStorage, member: NewMember): ToolResult<Member> {

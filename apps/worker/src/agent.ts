@@ -104,9 +104,10 @@ export type AgentHost = {
  * The tools the agent is offered, each described for the model. Left out: `setup_household`, which
  * would recreate the Household (ADR 0024); tools that take an upload, which comes over HTTP;
  * accepting a Suggestion or a Draft, resolving an Ingredient or stating an Item's Allergens, which
- * only a person does (ADR 0023); and rotating the calendar token, which stops every subscribed
- * calendar until it is added again. Deleting, clearing, Overrides and loosening a Hard Constraint are
- * offered, and wait for a person's tap (ADR 0024).
+ * only a person does (ADR 0023); rotating the calendar token, which stops every subscribed calendar
+ * until it is added again; and a device's notifications, which only that device can turn on.
+ * Deleting, clearing, Overrides and loosening a Hard Constraint are offered, and wait for a person's
+ * tap (ADR 0024).
  */
 const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   get_household:

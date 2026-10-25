@@ -231,11 +231,12 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 23,
+      schemaVersion: 24,
       tables: {
         calendar_token: [],
         chat_turn: [],
         drive_doc: [],
+        push_subscription: [],
         household: [
           {
             id: 1,
@@ -576,7 +577,7 @@ describe("replaying an export before a deploy", () => {
 });
 
 describe("nightly export", () => {
-  test("setting up the Household schedules the export for 03:00 and the Drive sync for 04:00 Household time", async () => {
+  test("setting up the Household schedules the export for 03:00, the Drive sync for 04:00 and the morning for 08:00 Household time", async () => {
     const household = freshHousehold();
     await household.callTool("setup_household", { name: "The Example Family", timezone: "Asia/Tokyo" });
 
@@ -586,6 +587,7 @@ describe("nightly export", () => {
     expect(schedules).toEqual([
       expect.objectContaining({ callback: "nightlyExport", time: at("03:00") }),
       expect.objectContaining({ callback: "nightlyDriveSync", time: at("04:00") }),
+      expect.objectContaining({ callback: "morningPushes", time: at("08:00") }),
     ]);
   });
 
@@ -602,6 +604,7 @@ describe("nightly export", () => {
     expect(await household.listSchedules()).toEqual([
       expect.objectContaining({ callback: "nightlyExport" }),
       expect.objectContaining({ callback: "nightlyDriveSync" }),
+      expect.objectContaining({ callback: "morningPushes" }),
     ]);
   });
 

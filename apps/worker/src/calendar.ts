@@ -35,19 +35,23 @@ export function readCalendarFeed(sql: SqlStorage, token: string, origin: string,
   const settings = readSettings(sql);
   if (!settings) return null;
   const from = addDays(localDate(now, settings.timezone), -FEED_PAST_DAYS);
-  const prepAhead = new Map(
+  return calendarFeed({
+    household: settings,
+    dinners: readSlots(sql, from).filter((slot) => slot.meal === "dinner"),
+    prepAhead: readPrepAhead(sql),
+    origin,
+    now,
+  });
+}
+
+/** The Prep-ahead note of each Recipe that has one. */
+export function readPrepAhead(sql: SqlStorage): Map<RecipeId, string> {
+  return new Map(
     sql
       .exec<{ id: RecipeId; prep_ahead: string }>("SELECT id, prep_ahead FROM recipe WHERE prep_ahead IS NOT NULL")
       .toArray()
       .map((row) => [row.id, row.prep_ahead]),
   );
-  return calendarFeed({
-    household: settings,
-    dinners: readSlots(sql, from).filter((slot) => slot.meal === "dinner"),
-    prepAhead,
-    origin,
-    now,
-  });
 }
 
 /** 256 random bits, URL-safe. */

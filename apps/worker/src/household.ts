@@ -1,6 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { type ConversationId, createRegistry, Harness } from "@earendil-works/pi-durable";
 import {
+  addDays,
   type Caller,
   type ChangeNotice,
   ChangeTopic,
@@ -9,11 +10,13 @@ import {
   type ChatReply,
   ChatWhere,
   changeTopicOf,
+  checkInMessage,
   DRIVE_SYNC_TIME,
   type DriveDoc,
   type DriveSyncStarted,
   docLink,
   docText,
+  driveFlaggedMessage,
   exportKey,
   firstDocImage,
   type Household as HouseholdData,
@@ -29,24 +32,34 @@ import {
   importUploadKey,
   isLinkOnly,
   isScreenshotType,
+  isStarted,
   isToolName,
   type Llm,
   LlmError,
+  type LocalDate,
   localDate,
   MAX_PASTED_TEXT,
   MAX_SCREENSHOT_BYTES,
   MAX_SCREENSHOTS_BYTES,
+  MORNING_PUSH_TIME,
   NIGHTLY_EXPORT_TIME,
   nextOccurrence,
   type ParsedToolInput,
   PHOTO_PREFIX,
+  ProposeWeekInput,
+  type PushKey,
+  type PushMessage,
   parseToolInput,
+  prepAheadMessage,
   presentTurn,
+  proposalWeekOn,
+  proposedMessage,
   type Recipe,
   type RecipeId,
   type RecipeImage,
   type RecipeReading,
   readPaprikaExport,
+  reviewMessage,
   type Suggestion,
   screenshotUploadKey,
   suggestItems,
@@ -54,6 +67,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
+  type Week,
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
@@ -69,7 +83,7 @@ import {
   turnBeingAnswered,
 } from "./agent";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
-import { readCalendarFeed } from "./calendar";
+import { readCalendarFeed, readPrepAhead } from "./calendar";
 import { confirmationShown, holdIfGuarded, releaseConfirmation, takeConfirmation } from "./confirmations";
 import { type Drive, DriveError, driveRevision, openDrive, recordDriveDocs } from "./drive";
 import { callerFrom } from "./identity";
@@ -79,10 +93,13 @@ import { fetchPhoto, readLink } from "./links";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
 import { piReports, reportWakeErrors, sentryOptions, sentryTelemetry } from "./observability";
+import { openPush, PushError } from "./push";
+import { removePushSubscription, subscriptionsFor } from "./pushDevices";
 import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { type HouseholdToolName, handlers } from "./tools";
 import { callerOfTurn, recordTurn, speakerOfTurn } from "./turns";
+import { readSlots } from "./weeks";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
@@ -110,6 +127,9 @@ const RESTORE_STATUS: Record<RestoreError["code"], number> = {
 
 // Once per isolate: the channel is shared by every Household it runs.
 reportWakeErrors();
+
+/** The scheduler callbacks the household runs once a day. */
+type DailyRun = "nightlyExport" | "nightlyDriveSync" | "morningPushes";
 
 /** What the household remembers about each WebSocket; it survives hibernation. */
 type ConnectionState = { caller: Caller | null };
@@ -171,7 +191,7 @@ class HouseholdAgent extends Agent<Env> {
 
   override async onStart(): Promise<void> {
     await this.followAgentModel();
-    await this.scheduleNightly();
+    await this.scheduleDailyRuns();
   }
 
   /**
@@ -325,6 +345,7 @@ class HouseholdAgent extends Agent<Env> {
       return this.importScreenshots(parsed.value as ParsedToolInput<"import_screenshots">);
     }
     if (name === "sync_drive_folder") return this.syncDriveFolder();
+    if (name === "get_push_key") return this.pushKey();
     const toolName = name as Exclude<ToolName, HouseholdToolName>;
     const handler = handlers[toolName] as (
       sql: SqlStorage,
@@ -350,8 +371,8 @@ class HouseholdAgent extends Agent<Env> {
 
     if (topic && revision !== undefined) {
       this.notify(topic, revision);
-      // The Household's timezone decides when the export runs.
-      if (topic === "household") await this.scheduleNightly();
+      // The Household's timezone decides when the export and the morning run.
+      if (topic === "household") await this.scheduleDailyRuns();
     }
     // Photos live in R2, outside the transaction: a deleted Recipe's goes once the deletion is committed.
     if (toolName === "delete_recipe" && result.ok) await this.deletePhoto((result.value as Recipe).photoKey);
@@ -561,6 +582,19 @@ class HouseholdAgent extends Agent<Env> {
     return { ok: true, value: { alreadyRunning: false } };
   }
 
+  /** The VAPID public key devices subscribe with; `not_configured` without a usable key. */
+  private async pushKey(): Promise<ToolResult<PushKey>> {
+    const push = openPush(this.env);
+    if (!push) return { ok: false, error: { code: "not_configured", message: "No push key is set up for Mise" } };
+    try {
+      return { ok: true, value: { publicKey: await push.publicKey() } };
+    } catch (error) {
+      if (!(error instanceof PushError)) throw error;
+      Sentry.captureException(error);
+      return { ok: false, error: { code: "not_configured", message: error.message } };
+    }
+  }
+
   /** Runs the sync "Sync Drive now" scheduled. Run by the scheduler. */
   async askedDriveSync(): Promise<void> {
     try {
@@ -653,6 +687,9 @@ class HouseholdAgent extends Agent<Env> {
     this.notify("recipes", outcome.revision);
     if (outcome.newTexts.length > 0) await this.schedule(0, "suggestAfterImport", { texts: outcome.newTexts });
     for (const key of [...outcome.replacedPhotos, ...stored]) await this.deletePhoto(key);
+    // Nobody watches a sync, which runs at night or minutes after it was asked for.
+    if (outcome.run.created + outcome.run.updated > 0) await this.pushReview();
+    if (outcome.run.flagged > 0) await this.push(driveFlaggedMessage(outcome.run.flagged));
     return outcome.run;
   }
 
@@ -665,7 +702,7 @@ class HouseholdAgent extends Agent<Env> {
       Sentry.captureException(error);
       throw error;
     } finally {
-      await this.scheduleNightly();
+      await this.scheduleDailyRuns();
     }
   }
 
@@ -687,7 +724,8 @@ class HouseholdAgent extends Agent<Env> {
   /** Asks the model about the new Unresolved texts an import brought. Run by the scheduler after it. */
   async suggestAfterImport({ texts }: { texts: string[] }): Promise<void> {
     try {
-      await this.suggest(texts);
+      // They come minutes after the import answered, so the review screen may no longer be open.
+      if ((await this.suggest(texts)).length > 0) await this.pushReview();
     } catch (error) {
       // The scheduler swallows callback errors, so report them here. The texts can be asked about again.
       Sentry.captureException(error);
@@ -720,6 +758,91 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   /**
+   * The morning's notifications, then tomorrow's morning is scheduled. Run by the scheduler at 08:00
+   * Household time. Two days before a Week starts (`proposalWeekOn`), Mise proposes it if nobody has
+   * started it, and says so; and asks for a Check-in if Staples are due. Every morning, tomorrow's
+   * dinner's Prep-ahead note.
+   */
+  async morningPushes(): Promise<void> {
+    try {
+      const household = this.household();
+      if (!household) return;
+      const { sql } = this.ctx.storage;
+      const today = localDate(new Date(), household.timezone);
+      const week = proposalWeekOn(today, household);
+      if (week) {
+        const proposed = this.proposeIfUnstarted(week);
+        const message = proposed && proposedMessage(proposed, household.locale);
+        if (message) await this.push(message);
+        const due = handlers.list_due_staples(sql, {}, { caller: null });
+        if (due.ok && due.value.due > 0) await this.push(checkInMessage(due.value.due));
+      }
+      const tomorrow = addDays(today, 1);
+      const prepAhead = readPrepAhead(sql);
+      for (const slot of readSlots(sql, tomorrow, tomorrow)) {
+        const note =
+          slot.meal === "dinner" && slot.kind === "recipe" && slot.recipe ? prepAhead.get(slot.recipe.id) : undefined;
+        if (note && slot.recipe) await this.push(prepAheadMessage(slot.recipe, note));
+      }
+    } catch (error) {
+      // The scheduler swallows callback errors, so report them here.
+      Sentry.captureException(error);
+      throw error;
+    } finally {
+      await this.scheduleDailyRuns();
+    }
+  }
+
+  /**
+   * Proposes the Week starting on `start` unless any of its dinners is planned, by hand or by an
+   * earlier Proposal: a Week someone started is never proposed again. Returns the Week proposed.
+   */
+  private proposeIfUnstarted(start: LocalDate): Week | null {
+    const { sql } = this.ctx.storage;
+    const context: ToolContext = { caller: null };
+    // The check and the Proposal in one transaction, so nothing planned in between is rolled over.
+    const outcome = this.ctx.storage.transactionSync(() => {
+      const week = handlers.get_week(sql, { date: start }, context);
+      if (!week.ok || isStarted(week.value)) return null;
+      const proposed = handlers.propose_week(sql, ProposeWeekInput.parse({ date: start }), context);
+      return proposed.ok ? { week: proposed.value, revision: this.bumpRevision() } : null;
+    });
+    if (!outcome) return null;
+    this.notify("plan", outcome.revision);
+    return outcome.week;
+  }
+
+  /**
+   * Sends `message` to every device that chose its kind. A device its push service no longer knows
+   * is forgotten; one it refuses is reported and kept, and the others are still sent it.
+   */
+  private async push(message: PushMessage): Promise<void> {
+    const push = openPush(this.env);
+    if (!push) return;
+    const { sql } = this.ctx.storage;
+    for (const subscription of subscriptionsFor(sql, message.kind)) {
+      try {
+        if ((await push.send(subscription, message)) === "gone") removePushSubscription(sql, subscription.endpoint);
+      } catch (error) {
+        if (!(error instanceof PushError)) throw error;
+        Sentry.captureException(error);
+      }
+    }
+  }
+
+  /** Tells the devices that chose it what waits on the review screen now, if anything does. */
+  private async pushReview(): Promise<void> {
+    const { sql } = this.ctx.storage;
+    const drafts = handlers.list_drafts(sql, {}, { caller: null });
+    const suggestions = handlers.list_suggestions(sql, {}, { caller: null });
+    const message = reviewMessage({
+      drafts: drafts.ok ? drafts.value.length : 0,
+      suggestions: suggestions.ok ? suggestions.value.length : 0,
+    });
+    if (message) await this.push(message);
+  }
+
+  /**
    * The Calendar Feed for `token`, or null if it is not the current one. Called by the Worker over
    * RPC for `/cal/<token>.ics`, which bypasses Access (ADR 0019); never callable over the WebSocket.
    */
@@ -741,7 +864,7 @@ class HouseholdAgent extends Agent<Env> {
       throw error;
     } finally {
       // A failed night must not stop the next one.
-      await this.scheduleNightly();
+      await this.scheduleDailyRuns();
     }
   }
 
@@ -787,7 +910,7 @@ class HouseholdAgent extends Agent<Env> {
 
     const revision = this.bumpRevision();
     for (const topic of ChangeTopic.options) this.notify(topic, revision);
-    await this.scheduleNightly();
+    await this.scheduleDailyRuns();
     return Response.json({ ok: true });
   }
 
@@ -879,17 +1002,21 @@ class HouseholdAgent extends Agent<Env> {
     if (key && !photoInUse(this.ctx.storage.sql, key)) await this.env.BUCKET.delete(key);
   }
 
-  /** Keeps the nightly export at 03:00 and the Drive sync at 04:00, in the Household's timezone. */
-  private async scheduleNightly(): Promise<void> {
+  /**
+   * Keeps the nightly export at 03:00, the Drive sync at 04:00 and the morning's notifications at
+   * 08:00, in the Household's timezone.
+   */
+  private async scheduleDailyRuns(): Promise<void> {
     await this.scheduleDaily("nightlyExport", NIGHTLY_EXPORT_TIME);
     await this.scheduleDaily("nightlyDriveSync", DRIVE_SYNC_TIME);
+    await this.scheduleDaily("morningPushes", MORNING_PUSH_TIME);
   }
 
   /**
    * Keeps exactly one upcoming run of `callback`, at the next `time` in the Household's timezone.
    * Only future runs are reconciled, so the run in progress is left for the scheduler to complete.
    */
-  private async scheduleDaily(callback: "nightlyExport" | "nightlyDriveSync", time: string): Promise<void> {
+  private async scheduleDaily(callback: DailyRun, time: string): Promise<void> {
     const household = this.household();
     const now = new Date();
     const upcoming = (await this.listSchedules()).filter(

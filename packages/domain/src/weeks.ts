@@ -91,6 +91,11 @@ export function nextWeekStart(week: WeekSpan): LocalDate {
   return addDays(week.endDate, 1);
 }
 
+/** Whether someone has started the Week: any of its dinners is planned, by hand or by a Proposal. */
+export function isStarted(week: Week): boolean {
+  return week.slots.some((slot) => slot.meal === "dinner" && slot.kind !== "unplanned");
+}
+
 /** Every date of the Week, in order. */
 export function weekDates(week: WeekSpan): LocalDate[] {
   const dates: LocalDate[] = [];
