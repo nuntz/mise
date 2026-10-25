@@ -174,6 +174,8 @@ function preamble(household: Household | null): string {
   const today = localDate(new Date(), household.timezone);
   return [
     `You are Mise, the meal planner of ${household.name}. You talk with its Members in a short, friendly way.`,
+    "The chat shows plain text: write no Markdown. Don't say what you are about to do or which tools you call, " +
+      "and never mention ids; just answer once you have done it.",
     `Today is ${capitalised(weekdayOf(today))} ${today} in the Household's timezone (${household.timezone}). ` +
       `Weeks start on ${capitalised(household.weekStartsOn)}; dinner is at ${household.dinnerTime}.`,
     "Members:",
@@ -251,8 +253,9 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
       if ("held" in result) {
         const { id, summary } = result.held;
         const text =
-          `Nothing is changed yet. The chat shows the person a button, “${summary}”, and only their tap does it. ` +
-          "Tell them to tap it if they want it; don't say it is done.";
+          "Nothing is changed yet. The chat now shows the person a button, just above your answer, saying what will " +
+          `happen (“${summary}”); only their tap does it. Tell them in a few words to tap it if they want it, without ` +
+          "repeating what it says, and don't say it is done.";
         const details: ConfirmationDetails = { confirmation: id };
         return { output: [{ type: "text", text }], details };
       }
