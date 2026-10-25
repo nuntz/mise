@@ -324,14 +324,16 @@ describe("typical turns", () => {
         ["propose_week", { date: MONDAY, reroll: true }],
       ]),
     );
+    // Proposed rather than set by hand, which proposing again would keep anyway.
     const household = await familyHousehold();
-    await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
+    await household.callTool("propose_week", { date: MONDAY });
+    const proposed = (await dinnerOn(household, TUESDAY))?.recipe?.id;
 
     const reply = await household.chat("Re-propose the week but keep Tuesday", ON_THE_WEEK);
 
     expect(reply).toMatchObject({ ok: true });
     const dinners = (await weekOf(household, MONDAY)).slots.filter((slot) => slot.meal === "dinner");
-    expect(dinners.find((slot) => slot.date === TUESDAY)).toMatchObject({ recipe: { id: 2 }, locked: true });
+    expect(dinners.find((slot) => slot.date === TUESDAY)).toMatchObject({ recipe: { id: proposed }, locked: true });
     expect(dinners.filter((slot) => slot.recipe !== null)).toHaveLength(7);
   });
 
