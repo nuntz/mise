@@ -194,6 +194,46 @@ describe("what the agent is told", () => {
   });
 });
 
+describe("what the agent is offered, as Anthropic takes it", () => {
+  // Anthropic takes a tool's input as one object, and pi-ai sends only the root's `properties` and
+  // `required`: a schema of alternatives at the root reaches the model as a tool without parameters.
+  test("every tool's input is one object with its properties at the root", async () => {
+    const offered: { name: string; parameters: { type?: string; properties?: object; oneOf?: unknown } }[][] = [];
+    scriptModel((context) => {
+      const system = context.messages.find((message) => (message.role as string) === "system") as
+        | { toolsAdded?: (typeof offered)[number] }
+        | undefined;
+      offered.push(system?.toolsAdded ?? []);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    for (const tool of offered[0] ?? []) {
+      expect(tool.parameters, tool.name).toMatchObject({ type: "object", properties: expect.any(Object) });
+      expect(tool.parameters, tool.name).not.toHaveProperty("oneOf");
+    }
+    const setSlot = offered[0]?.find((tool) => tool.name === "set_slot");
+    expect(Object.keys(setSlot?.parameters.properties ?? {})).toEqual(
+      expect.arrayContaining(["date", "meal", "kind", "recipeId", "overrides"]),
+    );
+    expect(setSlot?.parameters).toMatchObject({ required: ["date", "meal", "kind"] });
+  });
+
+  test("“a rice bowl for breakfast Friday” plans breakfast", async () => {
+    scriptModel(caller([["set_slot", { date: FRIDAY, meal: "breakfast", kind: "recipe", recipeId: 2 }]]));
+    const household = await familyHousehold();
+
+    await household.chat("Rice bowl for breakfast Friday", ON_THE_WEEK);
+
+    const breakfast = (await weekOf(household, FRIDAY)).slots.find(
+      (slot) => slot.date === FRIDAY && slot.meal === "breakfast",
+    );
+    expect(breakfast).toMatchObject({ kind: "recipe", recipe: { id: 2 } });
+  });
+});
+
 describe("who is speaking", () => {
   test("each turn is shown to the model with its speaker and where the chat was opened, and its tools run as them", async () => {
     const seen: string[] = [];

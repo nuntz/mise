@@ -120,7 +120,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "The Week containing `date` (YYYY-MM-DD), or this Week without one: every breakfast, lunch and dinner, " +
     "with its Recipe, Diners, Guests, Conflicts, whether it is Locked, and the Proposer's `reason` for a proposed one.",
   set_slot:
-    "Sets what a Slot is: a Recipe (not a Draft), leftovers, eating out, unplanned or skipped. Refused with " +
+    "Sets what a Slot is, at breakfast, lunch or dinner: a Recipe (not a Draft, `recipeId` with kind `recipe`), " +
+    "leftovers, eating out, unplanned or skipped. Refused with " +
     "`constraint_conflict` if it would bring a Conflict, unless `overrides` gives the person's reason for each, " +
     "which waits for their tap.",
   set_diners:
@@ -252,7 +253,7 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
   return {
     name,
     description,
-    parameters: Type.Unsafe(schema),
+    parameters: Type.Unsafe(asOneObject(schema)),
     async execute(args, api) {
       const result = await host.callTool(name, args, await host.speakerIn(api.conversationId));
       if ("held" in result) {
@@ -267,6 +268,46 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
       if (!result.ok) throw new Error(JSON.stringify(result.error));
       return { output: [{ type: "text", text: JSON.stringify(result.value) }] };
     },
+  };
+}
+
+type JsonSchema = {
+  type?: string;
+  properties?: Record<string, unknown>;
+  required?: string[];
+  oneOf?: JsonSchema[];
+  anyOf?: JsonSchema[];
+};
+
+/**
+ * A tool's input as one object. Anthropic takes a tool's input that way, and pi-ai sends only the
+ * root's `properties` and `required`, so alternatives at the root (`set_slot`'s, one for a Recipe and
+ * one for every other kind) would reach the model as a tool without parameters. Their properties are
+ * merged, a property the alternatives describe differently taking any of its descriptions, and only
+ * what every alternative requires is required; the household still validates the call as it is.
+ */
+function asOneObject(schema: JsonSchema): JsonSchema {
+  const alternatives = schema.oneOf ?? schema.anyOf;
+  if (!alternatives) return schema;
+  const properties: Record<string, unknown[]> = {};
+  for (const alternative of alternatives) {
+    for (const [key, property] of Object.entries(alternative.properties ?? {})) {
+      const seen = (properties[key] ??= []);
+      if (!seen.some((other) => JSON.stringify(other) === JSON.stringify(property))) seen.push(property);
+    }
+  }
+  const required = alternatives
+    .map((alternative) => alternative.required ?? [])
+    .reduce((all, some) => all.filter((key) => some.includes(key)));
+  return {
+    type: "object",
+    properties: Object.fromEntries(
+      Object.entries(properties).map(([key, [only, ...more]]) => [
+        key,
+        more.length > 0 ? { anyOf: [only, ...more] } : only,
+      ]),
+    ),
+    required,
   };
 }
 
