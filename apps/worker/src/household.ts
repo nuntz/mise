@@ -2,6 +2,8 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { type ConversationId, createRegistry, Harness } from "@earendil-works/pi-durable";
 import {
   addDays,
+  BACKUP_PREFIX,
+  backupsToPrune,
   type Caller,
   type ChangeNotice,
   ChangeTopic,
@@ -127,6 +129,9 @@ const RESTORE_STATUS: Record<RestoreError["code"], number> = {
 
 // Once per isolate: the channel is shared by every Household it runs.
 reportWakeErrors();
+
+/** The most keys one R2 delete takes. */
+const R2_DELETE_LIMIT = 1000;
 
 /** The scheduler callbacks the household runs once a day. */
 type DailyRun = "nightlyExport" | "nightlyDriveSync" | "morningPushes";
@@ -850,7 +855,10 @@ class HouseholdAgent extends Agent<Env> {
     return readCalendarFeed(this.ctx.storage.sql, token, origin, new Date());
   }
 
-  /** Writes tonight's export to R2, then schedules tomorrow's. Run by the scheduler at 03:00 Household time. */
+  /**
+   * Writes tonight's Backup to R2, prunes old ones, then schedules tomorrow's. Run by the scheduler
+   * at 03:00 Household time.
+   */
   async nightlyExport(): Promise<void> {
     try {
       const household = this.household();
@@ -858,6 +866,7 @@ class HouseholdAgent extends Agent<Env> {
       await this.env.BUCKET.put(exportKey(localDate(new Date(), household.timezone)), await this.exportFile(), {
         httpMetadata: { contentType: "application/json" },
       });
+      await this.pruneBackups();
     } catch (error) {
       // The scheduler swallows callback errors, so report them here.
       Sentry.captureException(error);
@@ -865,6 +874,19 @@ class HouseholdAgent extends Agent<Env> {
     } finally {
       // A failed night must not stop the next one.
       await this.scheduleDailyRuns();
+    }
+  }
+
+  /** Deletes the Backups retention no longer keeps (ADR 0006). A failure leaves them for the next night. */
+  private async pruneBackups(): Promise<void> {
+    try {
+      const pruned = backupsToPrune(await this.listKeys(BACKUP_PREFIX));
+      for (let i = 0; i < pruned.length; i += R2_DELETE_LIMIT) {
+        await this.env.BUCKET.delete(pruned.slice(i, i + R2_DELETE_LIMIT));
+      }
+    } catch (error) {
+      // Tonight's Backup is written; only report this.
+      Sentry.captureException(error);
     }
   }
 
@@ -891,7 +913,7 @@ class HouseholdAgent extends Agent<Env> {
 
   /** The export as a file: deterministic, so the same data always gives the same bytes. */
   private async exportFile(): Promise<string> {
-    return `${JSON.stringify(exportHousehold(this.ctx.storage.sql, await this.photoKeys()), null, 2)}\n`;
+    return `${JSON.stringify(exportHousehold(this.ctx.storage.sql, await this.listKeys(PHOTO_PREFIX)), null, 2)}\n`;
   }
 
   private async restore(request: Request): Promise<Response> {
@@ -1039,11 +1061,12 @@ class HouseholdAgent extends Agent<Env> {
     return result.ok ? result.value : null;
   }
 
-  private async photoKeys(): Promise<string[]> {
+  /** Every R2 key under a prefix, across as many list pages as it takes. */
+  private async listKeys(prefix: string): Promise<string[]> {
     const keys: string[] = [];
     let cursor: string | undefined;
     do {
-      const page = await this.env.BUCKET.list({ prefix: PHOTO_PREFIX, cursor });
+      const page = await this.env.BUCKET.list({ prefix, cursor });
       keys.push(...page.objects.map((object) => object.key));
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);

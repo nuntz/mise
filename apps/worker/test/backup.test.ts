@@ -612,6 +612,27 @@ describe("nightly export", () => {
     ]);
   });
 
+  test("the nightly Backup prunes old ones once tonight's is written, and leaves a file put there by hand", async () => {
+    const household = freshHousehold();
+    await household.callTool("setup_household", sampleHousehold);
+    const tonight = exportKey(localDate(new Date(), sampleHousehold.timezone));
+    // January 2020's 31 nights, then tonight: the 2nd is neither among the newest 30 nor its month's earliest.
+    const january = Array.from({ length: 31 }, (_, i) => exportKey(`2020-01-${String(i + 1).padStart(2, "0")}`));
+    const byHand = "exports/before-migration.json";
+    for (const key of [...january, byHand]) await env.BUCKET.put(key, "{}");
+    onTestFinished(() => env.BUCKET.delete([...january, byHand, tonight]));
+
+    await household.nightlyExport();
+
+    const listed = await env.BUCKET.list({ prefix: "exports/" });
+    const left = listed.objects.map((object) => object.key);
+    expect(left).toContain(tonight);
+    expect(left).toContain(byHand);
+    expect(left).toContain("exports/2020-01-01.json");
+    expect(left).not.toContain("exports/2020-01-02.json");
+    expect(left).toHaveLength(32);
+  });
+
   test("nothing is scheduled before the Household is set up", async () => {
     expect(await freshHousehold().listSchedules()).toEqual([]);
   });

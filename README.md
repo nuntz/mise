@@ -64,7 +64,7 @@ Mise reads the folder as a Google Cloud service account, so any Google account c
 4. Copy the folder's id, the end of its URL: `https://drive.google.com/drive/folders/<folder id>`.
 5. Add both to your ESC environment, as `infra/Pulumi.example.yaml` shows: `mise:driveFolderId`, and `mise:googleServiceAccountKey` as a secret holding the key file's JSON on one line. `bun run wizard` asks for the key file and the folder id and does this for you. They become the `DRIVE_FOLDER_ID` and `GOOGLE_SERVICE_ACCOUNT_KEY` Worker secrets on the next deploy.
 
-The sync runs at 04:00 Household time, after the nightly export. The model reads each new or changed Doc, so the Anthropic key is needed too. One sync reads at most 25 Docs, and the next one carries on. Without both settings there is no sync, and "Sync Drive now" says so.
+The sync runs at 04:00 Household time, after the nightly Backup. The model reads each new or changed Doc, so the Anthropic key is needed too. One sync reads at most 25 Docs, and the next one carries on. Without both settings there is no sync, and "Sync Drive now" says so.
 
 ## Notifications
 
@@ -72,11 +72,11 @@ Each phone, tablet or computer can turn on notifications under Household → Not
 
 At 08:00 Household time, two days before a Week starts, Mise proposes it if none of its dinners is planned yet, and says so. It never proposes again a Week someone has started, even with one dinner out. The same morning it asks for a pantry check if Staples are due, and every morning it sends tomorrow's dinner's Prep-ahead note. A Drive sync says what it left on the review screen, and Suggestions say so when they arrive after an import.
 
-Notifications need a VAPID key: a P-256 key pair that identifies Mise to Apple's, Google's and Mozilla's push services, with no account to register. `bun run wizard` makes one with `openssl` and puts it in your ESC environment as `mise:vapidPrivateKey`, which becomes the `VAPID_PRIVATE_KEY` Worker secret; `VAPID_SUBJECT` is set to `https://<your hostname>`. To make one by hand, see `infra/Pulumi.example.yaml`. **Keep the key**: every device subscribes with it, so a new key turns notifications off on every device until it turns them on again. Without the key there are no notifications, and the Notifications screen says so. The devices are in the nightly export, so a restore keeps them.
+Notifications need a VAPID key: a P-256 key pair that identifies Mise to Apple's, Google's and Mozilla's push services, with no account to register. `bun run wizard` makes one with `openssl` and puts it in your ESC environment as `mise:vapidPrivateKey`, which becomes the `VAPID_PRIVATE_KEY` Worker secret; `VAPID_SUBJECT` is set to `https://<your hostname>`. To make one by hand, see `infra/Pulumi.example.yaml`. **Keep the key**: every device subscribes with it, so a new key turns notifications off on every device until it turns them on again. Without the key there are no notifications, and the Notifications screen says so. The devices are in the nightly Backup, so a restore keeps them.
 
 ## Backup and restore
 
-At 03:00 Household time the household Durable Object writes a JSON export of all Household data to R2 at `exports/<date>.json` (ADR 0006). To take one by hand or restore one into a fresh deployment:
+At 03:00 Household time the household Durable Object writes a Backup of all Household data to R2 at `exports/<date>.json`. It keeps the newest 30 Backups and the earliest of every month, and deletes the rest; a file you put under `exports/` yourself is never deleted (ADR 0006). To take one by hand or restore one into a fresh deployment:
 
 ```sh
 cloudflared access login https://mise.example.com

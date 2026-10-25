@@ -44,6 +44,10 @@ A dislike; a Recipe that violates it is scored down but can still be chosen.
 **Allergen**:
 A substance from the canonical list (peanut, milk, sesame, …) that a Hard Constraint can name.
 
+**Backup**:
+A copy of all Household data taken every night, which can be restored into an empty household. Recipe photos are referenced, not copied.
+_Avoid_: Export, dump, snapshot
+
 ## Recipes and ingredients
 
 **Recipe**:
