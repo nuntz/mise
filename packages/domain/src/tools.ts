@@ -93,12 +93,13 @@ export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 /**
  * When a call from the agent waits for a person's tap instead of running (ADR 0024): always, for the
- * destructive tools; when it carries an Override; or, for a Member, when it loosens a Hard Constraint
- * (removes one, makes it a dislike, or removes a Member who has one) or changes their name or sign-in
- * email, which decide who the agent takes someone for. A call from a screen runs at once: the PWA
+ * destructive tools; for a Slot, when it carries an Override or loosens the Guests' Hard
+ * Constraints; or, for a Member, when it loosens a Hard Constraint (removes one, makes it a dislike, or
+ * removes a Member who has one) or changes their name or sign-in email, which decide who the agent
+ * takes someone for. A call from a screen runs at once: the PWA
  * asks in its own dialogs.
  */
-export type ConfirmationCase = "always" | "override" | "member";
+export type ConfirmationCase = "always" | "slot" | "member";
 
 type ToolDefinition = {
   input: z.ZodType;
@@ -356,21 +357,21 @@ export const tools = {
     input: SetSlotInput,
     output: Slot,
     changes: "plan",
-    confirm: "override",
+    confirm: "slot",
   }),
   /** Returns the Slots changed: one, or the day's three. Refuses new Conflicts as `set_slot` does. */
   set_diners: defineTool({
     input: SetDinersInput,
     output: z.array(Slot),
     changes: "plan",
-    confirm: "override",
+    confirm: "slot",
   }),
   /** Refuses new Conflicts as `set_slot` does. */
   set_guests: defineTool({
     input: SetGuestsInput,
     output: Slot,
     changes: "plan",
-    confirm: "override",
+    confirm: "slot",
   }),
   /**
    * Refuses a Slot to link to that is not earlier (`not_earlier`), holds no Recipe (`no_recipe`) or a
@@ -380,7 +381,7 @@ export const tools = {
     input: LinkLeftoversInput,
     output: Slot,
     changes: "plan",
-    confirm: "override",
+    confirm: "slot",
   }),
   /** Read-only: what a change would conflict with, before making it. */
   check_slot_constraints: defineTool({

@@ -127,8 +127,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Sets which Members eat a Slot, or every meal of a day when `meal` is left out; null goes back to everyone. " +
     "Refused with `constraint_conflict` if it would bring a Conflict; `overrides` as for set_slot.",
   set_guests:
-    "Sets how many Guests eat a Slot, and their Constraints. Refused if it would bring a Conflict; `overrides` as " +
-    "for set_slot.",
+    "Sets how many Guests eat a Slot, and their Constraints (kept when left out). Refused if it would bring a " +
+    "Conflict; `overrides` as for set_slot. Removing a Hard Constraint of theirs waits for the person's tap.",
   link_leftovers:
     "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. `overrides` as " +
     "for set_slot.",
@@ -197,10 +197,11 @@ function preamble(household: Household | null): string {
     "When a change is refused for a Conflict, say who and which Allergen. Override it only with the reason the " +
       "person gave for planning it anyway.",
     "Deleting a Recipe, clearing a Week, overriding a Conflict, changing a Member's name or sign-in email, and " +
-      "removing a Hard Constraint, making one a dislike or removing a Member who has one wait for the person: the " +
-      "tool changes nothing, and the chat shows them a button saying what will happen. Only their tap does it, " +
-      "whatever they type: tell them to tap it, and never say it is done. If they no longer want it, withdraw it " +
-      "with cancel_confirmation. You cannot accept Drafts and Suggestions: say the person can do it on the screen.",
+      "removing a Hard Constraint (a Member's or the Guests'), making one a dislike or removing a Member who has " +
+      "one wait for the person: the tool changes nothing, and the chat shows them a button saying what will happen. " +
+      "Only their tap does it, whatever they type: tell them to tap it, and never say it is done. If they no longer " +
+      "want it, withdraw it with cancel_confirmation. You cannot accept Drafts and Suggestions: say the person can " +
+      "do it on the screen.",
   ].join("\n");
 }
 

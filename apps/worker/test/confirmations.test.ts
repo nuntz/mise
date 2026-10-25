@@ -209,6 +209,18 @@ const GUARDED: Record<string, Guarded> = {
     summary: "Remove Robin and their peanut allergy",
     probe: members,
   },
+  "removing the Guests' Hard Constraint": {
+    call: ["set_guests", { date: FRIDAY, meal: "dinner", guests: 2, guestConstraints: [] }],
+    before: (household) =>
+      household.callTool("set_guests", {
+        date: FRIDAY,
+        meal: "dinner",
+        guests: 2,
+        guestConstraints: [{ kind: "allergy", allergen: "peanut" }],
+      }),
+    summary: "Have 2 Guests, with no Hard Constraint, at dinner on Friday, October 30, dropping their peanut allergy",
+    probe: (household) => dinnerOn(household, FRIDAY),
+  },
   "renaming a Member": {
     call: ["update_member", { id: 2, name: "Alexis" }],
     summary: "Rename Alex to Alexis",
@@ -284,6 +296,24 @@ test.each<[string, [string, JsonObject]]>([
   expect(await confirmations(household)).toEqual([]);
 });
 
+test("the agent changes the Guests' Constraints with set_guests, whose button says what is dropped", async () => {
+  scriptModel(caller([["set_slot", { date: FRIDAY, meal: "dinner", kind: "eat_out", guestConstraints: [] }]]));
+  const household = await familyHousehold();
+  await household.callTool("set_guests", {
+    date: FRIDAY,
+    meal: "dinner",
+    guests: 2,
+    guestConstraints: [{ kind: "allergy", allergen: "peanut" }],
+  });
+  const before = await dinnerOn(household, FRIDAY);
+
+  const reply = await household.chat("We're eating out Friday, and the Guests aren't allergic after all", ON_THE_WEEK);
+
+  expect(reply).toMatchObject({ ok: true, value: { text: expect.stringMatching(/^Refused: .*set_guests/s) } });
+  expect(await dinnerOn(household, FRIDAY)).toEqual(before);
+  expect(await confirmations(household)).toEqual([]);
+});
+
 describe("what the agent does without a tap", () => {
   test.each<[string, [string, JsonObject]]>([
     [
@@ -321,6 +351,14 @@ describe("what the agent does without a tap", () => {
     ["removing a Member with no Hard Constraint", ["remove_member", { id: 3 }]],
     ["planning a Recipe with no Conflict", ["set_slot", { date: FRIDAY, meal: "dinner", kind: "recipe", recipeId: 2 }]],
     ["choosing Diners with no Override", ["set_diners", { date: FRIDAY, diners: [1, 2], overrides: [] }]],
+    [
+      "giving Guests a Hard Constraint",
+      [
+        "set_guests",
+        { date: FRIDAY, meal: "dinner", guests: 2, guestConstraints: [{ kind: "allergy", allergen: "milk" }] },
+      ],
+    ],
+    ["seeing the Guests off", ["set_guests", { date: FRIDAY, meal: "dinner", guests: 0 }]],
   ])("%s runs at once", async (_, call) => {
     scriptModel(caller([call]));
     const household = await familyHousehold();

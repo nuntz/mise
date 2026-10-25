@@ -4,8 +4,8 @@ import {
   describeClearing,
   describeDeletion,
   describeMemberChange,
-  describeOverride,
   describeRemoval,
+  describeSlotChange,
   hardConstraintsOf,
   isToolName,
   type LocalDate,
@@ -36,7 +36,7 @@ import { handlers, readMembers } from "./tools";
 /** What a held call's button says, and the state it describes, serialised to compare. */
 type Held = { summary: string; state: string };
 
-type OverridableTool = "set_slot" | "set_diners" | "set_guests" | "link_leftovers";
+type SlotTool = "set_slot" | "set_diners" | "set_guests" | "link_leftovers";
 type MemberTool = "update_member" | "update_member_constraints" | "remove_member";
 
 /**
@@ -134,8 +134,8 @@ function heldCall(sql: SqlStorage, name: ToolName, input: unknown): ToolResult<H
       if (name === "delete_recipe") return deletion(sql, input as ParsedToolInput<"delete_recipe">);
       if (name === "clear_week") return clearing(sql, input as ParsedToolInput<"clear_week">);
       throw new Error(`No confirmation describes ${name}`);
-    case "override":
-      return override(sql, name as OverridableTool, input as ParsedToolInput<OverridableTool>);
+    case "slot":
+      return slotHeld(sql, name as SlotTool, input as ParsedToolInput<SlotTool>);
     case "member":
       return memberChange(sql, name as MemberTool, input as ParsedToolInput<MemberTool>);
   }
@@ -154,34 +154,38 @@ function clearing(sql: SqlStorage, input: ParsedToolInput<"clear_week">): ToolRe
 }
 
 /**
- * A change carrying Overrides. It describes the Slots changed (and the one Leftovers are linked to),
- * the Recipe it plans and the Members, whose Constraints its Conflicts come from.
+ * A change to a Slot carrying Overrides, or loosening its Guests' Hard Constraints. It describes the
+ * Slots changed (and the one Leftovers are linked to), the Recipe it plans and the Members, whose
+ * Constraints its Conflicts come from.
  */
-function override(
-  sql: SqlStorage,
-  name: OverridableTool,
-  input: ParsedToolInput<OverridableTool>,
-): ToolResult<Held | null> {
+function slotHeld(sql: SqlStorage, name: SlotTool, input: ParsedToolInput<SlotTool>): ToolResult<Held | null> {
   const overrides: Override[] = input.overrides ?? [];
-  if (overrides.length === 0) return { ok: true, value: null };
+  const given = "guestConstraints" in input ? input.guestConstraints : undefined;
+  if (overrides.length === 0 && given === undefined) return { ok: true, value: null };
+
+  const meal = "meal" in input ? input.meal : undefined;
+  const slots = slotsOn(sql, input.date, meal);
+  if (!slots.ok) return slots;
+  const current = slots.value[0]?.guestConstraints ?? [];
+  const dropped = given === undefined ? [] : loosenedConstraints(current, given);
+  if (overrides.length === 0 && dropped.length === 0) return { ok: true, value: null };
   // A button names a Slot's new Recipe and the Conflicts overridden; anything else would run unsaid.
+  if (name === "set_slot" && dropped.length > 0) {
+    return refused("the Guests' Constraints: change them with set_guests, whose button says what is dropped");
+  }
   if (name === "set_slot" && ["note", "diners", "guests", "guestConstraints"].some((field) => field in input)) {
-    return foldedIn("a note, Diners or Guests");
+    return refused("a note, Diners or Guests: make that change in a separate call");
   }
   const planned = name === "set_slot" && "recipeId" in input ? input.recipeId : null;
   const recipe = planned === null ? null : readRecipe(sql, planned);
   if (planned !== null && !recipe) return recipeNotFound(planned);
 
-  const meal = "meal" in input ? input.meal : undefined;
-  const slots = slotsOn(sql, input.date, meal);
-  if (!slots.ok) return slots;
   const of = name === "link_leftovers" ? (input as ParsedToolInput<"link_leftovers">).of : null;
   const linked = of ? slotsOn(sql, of.date, of.meal) : { ok: true as const, value: [] };
   if (!linked.ok) return linked;
 
   const members = readMembers(sql);
-  const guestConstraints =
-    ("guestConstraints" in input ? input.guestConstraints : undefined) ?? slots.value[0]?.guestConstraints ?? [];
+  const guestConstraints = given ?? current;
   const overridden: OverriddenFor[] = overrides.map(({ who, allergen }) => {
     const constraints = who === "guests" ? guestConstraints : (members.find((m) => m.id === who)?.constraints ?? []);
     const hard = hardConstraintsOf({ constraints }).find((constraint) => constraint.allergen === allergen);
@@ -192,15 +196,15 @@ function override(
   return {
     ok: true,
     value: {
-      summary: describeOverride(change, overridden),
+      summary: describeSlotChange(change, overridden, dropped),
       state: JSON.stringify({ slots: slots.value, linked: linked.value, recipe, members }),
     },
   };
 }
 
 function slotChange(
-  name: OverridableTool,
-  input: ParsedToolInput<OverridableTool>,
+  name: SlotTool,
+  input: ParsedToolInput<SlotTool>,
   title: string,
   members: readonly Member[],
 ): SlotChangeSummary {
@@ -260,12 +264,12 @@ function memberChange(sql: SqlStorage, name: MemberTool, input: ParsedToolInput<
 }
 
 /** Refuses a call that would fold `what` into a change waiting for a tap, which its button doesn't name. */
-function foldedIn<T>(what: string): ToolResult<T> {
+function refused<T>(what: string): ToolResult<T> {
   return {
     ok: false,
     error: {
       code: "invalid_input",
-      message: `This change waits for the person's tap, and its button can't also change ${what}: make that change in a separate call.`,
+      message: `This change waits for the person's tap, and its button can't also change ${what}.`,
     },
   };
 }

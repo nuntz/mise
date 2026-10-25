@@ -77,16 +77,27 @@ const OVERRIDDEN: Record<HardConstraint["kind"], [string, string]> = {
   diet: ["avoids", "avoid"],
 };
 
-/** "Plan “Satay” for dinner on Friday, October 30 although Robin is allergic to peanut" */
-export function describeOverride(change: SlotChangeSummary, overridden: readonly OverriddenFor[]): string {
+/**
+ * A change to a Slot that needs a tap: the Conflicts it overrides, and the Guests' Hard Constraints
+ * it drops (only a change of Guests drops any).
+ * "Plan “Satay” for dinner on Friday, October 30 although Robin is allergic to peanut"
+ * "Have 2 Guests, with no Hard Constraint, at dinner on Friday, October 30, dropping their peanut allergy"
+ */
+export function describeSlotChange(
+  change: SlotChangeSummary,
+  overridden: readonly OverriddenFor[],
+  dropped: readonly HardConstraint[] = [],
+): string {
   const reasons = overridden.map(({ who, name, constraint, allergen }) => {
     const [one, many] = constraint ? OVERRIDDEN[constraint] : ["can't have", "can't have"];
     return `${name} ${who === "guests" ? many : one} ${allergenName(allergen)}`;
   });
-  return `${describeSlotChange(change)} although ${list(reasons)}`;
+  const dropping = dropped.length > 0 ? `, dropping their ${list(dropped.map(constraintName))}` : "";
+  const although = reasons.length > 0 ? ` although ${list(reasons)}` : "";
+  return `${slotChangeName(change)}${dropping}${although}`;
 }
 
-function describeSlotChange(change: SlotChangeSummary): string {
+function slotChangeName(change: SlotChangeSummary): string {
   switch (change.kind) {
     case "plan":
       return `Plan “${change.title}” for ${slotName(change)}`;
