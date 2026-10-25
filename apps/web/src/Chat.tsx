@@ -122,7 +122,14 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
   };
 
   return (
-    <Sheet labelledBy={titleId} class="sheet-chat" onEscape={() => props.onClose()}>
+    // On a touch screen a focused field brings up the keyboard, which covers the conversation it
+    // opened to read: the field waits for a tap there.
+    <Sheet
+      labelledBy={titleId}
+      class="sheet-chat"
+      focusField={!window.matchMedia?.("(pointer: coarse)").matches}
+      onEscape={() => props.onClose()}
+    >
       <div class="sheet-header">
         <div class="page-heading">
           <p class="overline">{t("chat.overline")}</p>

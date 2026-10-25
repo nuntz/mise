@@ -131,6 +131,7 @@ function watchScrolling() {
 
 afterEach(() => {
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  delete (window as { matchMedia?: unknown }).matchMedia;
 });
 
 test("the chat opens at its newest turn and follows the conversation as it grows", async () => {
@@ -198,6 +199,30 @@ test("offline, the chat can't be opened: the agent needs the connection", async 
   goOffline();
 
   expect(button.disabled).toBe(true);
+});
+
+/** A screen touched by a finger, where focusing a field brings up the keyboard; jsdom has no `matchMedia`. */
+function touchScreen() {
+  window.matchMedia = (query: string) => ({ matches: query === "(pointer: coarse)" }) as MediaQueryList;
+}
+
+test("with a mouse, the chat opens ready to type", async () => {
+  const { client } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }));
+  render(() => <App client={client} />);
+
+  const chat = await openChat();
+
+  await waitFor(() => expect(document.activeElement).toBe(messageBox(chat)));
+});
+
+test("on a touch screen, the chat opens on the conversation, not the keyboard", async () => {
+  touchScreen();
+  const { client } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }));
+  render(() => <App client={client} />);
+
+  const chat = await openChat();
+
+  await waitFor(() => expect(document.activeElement).toBe(chat));
 });
 
 test("the chat closes with its close button", async () => {

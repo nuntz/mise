@@ -2,12 +2,21 @@ import type { JSX } from "solid-js";
 
 /**
  * A sheet over the page that holds the focus until it closes: a modal dialog, labelled by the
- * element with id `labelledBy`, that focuses its first field on opening. Escape calls `onEscape`;
- * Tab and Shift+Tab go round its controls, not out to the page under it.
+ * element with id `labelledBy`, that focuses its first field on opening, or itself when `focusField`
+ * is false. Escape calls `onEscape`; Tab and Shift+Tab go round its controls, not out to the page
+ * under it.
  */
-export function Sheet(props: { labelledBy: string; onEscape: () => void; class?: string; children: JSX.Element }) {
+export function Sheet(props: {
+  labelledBy: string;
+  onEscape: () => void;
+  class?: string;
+  focusField?: boolean;
+  children: JSX.Element;
+}) {
   const focusFirst = (sheet: HTMLElement) =>
-    queueMicrotask(() => sheet.querySelector<HTMLElement>("input, textarea")?.focus());
+    queueMicrotask(() =>
+      (props.focusField === false ? sheet : sheet.querySelector<HTMLElement>("input, textarea"))?.focus(),
+    );
 
   return (
     <div class="sheet-backdrop">
@@ -16,6 +25,7 @@ export function Sheet(props: { labelledBy: string; onEscape: () => void; class?:
         role="dialog"
         aria-modal="true"
         aria-labelledby={props.labelledBy}
+        tabIndex={-1}
         ref={focusFirst}
         onKeyDown={(event) => {
           if (event.key === "Escape") props.onEscape();

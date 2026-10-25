@@ -45,6 +45,8 @@
   --type-title-sm: 600 20px / 24px var(--font-display);
   --type-numeral: 600 18px / 20px var(--font-display);
   --type-body: 400 15px / 22px var(--font-sans);
+  /* What's typed in a field: never under 16px, or iOS Safari zooms in on the field it focuses. */
+  --type-field: 400 16px / 22px var(--font-sans);
   --type-button: 700 15px / 20px var(--font-sans);
   --type-meta: 400 14px / 19px var(--font-sans);
   --type-label: 800 12px / 16px var(--font-sans);
@@ -123,6 +125,7 @@
   --type-title-sm: 600 22px / 26px var(--font-display);
   --type-numeral: 600 20px / 22px var(--font-display);
   --type-body: 400 17px / 25px var(--font-sans);
+  --type-field: 400 17px / 25px var(--font-sans);
   --type-button: 800 16px / 20px var(--font-sans);
   --type-meta: 400 17px / 23px var(--font-sans);
   --type-label: 800 13px / 16px var(--font-sans);

@@ -193,7 +193,7 @@ textarea {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--ink);
-  font: var(--type-body);
+  font: var(--type-field);
 }
 
 textarea {
