@@ -1,3 +1,4 @@
+import { evictDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
   type FauxResponseFactory,
@@ -492,6 +493,24 @@ describe("a long conversation", () => {
     expect(requests.some((request) => request.includes(SUMMARISER))).toBe(true);
     const largest = Math.max(...requests.map((request) => request.length / 4));
     expect(largest).toBeLessThan(80_000);
+  });
+});
+
+describe("a new agent model", () => {
+  test("once deployed, answers the turns of a Household whose conversation began on the old one", async () => {
+    scriptModel(() => fauxAssistantMessage("The old model answers."), { id: "old" });
+    const household = env.Household.getByName(crypto.randomUUID());
+    await household.callTool("setup_household", { name: "The Example Family" });
+    expect(await household.chat("Hello", ON_THE_WEEK)).toMatchObject({ value: { text: "The old model answers." } });
+
+    // A deploy: the Household starts again, on the new model.
+    scriptModel(() => fauxAssistantMessage("The new model answers."), { id: "new" });
+    await evictDurableObject(household);
+
+    expect(await household.chat("Hello again", ON_THE_WEEK)).toEqual({
+      ok: true,
+      value: { role: "agent", text: "The new model answers." },
+    });
   });
 });
 

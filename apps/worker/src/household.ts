@@ -157,7 +157,20 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   override async onStart(): Promise<void> {
+    await this.followAgentModel();
     await this.scheduleNightly();
+  }
+
+  /**
+   * Puts the conversation on the agent's model if a deploy changed it: Pi keeps the model a
+   * conversation began on, and the harness's default applies only to a new one.
+   */
+  private async followAgentModel(): Promise<void> {
+    const { model } = this.models;
+    const root = await (await this.harness.pi()).root(BACKGROUND_CONTEXT);
+    const current = (await root.agent(BACKGROUND_CONTEXT)).model;
+    if (current?.provider === model.provider && current.modelId === model.id) return;
+    await this.harness.session().setModel(model);
   }
 
   /** Remembers who opened the connection, as the Worker resolved them, for every tool call it makes. */
