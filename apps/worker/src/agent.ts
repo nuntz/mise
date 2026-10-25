@@ -117,8 +117,13 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   rate_recipe: "Rates a cooked Slot's Recipe for the Member speaking.",
   set_store_section_order: "Puts the Store Sections given first, in the order the Household walks its store.",
   get_calendar_token: "The calendar feed's token, for the feed's address; null until one is made on the screen.",
-  build_grocery_list: "Builds or rebuilds the Week's Grocery List from its plan and Staples.",
-  get_grocery_list: "The Week's Grocery List; null until it is first built.",
+  build_grocery_list:
+    "Builds or rebuilds the Week's Grocery List from its plan as it is now and the Staples low, out or always bought.",
+  get_grocery_list:
+    "The Week's Grocery List as it was last built; null until it is first built. `planChanged` or `staplesChanged` " +
+    "means it is out of date: rebuild it before saying what it holds or lacks. A Staple to buy that a planned Recipe " +
+    "also needs is bought on that Recipe's line, in the Recipe's amount, not on a line of its own; each line's " +
+    "`recipes` names the Recipes it is for.",
   set_have_tick: "Ticks a Grocery List line as already had, or unticks it, as of `at` (now).",
   add_grocery_line: "Adds a line to the Week's Grocery List.",
   upsert_staple: "Makes an Item a Staple, or changes how it is kept and checked.",
@@ -154,7 +159,9 @@ function preamble(household: Household | null): string {
     "",
     "Each message starts with who is speaking and the screen (and Week) they are looking at, in brackets. " +
       "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see.",
-    "Change things only through the tools. Answer from what they return: never guess what is planned, read it.",
+    "Change things only through the tools. Answer from what they return: never guess what is planned, read it. " +
+      "Don't say why something happened, or what a Week or list holds, unless a tool you just called says so; " +
+      "if the tools don't tell you, say you don't know.",
     "To explain a Proposal, use only each Slot's `reason` from `get_week`; don't invent others.",
     "When a change is refused for a Conflict, say who and which Allergen. You cannot override a Conflict, delete " +
       "anything, clear a Week, change or remove Members' Constraints, or accept Drafts and Suggestions: say the person " +

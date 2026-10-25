@@ -115,7 +115,7 @@ class HouseholdAgent extends Agent<Env> {
       const registry = createRegistry();
       registry.install(
         miseExtension({
-          callTool: (name, input, caller) => this.invokeTool(name, input, caller),
+          callTool: (name, input, caller) => this.invokeTool(name, input, caller, "agent"),
           speakerIn: (id) => this.callerAnswered(id),
         }),
       );
@@ -156,7 +156,7 @@ class HouseholdAgent extends Agent<Env> {
   /** The single entry point to every tool (ADR 0002). Input is validated against the registry. */
   @callable()
   async callTool(name: string, input: unknown): Promise<ToolResult<unknown>> {
-    return this.invokeTool(name, input, this.callerOf(getCurrentAgent().connection));
+    return this.invokeTool(name, input, this.callerOf(getCurrentAgent().connection), "client");
   }
 
   /**
@@ -204,10 +204,17 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   /** A tool call, as `caller`; the agent's calls come here too. */
-  private async invokeTool(name: string, input: unknown, caller: Caller | null): Promise<ToolResult<unknown>> {
+  private async invokeTool(
+    name: string,
+    input: unknown,
+    caller: Caller | null,
+    calledBy: "agent" | "client",
+  ): Promise<ToolResult<unknown>> {
     // One span per tool, named but without its input: inputs are Household data.
     const spanName = `tool ${isToolName(name) ? name : "unknown"}`;
-    return Sentry.startSpan({ name: spanName, op: "mise.tool" }, () => this.runTool(name, input, caller));
+    // Whether the agent or a client (a screen, or RPC from inside the deployment) made it.
+    const attributes = { "mise.called_by": calledBy };
+    return Sentry.startSpan({ name: spanName, op: "mise.tool", attributes }, () => this.runTool(name, input, caller));
   }
 
   private async runTool(name: string, input: unknown, caller: Caller | null): Promise<ToolResult<unknown>> {
