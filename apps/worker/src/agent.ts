@@ -1,6 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { type Models, Type } from "@earendil-works/pi-ai";
 import type {
+  CompactionSettings,
   Conversation,
   ConversationId,
   Cursor,
@@ -41,6 +42,33 @@ let replacement: ((env: Env) => AgentModels) | undefined;
  */
 export function useAgentModels(open: ((env: Env) => AgentModels) | undefined): void {
   replacement = open;
+}
+
+/** The most of the conversation a request shows the model: well under the 100,000 tokens above which Claude costs more. */
+const CONTEXT_LIMIT = 80_000;
+/** From how many tokens the conversation is summarised in the background, while the chat carries on. */
+const COMPACT_FROM = 50_000;
+/** How much of the newest conversation a summary leaves as it was said. */
+const KEEP_RECENT = 20_000;
+
+/**
+ * Compaction for the agent's model. Pi measures its thresholds back from the model's context window,
+ * so on Haiku's million tokens it would summarise only near a million, and every request above 100,000
+ * costs more. Pi has no setting for the context to work in, so `reserveTokens` (the room kept for the
+ * answer) holds back all of the window but `CONTEXT_LIMIT`; a summary may then be as long as an answer.
+ */
+export function agentCompaction({ models, model }: AgentModels): CompactionSettings {
+  const window = models.getModel(model.provider, model.id)?.contextWindow ?? 0;
+  if (window <= CONTEXT_LIMIT) return {};
+  return {
+    modelOverrides: {
+      [`${model.provider}/${model.id}`]: {
+        reserveTokens: window - CONTEXT_LIMIT,
+        backgroundTokens: CONTEXT_LIMIT - COMPACT_FROM,
+        keepRecentTokens: KEEP_RECENT,
+      },
+    },
+  };
 }
 
 /** Claude, with the deployment's Anthropic key (a Worker secret). */

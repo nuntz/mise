@@ -60,6 +60,7 @@ import { Agent, type Connection, type ConnectionContext, callable, getCurrentAge
 import { PiHarness } from "agents/harness/pi";
 import {
   type AgentCallResult,
+  agentCompaction,
   agentModels,
   miseExtension,
   recentChat,
@@ -138,7 +139,7 @@ class HouseholdAgent extends Agent<Env> {
           registry,
           onWake,
           // A failed run answers nothing more: later messages are not run against a stale question.
-          settings: { afterFailedRun: "withdraw" },
+          settings: { afterFailedRun: "withdraw", compaction: agentCompaction(this.models) },
           // Runs and model requests are traced, without what anyone said.
           telemetry: sentryTelemetry(),
         },

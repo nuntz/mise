@@ -476,6 +476,23 @@ describe("a long conversation", () => {
     expect(conversation).toHaveLength(84);
     expect(conversation[0]).toEqual({ role: "member", speaker: null, text: BIRTHDAY });
   });
+
+  test("on Haiku, with its million-token window, is compacted before a request reaches 80,000 tokens", async () => {
+    const requests: string[] = [];
+    scriptModel(rememberer(requests), { provider: "anthropic", id: "claude-haiku-5-5", contextWindow: 1_000_000 });
+    const household = env.Household.getByName(crypto.randomUUID());
+    await household.callTool("setup_household", { name: "The Example Family" });
+
+    // About 1,300 tokens a turn: some 100,000 tokens in all, were nothing compacted.
+    for (let turn = 1; turn <= 80; turn++) {
+      const chatter = `Turn ${turn}. ${"Some long chatter about what we might cook. ".repeat(60)}`;
+      expect(await household.chat(chatter, ON_THE_WEEK)).toMatchObject({ ok: true });
+    }
+
+    expect(requests.some((request) => request.includes(SUMMARISER))).toBe(true);
+    const largest = Math.max(...requests.map((request) => request.length / 4));
+    expect(largest).toBeLessThan(80_000);
+  });
 });
 
 describe("the agent's conversation and the export", () => {

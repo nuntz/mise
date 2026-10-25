@@ -79,10 +79,14 @@ export function caller(calls: [string, JsonObject][]): FauxResponseFactory {
 /**
  * Puts the agent of households started from now on a faux model that answers every request with
  * `respond`. A household's models are fixed when it starts, so script the model before using it.
- * Put it back with `useAgentModels(undefined)` after each test.
+ * Put it back with `useAgentModels(undefined)` after each test. `provider` and `id` name the model it
+ * stands in for, so settings for that model apply.
  */
-export function scriptModel(respond: FauxResponseFactory, { contextWindow }: { contextWindow?: number } = {}) {
-  const faux = fauxProvider({ models: [{ id: "scripted", contextWindow }] });
+export function scriptModel(
+  respond: FauxResponseFactory,
+  { contextWindow, provider, id = "scripted" }: { contextWindow?: number; provider?: string; id?: string } = {},
+) {
+  const faux = fauxProvider({ provider, models: [{ id, contextWindow }] });
   const models = createModels();
   models.setProvider(faux.provider);
   // Each request takes the next scripted response; one factory per request it might make.
