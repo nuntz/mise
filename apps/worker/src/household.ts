@@ -145,6 +145,8 @@ class HouseholdAgent extends Agent<Env> {
             // A failed run answers nothing more: later messages are not run against a stale question. That
             // holds for every speaker's: another Member's queued message is withdrawn too, and they resend it.
             afterFailedRun: "withdraw",
+            // One queued turn per run, so that a run's tools find its own speaker (`turnBeingAnswered`).
+            followUpMode: "one-at-a-time",
             compaction: agentCompaction(this.models),
             // A round's tool calls run in the order the model made them: a Slot locked before the Week is
             // proposed again is kept. They are quick calls to this household, so nothing is lost.
@@ -214,9 +216,11 @@ class HouseholdAgent extends Agent<Env> {
     const turn = recordTurn(sql, speaker, new Date().toISOString());
     const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), where: from.data, text: message.data });
     const entry: TurnData = { turn, text: message.data };
-    const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, () =>
-      this.harness.prompt(presented, { entry: { kind: TURN_ENTRY, data: entry } }),
-    );
+    // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
+    const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {
+      const { operationId } = await this.harness.submit(presented, { entry: { kind: TURN_ENTRY, data: entry } });
+      return this.harness.wait(operationId);
+    });
     this.notify("chat", this.bumpRevision());
     if (answer.status !== "done") {
       return { ok: false, error: { code: "unanswered", message: answer.reason ?? "The agent did not answer" } };

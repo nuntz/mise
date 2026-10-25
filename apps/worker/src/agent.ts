@@ -15,6 +15,7 @@ import {
   type ConfirmationStatus,
   type Constraint,
   capitalised,
+  changeTopicOf,
   type Household,
   ItemId,
   localDate,
@@ -282,6 +283,9 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
     name,
     description,
     parameters: Type.Unsafe(asOneObject(schema)),
+    // A tool that only reads runs again if the household was evicted during it; one that changes
+    // something is answered as interrupted instead, and never runs twice.
+    replay: changeTopicOf(name) ? "unsafe" : "safe",
     async execute(args, api) {
       const result = await host.callTool(name, args, await host.speakerIn(api.conversationId));
       if ("held" in result) {
