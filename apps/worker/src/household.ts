@@ -141,8 +141,15 @@ class HouseholdAgent extends Agent<Env> {
           models: this.models.models,
           registry,
           onWake,
-          // A failed run answers nothing more: later messages are not run against a stale question.
-          settings: { afterFailedRun: "withdraw", compaction: agentCompaction(this.models) },
+          settings: {
+            // A failed run answers nothing more: later messages are not run against a stale question. That
+            // holds for every speaker's: another Member's queued message is withdrawn too, and they resend it.
+            afterFailedRun: "withdraw",
+            compaction: agentCompaction(this.models),
+            // A round's tool calls run in the order the model made them: a Slot locked before the Week is
+            // proposed again is kept. They are quick calls to this household, so nothing is lost.
+            toolExecution: "sequential",
+          },
           // Runs and model requests are traced, and pi's own failures reported, without what anyone said.
           telemetry: sentryTelemetry(),
           onReport: piReports(),

@@ -335,6 +335,26 @@ describe("typical turns", () => {
     expect(dinners.filter((slot) => slot.recipe !== null)).toHaveLength(7);
   });
 
+  test("keeping Tuesday holds when the lock and the Proposal come in one round", async () => {
+    scriptModel((context) => {
+      if (context.messages.at(-1)?.role === "toolResult") return fauxAssistantMessage("Done.");
+      return fauxAssistantMessage(
+        [
+          fauxToolCall("lock_slot", { date: TUESDAY, meal: "dinner", locked: true }),
+          fauxToolCall("propose_week", { date: MONDAY, reroll: true }),
+        ],
+        { stopReason: "toolUse" },
+      );
+    });
+    const household = await familyHousehold();
+    await household.callTool("propose_week", { date: MONDAY });
+    const proposed = (await dinnerOn(household, TUESDAY))?.recipe?.id;
+
+    expect(await household.chat("Re-propose the week but keep Tuesday", ON_THE_WEEK)).toMatchObject({ ok: true });
+
+    expect(await dinnerOn(household, TUESDAY)).toMatchObject({ recipe: { id: proposed }, locked: true });
+  });
+
   test("“just the two of us Friday” sets Friday's Diners", async () => {
     scriptModel(caller([["set_diners", { date: FRIDAY, diners: [1, 2] }]]));
     const household = await familyHousehold();
