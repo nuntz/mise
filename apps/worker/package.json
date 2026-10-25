@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "seed": "bun scripts/seed.ts",
+    "screenshot": "bun scripts/screenshot.ts",
     "eval": "bun scripts/eval.ts",
     "test": "vitest run",
     "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p scripts"
@@ -24,6 +25,7 @@
     "@cloudflare/vitest-plugin": "1.4.6",
     "@types/bun": "1.4.3",
     "ical.js": "2.1.0",
+    "playwright": "1.64.0",
     "vitest": "5.0.5",
     "wrangler": "4.151.3"
   }

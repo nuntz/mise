@@ -2,6 +2,8 @@
 
 A self-hosted family meal planner. See `SPEC.md` for the product and architecture.
 
+<img src="docs/screenshots/week-phone.png" alt="The Week on a phone: Monday's dinner, Sheet-Pan Lemon Chicken, serving Robin, Alex and Sam" width="320">
+
 ## Allergens
 
 Mise checks Recipes against the Household's allergies by looking up each Ingredient in a built-in Item catalogue (`packages/domain/src/catalogue.ts`). An AI drafted that catalogue, and a maintainer reviews it, but **it is not guaranteed to be complete or correct**: brands and recipes vary by country and change over time, and many Items are tagged from what is typical rather than from a specific product's label. Ingredients Mise can't match are treated as conflicting with every allergy, but a matched Item can still be wrong. The same goes for Items your Household adds on the Resolve Ingredients screen: Mise trusts the Allergens chosen there for every Recipe that uses them. Use Mise as a planning aid, not as a substitute for reading labels or for medical advice.
@@ -27,6 +29,8 @@ bun run test:worker  # tool-seam tests in workerd
 bun run test:web     # component tests in jsdom
 bun run check:private  # no personal emails committed
 ```
+
+`bun run screenshot` retakes `docs/screenshots/` from the fictional sample Household and its Week (`fixtures/sample-week.json`) on a throwaway local deployment. Look the images over before committing them. It needs Playwright's Chromium once: `bunx playwright install chromium`.
 
 ## Deployment
 

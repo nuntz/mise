@@ -1,0 +1,75 @@
+{
+  "recipes": [
+    {
+      "title": "Sheet-Pan Lemon Chicken",
+      "baseServings": 4,
+      "effortMinutes": 15,
+      "cuisine": "mediterranean",
+      "mainProtein": "chicken",
+      "ingredients": ["8 chicken thighs", "2 lemons", "500 g baby potatoes", "3 cloves garlic", "2 tbsp olive oil"],
+      "steps": ["Toss everything on a sheet pan.", "Roast at 220 °C for 40 minutes."]
+    },
+    {
+      "title": "Black Bean Burrito Bowls",
+      "baseServings": 4,
+      "effortMinutes": 20,
+      "cuisine": "mexican",
+      "mainProtein": "beans",
+      "ingredients": ["2 cans black beans", "300 g rice", "1 cup corn", "1 avocado", "1 lime", "1 red onion"],
+      "steps": ["Warm the beans with cumin.", "Spoon over rice and top with corn, avocado and onion."]
+    },
+    {
+      "title": "Salmon Teriyaki Bowls",
+      "baseServings": 4,
+      "effortMinutes": 25,
+      "cuisine": "japanese",
+      "mainProtein": "fish",
+      "ingredients": ["4 salmon fillets", "300 g rice", "1 cucumber", "2 carrots", "60 ml soy sauce", "2 tbsp honey"],
+      "steps": ["Cook the rice.", "Glaze and bake the salmon.", "Serve over rice with the vegetables."]
+    },
+    {
+      "title": "Beef and Broccoli Stir-Fry",
+      "baseServings": 4,
+      "effortMinutes": 25,
+      "cuisine": "chinese",
+      "mainProtein": "beef",
+      "yieldsLeftovers": true,
+      "ingredients": ["500 g flank steak", "2 heads broccoli", "3 tbsp soy sauce", "1 tbsp ginger", "300 g rice"],
+      "steps": ["Sear the beef.", "Stir-fry the broccoli.", "Toss together with the sauce."]
+    },
+    {
+      "title": "Minestrone",
+      "baseServings": 6,
+      "effortMinutes": 30,
+      "cuisine": "italian",
+      "mainProtein": "beans",
+      "ingredients": [
+        "1 onion",
+        "2 carrots",
+        "2 celery stalks",
+        "1 can white beans",
+        "1 can tomatoes",
+        "150 g small pasta"
+      ],
+      "steps": ["Soften the vegetables.", "Add tomatoes, beans and stock.", "Simmer, then add the pasta."]
+    },
+    {
+      "title": "Pork Chops with Apples",
+      "baseServings": 4,
+      "effortMinutes": 30,
+      "cuisine": "american",
+      "mainProtein": "pork",
+      "ingredients": ["4 pork chops", "2 apples", "1 onion", "4 sage leaves", "2 tbsp olive oil"],
+      "steps": ["Brown the chops.", "Soften the apples and onion with the sage.", "Finish the chops in the pan."]
+    }
+  ],
+  "dinners": [
+    { "day": 0, "recipe": "Sheet-Pan Lemon Chicken" },
+    { "day": 1, "recipe": "Black Bean Burrito Bowls" },
+    { "day": 2, "recipe": "Beef and Broccoli Stir-Fry" },
+    { "day": 3, "leftovers": 2 },
+    { "day": 4, "recipe": "Pork Chops with Apples" },
+    { "day": 5, "eatOut": "Grandma's" },
+    { "day": 6, "recipe": "Salmon Teriyaki Bowls" }
+  ]
+}
