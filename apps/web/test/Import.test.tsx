@@ -141,7 +141,12 @@ function fakeClient(
       },
     },
   );
-  return { client, calls, uploads, screenshots };
+  /** Logs `run` and announces it, as a Drive sync does when it finishes. */
+  const logRun = (run: ImportRun) => {
+    runs = [run, ...runs];
+    notify("recipes");
+  };
+  return { client, calls, uploads, screenshots, logRun };
 }
 
 const screenshotFiles = () => [
@@ -491,14 +496,21 @@ const driveRun: ImportRun = {
   errors: [{ entry: NOTES_DOC, message: "Shopping notes holds no recipe" }],
 };
 
-test("syncing the Drive folder shows what it did, with a link to each Doc it did not import", async () => {
-  const { client, calls } = fakeClient({ syncDrive: { ok: true, value: driveRun } });
+test("syncing the Drive folder waits for its run, then shows what it did, with a link to each Doc it did not import", async () => {
+  const { client, calls, logRun } = fakeClient({ syncDrive: { ok: true, value: { alreadyRunning: false } } });
   await openImport(client);
 
   await userEvent.click(await screen.findByRole("button", { name: "Sync Drive now" }));
 
   expect(calls).toContainEqual({ name: "sync_drive_folder", input: {} });
+  expect(((await screen.findByRole("button", { name: "Syncing…" })) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("alert")).toBeNull();
+
+  // Minutes later, the sync's run is logged and announced.
+  logRun(driveRun);
+
   expect(await screen.findByText("Synced: 1 created, 0 updated, 4 skipped, 0 flagged.")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Sync Drive now" })).toBeTruthy();
   const skipped = screen.getByRole("list", { name: "Not imported from Drive" });
   expect(within(skipped).getByRole("link", { name: NOTES_DOC })).toHaveProperty("href", NOTES_DOC);
   expect(within(skipped).getByText(/Shopping notes holds no recipe/)).toBeTruthy();

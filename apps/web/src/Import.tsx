@@ -7,7 +7,7 @@ import {
   type ToolError,
   type ToolOutput,
 } from "@mise/domain";
-import { createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
@@ -62,7 +62,7 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
       <PasteLink client={props.client} onReview={props.onReview} />
       <PasteRecipe client={props.client} onReview={props.onReview} />
       <ImportScreenshots client={props.client} onReview={props.onReview} />
-      <DriveSync client={props.client} />
+      <DriveSync client={props.client} runs={runs()} />
       <h2>{t("import.title")}</h2>
       <p>{t("import.intro")}</p>
       <label>
@@ -137,26 +137,37 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
   );
 }
 
-/** Reads the Drive folder now rather than tonight, and shows what the sync did. */
-function DriveSync(props: { client: MiseClient }) {
-  const [busy, setBusy] = createSignal(false);
+/**
+ * Reads the Drive folder now rather than tonight, and shows what the sync did. The sync answers once
+ * started and takes minutes, so this waits for its run among the Household's runs (`runs`, kept fresh).
+ */
+function DriveSync(props: { client: MiseClient; runs: ImportRun[] | undefined }) {
+  // The runs logged before the sync was asked for, while waiting for its own.
+  const [before, setBefore] = createSignal<ReadonlySet<number>>();
   const [error, setError] = createSignal<string>();
   const [run, setRun] = createSignal<ImportRun>();
+  const busy = () => before() !== undefined;
+
+  createEffect(() => {
+    const known = before();
+    const logged = known && props.runs?.find((past) => past.source === "gdrive" && !known.has(past.id));
+    if (!logged) return;
+    setRun(logged);
+    setBefore(undefined);
+  });
 
   const sync = async () => {
-    setBusy(true);
+    setBefore(new Set((props.runs ?? []).map((past) => past.id)));
     setError(undefined);
     setRun(undefined);
     try {
       const result = await props.client.call("sync_drive_folder", {});
-      if (result.ok) setRun(result.value);
-      else
-        setError(result.error.code === "not_configured" ? t("drive.notConfigured") : errorText(result.error, "recipe"));
+      if (result.ok) return;
+      setError(result.error.code === "not_configured" ? t("drive.notConfigured") : errorText(result.error, "recipe"));
     } catch {
       setError(t("app.error"));
-    } finally {
-      setBusy(false);
     }
+    setBefore(undefined);
   };
 
   return (

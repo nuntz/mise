@@ -10,7 +10,7 @@ import {
   type ToolResult,
 } from "@mise/domain";
 import { exportPKCS8, generateKeyPair, jwtVerify } from "jose";
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { SAMPLE_JPEG, utf8, zip } from "../../../fixtures/paprika";
 import { googleDrive, type ServiceAccountKey, useDrive } from "../src/drive";
 import { useLlm } from "../src/llm";
@@ -142,8 +142,36 @@ function succeeded<T>(result: ToolResult<unknown>): T {
   return result.value as T;
 }
 
+async function importRuns(household: HouseholdStub): Promise<ImportRun[]> {
+  return succeeded<ImportRun[]>(await household.callTool("list_import_runs", {}));
+}
+
+/** Starts a sync, as "Sync Drive now" does, and waits for its run to be logged. */
 async function sync(household: HouseholdStub): Promise<ImportRun> {
-  return succeeded<ImportRun>(await household.callTool("sync_drive_folder", {}));
+  const before = (await importRuns(household)).length;
+  expect(succeeded(await household.callTool("sync_drive_folder", {}))).toEqual({ alreadyRunning: false });
+  return vi.waitFor(async () => {
+    const runs = await importRuns(household);
+    if (runs.length === before) throw new Error("The sync has not finished");
+    return runs[0] as ImportRun;
+  });
+}
+
+/** A fake model that reads nothing until `release` is called, as a slow one keeps a sync running. */
+function withSlowReading(reading: RecipeReading): { release: () => void } {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const llm = new FakeLlm();
+  llm.reading = reading;
+  const readRecipe = llm.readRecipe.bind(llm);
+  llm.readRecipe = async (request) => {
+    await gate;
+    return readRecipe(request);
+  };
+  useLlm(() => llm);
+  return { release };
 }
 
 async function drafts(household: HouseholdStub): Promise<Recipe[]> {
@@ -174,6 +202,31 @@ describe("syncing the Drive folder", () => {
       source: { kind: "gdrive", url: "https://docs.google.com/document/d/1SoupDocId/edit" },
       ingredients: [{ raw: "1 cup red lentils" }, { raw: "1 onion, diced" }],
     });
+  });
+
+  test("answers at once, before the model has read a Doc, and logs the run once it has", async () => {
+    pretendGoogle([soupDoc()]);
+    const model = withSlowReading(soup);
+    const household = await newHousehold();
+
+    expect(succeeded(await household.callTool("sync_drive_folder", {}))).toEqual({ alreadyRunning: false });
+    expect(await importRuns(household)).toEqual([]);
+
+    model.release();
+    await vi.waitFor(async () => expect(await importRuns(household)).toMatchObject([{ source: "gdrive", created: 1 }]));
+  });
+
+  test("answers that a sync is already running when asked again before it finishes, and runs it once", async () => {
+    pretendGoogle([soupDoc()]);
+    const model = withSlowReading(soup);
+    const household = await newHousehold();
+    succeeded(await household.callTool("sync_drive_folder", {}));
+
+    expect(succeeded(await household.callTool("sync_drive_folder", {}))).toEqual({ alreadyRunning: true });
+
+    model.release();
+    await vi.waitFor(async () => expect(await importRuns(household)).toHaveLength(1));
+    expect(await drafts(household)).toHaveLength(1);
   });
 
   test("skips a Doc unchanged since it was read, without exporting it, and updates its Draft once edited", async () => {

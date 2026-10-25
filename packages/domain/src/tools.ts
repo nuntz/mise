@@ -21,6 +21,7 @@ import {
 import {
   Draft,
   DraftInput,
+  DriveSyncStarted,
   ImportFlag,
   ImportRun,
   ImportScreenshotsInput,
@@ -289,8 +290,11 @@ export const tools = {
     changes: "recipes",
   }),
   /**
-   * Reads the Google Docs in the Drive folder shared with the deployment's service account, and its
-   * subfolders, logged as an Import Run of source `gdrive`; the household also runs it every night.
+   * Starts reading the Google Docs in the Drive folder shared with the deployment's service account,
+   * and its subfolders, and answers at once: the sync is logged as an Import Run of source `gdrive`
+   * when it finishes, minutes later for a full folder, and announced as a change to `recipes`. Answers
+   * `alreadyRunning` while a sync is running, and starts no second one; the household also runs it
+   * every night.
    * The model reads each new or changed Doc (ADR 0023) into a Draft Recipe, upserted on the Doc's id
    * at its modified time, with its first image as the photo and its subfolders as tags. A Doc that
    * holds no recipe is logged as the run's error, with its link, and skipped until it changes; so is
@@ -299,7 +303,7 @@ export const tools = {
    */
   sync_drive_folder: defineTool({
     input: z.object({}).strict(),
-    output: ImportRun,
+    output: DriveSyncStarted,
     changes: "recipes",
   }),
   /** Draft Recipes, newest first. */

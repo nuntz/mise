@@ -32,6 +32,13 @@ export const ImportRun = z.object({
 });
 export type ImportRun = z.infer<typeof ImportRun>;
 
+/** What "Sync Drive now" answers at once: the sync's Import Run is logged when it finishes. */
+export const DriveSyncStarted = z.object({
+  /** A sync was running already, tonight's or one asked for, so no second one was started. */
+  alreadyRunning: z.boolean(),
+});
+export type DriveSyncStarted = z.infer<typeof DriveSyncStarted>;
+
 const RecipeRef = Recipe.pick({ id: true, title: true });
 
 /** A Recipe read from a source, mapped onto Mise's fields, before it is stored. */

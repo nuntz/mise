@@ -11,6 +11,7 @@ import {
   changeTopicOf,
   DRIVE_SYNC_TIME,
   type DriveDoc,
+  type DriveSyncStarted,
   docLink,
   docText,
   exportKey,
@@ -103,8 +104,10 @@ type ConnectionState = { caller: Caller | null };
 /** The household Durable Object: the one place Mise's data lives. */
 class HouseholdAgent extends Agent<Env> {
   private readonly models = agentModels(this.env);
-  /** The Drive sync running, if one is: "sync now" during the nightly sync answers with its run. */
+  /** The Drive sync running, if one is: the nightly sync joins one asked for, and the other way round. */
   private driveSync: Promise<ImportRun> | null = null;
+  /** Whether "Sync Drive now" has scheduled a sync that has not finished, so that asking again starts none. */
+  private driveSyncAsked = false;
 
   /**
    * The agent: one shared Pi conversation, kept in Pi's own `pi_` tables beside ours. It reaches
@@ -454,16 +457,41 @@ class HouseholdAgent extends Agent<Env> {
     return { ok: true, value: { run: outcome.run, recipe: { id, title, draft, linkOnly: isLinkOnly(outcome.made) } } };
   }
 
-  /** Syncs the Drive folder (see `readDriveFolder`), or answers with the sync already running. */
-  private async syncDriveFolder(): Promise<ToolResult<ImportRun>> {
-    const drive = openDrive(this.env);
-    if (!drive) {
+  /**
+   * Schedules a sync of the Drive folder and answers at once, as reading a full folder takes minutes,
+   * longer than a caller waits for an answer. The run is logged, and announced, when it finishes.
+   */
+  private async syncDriveFolder(): Promise<ToolResult<DriveSyncStarted>> {
+    if (!openDrive(this.env)) {
       return { ok: false, error: { code: "not_configured", message: "No Drive folder is set up for Mise" } };
     }
+    if (this.driveSyncAsked || this.driveSync) return { ok: true, value: { alreadyRunning: true } };
+    this.driveSyncAsked = true;
+    await this.schedule(0, "askedDriveSync");
+    return { ok: true, value: { alreadyRunning: false } };
+  }
+
+  /** Runs the sync "Sync Drive now" scheduled. Run by the scheduler. */
+  async askedDriveSync(): Promise<void> {
+    try {
+      await this.syncDrive();
+    } catch (error) {
+      // The scheduler swallows callback errors, so report them here.
+      Sentry.captureException(error);
+      throw error;
+    } finally {
+      this.driveSyncAsked = false;
+    }
+  }
+
+  /** Syncs the Drive folder (see `readDriveFolder`), or joins the sync already running. */
+  private async syncDrive(): Promise<void> {
+    const drive = openDrive(this.env);
+    if (!drive) return;
     this.driveSync ??= this.readDriveFolder(drive).finally(() => {
       this.driveSync = null;
     });
-    return { ok: true, value: await this.driveSync };
+    await this.driveSync;
   }
 
   /**
@@ -541,7 +569,7 @@ class HouseholdAgent extends Agent<Env> {
   /** Syncs the Drive folder, if there is one, then schedules tomorrow's. Run by the scheduler every night. */
   async nightlyDriveSync(): Promise<void> {
     try {
-      if (this.household()) await this.syncDriveFolder();
+      if (this.household()) await this.syncDrive();
     } catch (error) {
       // The scheduler swallows callback errors, so report them here.
       Sentry.captureException(error);

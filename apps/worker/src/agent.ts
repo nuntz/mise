@@ -91,7 +91,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   import_url:
     "Imports the recipe at a link: a recipe page, a TikTok or an Instagram post. What a model read becomes a Draft for a person to check.",
   import_text: "Reads a recipe's pasted text into a Draft for a person to check.",
-  sync_drive_folder: "Reads new and changed Google Docs from the Household's Drive folder into Drafts.",
+  sync_drive_folder:
+    "Starts reading new and changed Google Docs from the Household's Drive folder into Drafts, and answers at once, before any is read. The sync takes minutes; its Import Run appears in list_import_runs when it finishes.",
   list_drafts: "Draft Recipes waiting for a person to check and accept them.",
   list_import_runs: "Import runs, newest first, with what each did.",
   list_import_flags: "Recipes an import flagged for a merge or as a possible duplicate.",
