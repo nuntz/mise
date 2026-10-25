@@ -8,3 +8,5 @@ A prompt that says "ask before deleting" is a request to the model, not a guaran
 
 - The PWA calling the same tools directly already asks in its own dialogs, so the check applies to calls that come from the agent.
 - In voice (Drop 3) the confirmation still needs a tap, or something equally deliberate, decided then.
+- A Member's new name or sign-in email also waits for a tap (#40): they decide who the agent takes a speaker for, and so whose Constraints and Ratings a turn is about.
+- A confirmation can be cancelled, by its own button or by the agent when told "never mind": cancelling only ever makes plans safer.

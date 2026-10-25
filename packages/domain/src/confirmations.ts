@@ -106,19 +106,34 @@ function describeSlotChange(change: SlotChangeSummary): string {
   }
 }
 
-/** "Remove Robin's peanut allergy and make their milk intolerance a dislike" */
-export function describeLoosening(
-  name: string,
-  loosened: readonly HardConstraint[],
-  after: readonly Constraint[],
-): string {
-  const parts = loosened.map((constraint, index) => {
-    const whose = index === 0 ? `${name}'s` : "their";
-    const disliked = after.some((now) => now.kind === "dislike" && now.allergen === constraint.allergen);
-    return disliked
-      ? `make ${whose} ${constraintName(constraint)} a dislike`
-      : `remove ${whose} ${constraintName(constraint)}`;
-  });
+/**
+ * A change to a Member that needs a tap: a new name or sign-in email (null: none), which decide who
+ * the agent takes someone for, and the Hard Constraints it loosens.
+ */
+export type MemberChange = {
+  name?: string;
+  email?: string | null;
+  loosened: readonly HardConstraint[];
+  after: readonly Constraint[];
+};
+
+/** "Rename Robin to Robyn, change their sign-in email to robyn@example.com and remove their peanut allergy" */
+export function describeMemberChange(member: Pick<Member, "name" | "email">, change: MemberChange): string {
+  const parts: string[] = [];
+  // The first part names the Member; the others say "their" and "them".
+  const whose = () => (parts.length === 0 ? `${member.name}'s` : "their");
+  const whom = () => (parts.length === 0 ? member.name : "them");
+  if (change.name !== undefined) parts.push(`rename ${member.name} to ${change.name}`);
+  if (change.email === null) parts.push(`stop ${whom()} signing in as ${member.email}`);
+  else if (change.email !== undefined) parts.push(`change ${whose()} sign-in email to ${change.email}`);
+  for (const constraint of change.loosened) {
+    const disliked = change.after.some((now) => now.kind === "dislike" && now.allergen === constraint.allergen);
+    parts.push(
+      disliked
+        ? `make ${whose()} ${constraintName(constraint)} a dislike`
+        : `remove ${whose()} ${constraintName(constraint)}`,
+    );
+  }
   const sentence = list(parts);
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
@@ -177,6 +192,7 @@ function slotName({ date, meal }: { date: LocalDate; meal: Meal }): string {
   return `${meal} on ${dayName(date)}`;
 }
 
+/** "a, b and c", without the serial comma, as Mise writes everywhere. */
 function list(parts: readonly string[]): string {
-  return new Intl.ListFormat("en", { type: "conjunction" }).format(parts);
+  return new Intl.ListFormat("en-GB", { type: "conjunction" }).format(parts);
 }

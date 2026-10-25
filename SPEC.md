@@ -154,7 +154,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 ### 4.7 Agent (text) — drop 2
 - One shared Pi Durable conversation per household, with no reset (the harness compacts it); system prompt describing the household, tool catalogue below. Each turn records and tells the agent which Caller is speaking; turns from two people run one after the other. (Per-Caller conversations may come later; recording the speaker keeps that a data split.)
 - Chat is a sheet opened from every screen's header (kitchen mode aside), and knows which screen and Week it was opened from.
-- Agent never edits state except through tools. Deletes (`delete_recipe`, `clear_week`), Overrides, and anything loosening a Hard Constraint (removing one, making it a dislike, removing a Member who has one) return a pending confirmation; only the person's tap on the button the chat shows runs them. The model cannot confirm (ADR 0024). `setup_household` is not offered to the agent.
+- Agent never edits state except through tools. Deletes (`delete_recipe`, `clear_week`), Overrides, a Member's new name or sign-in email, and anything loosening a Hard Constraint (removing one, making it a dislike, removing a Member who has one) return a pending confirmation, which the person can also cancel; only the person's tap on the button the chat shows runs them. The model cannot confirm (ADR 0024). `setup_household` is not offered to the agent.
 - LLM spend is capped by the Anthropic console limit, documented in the deployment settings; no in-app cap for text.
 - Typical turns: "re-propose the week but keep Tuesday", "swap Thursday for something with the chicken we have", "just the two of us Friday", "we're out of cumin", "put this week on Instacart".
 
@@ -181,7 +181,7 @@ items:     list_items, create_item, update_item, list_unresolved_ingredients, re
 imports:   run_paprika_import, import_url, import_text, import_screenshots, list_import_runs, list_import_flags,
            sync_drive_folder, enqueue_video_import
 calendar:  rotate_calendar_token
-* = requires confirmation (from the agent: a tapped confirmation, ADR 0024; so do Overrides and loosening a Hard Constraint)
+* = requires confirmation (from the agent: a tapped confirmation, ADR 0024; so do Overrides, a Member's new name or sign-in email, and loosening a Hard Constraint)
 ```
 
 ## 6. Security & privacy

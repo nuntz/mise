@@ -209,6 +209,26 @@ const GUARDED: Record<string, Guarded> = {
     summary: "Remove Robin and their peanut allergy",
     probe: members,
   },
+  "renaming a Member": {
+    call: ["update_member", { id: 2, name: "Alexis" }],
+    summary: "Rename Alex to Alexis",
+    probe: members,
+  },
+  "changing a Member's sign-in email": {
+    call: ["update_member", { id: 2, email: "alexis@example.com" }],
+    summary: "Change Alex's sign-in email to alexis@example.com",
+    probe: members,
+  },
+  "taking away a Member's sign-in": {
+    call: ["update_member", { id: 2, email: null }],
+    summary: "Stop Alex signing in as alex@example.com",
+    probe: members,
+  },
+  "renaming a Member, changing their email and removing a Hard Constraint at once": {
+    call: ["update_member", { id: 1, name: "Robyn", email: "robyn@example.com", constraints: [] }],
+    summary: "Rename Robin to Robyn, change their sign-in email to robyn@example.com and remove their peanut allergy",
+    probe: members,
+  },
 };
 
 describe.each(Object.entries(GUARDED))("%s", (_, guarded) => {
@@ -249,10 +269,6 @@ test("an Override's confirmation expires when the Constraint it overrides change
 
 test.each<[string, [string, JsonObject]]>([
   [
-    "a Member's email with their Hard Constraint",
-    ["update_member", { id: 1, email: "x@example.com", constraints: [] }],
-  ],
-  [
     "Diners with an Override on a planned Recipe",
     ["set_slot", { date: FRIDAY, meal: "dinner", kind: "recipe", recipeId: 1, diners: [1], overrides: FOR_ROBIN }],
   ],
@@ -287,7 +303,21 @@ describe("what the agent does without a tap", () => {
         },
       ],
     ],
-    ["renaming a Member", ["update_member", { id: 1, name: "Robyn" }]],
+    [
+      "an edit to a Member that changes nothing guarded",
+      [
+        "update_member",
+        {
+          id: 1,
+          name: "Robin",
+          email: "robin@example.com",
+          constraints: [
+            { kind: "dislike", term: "olives" },
+            { kind: "allergy", allergen: "peanut" },
+          ],
+        },
+      ],
+    ],
     ["removing a Member with no Hard Constraint", ["remove_member", { id: 3 }]],
     ["planning a Recipe with no Conflict", ["set_slot", { date: FRIDAY, meal: "dinner", kind: "recipe", recipeId: 2 }]],
     ["choosing Diners with no Override", ["set_diners", { date: FRIDAY, diners: [1, 2], overrides: [] }]],

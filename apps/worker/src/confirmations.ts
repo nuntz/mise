@@ -3,7 +3,7 @@ import {
   confirmationCaseOf,
   describeClearing,
   describeDeletion,
-  describeLoosening,
+  describeMemberChange,
   describeOverride,
   describeRemoval,
   hardConstraintsOf,
@@ -12,6 +12,7 @@ import {
   loosenedConstraints,
   type Meal,
   type Member,
+  type MemberChange,
   type OverriddenFor,
   type Override,
   type ParsedToolInput,
@@ -135,8 +136,8 @@ function heldCall(sql: SqlStorage, name: ToolName, input: unknown): ToolResult<H
       throw new Error(`No confirmation describes ${name}`);
     case "override":
       return override(sql, name as OverridableTool, input as ParsedToolInput<OverridableTool>);
-    case "loosening":
-      return loosening(sql, name as MemberTool, input as ParsedToolInput<MemberTool>);
+    case "member":
+      return memberChange(sql, name as MemberTool, input as ParsedToolInput<MemberTool>);
   }
 }
 
@@ -232,10 +233,11 @@ function slotsOn(sql: SqlStorage, date: LocalDate, meal: Meal | undefined): Tool
 }
 
 /**
- * A change to a Member that loosens a Hard Constraint. It describes the Member. One that loosens
- * none, or of a Member who doesn't exist (which the tool refuses), needs no tap.
+ * A change to a Member that loosens a Hard Constraint or changes their name or sign-in email. It
+ * describes the Member. One that does neither, or of a Member who doesn't exist (which the tool
+ * refuses), needs no tap.
  */
-function loosening(sql: SqlStorage, name: MemberTool, input: ParsedToolInput<MemberTool>): ToolResult<Held | null> {
+function memberChange(sql: SqlStorage, name: MemberTool, input: ParsedToolInput<MemberTool>): ToolResult<Held | null> {
   const member: Member | undefined = readMembers(sql, input.id)[0];
   if (!member) return { ok: true, value: null };
   const state = JSON.stringify(member);
@@ -243,13 +245,18 @@ function loosening(sql: SqlStorage, name: MemberTool, input: ParsedToolInput<Mem
     const hard = hardConstraintsOf(member);
     return { ok: true, value: hard.length > 0 ? { summary: describeRemoval(member.name, hard), state } : null };
   }
-  const { constraints: after, ...rest } = input as ParsedToolInput<"update_member">;
-  if (after === undefined) return { ok: true, value: null };
-  const loosened = loosenedConstraints(member.constraints, after);
-  if (loosened.length === 0) return { ok: true, value: null };
-  // A button names the Constraints loosened; a new name or email would run unsaid.
-  if ("name" in rest || "email" in rest) return foldedIn("a name or email");
-  return { ok: true, value: { summary: describeLoosening(member.name, loosened, after), state } };
+  const { name: newName, email, constraints } = input as ParsedToolInput<"update_member">;
+  const after = constraints ?? member.constraints;
+  const change: MemberChange = {
+    ...(newName !== undefined && newName !== member.name && { name: newName }),
+    ...(email !== undefined && email !== member.email && { email }),
+    loosened: loosenedConstraints(member.constraints, after),
+    after,
+  };
+  if (change.name === undefined && change.email === undefined && change.loosened.length === 0) {
+    return { ok: true, value: null };
+  }
+  return { ok: true, value: { summary: describeMemberChange(member, change), state } };
 }
 
 /** Refuses a call that would fold `what` into a change waiting for a tap, which its button doesn't name. */

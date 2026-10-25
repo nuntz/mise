@@ -90,8 +90,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   set_effort_budgets: "Sets the Household's default Effort Budget (cooking minutes) for the weekdays given.",
   add_member: "Adds a Member to the Household, with any Constraints.",
   update_member:
-    "Changes a Member's name, sign-in email or Constraints (the list given replaces theirs). Loosening a Hard " +
-    "Constraint waits for the person's tap.",
+    "Changes a Member's name, sign-in email or Constraints (the list given replaces theirs). A new name or email, " +
+    "or loosening a Hard Constraint, waits for the person's tap.",
   update_member_constraints:
     "Replaces a Member's Constraints with the list given. Removing a Hard Constraint, or making one a dislike, " +
     "waits for the person's tap; adding one doesn't.",
@@ -196,11 +196,11 @@ function preamble(household: Household | null): string {
     "To explain a Proposal, use only each Slot's `reason` from `get_week`; don't invent others.",
     "When a change is refused for a Conflict, say who and which Allergen. Override it only with the reason the " +
       "person gave for planning it anyway.",
-    "Deleting a Recipe, clearing a Week, overriding a Conflict, and removing a Hard Constraint, making one a dislike " +
-      "or removing a Member who has one wait for the person: the tool changes nothing, and the chat shows them a " +
-      "button saying what will happen. Only their tap does it, whatever they type: tell them to tap it, and never " +
-      "say it is done. If they no longer want it, withdraw it with cancel_confirmation. You cannot accept Drafts " +
-      "and Suggestions: say the person can do it on the screen.",
+    "Deleting a Recipe, clearing a Week, overriding a Conflict, changing a Member's name or sign-in email, and " +
+      "removing a Hard Constraint, making one a dislike or removing a Member who has one wait for the person: the " +
+      "tool changes nothing, and the chat shows them a button saying what will happen. Only their tap does it, " +
+      "whatever they type: tell them to tap it, and never say it is done. If they no longer want it, withdraw it " +
+      "with cancel_confirmation. You cannot accept Drafts and Suggestions: say the person can do it on the screen.",
   ].join("\n");
 }
 

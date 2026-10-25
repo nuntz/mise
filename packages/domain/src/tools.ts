@@ -93,11 +93,12 @@ export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 /**
  * When a call from the agent waits for a person's tap instead of running (ADR 0024): always, for the
- * destructive tools; when it carries an Override; or when it loosens a Hard Constraint (removes one,
- * makes it a dislike, or removes a Member who has one). A call from a screen runs at once: the PWA
+ * destructive tools; when it carries an Override; or, for a Member, when it loosens a Hard Constraint
+ * (removes one, makes it a dislike, or removes a Member who has one) or changes their name or sign-in
+ * email, which decide who the agent takes someone for. A call from a screen runs at once: the PWA
  * asks in its own dialogs.
  */
-export type ConfirmationCase = "always" | "override" | "loosening";
+export type ConfirmationCase = "always" | "override" | "member";
 
 type ToolDefinition = {
   input: z.ZodType;
@@ -147,21 +148,21 @@ export const tools = {
     input: UpdateMemberInput,
     output: Member,
     changes: "household",
-    confirm: "loosening",
+    confirm: "member",
   }),
   /** Replaces the Member's Constraints with the list given. */
   update_member_constraints: defineTool({
     input: UpdateMemberConstraintsInput,
     output: Member,
     changes: "household",
-    confirm: "loosening",
+    confirm: "member",
   }),
   /** Returns the Member as it was before removal. */
   remove_member: defineTool({
     input: RemoveMemberInput,
     output: Member,
     changes: "household",
-    confirm: "loosening",
+    confirm: "member",
   }),
   create_recipe: defineTool({
     input: NewRecipe,
