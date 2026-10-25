@@ -584,11 +584,15 @@ describe("nightly export", () => {
     const schedules = await household.listSchedules();
 
     const at = (time: string) => nextOccurrence(new Date(), time, "Asia/Tokyo").getTime() / 1000;
-    expect(schedules).toEqual([
-      expect.objectContaining({ callback: "nightlyExport", time: at("03:00") }),
-      expect.objectContaining({ callback: "nightlyDriveSync", time: at("04:00") }),
-      expect.objectContaining({ callback: "morningPushes", time: at("08:00") }),
-    ]);
+    // Listed soonest first, so their order depends on the time of day the test runs.
+    expect(schedules).toHaveLength(3);
+    expect(schedules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ callback: "nightlyExport", time: at("03:00") }),
+        expect.objectContaining({ callback: "nightlyDriveSync", time: at("04:00") }),
+        expect.objectContaining({ callback: "morningPushes", time: at("08:00") }),
+      ]),
+    );
   });
 
   test("the nightly export writes the export to R2 under the Household's date and schedules the next", async () => {
