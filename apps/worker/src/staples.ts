@@ -36,19 +36,7 @@ export const stapleHandlers: Pick<Handlers, StapleTools> = {
       return { ok: false, error: { code: "not_found", message: `No Item ${input.item}` } };
     }
     const [current] = readStaples(sql, input.item);
-    writeStaple(sql, {
-      ...(current ?? {
-        item: input.item,
-        location: "pantry",
-        checkEvery: NEW_STAPLE_INTERVAL,
-        alwaysBuy: false,
-        qtyPerShop: null,
-        status: "stocked",
-        lastChecked: null,
-        outInARow: 0,
-      }),
-      ...definedFields(input),
-    });
+    writeStaple(sql, { ...(current ?? newStaple(input.item)), ...definedFields(input) });
     return { ok: true, value: readStaples(sql, input.item)[0] as Staple };
   },
 
@@ -80,14 +68,31 @@ export const stapleHandlers: Pick<Handlers, StapleTools> = {
 
   record_staple_status: (sql, input) => {
     if (!readSettings(sql)) return notSetUp();
-    const [staple] = readStaples(sql, input.item);
-    if (!staple) return notAStaple(input.item);
+    if (!readCatalogue(sql).item(input.item)) {
+      return { ok: false, error: { code: "not_found", message: `No Item ${input.item}` } };
+    }
+    // "We're out of paprika" needs no Staple first: an Item that is none becomes one, as `upsert_staple` makes it.
+    const [staple = newStaple(input.item)] = readStaples(sql, input.item);
     const at = input.at ?? new Date().toISOString();
     // A status recorded later than this one wins, so one synced late from offline changes nothing.
     if (isLatest(staple, at)) writeStaple(sql, recordStapleStatus(staple, input.status, new Date(at).toISOString()));
     return { ok: true, value: readStaples(sql, input.item)[0] as Staple };
   },
 };
+
+/** A Staple as an Item first becomes one: in the pantry, stocked, never checked. */
+function newStaple(item: ItemId): Omit<Staple, "name" | "suggestAlwaysBuy"> {
+  return {
+    item,
+    location: "pantry",
+    checkEvery: NEW_STAPLE_INTERVAL,
+    alwaysBuy: false,
+    qtyPerShop: null,
+    status: "stocked",
+    lastChecked: null,
+    outInARow: 0,
+  };
+}
 
 /**
  * Sets the Item's Staple, if it is one, to stocked as of `at`, unless a status was recorded later:
@@ -100,7 +105,7 @@ export function restockStaple(sql: SqlStorage, item: ItemId, at: string): void {
   }
 }
 
-function isLatest(staple: Staple, at: string): boolean {
+function isLatest(staple: Pick<Staple, "lastChecked">, at: string): boolean {
   return staple.lastChecked === null || Date.parse(staple.lastChecked) <= Date.parse(at);
 }
 

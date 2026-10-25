@@ -65,12 +65,21 @@ describe("Staples", () => {
     expect(changed).toMatchObject({ location: "fridge", alwaysBuy: true, status: "low", checkEvery: 14 });
   });
 
-  test("only an Item can be a Staple, and only a Staple can be removed or checked", async () => {
+  test("recording an Item that is no Staple yet makes it one, in the pantry, with that status", async () => {
+    const household = await setUpHousehold();
+
+    const paprika = succeeded(await household.callTool("record_staple_status", { item: "paprika", status: "out" }));
+
+    expect(paprika).toMatchObject({ item: "paprika", location: "pantry", status: "out", alwaysBuy: false });
+    expect(succeeded<Staple[]>(await household.callTool("list_staples", {}))).toEqual([paprika]);
+  });
+
+  test("only an Item can be a Staple, and only a Staple can be removed", async () => {
     const household = await setUpHousehold();
     const notFound = { ok: false, error: expect.objectContaining({ code: "not_found" }) };
 
     expect(await household.callTool("upsert_staple", { item: "household:99" })).toEqual(notFound);
-    expect(await household.callTool("record_staple_status", { item: "rice", status: "out" })).toEqual(notFound);
+    expect(await household.callTool("record_staple_status", { item: "household:99", status: "out" })).toEqual(notFound);
     expect(await household.callTool("remove_staple", { item: "rice" })).toEqual(notFound);
 
     const rice = succeeded(await household.callTool("upsert_staple", { item: "rice" }));

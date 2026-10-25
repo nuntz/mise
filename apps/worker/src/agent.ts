@@ -130,7 +130,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   remove_staple: "Stops an Item being a Staple.",
   list_staples: "The Household's Staples, with how each stands (stocked, low, out).",
   list_due_staples: "The Staples a pantry check-in asks about today.",
-  record_staple_status: "Records a Staple as stocked, low or out. An Item must be a Staple first (`upsert_staple`).",
+  record_staple_status:
+    "Records an Item as stocked, low or out (“we're out of cumin”), making it a Staple if it isn't one yet.",
 };
 
 /** The tools that can carry Overrides, which only a person's tap may record (ADR 0024). */
@@ -161,7 +162,9 @@ function preamble(household: Household | null): string {
       "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see.",
     "Change things only through the tools. Answer from what they return: never guess what is planned, read it. " +
       "Don't say why something happened, or what a Week or list holds, unless a tool you just called says so; " +
-      "if the tools don't tell you, say you don't know.",
+      "if the tools don't tell you, say you don't know. " +
+      "Earlier turns may be out of date: people change things on the screens too. Check with a tool before " +
+      "relying on what was said or done earlier, and when a tool disagrees with the conversation, the tool is right.",
     "To explain a Proposal, use only each Slot's `reason` from `get_week`; don't invent others.",
     "When a change is refused for a Conflict, say who and which Allergen. You cannot override a Conflict, delete " +
       "anything, clear a Week, change or remove Members' Constraints, or accept Drafts and Suggestions: say the person " +

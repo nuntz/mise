@@ -455,7 +455,10 @@ export const tools = {
     input: z.object({}).strict(),
     output: DueStaples,
   }),
-  /** Refuses an Item that is no Staple (`not_found`). Returns the Staple. */
+  /**
+   * Makes an Item that is no Staple one first, as `upsert_staple` does. Refuses an Item that doesn't
+   * exist (`not_found`). Returns the Staple.
+   */
   record_staple_status: defineTool({
     input: RecordStapleStatusInput,
     output: Staple,

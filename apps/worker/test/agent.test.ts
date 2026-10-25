@@ -406,13 +406,8 @@ describe("typical turns", () => {
     expect(await dinnerOn(household, THURSDAY)).toMatchObject({ kind: "recipe", recipe: { title: "Lemon chicken" } });
   });
 
-  test("“we're out of cumin” records the Staple as out", async () => {
-    scriptModel(
-      caller([
-        ["upsert_staple", { item: "cumin" }],
-        ["record_staple_status", { item: "cumin", status: "out" }],
-      ]),
-    );
+  test("“we're out of cumin” records cumin as out in one call, making it a Staple", async () => {
+    scriptModel(caller([["record_staple_status", { item: "cumin", status: "out" }]]));
     const household = await familyHousehold();
 
     const reply = await household.chat("We're out of cumin", { screen: "pantry" });
