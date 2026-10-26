@@ -4,6 +4,7 @@ const en = {
   "app.loading": "Loading…",
   "app.error": "Something went wrong talking to Mise. It will retry when the connection comes back.",
 
+  "setup.overline": "Mise · Setup",
   "setup.title": "Set up your Household",
   "setup.intro": "Tell Mise about your Household. You can change these later.",
   "setup.name": "Household name",
@@ -197,10 +198,10 @@ const en = {
   "calendar.secret": "Anyone with this link can see the plan without signing in. Share it only with the Household.",
   "calendar.create": "Create a subscribe link",
   "calendar.rotate": "Rotate link",
+  "calendar.rotateTitle": "Rotate the subscribe link?",
   "calendar.rotateWarning":
     "Calendars subscribed with the current link will stop updating. Everyone will need to subscribe again with the new one.",
   "calendar.rotateConfirm": "Rotate now",
-  "calendar.cancel": "Cancel",
 
   "notifications.title": "Notifications",
   "notifications.intro":
@@ -213,8 +214,7 @@ const en = {
     "This browser can't get notifications from Mise. On an iPhone or iPad, add Mise to the Home Screen (Share → Add to Home Screen), open it from there, and come back here.",
   "notifications.denied":
     "Notifications are blocked for Mise on this device. Allow them in the device's settings for Mise, then try again.",
-  "notifications.notConfigured":
-    "This Mise hasn't been set up to send notifications: it needs a push key (README → Notifications).",
+  "notifications.notConfigured": "Notifications aren't turned on for this Mise. Whoever set it up can turn them on.",
   "notifications.kind.weekly_proposal": "Next week proposed",
   "notifications.kind.weekly_proposal.hint":
     "Two days before a Week starts, if nobody has planned it, Mise proposes it.",

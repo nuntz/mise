@@ -5,6 +5,7 @@ import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import { setPseudoLocale } from "../src/messages";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 const robin: Member = { id: 1, name: "Robin", email: null, constraints: [] };
 
@@ -236,7 +237,6 @@ test("Add a Member is the Members page's one primary, and each Constraint in the
   await user.click(await screen.findByRole("button", { name: "Household" }));
   await user.click(screen.getByRole("button", { name: "Members" }));
 
-  const primaries = () => [...document.querySelectorAll(".button-primary")].map((button) => button.textContent);
   expect(primaries()).toEqual(["Add a Member"]);
 
   await user.click(screen.getByRole("button", { name: "Edit Robin" }));
@@ -245,4 +245,13 @@ test("Add a Member is the Members page's one primary, and each Constraint in the
   expect(constraint.querySelector(".row-body")).toBeTruthy();
   const remove = within(constraint).getByRole("button", { name: "Remove" });
   expect(remove.parentElement?.classList.contains("row-end")).toBe(true);
+});
+
+test("Save settings is the Settings page's one primary", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeHousehold();
+  render(() => <App client={client} />);
+  await openSettings(user);
+
+  expect(primaries()).toEqual(["Save settings"]);
 });

@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 import { NotificationSettings } from "../src/Notifications";
 import type { DevicePush } from "../src/push";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 const PUBLIC_KEY = "BExamplePublicKey";
 
@@ -138,11 +139,23 @@ test("a browser that can't get notifications here says to add Mise to the Home S
   expect(screen.queryByRole("button", { name: "Turn on notifications on this device" })).toBeNull();
 });
 
-test("a deployment without a push key says so", async () => {
+test("a deployment without a push key says so in an amber banner, pointing at a person, not the README", async () => {
   const { client } = fakeClient(null);
   const { push } = fakeDevicePush();
   render(() => <NotificationSettings client={client} push={push} />);
 
-  expect(await screen.findByText(/hasn't been set up to send notifications/)).toBeTruthy();
+  const banner = await screen.findByText(
+    "Notifications aren't turned on for this Mise. Whoever set it up can turn them on.",
+  );
+  expect(banner.classList.contains("banner-amber")).toBe(true);
   expect(screen.queryByRole("button", { name: "Turn on notifications on this device" })).toBeNull();
+});
+
+test("turning notifications on is the screen's one primary", async () => {
+  const { client } = fakeClient();
+  const { push } = fakeDevicePush();
+  render(() => <NotificationSettings client={client} push={push} />);
+
+  await screen.findByRole("button", { name: "Turn on notifications on this device" });
+  expect(primaries()).toEqual(["Turn on notifications on this device"]);
 });

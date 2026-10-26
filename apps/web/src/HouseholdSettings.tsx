@@ -127,7 +127,7 @@ export function HouseholdSettingsForm(props: { client: MiseClient; household: Ho
           {error()}
         </p>
       </Show>
-      <button type="submit" disabled={submitting()}>
+      <button type="submit" class="button-primary" disabled={submitting()}>
         {submitting() ? t("settings.saving") : t("settings.save")}
       </button>
     </form>

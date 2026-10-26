@@ -78,7 +78,8 @@ async function seed(): Promise<Map<string, number>> {
 
 /**
  * What the screens past the Week need to show more than their empty states: a Recipe with
- * Unresolved Ingredients, a link-only Draft to review, Staples due and run low, and a Grocery List.
+ * Unresolved Ingredients, a link-only Draft to review, Staples due and run low, a Grocery List and a
+ * calendar link.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -108,6 +109,7 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   }
   await call(agent, "record_staple_status", { item: "milk", status: "low" });
   await call(agent, "build_grocery_list", {});
+  await call(agent, "rotate_calendar_token", {});
 }
 
 async function screenshot(browser: Browser) {

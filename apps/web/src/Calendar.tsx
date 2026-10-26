@@ -1,5 +1,6 @@
 import { type CalendarToken, calendarFeedPath } from "@mise/domain";
 import { createSignal, Match, Show, Switch } from "solid-js";
+import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
@@ -8,7 +9,6 @@ import { t } from "./messages";
 export function CalendarSettings(props: { client: MiseClient }) {
   const [token, setToken] = createSignal<CalendarToken | null>();
   const [failed, setFailed] = createSignal(false);
-  const [confirming, setConfirming] = createSignal(false);
   const [rotating, setRotating] = createSignal(false);
 
   // Another device rotating the token announces it as a household change.
@@ -23,7 +23,17 @@ export function CalendarSettings(props: { client: MiseClient }) {
     () => setFailed(true),
   );
 
+  const confirm = createConfirm();
   const rotate = async () => {
+    const confirmed = await confirm.ask({
+      title: t("calendar.rotateTitle"),
+      lost: t("calendar.rotateWarning"),
+      action: t("calendar.rotateConfirm"),
+    });
+    if (confirmed) await replaceToken();
+  };
+
+  const replaceToken = async () => {
     setRotating(true);
     try {
       // Loaded again rather than shown, so an older answer still on its way can't replace it.
@@ -33,7 +43,6 @@ export function CalendarSettings(props: { client: MiseClient }) {
       setFailed(true);
     }
     setRotating(false);
-    setConfirming(false);
   };
 
   return (
@@ -53,39 +62,26 @@ export function CalendarSettings(props: { client: MiseClient }) {
                 {t("calendar.url")}
                 <input readOnly value={`${window.location.origin}${calendarFeedPath(current().token)}`} />
               </label>
-              <p>
-                <a href={`webcal://${window.location.host}${calendarFeedPath(current().token)}`}>
-                  {t("calendar.subscribe")}
-                </a>
-              </p>
               <p>{t("calendar.secret")}</p>
-              <Show
-                when={confirming()}
-                fallback={
-                  <button type="button" onClick={() => setConfirming(true)}>
-                    {t("calendar.rotate")}
-                  </button>
-                }
+              <a
+                class="button button-primary"
+                href={`webcal://${window.location.host}${calendarFeedPath(current().token)}`}
               >
-                <p class="banner banner-warn" role="alert">
-                  {t("calendar.rotateWarning")}
-                </p>
-                <button type="button" disabled={rotating()} onClick={rotate}>
-                  {t("calendar.rotateConfirm")}
-                </button>
-                <button type="button" disabled={rotating()} onClick={() => setConfirming(false)}>
-                  {t("calendar.cancel")}
-                </button>
-              </Show>
+                {t("calendar.subscribe")}
+              </a>
+              <button type="button" disabled={rotating()} onClick={rotate}>
+                {t("calendar.rotate")}
+              </button>
             </>
           )}
         </Match>
         <Match when={token() === null}>
-          <button type="button" disabled={rotating()} onClick={rotate}>
+          <button type="button" class="button-primary" disabled={rotating()} onClick={replaceToken}>
             {t("calendar.create")}
           </button>
         </Match>
       </Switch>
+      <confirm.ConfirmSheet />
     </section>
   );
 }

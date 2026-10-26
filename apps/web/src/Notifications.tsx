@@ -113,11 +113,13 @@ export function NotificationSettings(props: { client: MiseClient; push?: DeviceP
           <p>{t("notifications.unsupported")}</p>
         </Match>
         <Match when={offer().kind === "notConfigured"}>
-          <p>{t("notifications.notConfigured")}</p>
+          <p class="banner banner-amber" role="status">
+            {t("notifications.notConfigured")}
+          </p>
         </Match>
         <Match when={off()}>
           {(off) => (
-            <button type="button" disabled={busy()} onClick={() => turnOn(off().publicKey)}>
+            <button type="button" class="button-primary" disabled={busy()} onClick={() => turnOn(off().publicKey)}>
               {busy() ? t("notifications.turningOn") : t("notifications.turnOn")}
             </button>
           )}

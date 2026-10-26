@@ -32,8 +32,13 @@ export function SetupForm(props: { client: MiseClient }) {
 
   return (
     <form onSubmit={submit}>
-      <h2>{t("setup.title")}</h2>
-      <p>{t("setup.intro")}</p>
+      <header class="page-header">
+        <div class="page-heading">
+          <p class="overline">{t("setup.overline")}</p>
+          <h1>{t("setup.title")}</h1>
+          <p class="meta">{t("setup.intro")}</p>
+        </div>
+      </header>
 
       <HouseholdSettingsFields settings={input()} onChange={update} />
 
@@ -46,13 +51,17 @@ export function SetupForm(props: { client: MiseClient }) {
               draft={member()}
               onChange={(draft) => setMembers((all) => all.map((m, i) => (i === index ? draft : m)))}
             />
-            <button type="button" onClick={() => setMembers((all) => all.filter((_, i) => i !== index))}>
+            <button
+              type="button"
+              class="button-quiet"
+              onClick={() => setMembers((all) => all.filter((_, i) => i !== index))}
+            >
               {t("member.remove")}
             </button>
           </div>
         )}
       </Index>
-      <button type="button" onClick={() => setMembers((all) => [...all, emptyMember()])}>
+      <button type="button" class="button-secondary" onClick={() => setMembers((all) => [...all, emptyMember()])}>
         {t("members.add")}
       </button>
 
@@ -62,7 +71,7 @@ export function SetupForm(props: { client: MiseClient }) {
         </p>
       </Show>
 
-      <button type="submit" disabled={submitting()}>
+      <button type="submit" class="button-primary" disabled={submitting()}>
         {submitting() ? t("setup.submitting") : t("setup.submit")}
       </button>
     </form>
