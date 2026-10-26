@@ -24,11 +24,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@types/bun": "1.4.3",
+    "@types/bun": "1.4.4",
     "typescript": "5.9.3"
   },
   "trustedDependencies": [],
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "patchedDependencies": {
     "@sentry/cloudflare@11.4.0": "patches/@sentry%2Fcloudflare@11.4.0.patch"
   }
