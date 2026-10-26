@@ -226,7 +226,9 @@ test("the Week opens first: each day's dinner with its photo, breakfast and lunc
 
   const otherMeals = within(tuesday).getByText("Breakfast and lunch").closest("details");
   expect(otherMeals?.open).toBe(false);
-  expect(within(screen.getByRole("region", { name: "Monday, October 26" })).getByText("Nothing planned")).toBeTruthy();
+  expect(
+    within(screen.getByRole("region", { name: "Monday, October 26" })).getByText("Mon 26 · Nothing planned"),
+  ).toBeTruthy();
 });
 
 /** This Week with Tuesday's dinner the Pasta for 6: the household and 3 Guests. */
@@ -353,7 +355,11 @@ test("editing a dinner sends what changed in one change to the Slot, then the Lo
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
 
-  await user.click(within(tuesday).getByRole("button", { name: "Edit dinner" }));
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Pasta" })).getByRole("button", { name: "Edit dinner" }),
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
   const form = within(tuesday).getByRole("form", { name: "Dinner" });
   await within(form).findByRole("option", { name: "Curry" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
@@ -385,7 +391,7 @@ test("Guests and their Constraints are set on the Slot", async () => {
   render(() => <App client={client} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(within(monday).getByRole("button", { name: "Edit dinner" }));
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Eating out");
   await user.clear(within(form).getByRole("spinbutton", { name: "Guests" }));
@@ -541,7 +547,7 @@ test("a change refused for a Conflict names the person and the Allergen, and sav
   render(() => <App client={client} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(within(monday).getByRole("button", { name: "Edit dinner" }));
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
   await within(form).findByRole("option", { name: "Curry" });
@@ -629,7 +635,7 @@ test("changing the Slot after a refusal takes the warning away, and its reasons 
   render(() => <App client={client} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(within(monday).getByRole("button", { name: "Edit dinner" }));
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
   await within(form).findByRole("option", { name: "Curry" });
@@ -747,7 +753,7 @@ test("a dinner cooked for a lunch's Leftovers, or for several, says so in one se
   expect(within(tuesday).getByText("Cook for 8, with Leftovers on Wednesday and Thursday.")).toBeTruthy();
 });
 
-test("in the pseudo-locale, the Cook-for line and Edit actions are each one message", async () => {
+test("in the pseudo-locale, the Cook-for line and Choose actions are each one message", async () => {
   setPseudoLocale(true);
   onTestFinished(() => setPseudoLocale(false));
   const week = emptyWeek("2026-10-26");
@@ -763,8 +769,9 @@ test("in the pseudo-locale, the Cook-for line and Edit actions are each one mess
   const monday = await screen.findByRole("region", { name: /Monday/ });
   const cookFor = within(monday).getByText(/^\[Çööķ ƒöŕ 6/);
   expect(cookFor.textContent).not.toMatch(/\[.*\[/);
-  for (const edit of within(monday).getAllByRole("button", { name: /^\[Éđîţ/ })) {
-    expect(edit.textContent).not.toMatch(/\[.*\[/);
+  const tuesday = screen.getByRole("region", { name: /Tuesday/ });
+  for (const choose of within(tuesday).getAllByRole("button", { name: /^\[Çĥööšé/ })) {
+    expect(choose.textContent).not.toMatch(/\[.*\[/);
   }
 });
 
@@ -851,21 +858,132 @@ test("Effort Budgets are set for this Week, or for every Week", async () => {
   );
 });
 
-test("a dinner with a Recipe can be marked cooked; one without has nothing to cook", async () => {
+/** This Week's dinners in each state: Monday unplanned, Tuesday planned, Wednesday cooked, Thursday rated. */
+function dinnersByState(): Week {
+  const week = emptyWeek("2026-10-26");
+  const pastaSlot = { kind: "recipe", recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null } };
+  Object.assign(week.slots[5] as Slot, pastaSlot);
+  Object.assign(week.slots[8] as Slot, { ...pastaSlot, cookedAt: "2026-10-29T02:00:00.000Z" });
+  Object.assign(week.slots[11] as Slot, {
+    ...pastaSlot,
+    cookedAt: "2026-10-30T02:00:00.000Z",
+    ratings: [{ memberId: 1, rating: "again", note: null, at: "2026-10-30T02:10:00.000Z" }],
+  });
+  return week;
+}
+
+/** What a dinner card offers besides opening its Recipe from its title. */
+const dinnerActions = (day: string) => {
+  const dinner = within(screen.getByRole("region", { name: day })).getByRole("region", { name: "Dinner" });
+  return within(dinner)
+    .queryAllByRole("button")
+    .map((button) => button.textContent)
+    .filter((name) => name !== "Pasta");
+};
+
+test("each dinner card has one action: Choose a dinner, then Cook, then Rate it, then none", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: dinnersByState() }) });
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  expect(dinnerActions("Monday, October 26")).toEqual(["Choose a dinner"]);
+  expect(dinnerActions("Tuesday, October 27")).toEqual(["Cook"]);
+  expect(dinnerActions("Wednesday, October 28")).toEqual(["Rate it"]);
+  expect(dinnerActions("Thursday, October 29")).toEqual([]);
+
+  const wednesday = within(screen.getByRole("region", { name: "Wednesday, October 28" }));
+  expect(wednesday.getByText("Cooked")).toBeTruthy();
+  const thursday = within(screen.getByRole("region", { name: "Thursday, October 29" }));
+  expect(thursday.getByText("Again")).toBeTruthy();
+});
+
+test("Rate it opens the dinner's Recipe at its rating, and the rated dinner shows the Rating", async () => {
+  let rated = false;
+  const fake = fakeClient({
+    get_week: () => {
+      const week = dinnersByState();
+      if (rated) {
+        (week.slots[8] as Slot).ratings = [
+          { memberId: null, rating: "meh", note: null, at: "2026-10-29T03:00:00.000Z" },
+        ];
+      }
+      return { ok: true, value: week };
+    },
+    rate_recipe: () => {
+      rated = true;
+      queueMicrotask(() => fake.notify("plan"));
+      return undefined;
+    },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={fake.client} />);
+  const wednesday = await screen.findByRole("region", { name: "Wednesday, October 28" });
+
+  await user.click(within(wednesday).getByRole("button", { name: "Rate it" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const form = within(sheet).getByRole("form", { name: "How was it?" });
+  await vi.waitFor(() => expect(form.contains(document.activeElement)).toBe(true));
+  await user.click(within(form).getByRole("radio", { name: "Meh" }));
+  await user.click(within(form).getByRole("button", { name: "Rate" }));
+  await user.click(within(sheet).getByRole("button", { name: "Close the Recipe" }));
+
+  await vi.waitFor(() => expect(dinnerActions("Wednesday, October 28")).toEqual([]));
+  expect(within(wednesday).getByText("Meh")).toBeTruthy();
+  expect(writes(fake.calls)).toEqual([
+    { name: "rate_recipe", input: { date: "2026-10-28", meal: "dinner", rating: "meh", note: null } },
+  ]);
+});
+
+test("breakfast and lunch have one action each too, in the folded strip", async () => {
+  const week = dinnersByState();
+  Object.assign(week.slots[3] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByText("Breakfast and lunch"));
+
+  const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
+  expect(
+    within(breakfast)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Pasta", "Cook"]);
+  const lunch = within(tuesday).getByRole("region", { name: "Lunch" });
+  expect(
+    within(lunch)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Choose a lunch"]);
+});
+
+test("an unplanned Week is seven compact rows, each with Choose a dinner", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2026-10-26") }) });
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  expect(within(monday).getByText("Mon 26 · Nothing planned")).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "Choose a dinner" })).toHaveLength(7);
+  expect(screen.queryByRole("img")).toBeNull();
+});
+
+test("a dinner with a Recipe is marked cooked from its Recipe's sheet", async () => {
   const { client, calls } = fakeClient();
   const user = userEvent.setup();
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  const monday = screen.getByRole("region", { name: "Monday, October 26" });
 
-  expect(within(monday).queryByRole("button", { name: "Mark cooked" })).toBeNull();
-  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
-  await user.click(within(dinner).getByRole("button", { name: "Mark cooked" }));
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  await user.click(within(sheet).getByRole("button", { name: "Mark cooked" }));
 
   expect(writes(calls)).toEqual([{ name: "mark_cooked", input: { date: "2026-10-27", meal: "dinner" } }]);
 });
 
-test("a cooked dinner shows its Ratings, asks for one, and can be unmarked", async () => {
+test("a cooked dinner's sheet shows its Ratings, asks for one, and can be unmarked", async () => {
   const cooked = emptyWeek("2026-10-26");
   Object.assign(cooked.slots[5] as Slot, {
     kind: "recipe",
@@ -880,18 +998,19 @@ test("a cooked dinner shows its Ratings, asks for one, and can be unmarked", asy
   const user = userEvent.setup();
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
 
-  expect(within(dinner).getByText("Cooked")).toBeTruthy();
-  expect(within(dinner).getByText("Robin: Meh. Too salty")).toBeTruthy();
-  expect(within(dinner).getByText("Someone: Again")).toBeTruthy();
-  expect(within(dinner).queryByRole("button", { name: "Mark cooked" })).toBeNull();
+  expect(within(sheet).getByText("Cooked")).toBeTruthy();
+  expect(within(sheet).getByText("Robin: Meh. Too salty")).toBeTruthy();
+  expect(within(sheet).getByText("Someone: Again")).toBeTruthy();
+  expect(within(sheet).queryByRole("button", { name: "Mark cooked" })).toBeNull();
 
-  const form = within(dinner).getByRole("form", { name: "How was it?" });
+  const form = within(sheet).getByRole("form", { name: "How was it?" });
   await user.click(within(form).getByRole("radio", { name: "Never again" }));
   await user.type(within(form).getByRole("textbox", { name: "Note (optional)" }), "Nobody ate it");
   await user.click(within(form).getByRole("button", { name: "Rate" }));
-  await user.click(within(dinner).getByRole("button", { name: "Not cooked after all" }));
+  await user.click(within(sheet).getByRole("button", { name: "Not cooked after all" }));
 
   expect(writes(calls)).toEqual([
     {
@@ -902,7 +1021,7 @@ test("a cooked dinner shows its Ratings, asks for one, and can be unmarked", asy
   ]);
 });
 
-test("a cooked dinner asks whether any Staple its Recipe uses has run out", async () => {
+test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run out", async () => {
   const cooked = emptyWeek("2026-10-26");
   Object.assign(cooked.slots[5] as Slot, {
     kind: "recipe",
@@ -929,9 +1048,10 @@ test("a cooked dinner asks whether any Staple its Recipe uses has run out", asyn
   const user = userEvent.setup();
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
 
-  const runOut = await within(dinner).findByRole("group", { name: "Anything run out?" });
+  const runOut = await within(sheet).findByRole("group", { name: "Anything run out?" });
   await user.click(within(runOut).getByRole("button", { name: "olive oil: Out" }));
 
   expect(writes(calls)).toEqual([
@@ -972,11 +1092,12 @@ test("marking a dinner cooked asks at once whether any Staple its Recipe uses ha
   const user = userEvent.setup();
   render(() => <App client={fake.client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
 
-  await user.click(within(dinner).getByRole("button", { name: "Mark cooked" }));
+  await user.click(within(sheet).getByRole("button", { name: "Mark cooked" }));
 
-  const runOut = await within(dinner).findByRole("group", { name: "Anything run out?" });
+  const runOut = await within(sheet).findByRole("group", { name: "Anything run out?" });
   expect(within(runOut).getByRole("button", { name: "salt: Out" })).toBeTruthy();
 });
 
@@ -1001,8 +1122,11 @@ test("offline, the Week last loaded opens read-only: it can be cooked from, not 
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
   expect(within(tuesday).getByRole("heading", { name: "Pasta" })).toBeTruthy();
   expect(within(tuesday).getByRole("button", { name: "Cook" })).toBeTruthy();
-  expect(within(tuesday).queryByRole("button", { name: "Edit dinner" })).toBeNull();
-  expect(within(tuesday).queryByRole("button", { name: "Mark cooked" })).toBeNull();
+  expect(within(screen.getByRole("region", { name: "Monday, October 26" })).queryByRole("button")).toBeNull();
+  await userEvent.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog");
+  expect(within(sheet).queryByRole("button", { name: "Edit dinner" })).toBeNull();
+  expect(within(sheet).queryByRole("button", { name: "Mark cooked" })).toBeNull();
   expect((screen.getByRole("button", { name: "Propose dinners" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("alert")).toBeNull();
 });

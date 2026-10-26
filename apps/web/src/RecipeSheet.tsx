@@ -10,8 +10,8 @@ import { Sheet } from "./Sheet";
 
 /**
  * A Slot's Recipe, looked at over the Week: its Ingredients scaled to `servings`, what the Slot is
- * cooked for (its Leftovers included), after the `children` (the Slot's Conflicts). Read-only;
- * Recipes are changed on the Recipes screen.
+ * cooked for (its Leftovers included), after the `children` (the Slot's Conflicts) and what can be
+ * done with the Slot. The Recipe itself is read-only; Recipes are changed on the Recipes screen.
  */
 export function RecipeSheet(props: {
   client: MiseClient;
@@ -21,6 +21,8 @@ export function RecipeSheet(props: {
   /** Without it, nothing to cook: Leftovers are cooked on the Slot they're of. */
   onCook?: (recipe: RecipeId, servings: number) => void;
   onClose: () => void;
+  /** What can be done with the Slot: marking it cooked, rating it, editing it. */
+  slotActions?: JSX.Element;
   children?: JSX.Element;
 }) {
   const titleId = createUniqueId();
@@ -40,7 +42,7 @@ export function RecipeSheet(props: {
   );
 
   return (
-    <Sheet labelledBy={titleId} onEscape={() => props.onClose()}>
+    <Sheet labelledBy={titleId} focusField={false} onEscape={() => props.onClose()}>
       <div class="sheet-header">
         <div class="page-heading">
           <p class="overline">{t("recipe.overline")}</p>
@@ -68,6 +70,7 @@ export function RecipeSheet(props: {
                   </button>
                 )}
               </Show>
+              {props.slotActions}
               <section class="stack" aria-labelledby={`${titleId}-ingredients`}>
                 <h3 id={`${titleId}-ingredients`}>{t("recipe.ingredients")}</h3>
                 <p class="meta">{scaledForText(props.servings, open().baseServings)}</p>

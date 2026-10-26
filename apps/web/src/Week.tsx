@@ -25,7 +25,7 @@ import {
   type WeekSpan,
   weekDates,
 } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { formatDate, shortDate } from "./dates";
@@ -47,11 +47,14 @@ import {
 import { RecipeSheet } from "./RecipeSheet";
 import { Sheet } from "./Sheet";
 
+/** Which Slot of the Week: its day and meal. */
+type SlotKey = Pick<Slot, "date" | "meal">;
+
 /**
  * The Recipe a Slot holds, or that its Leftovers are of, opened over the Week and scaled to the
- * `servings` it is cooked for.
+ * `servings` it is cooked for; at its rating, when `rate` is set.
  */
-type OpenRecipe = { id: RecipeId; servings: number; slot: Slot };
+type OpenRecipe = { id: RecipeId; servings: number; slot: SlotKey; rate: boolean };
 
 /**
  * The current and next Week, each day's dinner first, with every Slot editable by hand. Offline it is
@@ -87,14 +90,23 @@ export function WeekPage(props: {
   const items = createItems(props.client);
   const readOnly = () => !props.online;
   const [opened, setOpened] = createSignal<OpenRecipe>();
-  const open = (slot: Slot) => {
+  // The one Slot whose form is open.
+  const [editing, setEditing] = createSignal<SlotKey>();
+  const open = (slot: Slot, rate = false) => {
     const recipe = slot.recipe ?? slot.leftoversOf?.recipe;
     if (!recipe) return;
     // Leftovers are cooked on the Slot they're of; one in another Week isn't here, so as written.
     const of = slot.leftoversOf;
-    const cooked = of ? week()?.slots.find((s) => s.date === of.date && s.meal === of.meal) : slot;
-    setOpened({ id: recipe.id, servings: cooked?.cookFor || recipe.baseServings, slot });
+    const cooked = of ? week()?.slots.find((s) => sameSlot(s, of)) : slot;
+    setOpened({
+      id: recipe.id,
+      servings: cooked?.cookFor || recipe.baseServings,
+      slot: { date: slot.date, meal: slot.meal },
+      rate,
+    });
   };
+  // The opened Slot as the Week now has it, so that marking it cooked or rating it shows at once.
+  const openedSlot = (open: OpenRecipe) => week()?.slots.find((slot) => sameSlot(slot, open.slot));
 
   // Slots show their Recipes' titles and photos, and follow the default Diners: every Member.
   const refetch = keepFresh(
@@ -209,6 +221,8 @@ export function WeekPage(props: {
                     readOnly={readOnly()}
                     onCook={props.onCook}
                     onOpen={open}
+                    editing={editing()}
+                    onEdit={setEditing}
                     slots={shown().slots.filter((slot) => slot.date === date)}
                   />
                 )}
@@ -226,16 +240,35 @@ export function WeekPage(props: {
       <confirm.ConfirmSheet />
       <Show when={opened()} keyed>
         {(open) => (
-          <RecipeSheet
-            client={props.client}
-            id={open.id}
-            servings={open.servings}
-            locale={props.household.locale}
-            onCook={open.slot.recipe ? props.onCook : undefined}
-            onClose={() => setOpened(undefined)}
-          >
-            <SlotConflicts household={props.household} slot={open.slot} />
-          </RecipeSheet>
+          <Show when={openedSlot(open)}>
+            {(slot) => (
+              <RecipeSheet
+                client={props.client}
+                id={open.id}
+                servings={open.servings}
+                locale={props.household.locale}
+                onCook={slot().recipe ? props.onCook : undefined}
+                onClose={() => setOpened(undefined)}
+                slotActions={
+                  <Show when={slot().recipe}>
+                    <Cooking
+                      client={props.client}
+                      household={props.household}
+                      slot={slot()}
+                      readOnly={readOnly()}
+                      rate={open.rate}
+                      onEdit={() => {
+                        setOpened(undefined);
+                        setEditing(open.slot);
+                      }}
+                    />
+                  </Show>
+                }
+              >
+                <SlotConflicts household={props.household} slot={slot()} />
+              </RecipeSheet>
+            )}
+          </Show>
         )}
       </Show>
     </section>
@@ -283,10 +316,13 @@ function Day(props: {
   today: boolean;
   readOnly: boolean;
   onCook: (recipe: RecipeId, servings: number) => void;
-  onOpen: (slot: Slot) => void;
+  onOpen: (slot: Slot, rate?: boolean) => void;
+  editing: SlotKey | undefined;
+  onEdit: (slot: SlotKey | undefined) => void;
   slots: Slot[];
 }) {
   const title = () => dayTitle(props.date, props.household.locale);
+  const isEditing = (meal: Meal) => !!props.editing && sameSlot(props.editing, { date: props.date, meal });
   const slot = (meal: Meal) => props.slots.find((s) => s.meal === meal) as Slot;
   const [editingDiners, setEditingDiners] = createSignal(false);
   const view = (meal: Meal, prominent = false) => (
@@ -300,6 +336,8 @@ function Day(props: {
       readOnly={props.readOnly}
       onCook={props.onCook}
       onOpen={props.onOpen}
+      editing={isEditing(meal)}
+      onEdit={(edit) => props.onEdit(edit ? { date: props.date, meal } : undefined)}
       prominent={prominent}
     />
   );
@@ -314,7 +352,10 @@ function Day(props: {
     <section class="day" id={dayId(props.date)} aria-label={title()}>
       <h2 class="visually-hidden">{title()}</h2>
       {view("dinner", true)}
-      <details class="strip" open={["breakfast", "lunch"].some((meal) => blocking(slot(meal as Meal)))}>
+      <details
+        class="strip"
+        open={(["breakfast", "lunch"] as const).some((meal) => blocking(slot(meal)) || isEditing(meal))}
+      >
         <summary>
           <span>{t("week.otherMeals")}</span>
           <span class="strip-plan">{otherPlans()}</span>
@@ -349,6 +390,10 @@ function Day(props: {
   );
 }
 
+/**
+ * A Slot as the Week shows it, with one action by where it stands: nothing chosen, Choose; a Recipe
+ * to cook, Cook; cooked, Rate it; rated, none. The rest is in its Recipe's sheet.
+ */
 function SlotView(props: {
   client: MiseClient;
   household: Household;
@@ -359,10 +404,11 @@ function SlotView(props: {
   today: boolean;
   readOnly: boolean;
   onCook: (recipe: RecipeId, servings: number) => void;
-  onOpen: (slot: Slot) => void;
+  onOpen: (slot: Slot, rate?: boolean) => void;
+  editing: boolean;
+  onEdit: (editing: boolean) => void;
   prominent?: boolean;
 }) {
-  const [editing, setEditing] = createSignal(false);
   const meal = () => t(`meal.${props.slot.meal}`);
   const unsafe = () => props.slot.conflicts.find((conflict) => conflict.override === null);
   const flag = (): Flag | undefined => {
@@ -370,6 +416,13 @@ function SlotView(props: {
     if (conflict) return { kind: "warn", text: conflictChip(conflict, props.household) };
     return props.slot.locked ? { kind: "lock", text: t("slot.locked") } : undefined;
   };
+  const choose = () => (
+    <Show when={!props.readOnly}>
+      <button type="button" class="button-row" onClick={() => props.onEdit(true)}>
+        {t(`slot.choose.${props.slot.meal}`)}
+      </button>
+    </Show>
+  );
 
   return (
     <section class="slot" aria-label={meal()}>
@@ -384,21 +437,34 @@ function SlotView(props: {
         <Show
           when={props.slot.kind === "recipe" && props.slot.recipe}
           fallback={
-            <div class="compact">
-              <SlotThumb client={props.client} slot={props.slot} />
-              <div class="dish">
-                <p class="overline">{props.day}</p>
-                <DishTitle slot={props.slot} onOpen={props.onOpen} />
-                <p class="meta">{servingsText(props.slot, props.household)}</p>
-                <Show when={flag()}>
-                  {(shown) => (
-                    <p class="chips">
-                      <span class={`chip ${FLAG_CLASS[shown().kind].chip}`}>{shown().text}</span>
-                    </p>
-                  )}
-                </Show>
+            <Show
+              when={props.slot.kind !== "unplanned"}
+              fallback={
+                <div class="compact compact-end">
+                  <SlotThumb client={props.client} slot={props.slot} />
+                  <p class="row-title">{t("week.nothingPlanned", { day: props.day })}</p>
+                  <Show when={!props.editing}>
+                    <div class="row-end">{choose()}</div>
+                  </Show>
+                </div>
+              }
+            >
+              <div class="compact">
+                <SlotThumb client={props.client} slot={props.slot} />
+                <div class="dish">
+                  <p class="overline">{props.day}</p>
+                  <DishTitle slot={props.slot} onOpen={props.onOpen} />
+                  <p class="meta">{servingsText(props.slot, props.household)}</p>
+                  <Show when={flag()}>
+                    {(shown) => (
+                      <p class="chips">
+                        <span class={`chip ${FLAG_CLASS[shown().kind].chip}`}>{shown().text}</span>
+                      </p>
+                    )}
+                  </Show>
+                </div>
               </div>
-            </div>
+            </Show>
           }
         >
           {(recipe) => (
@@ -439,37 +505,50 @@ function SlotView(props: {
       <SlotConflicts household={props.household} slot={props.slot} />
       <Show when={props.slot.note}>{(note) => <p>{note()}</p>}</Show>
       <Show
-        when={editing()}
+        when={props.editing}
         fallback={
-          <div class="slot-actions">
-            <Show when={props.slot.recipe}>
-              {(recipe) => (
-                <button
-                  type="button"
-                  class="button-primary"
-                  onClick={() => props.onCook(recipe().id, props.slot.cookFor || recipe().baseServings)}
-                >
-                  <Icon name="pot" />
-                  {t("kitchen.cook")}
-                </button>
+          <Switch fallback={<Show when={props.slot.kind !== "unplanned" || !props.prominent}>{choose()}</Show>}>
+            <Match when={props.slot.cookedAt ? props.slot.ratings.at(-1) : undefined}>
+              {(rated) => (
+                <p class="chips">
+                  <span class="chip">{t(`rating.${rated().rating}`)}</span>
+                </p>
               )}
-            </Show>
-            <Show when={props.slot.recipe}>
-              <Cooking client={props.client} household={props.household} slot={props.slot} readOnly={props.readOnly} />
-            </Show>
-            <Show when={!props.readOnly}>
-              <button type="button" class="button-row" onClick={() => setEditing(true)}>
-                {t(`slot.edit.${props.slot.meal}`)}
-              </button>
-            </Show>
-          </div>
+            </Match>
+            <Match when={props.slot.cookedAt}>
+              <p class="chips">
+                <CookedChip />
+              </p>
+              <Show when={!props.readOnly}>
+                <div class="slot-actions">
+                  <button type="button" class="button-row" onClick={() => props.onOpen(props.slot, true)}>
+                    {t("cooking.rateIt")}
+                  </button>
+                </div>
+              </Show>
+            </Match>
+            <Match when={props.slot.recipe}>
+              {(recipe) => (
+                <div class="slot-actions">
+                  <button
+                    type="button"
+                    class="button-primary"
+                    onClick={() => props.onCook(recipe().id, props.slot.cookFor || recipe().baseServings)}
+                  >
+                    <Icon name="pot" />
+                    {t("kitchen.cook")}
+                  </button>
+                </div>
+              )}
+            </Match>
+          </Switch>
         }
       >
         <SlotForm
           client={props.client}
           household={props.household}
           slot={props.slot}
-          onDone={() => setEditing(false)}
+          onDone={() => props.onEdit(false)}
         />
       </Show>
     </section>
@@ -547,6 +626,15 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
   );
 }
 
+function CookedChip() {
+  return (
+    <span class="chip chip-leaf">
+      <Icon name="check" size={16} />
+      {t("cooking.cooked")}
+    </span>
+  );
+}
+
 /** What a dinner is flagged with: a Conflict nobody has overridden, or that it is Locked. */
 type Flag = { kind: "warn" | "lock"; text: string };
 const FLAG_CLASS = {
@@ -554,8 +642,19 @@ const FLAG_CLASS = {
   lock: { pill: "pill-lock", chip: "chip-plum" },
 } satisfies Record<Flag["kind"], { pill: string; chip: string }>;
 
-/** Marking a Slot with a Recipe cooked; once it is, its Ratings and a prompt for one more. */
-function Cooking(props: { client: MiseClient; household: Household; slot: Slot; readOnly: boolean }) {
+/**
+ * A Slot with a Recipe, in that Recipe's sheet: marking it cooked; once it is, what ran out, its
+ * Ratings and a prompt for one more; and editing it.
+ */
+function Cooking(props: {
+  client: MiseClient;
+  household: Household;
+  slot: Slot;
+  readOnly: boolean;
+  /** Opened to rate it: the rating has the focus. */
+  rate: boolean;
+  onEdit: () => void;
+}) {
   const [rating, setRating] = createSignal<Rating>();
   const [note, setNote] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -613,17 +712,19 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot; 
         }
       >
         <p class="chips">
-          <span class="chip chip-plum">
-            <Icon name="check" size={16} />
-            {t("cooking.cooked")}
-          </span>
+          <CookedChip />
         </p>
         <Show when={props.slot.meal === "dinner" && props.slot.recipe}>
           {(recipe) => <RunOut client={props.client} recipeId={recipe().id} />}
         </Show>
         <For each={props.slot.ratings}>{(given) => <p class="meta">{ratedText(given)}</p>}</For>
         <form class="slot-form" aria-label={t("cooking.prompt")} onSubmit={rate}>
-          <fieldset class="rating">
+          <fieldset
+            class="rating"
+            ref={(rating) =>
+              props.rate && queueMicrotask(() => rating.querySelector<HTMLInputElement>("input")?.focus())
+            }
+          >
             <legend>{t("cooking.prompt")}</legend>
             <For each={RATINGS}>
               {(option) => (
@@ -654,6 +755,11 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot; 
           onClick={() => call(() => props.client.call("mark_cooked", { ...where(), cooked: false }))}
         >
           {t("cooking.unmark")}
+        </button>
+      </Show>
+      <Show when={!props.readOnly}>
+        <button type="button" class="button-row" onClick={() => props.onEdit()}>
+          {t(`slot.edit.${props.slot.meal}`)}
         </button>
       </Show>
     </>
@@ -1071,6 +1177,10 @@ function servingsText(slot: Slot, household: Household): string {
   return slot.recipe
     ? t("slot.servesRecipe", { ...params, base: String(slot.recipe.baseServings) })
     : t("slot.serves", params);
+}
+
+function sameSlot(slot: SlotKey, other: SlotKey): boolean {
+  return slot.date === other.date && slot.meal === other.meal;
 }
 
 /** Where the day rail jumps to. */

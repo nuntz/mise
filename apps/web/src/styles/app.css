@@ -1176,6 +1176,11 @@ article:not([class]) {
   font: var(--type-title-sm);
 }
 
+/* A compact row with its one action trailing, such as an unplanned dinner's Choose. */
+.compact-end {
+  grid-template-columns: var(--thumb) minmax(0, 1fr) auto;
+}
+
 .thumb {
   position: relative;
   display: flex;
