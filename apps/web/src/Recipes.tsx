@@ -11,6 +11,7 @@ import type {
   Recurrence,
 } from "@mise/domain";
 import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { FilePicker } from "./FilePicker";
@@ -200,8 +201,14 @@ function RecipeDetail(props: {
     () => setError(t("app.error")),
   );
 
+  const confirm = createConfirm();
   const remove = async (current: Recipe) => {
-    if (!window.confirm(t("recipe.deleteConfirm", { title: current.title }))) return;
+    const confirmed = await confirm.ask({
+      title: t("recipe.deleteTitle", { title: current.title }),
+      lost: t("recipe.deleteLost", { title: current.title }),
+      action: t("recipe.delete"),
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       const result = await props.client.call("delete_recipe", { id: current.id, confirm: true });
@@ -346,6 +353,7 @@ function RecipeDetail(props: {
           </article>
         )}
       </Show>
+      <confirm.ConfirmSheet />
     </>
   );
 }

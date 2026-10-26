@@ -27,6 +27,7 @@ import {
   weekdayOf,
 } from "@mise/domain";
 import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
+import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { formatDate, shortDate } from "./dates";
 import { errorText } from "./errors";
@@ -131,8 +132,11 @@ export function WeekPage(props: {
     void refetch();
   };
 
+  const confirm = createConfirm();
   const clear = async (shown: Week) => {
-    if (!window.confirm(t("week.clearConfirm", { date: dayTitle(shown.startDate, props.household.locale) }))) return;
+    const lost = t("week.clearLost", { date: dayTitle(shown.startDate, props.household.locale) });
+    const confirmed = await confirm.ask({ title: t("week.clearTitle"), lost, action: t("week.clear") });
+    if (!confirmed) return;
     setError(
       (await outcomeOf(() => props.client.call("clear_week", { date: shown.startDate, confirm: true }))).failure,
     );
@@ -231,6 +235,7 @@ export function WeekPage(props: {
           </>
         )}
       </Show>
+      <confirm.ConfirmSheet />
       <Show when={opened()} keyed>
         {(open) => (
           <RecipeSheet

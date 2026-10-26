@@ -11,7 +11,7 @@ import {
 } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, onTestFinished, test, vi } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
@@ -243,19 +243,23 @@ test("a Draft is edited in place, and stays to be accepted", async () => {
   expect(within(edited.closest("article") as HTMLElement).getByRole("button", { name: "Accept" })).toBeTruthy();
 });
 
-test("a Draft can be discarded, once confirmed, as a Recipe is deleted", async () => {
+test("a Draft can be discarded, once confirmed in Mise's own sheet", async () => {
   const { client, calls } = fakeClient({ drafts: [{ recipe: dal, duplicateOf: [] }] });
-  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
   await openReview(client);
   const draft = await screen.findByRole("article", { name: "Grandma's dal" });
 
   await userEvent.click(within(draft).getByRole("button", { name: "Discard" }));
+  const sheet = screen.getByRole("dialog", { name: "Discard Grandma's dal?" });
+  expect(within(sheet).getByText("This Draft goes for good, and isn't added to your Recipes.")).toBeTruthy();
+  await userEvent.click(within(sheet).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(calls.map((call) => call.name)).not.toContain("delete_recipe");
-  await userEvent.click(within(draft).getByRole("button", { name: "Discard" }));
+  expect(screen.getByRole("article", { name: "Grandma's dal" })).toBeTruthy();
 
-  expect(confirm).toHaveBeenCalledWith("Delete Grandma's dal? This cannot be undone.");
+  await userEvent.click(within(draft).getByRole("button", { name: "Discard" }));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Discard Draft" }));
+
   expect(calls).toContainEqual({ name: "delete_recipe", input: { id: 9, confirm: true } });
-  confirm.mockRestore();
   expect(await screen.findByText("Nothing is waiting on you.")).toBeTruthy();
 });
 

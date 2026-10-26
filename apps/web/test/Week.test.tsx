@@ -426,21 +426,34 @@ test("who's eating can be set for a whole day", async () => {
   );
 });
 
-test("clearing the Week asks first", async () => {
+test("clearing the Week asks first, in Mise's own sheet", async () => {
   const { client, calls } = fakeClient();
   const user = userEvent.setup();
-  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
 
   await user.click(screen.getByRole("button", { name: "Clear this Week" }));
-  await user.click(screen.getByRole("button", { name: "Clear this Week" }));
+  const sheet = screen.getByRole("dialog", { name: "Clear this Week?" });
+  expect(
+    within(sheet).getByText(
+      "Every Slot of the Week starting Monday, October 26 is emptied for good, Locked ones too; meals already cooked stay.",
+    ),
+  ).toBeTruthy();
+  await user.click(within(sheet).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
 
-  expect(confirm).toHaveBeenCalledTimes(2);
+  await user.click(screen.getByRole("button", { name: "Clear this Week" }));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(writes(calls)).toEqual([]);
+
+  await user.click(screen.getByRole("button", { name: "Clear this Week" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Clear this Week" }));
+
   await vi.waitFor(() =>
     expect(writes(calls)).toEqual([{ name: "clear_week", input: { date: "2026-10-26", confirm: true } }]),
   );
-  confirm.mockRestore();
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 const robinsPeanut = { who: 1, allergen: "peanut", constraint: "allergy", cause: "contains" } as const;

@@ -80,10 +80,11 @@ const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, cours
  * A client over a fixed set of Recipes that records every tool call made and every photo uploaded;
  * offline, every call fails.
  */
-function fakeClient(recipes: Recipe[], { online = true } = {}) {
+function fakeClient(stored: Recipe[], { online = true } = {}) {
+  let recipes = stored;
   const calls: { name: string; input: unknown }[] = [];
   const photos: { recipeId: number; photo: Blob }[] = [];
-  const { client } = createFakeClient(
+  const { client, notify } = createFakeClient(
     async (name: string, input: Record<string, unknown>) => {
       calls.push({ name, input });
       switch (name) {
@@ -108,6 +109,13 @@ function fakeClient(recipes: Recipe[], { online = true } = {}) {
           return { ok: true, value: { ...rice, id: 3, title: String(input.title) } };
         case "update_recipe":
           return { ok: true, value: { ...toast, ...input } };
+        case "delete_recipe": {
+          const recipe = recipes.find((r) => r.id === input.id);
+          if (!recipe) return { ok: false, error: { code: "not_found", message: "" } };
+          recipes = recipes.filter((r) => r !== recipe);
+          queueMicrotask(() => notify("recipes"));
+          return { ok: true, value: recipe };
+        }
         default:
           throw new Error(`Unexpected tool ${name}`);
       }
@@ -315,6 +323,32 @@ test("editing a Recipe starts from what it has and saves the changes", async () 
     effortMinutes: null,
     recurring: "weekly",
   });
+});
+
+test("deleting a Recipe asks in Mise's own sheet, and Cancel keeps it", async () => {
+  const user = userEvent.setup();
+  const { client, calls } = fakeClient([toast]);
+  await openRecipes(client);
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+
+  await user.click(await screen.findByRole("button", { name: "Delete Recipe" }));
+  const sheet = screen.getByRole("dialog", { name: "Delete Toast?" });
+  expect(
+    within(sheet).getByText(
+      "Toast goes for good, and every Slot it's planned in, cooked ones too, is unplanned and loses its Ratings.",
+    ),
+  ).toBeTruthy();
+  await user.click(within(sheet).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(calls.map((call) => call.name)).not.toContain("delete_recipe");
+  expect(screen.getByRole("heading", { name: "Toast" })).toBeTruthy();
+
+  await user.click(screen.getByRole("button", { name: "Delete Recipe" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Recipe" }));
+
+  expect(calls).toContainEqual({ name: "delete_recipe", input: { id: 1, confirm: true } });
+  await screen.findByRole("searchbox", { name: "Search Recipes" });
+  await waitForGone(() => screen.queryByRole("button", { name: "Toast" }));
 });
 
 test("a Recipe shows its Course, which the form corrects or leaves unknown", async () => {

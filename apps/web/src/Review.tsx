@@ -10,6 +10,7 @@ import {
 } from "@mise/domain";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { Done } from "./Done";
 import { errorText } from "./errors";
@@ -124,6 +125,7 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
   /** The link of a link-only Draft; null for any other. */
   const link = () => (isLinkOnly(recipe()) ? linkOf(recipe()) : null);
 
+  const confirm = createConfirm();
   const act = async (change: () => Promise<ToolResult<unknown>>) => {
     setBusy(true);
     setError(undefined);
@@ -135,6 +137,17 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
     } finally {
       setBusy(false);
     }
+  };
+
+  // Discarding a Draft deletes it, so it is asked first, as deleting a Recipe is.
+  const discard = async () => {
+    const confirmed = await confirm.ask({
+      title: t("review.discardTitle", { title: recipe().title }),
+      lost: t("review.discardLost"),
+      action: t("review.discardAction"),
+    });
+    if (!confirmed) return;
+    await act(() => props.client.call("delete_recipe", { id: recipe().id, confirm: true }));
   };
 
   return (
@@ -190,16 +203,7 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
             <button type="button" class="button-secondary" disabled={busy()} onClick={() => setEditing(true)}>
               {t("review.edit")}
             </button>
-            <button
-              type="button"
-              class="button-danger"
-              disabled={busy()}
-              onClick={() => {
-                // Discarding is deleting, confirmed as any Recipe's deletion is.
-                if (!window.confirm(t("recipe.deleteConfirm", { title: recipe().title }))) return;
-                void act(() => props.client.call("delete_recipe", { id: recipe().id, confirm: true }));
-              }}
-            >
+            <button type="button" class="button-danger" disabled={busy()} onClick={discard}>
               {t("review.discard")}
             </button>
           </>
@@ -217,6 +221,7 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
           {error()}
         </p>
       </Show>
+      <confirm.ConfirmSheet />
     </article>
   );
 }

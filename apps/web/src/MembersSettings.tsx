@@ -1,5 +1,6 @@
 import { type Constraint, constraintSeverity, type Member, type MemberId, type ToolError } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
+import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
@@ -49,8 +50,15 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
     await submitChange(() => props.client.call("update_member", { id: props.member.id, ...memberOf(current) }));
   };
 
+  const confirm = createConfirm();
   const remove = async () => {
-    if (!window.confirm(t("member.removeConfirm", { name: props.member.name }))) return;
+    const { name } = props.member;
+    const confirmed = await confirm.ask({
+      title: t("member.removeTitle", { name }),
+      lost: t("member.removeLost", { name }),
+      action: t("member.removeAction"),
+    });
+    if (!confirmed) return;
     await submitChange(() => props.client.call("remove_member", { id: props.member.id }));
   };
 
@@ -70,54 +78,57 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
   };
 
   return (
-    <Show
-      when={draft()}
-      fallback={
-        <div class="row">
-          <div class="row-body">
-            <span class="row-title">
-              {props.member.name} {props.isCaller && t("member.you")}
-            </span>
-            <span class="row-meta">{props.member.email ?? t("member.noEmail")}</span>
-            <span class="row-meta">
-              {props.member.constraints.length > 0
-                ? props.member.constraints.map(constraintText).join("; ")
-                : t("member.noConstraints")}
-            </span>
+    <>
+      <Show
+        when={draft()}
+        fallback={
+          <div class="row">
+            <div class="row-body">
+              <span class="row-title">
+                {props.member.name} {props.isCaller && t("member.you")}
+              </span>
+              <span class="row-meta">{props.member.email ?? t("member.noEmail")}</span>
+              <span class="row-meta">
+                {props.member.constraints.length > 0
+                  ? props.member.constraints.map(constraintText).join("; ")
+                  : t("member.noConstraints")}
+              </span>
+            </div>
+            <div class="row-end">
+              <button type="button" onClick={() => setDraft(draftOf(props.member))}>
+                {t("member.edit")}
+              </button>
+              <button type="button" class="button-danger" disabled={busy()} onClick={remove}>
+                {t("member.remove")}
+              </button>
+            </div>
+            <Show when={error()}>
+              <p class="banner banner-warn" role="alert">
+                {error()}
+              </p>
+            </Show>
           </div>
-          <div class="row-end">
-            <button type="button" onClick={() => setDraft(draftOf(props.member))}>
-              {t("member.edit")}
+        }
+      >
+        {(current) => (
+          <form onSubmit={save}>
+            <MemberFields draft={current()} onChange={setDraft} />
+            <Show when={error()}>
+              <p class="banner banner-warn" role="alert">
+                {error()}
+              </p>
+            </Show>
+            <button type="submit" disabled={busy()}>
+              {busy() ? t("member.saving") : t("member.save")}
             </button>
-            <button type="button" class="button-danger" disabled={busy()} onClick={remove}>
-              {t("member.remove")}
+            <button type="button" onClick={() => setDraft(undefined)}>
+              {t("member.cancel")}
             </button>
-          </div>
-          <Show when={error()}>
-            <p class="banner banner-warn" role="alert">
-              {error()}
-            </p>
-          </Show>
-        </div>
-      }
-    >
-      {(current) => (
-        <form onSubmit={save}>
-          <MemberFields draft={current()} onChange={setDraft} />
-          <Show when={error()}>
-            <p class="banner banner-warn" role="alert">
-              {error()}
-            </p>
-          </Show>
-          <button type="submit" disabled={busy()}>
-            {busy() ? t("member.saving") : t("member.save")}
-          </button>
-          <button type="button" onClick={() => setDraft(undefined)}>
-            {t("member.cancel")}
-          </button>
-        </form>
-      )}
-    </Show>
+          </form>
+        )}
+      </Show>
+      <confirm.ConfirmSheet />
+    </>
   );
 }
 

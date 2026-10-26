@@ -21,6 +21,8 @@ const en = {
 
   "form.invalid": "Please check: {fields}",
 
+  "confirm.cancel": "Cancel",
+
   "members.title": "Members",
   "members.add": "Add a Member",
   "members.none": "No Members yet.",
@@ -35,7 +37,9 @@ const en = {
   "member.saving": "Saving…",
   "member.cancel": "Cancel",
   "member.remove": "Remove",
-  "member.removeConfirm": "Remove {name} from the Household?",
+  "member.removeTitle": "Remove {name}?",
+  "member.removeLost": "{name} and their Constraints leave the Household, and Mise stops planning for them.",
+  "member.removeAction": "Remove Member",
   "member.emailInUse": "Another Member already signs in with that email.",
   "member.notFound": "That Member is no longer in the Household.",
   "member.you": "(you)",
@@ -408,6 +412,9 @@ const en = {
   "review.accept": "Accept",
   "review.edit": "Edit",
   "review.discard": "Discard",
+  "review.discardTitle": "Discard {title}?",
+  "review.discardLost": "This Draft goes for good, and isn't added to your Recipes.",
+  "review.discardAction": "Discard Draft",
   "review.suggestions": "Suggestions",
   "review.resolve": "Resolve them",
   "drive.title": "Google Drive folder",
@@ -460,7 +467,9 @@ const en = {
   "recipes.overline": "Mise · Recipes",
   "recipe.edit": "Edit Recipe",
   "recipe.delete": "Delete Recipe",
-  "recipe.deleteConfirm": "Delete {title}? This cannot be undone.",
+  "recipe.deleteTitle": "Delete {title}?",
+  "recipe.deleteLost":
+    "{title} goes for good, and every Slot it's planned in, cooked ones too, is unplanned and loses its Ratings.",
   "recipe.notFound": "That Recipe no longer exists.",
   "recipe.servings": "Serves {count}",
   "recipe.effort": "{minutes} minutes",
@@ -524,7 +533,9 @@ const en = {
   "week.this": "This Week",
   "week.next": "Next Week",
   "week.clear": "Clear this Week",
-  "week.clearConfirm": "Clear every Slot of the Week starting {date}, Locked ones too? This cannot be undone.",
+  "week.clearTitle": "Clear this Week?",
+  "week.clearLost":
+    "Every Slot of the Week starting {date} is emptied for good, Locked ones too; meals already cooked stay.",
   "week.otherMeals": "Breakfast and lunch",
   "week.dayDiners": "Who's eating today",
   "week.propose": "Propose dinners",
