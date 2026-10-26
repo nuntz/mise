@@ -74,7 +74,7 @@ test("a household change notice keeps unsaved Member input and shows the new dat
   await screen.findByRole("heading", { name: "The Tremblays" });
   await user.click(screen.getByRole("button", { name: "Members" }));
   // Half-edit Sam, and half-add a new Member.
-  await user.click(screen.getAllByRole("button", { name: "Edit" })[1] as HTMLElement);
+  await user.click(screen.getByRole("button", { name: "Edit Sam" }));
   const editName = screen.getByDisplayValue("Sam");
   await user.clear(editName);
   await user.type(editName, "Samuel");

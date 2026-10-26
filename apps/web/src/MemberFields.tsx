@@ -104,44 +104,51 @@ export function ConstraintFields(props: {
         <Index each={props.constraints}>
           {(constraint, index) => (
             <li>
-              <select
-                aria-label={t("constraint.kind")}
-                value={constraint().kind}
-                onChange={(e) => changeKind(index, e.currentTarget.value as ConstraintKind)}
-              >
-                <For each={CONSTRAINT_KINDS}>
-                  {(kind) => (
-                    <option value={kind}>
-                      {t(`constraint.${kind}`)} ({t(`constraint.${constraintSeverity(kind)}`)})
-                    </option>
-                  )}
-                </For>
-              </select>
+              <div class="row-body row-fields">
+                <select
+                  aria-label={t("constraint.kind")}
+                  value={constraint().kind}
+                  onChange={(e) => changeKind(index, e.currentTarget.value as ConstraintKind)}
+                >
+                  <For each={CONSTRAINT_KINDS}>
+                    {(kind) => (
+                      <option value={kind}>
+                        {t(`constraint.${kind}`)} ({t(`constraint.${constraintSeverity(kind)}`)})
+                      </option>
+                    )}
+                  </For>
+                </select>
 
-              <select
-                aria-label={t("constraint.allergen")}
-                value={constraint().allergen}
-                onChange={(e) => updateConstraint(index, { allergen: e.currentTarget.value as Allergen | "" })}
-              >
-                <Show when={constraintSeverity(constraint().kind) === "soft"}>
-                  <option value="">{t("constraint.noAllergen")}</option>
-                </Show>
-                <For each={ALLERGENS}>
-                  {(allergen) => <option value={allergen}>{t(`allergen.${allergen}`)}</option>}
-                </For>
-              </select>
+                <select
+                  aria-label={t("constraint.allergen")}
+                  value={constraint().allergen}
+                  onChange={(e) => updateConstraint(index, { allergen: e.currentTarget.value as Allergen | "" })}
+                >
+                  <Show when={constraintSeverity(constraint().kind) === "soft"}>
+                    <option value="">{t("constraint.noAllergen")}</option>
+                  </Show>
+                  <For each={ALLERGENS}>
+                    {(allergen) => <option value={allergen}>{t(`allergen.${allergen}`)}</option>}
+                  </For>
+                </select>
 
-              <input
-                aria-label={t("constraint.term")}
-                placeholder={t("constraint.termPlaceholder")}
-                maxLength={100}
-                value={constraint().term}
-                onInput={(e) => updateConstraint(index, { term: e.currentTarget.value })}
-              />
-
-              <button type="button" onClick={() => props.onChange(props.constraints.filter((_, i) => i !== index))}>
-                {t("constraint.remove")}
-              </button>
+                <input
+                  aria-label={t("constraint.term")}
+                  placeholder={t("constraint.termPlaceholder")}
+                  maxLength={100}
+                  value={constraint().term}
+                  onInput={(e) => updateConstraint(index, { term: e.currentTarget.value })}
+                />
+              </div>
+              <div class="row-end">
+                <button
+                  type="button"
+                  class="button-quiet"
+                  onClick={() => props.onChange(props.constraints.filter((_, i) => i !== index))}
+                >
+                  {t("constraint.remove")}
+                </button>
+              </div>
             </li>
           )}
         </Index>

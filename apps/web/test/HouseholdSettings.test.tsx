@@ -30,7 +30,8 @@ function fakeHousehold(refuse?: { path: string }, start: Partial<Household> = {}
   const updates: Record<string, unknown>[] = [];
   const removed: MemberId[] = [];
   const fake = createFakeClient((name, input) => {
-    if (name === "get_household") return { ok: true, value: current };
+    // A copy, as the real client's JSON is: the App's store updates what it's given in place.
+    if (name === "get_household") return { ok: true, value: structuredClone(current) };
     if (name === "remove_member") {
       const member = current.members.find((listed) => listed.id === input.id);
       if (!member) return { ok: false, error: { code: "not_found", message: "" } };
@@ -147,14 +148,17 @@ test("a change made on another device shows in the form without a reload", async
   expect((screen.getByRole("combobox", { name: "Week starts on" }) as HTMLSelectElement).value).toBe("sunday");
 });
 
-test("removing a Member asks in Mise's own sheet, and Cancel keeps them", async () => {
+test("a Member is removed from their edit view, after Mise's own sheet asks, and Cancel keeps them", async () => {
   const user = userEvent.setup();
   const { client, removed } = fakeHousehold();
   render(() => <App client={client} />);
   await user.click(await screen.findByRole("button", { name: "Household" }));
   await user.click(screen.getByRole("button", { name: "Members" }));
 
-  await user.click(screen.getByRole("button", { name: "Remove" }));
+  // The row's one action is Edit; Remove waits in the edit view.
+  expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Edit Robin" }));
+  await user.click(screen.getByRole("button", { name: "Remove Robin" }));
   const sheet = screen.getByRole("dialog", { name: "Remove Robin?" });
   expect(
     within(sheet).getByText("Robin and their Constraints leave the Household, and Mise stops planning for them."),
@@ -162,16 +166,16 @@ test("removing a Member asks in Mise's own sheet, and Cancel keeps them", async 
   await user.click(within(sheet).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(removed).toEqual([]);
-  expect(screen.getByText("Robin")).toBeTruthy();
+  expect(screen.getByDisplayValue("Robin")).toBeTruthy();
 
-  await user.click(screen.getByRole("button", { name: "Remove" }));
+  await user.click(screen.getByRole("button", { name: "Remove Robin" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove Member" }));
 
   expect(removed).toEqual([1]);
   expect(await screen.findByText("No Members yet.")).toBeTruthy();
 });
 
-test("a Member's Constraints each read as one sentence", async () => {
+test("a Member's Constraints are chips, each one sentence, a Hard Constraint's in warn", async () => {
   const user = userEvent.setup();
   const jo: Member = {
     id: 1,
@@ -190,11 +194,16 @@ test("a Member's Constraints each read as one sentence", async () => {
   await user.click(await screen.findByRole("button", { name: "Household" }));
   await user.click(screen.getByRole("button", { name: "Members" }));
 
-  expect(
-    screen.getByText(
-      "Peanut allergy: anaphylactic; Milk intolerance; Wheat-free diet; Dislikes cilantro; Dislikes fish: salmon",
-    ),
-  ).toBeTruthy();
+  const chips = screen.getAllByText(/allergy|intolerance|diet|Dislikes/);
+  expect(chips.map((chip) => [chip.textContent, chip.classList.contains("chip-warn")])).toEqual([
+    ["Peanut allergy: anaphylactic", true],
+    ["Milk intolerance", true],
+    ["Wheat-free diet", true],
+    ["Dislikes cilantro", false],
+    ["Dislikes fish: salmon", false],
+  ]);
+  // The email, or its absence, stays meta.
+  expect(screen.getByText("Doesn't sign in").classList.contains("row-meta")).toBe(true);
 });
 
 test("in the pseudo-locale, no Constraint has a message pasted inside it", async () => {
@@ -215,8 +224,25 @@ test("in the pseudo-locale, no Constraint has a message pasted inside it", async
   await user.click(await screen.findByRole("button", { name: /^\[Ĥöûšéĥöĺđ/ }));
   await user.click(screen.getByRole("button", { name: /^\[Ṁéɱƀéŕš/ }));
 
-  const constraints = screen.getByText(/^\[Ţŕéé/);
-  for (const constraint of (constraints.textContent ?? "").split("; ")) {
-    expect(constraint).toMatch(/^\[[^[\]]*\]$/);
-  }
+  const chips = screen.getAllByText(/^\[/).filter((element) => element.classList.contains("chip"));
+  expect(chips).toHaveLength(2);
+  for (const chip of chips) expect(chip.textContent).toMatch(/^\[[^[\]]*\]$/);
+});
+
+test("Add a Member is the Members page's one primary, and each Constraint in the editor is a row", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeHousehold();
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+  await user.click(screen.getByRole("button", { name: "Members" }));
+
+  const primaries = () => [...document.querySelectorAll(".button-primary")].map((button) => button.textContent);
+  expect(primaries()).toEqual(["Add a Member"]);
+
+  await user.click(screen.getByRole("button", { name: "Edit Robin" }));
+  await user.click(screen.getByRole("button", { name: "Add a Constraint" }));
+  const constraint = screen.getByRole("combobox", { name: "Kind" }).closest("li") as HTMLElement;
+  expect(constraint.querySelector(".row-body")).toBeTruthy();
+  const remove = within(constraint).getByRole("button", { name: "Remove" });
+  expect(remove.parentElement?.classList.contains("row-end")).toBe(true);
 });

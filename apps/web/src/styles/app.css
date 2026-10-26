@@ -1652,6 +1652,18 @@ article:not([class]) {
   flex: none;
 }
 
+/* A Member's lead: their initial in a circle, set as a name. */
+.avatar {
+  display: grid;
+  place-items: center;
+  width: var(--avatar);
+  height: var(--avatar);
+  border-radius: var(--radius-full);
+  background: var(--chip);
+  color: var(--chip-ink);
+  font: var(--type-item);
+}
+
 .row-body {
   display: flex;
   flex: 1 1 12em;
@@ -1659,6 +1671,12 @@ article:not([class]) {
   align-items: flex-start;
   gap: var(--space-1);
   min-width: 0;
+}
+
+/* A row body of fields, such as a Constraint being edited: each field at full width. */
+.row-fields {
+  align-items: stretch;
+  align-self: stretch;
 }
 
 .row-title {

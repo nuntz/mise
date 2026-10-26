@@ -170,6 +170,14 @@ function screens(ids: Map<string, number>): Screen[] {
         await page.locator("button.row-open").nth(index).click();
       },
     })),
+    {
+      name: "household-member-edit",
+      open: async (page: Page) => {
+        await nav(4)(page);
+        await page.locator("button.row-open").first().click();
+        await page.locator(".rows .row-end button").first().click();
+      },
+    },
   ];
 }
 

@@ -1,4 +1,4 @@
-import type { Constraint, Member, MemberId, ToolError } from "@mise/domain";
+import { type Constraint, isHardConstraint, type Member, type MemberId, type ToolError } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
@@ -83,23 +83,34 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
         when={draft()}
         fallback={
           <div class="row">
+            <span class="row-lead avatar name" aria-hidden="true">
+              {initialOf(props.member.name)}
+            </span>
             <div class="row-body">
               <span class="row-title">
                 <span class="name">{nameText(props.member.name)}</span> {props.isCaller && t("member.you")}
               </span>
               <span class="row-meta">{props.member.email ?? t("member.noEmail")}</span>
-              <span class="row-meta">
-                {props.member.constraints.length > 0
-                  ? props.member.constraints.map(constraintText).join("; ")
-                  : t("member.noConstraints")}
-              </span>
+              <Show when={props.member.constraints.length > 0}>
+                <span class="chips">
+                  <For each={props.member.constraints}>
+                    {(constraint) => (
+                      <span class={isHardConstraint(constraint) ? "chip chip-warn" : "chip"}>
+                        {constraintText(constraint)}
+                      </span>
+                    )}
+                  </For>
+                </span>
+              </Show>
             </div>
             <div class="row-end">
-              <button type="button" onClick={() => setDraft(draftOf(props.member))}>
+              <button
+                type="button"
+                class="button-row"
+                aria-label={t("member.editName", { name: props.member.name })}
+                onClick={() => setDraft(draftOf(props.member))}
+              >
                 {t("member.edit")}
-              </button>
-              <button type="button" class="button-danger" disabled={busy()} onClick={remove}>
-                {t("member.remove")}
               </button>
             </div>
             <Show when={error()}>
@@ -111,18 +122,27 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
         }
       >
         {(current) => (
-          <form onSubmit={save}>
+          <form class="stack" onSubmit={save}>
             <MemberFields draft={current()} onChange={setDraft} />
             <Show when={error()}>
               <p class="banner banner-warn" role="alert">
                 {error()}
               </p>
             </Show>
-            <button type="submit" disabled={busy()}>
+            <button type="submit" class="button-primary" disabled={busy()}>
               {busy() ? t("member.saving") : t("member.save")}
             </button>
-            <button type="button" onClick={() => setDraft(undefined)}>
+            <button type="button" class="button-quiet" onClick={() => setDraft(undefined)}>
               {t("member.cancel")}
+            </button>
+            <button
+              type="button"
+              class="button-danger"
+              aria-label={t("member.removeName", { name: props.member.name })}
+              disabled={busy()}
+              onClick={remove}
+            >
+              {t("member.remove")}
             </button>
           </form>
         )}
@@ -130,6 +150,11 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
       <confirm.ConfirmSheet />
     </>
   );
+}
+
+/** The first letter of a Member's name, for their avatar. */
+function initialOf(name: string): string {
+  return [...nameText(name)][0] ?? "";
 }
 
 function AddMember(props: { client: MiseClient }) {
@@ -158,23 +183,23 @@ function AddMember(props: { client: MiseClient }) {
     <Show
       when={draft()}
       fallback={
-        <button type="button" onClick={() => setDraft(emptyMember())}>
+        <button type="button" class="button-primary" onClick={() => setDraft(emptyMember())}>
           {t("members.add")}
         </button>
       }
     >
       {(current) => (
-        <form onSubmit={add}>
+        <form class="stack" onSubmit={add}>
           <MemberFields draft={current()} onChange={setDraft} />
           <Show when={error()}>
             <p class="banner banner-warn" role="alert">
               {error()}
             </p>
           </Show>
-          <button type="submit" disabled={busy()}>
+          <button type="submit" class="button-primary" disabled={busy()}>
             {busy() ? t("member.saving") : t("members.add")}
           </button>
-          <button type="button" onClick={() => setDraft(undefined)}>
+          <button type="button" class="button-quiet" onClick={() => setDraft(undefined)}>
             {t("member.cancel")}
           </button>
         </form>
