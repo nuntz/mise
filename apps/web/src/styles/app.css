@@ -149,7 +149,7 @@ button[aria-disabled="true"] {
 .button-small {
   min-height: var(--touch-min);
   padding: var(--space-2) var(--space-3);
-  border: var(--hairline) solid var(--line);
+  border: var(--hairline) solid var(--line-control);
   background: transparent;
   font: var(--type-strip);
 }
@@ -166,16 +166,16 @@ button[aria-disabled="true"] {
 
 .icon-button {
   flex: none;
-  width: 48px;
-  height: 48px;
+  width: var(--touch-min);
+  height: var(--touch-min);
   padding: 0;
-  border: var(--hairline) solid var(--line);
+  border: var(--hairline) solid var(--line-control);
   background: var(--surface-raised);
 }
 
 .icon-button .icon {
-  width: 22px;
-  height: 22px;
+  width: var(--icon);
+  height: var(--icon);
 }
 
 .icon-button[aria-expanded="true"] {
@@ -187,9 +187,9 @@ input,
 select,
 textarea {
   width: 100%;
-  min-height: 48px;
-  padding: var(--space-2) 14px;
-  border: 2px solid var(--line);
+  min-height: var(--field);
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--line-control);
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--ink);
@@ -197,7 +197,7 @@ textarea {
 }
 
 textarea {
-  min-height: 120px;
+  min-height: calc(var(--field) * 2.5);
 }
 
 input:focus,
@@ -208,8 +208,8 @@ textarea:focus {
 
 input[type="checkbox"],
 input[type="radio"] {
-  width: 24px;
-  height: 24px;
+  width: var(--icon);
+  height: var(--icon);
   min-height: 0;
   margin: 0;
   flex: none;
@@ -223,7 +223,7 @@ input[type="file"] {
 label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   font: var(--type-strip);
   color: var(--ink-muted);
 }
@@ -280,8 +280,8 @@ details > summary::-webkit-details-marker {
 
 details > summary::after {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: var(--space-2);
+  height: var(--space-2);
   margin-inline-start: var(--space-2);
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
@@ -338,7 +338,7 @@ details[open] > summary::after {
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .page-header-row {
@@ -417,8 +417,8 @@ details[open] > summary::after {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) 14px;
-  border-radius: 14px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
   font: var(--type-meta);
   font-weight: 600;
 }
@@ -472,7 +472,7 @@ details[open] > summary::after {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .chip {
@@ -480,8 +480,8 @@ details[open] > summary::after {
   align-items: center;
   gap: var(--space-1);
   min-height: 28px;
-  padding: var(--space-1) 10px;
-  border-radius: 14px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
   background: var(--chip);
   color: var(--chip-ink);
   font: var(--type-chip);
@@ -521,7 +521,7 @@ details[open] > summary::after {
 
 .segmented button {
   min-height: var(--touch-min);
-  border-radius: 10px;
+  border-radius: calc(var(--radius-md) - var(--space-1));
   background: transparent;
 }
 
@@ -533,13 +533,13 @@ details[open] > summary::after {
 .actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5em), 1fr));
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 /* ---------- States: empty and loading ---------- */
@@ -556,8 +556,8 @@ details[open] > summary::after {
 }
 
 .empty > .icon {
-  width: 40px;
-  height: 40px;
+  width: calc(var(--icon) * 1.5);
+  height: calc(var(--icon) * 1.5);
   color: var(--ink-muted);
 }
 
@@ -578,7 +578,7 @@ details[open] > summary::after {
 /* Still blocks with the final layout's shape, so nothing jumps when content lands. No shimmer. */
 .skeleton {
   display: block;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
 }
 
@@ -629,14 +629,15 @@ details[open] > summary::after {
 }
 
 .sk-tick {
-  width: 32px;
-  height: 32px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: 50%;
 }
 
 .sk-qty {
   height: 18px;
-  width: 40px;
+  width: 50%;
+  justify-self: end;
 }
 
 .sk-item {
@@ -672,7 +673,7 @@ details[open] > summary::after {
   max-height: 92dvh;
   margin: 0 auto;
   overflow: auto;
-  border-radius: 20px 20px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--sheet);
@@ -681,7 +682,7 @@ details[open] > summary::after {
 
 @keyframes sheet-in {
   from {
-    transform: translateY(24px);
+    transform: translateY(var(--space-6));
     opacity: 0;
   }
 }
@@ -695,8 +696,8 @@ details[open] > summary::after {
 
 .sheet-header .icon {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: var(--icon);
+  height: var(--icon);
   margin-top: var(--space-1);
 }
 
@@ -712,7 +713,7 @@ details[open] > summary::after {
 .sheet-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-4);
   padding: var(--space-4) var(--space-4) var(--space-6);
 }
 
@@ -807,12 +808,12 @@ details[open] > summary::after {
 .day-rail {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .day-rail button {
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
   height: var(--day-rail);
   padding: 0;
@@ -886,7 +887,7 @@ details[open] > summary::after {
   left: var(--space-3);
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: var(--space-8);
   max-width: calc(100% - 2 * var(--space-3));
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
@@ -921,8 +922,7 @@ details[open] > summary::after {
 .dish {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 0 2px;
+  gap: var(--space-2);
 }
 
 .dish-title {
@@ -1011,12 +1011,11 @@ details[open] > summary::after {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 3px 0;
+  padding: 0 var(--space-1);
   background: var(--scrim);
   color: var(--on-photo);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font: var(--type-label);
+  letter-spacing: 0.04em;
   text-align: center;
   text-transform: uppercase;
 }
@@ -1081,14 +1080,14 @@ details[open] > summary::after {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  min-height: 48px;
+  min-height: var(--touch-min);
   margin-top: var(--space-2);
 }
 
 /* A section's lines share their columns, so quantities and names line up down the list. */
 .tick-list {
   display: grid;
-  grid-template-columns: 32px minmax(56px, max-content) minmax(0, 1fr);
+  grid-template-columns: var(--space-8) var(--qty) minmax(0, 1fr);
 }
 
 .tick-row {
@@ -1097,7 +1096,7 @@ details[open] > summary::after {
   grid-template-columns: subgrid;
   gap: var(--space-1) var(--space-3);
   align-items: center;
-  min-height: 60px;
+  min-height: calc(var(--control) + var(--space-2));
   padding: var(--space-2) 0;
   border-bottom: var(--hairline) solid var(--line);
 }
@@ -1113,23 +1112,23 @@ details[open] > summary::after {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: var(--space-1);
 }
 
 .tick {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: var(--space-8);
+  height: var(--space-8);
 }
 
 .tick input {
   appearance: none;
   position: absolute;
   inset: 0;
-  width: 32px;
-  height: 32px;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  border: 2px solid var(--ink-muted);
+  border: 2px solid var(--line-control);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
@@ -1145,9 +1144,10 @@ details[open] > summary::after {
 
 .tick .icon {
   position: absolute;
-  inset: 7px;
-  width: 18px;
-  height: 18px;
+  inset: 0;
+  width: var(--icon-button);
+  height: var(--icon-button);
+  margin: auto;
   pointer-events: none;
   color: var(--on-leaf);
   stroke-width: 3;
@@ -1179,18 +1179,10 @@ details[open] > summary::after {
 .qty {
   font: var(--type-numeral);
   text-align: right;
-  padding-right: 2px;
 }
 
 .item-name {
-  font: var(--type-body);
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-[data-theme="kitchen"] .item-name {
-  font-size: 19px;
+  font: var(--type-item);
 }
 
 .tick-row:has(input:checked) .item-name,
@@ -1236,9 +1228,9 @@ details[open] > summary::after {
 }
 
 .bar {
-  height: 8px;
+  height: var(--space-2);
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--radius-full);
   background: var(--line);
 }
 
@@ -1267,21 +1259,21 @@ details[open] > summary::after {
 .dots {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 32px;
+  gap: var(--space-3);
+  min-height: var(--space-8);
 }
 
 .dots > div {
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
-  gap: 6px;
+  gap: var(--space-1);
   flex: 1;
 }
 
 .dots span {
-  height: 8px;
-  border-radius: 4px;
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   background: var(--line);
 }
 
@@ -1319,12 +1311,6 @@ details[open] > summary::after {
 
 .check-card-title {
   font: var(--type-display);
-  font-size: 32px;
-  line-height: 1.1;
-}
-
-[data-theme="kitchen"] .check-card-title {
-  font-size: 34px;
 }
 
 .check-card p {
@@ -1345,7 +1331,7 @@ details[open] > summary::after {
 .answers {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
   border: 0;
   padding: 0;
 }
@@ -1353,19 +1339,12 @@ details[open] > summary::after {
 .answer {
   justify-content: flex-start;
   gap: var(--space-3);
-  min-height: 56px;
-  padding: 0 18px;
+  min-height: calc(var(--control) + var(--space-1));
+  padding: 0 var(--space-4);
   border: 2px solid currentColor;
-  border-radius: 28px;
-  font: var(--type-button);
-  font-size: 17px;
-  font-weight: 800;
+  border-radius: var(--radius-full);
+  font: var(--type-item);
   text-align: start;
-}
-
-[data-theme="kitchen"] .answer {
-  min-height: 60px;
-  font-size: 19px;
 }
 
 .answer .icon {
@@ -1407,8 +1386,8 @@ details[open] > summary::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 72px;
-  height: 72px;
+  width: calc(var(--icon) * 3);
+  height: calc(var(--icon) * 3);
   margin: 0 auto;
   border-radius: 50%;
   background: var(--leaf-soft);
@@ -1416,8 +1395,8 @@ details[open] > summary::after {
 }
 
 .done-mark .icon {
-  width: 36px;
-  height: 36px;
+  width: calc(var(--icon) * 1.5);
+  height: calc(var(--icon) * 1.5);
   stroke-width: 2.8;
 }
 
@@ -1440,14 +1419,14 @@ details[open] > summary::after {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
 }
 
 .status-mark .icon {
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   stroke-width: 3;
 }
 
@@ -1522,7 +1501,7 @@ details[open] > summary::after {
 }
 
 .hero {
-  height: calc(var(--photo) * 1.25);
+  height: var(--photo-hero);
 }
 
 .ingredients li {
@@ -1542,7 +1521,7 @@ details[open] > summary::after {
 
 .steps li {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: var(--space-8) minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: var(--hairline) solid var(--line);
@@ -1596,9 +1575,7 @@ details[open] > summary::after {
 }
 
 .kitchen-ingredients li {
-  font: var(--type-body);
-  font-size: 20px;
-  line-height: 28px;
+  font: var(--type-item);
 }
 
 .kitchen-controls {
@@ -1606,7 +1583,7 @@ details[open] > summary::after {
   bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
   padding-top: var(--space-3);
   background: var(--surface);
 }

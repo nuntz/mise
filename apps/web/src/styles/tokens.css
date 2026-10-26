@@ -10,6 +10,8 @@
   --surface: #fffdf9;
   --surface-raised: #f4efe7;
   --line: #e8e2d9;
+  /* What a control is drawn in (field and row-button borders, unchecked boxes): 3:1 or more on surface. */
+  --line-control: #948b81;
   --line-dashed: #d6cec3;
   --ink: #1a1714;
   --ink-muted: #6b645c;
@@ -52,6 +54,8 @@
   --type-label: 800 12px / 16px var(--font-sans);
   --type-chip: 700 12px / 16px var(--font-sans);
   --type-strip: 600 13px / 18px var(--font-sans);
+  /* A thing's name in a list, and the answers that name its state. */
+  --type-item: 600 17px / 21px var(--font-sans);
   /* A step being cooked: read at arm's length, so bigger than body in both themes. */
   --type-step: 500 22px / 32px var(--font-sans);
 
@@ -67,16 +71,21 @@
   /* Sizes */
   --touch-min: 44px;
   --control: 52px;
+  --field: 48px;
   --day-rail: 56px;
   --nav: 64px;
   --photo: 176px;
+  --photo-hero: 220px;
   --thumb: 64px;
   --avatar: 40px;
   --icon: 24px;
   --icon-button: 20px;
+  /* The Grocery List's quantity column, one width across every Store Section. */
+  --qty: 80px;
   --hairline: 1px;
 
   /* Radius */
+  --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-full: 9999px;
@@ -97,6 +106,7 @@
   --surface: #0f0d0b;
   --surface-raised: #1e1b18;
   --line: #3b3631;
+  --line-control: #6b645c;
   --line-dashed: #6b645c;
   --ink: #ffffff;
   --ink-muted: #d2cbc2;
@@ -131,9 +141,11 @@
   --type-label: 800 13px / 16px var(--font-sans);
   --type-chip: 800 14px / 18px var(--font-sans);
   --type-strip: 800 14px / 18px var(--font-sans);
+  --type-item: 700 19px / 24px var(--font-sans);
   --type-step: 600 28px / 38px var(--font-sans);
 
   --control: 56px;
+  --field: 52px;
   --day-rail: 60px;
   --nav: 72px;
   --thumb: 72px;
