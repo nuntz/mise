@@ -528,7 +528,7 @@ article:not([class]) {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   max-width: 600px;
   margin: 0 auto;
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -589,6 +589,16 @@ article:not([class]) {
 
 .banner.stack > p {
   flex: none;
+}
+
+/* A banner whose button stays beside its sentence, in every theme and language. */
+.banner-nowrap {
+  flex-wrap: nowrap;
+}
+
+.banner-nowrap > p {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .banner-top {
@@ -1672,6 +1682,24 @@ article:not([class]) {
   gap: var(--space-2);
 }
 
+/* A row that opens something is one button, the whole row its tap target. */
+button.row-open {
+  flex-wrap: nowrap;
+  width: 100%;
+  min-height: var(--control);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+button.row-open .row-end {
+  color: var(--ink-muted);
+}
+
 /* A row's controls grouped under its name, as a fieldset laid out as the row itself. */
 fieldset.row {
   flex-direction: row;
@@ -1804,8 +1832,10 @@ fieldset.row {
   white-space: pre-line;
 }
 
+/* A back link starts at the page's edge, in line with the heading under it. */
 .back {
   align-self: flex-start;
+  padding-inline-start: 0;
 }
 
 .visually-hidden {

@@ -41,7 +41,7 @@ export function PantryBanner(props: { client: MiseClient; onOpen: () => void }) 
   const due = createDueCount(props.client);
   return (
     <Show when={due() > 0}>
-      <div class="banner banner-plum" role="status">
+      <div class="banner banner-plum banner-nowrap" role="status">
         <p>{due() === 1 ? t("pantry.bannerOne") : t("pantry.banner", { count: String(due()) })}</p>
         <button type="button" onClick={() => props.onOpen()}>
           {t("pantry.checkNow")}

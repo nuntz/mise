@@ -1,5 +1,5 @@
 import { type ChatWhere, type Household, type LocalDate, type QueuedChange, RecipeId } from "@mise/domain";
-import { createComputed, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createComputed, createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CalendarSettings } from "./Calendar";
 import { Chat } from "./Chat";
@@ -16,6 +16,7 @@ import { setLocale, t } from "./messages";
 import { NotificationSettings } from "./Notifications";
 import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
+import { createPushedPages } from "./pushed";
 import { RanOut } from "./RanOut";
 import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
@@ -33,9 +34,10 @@ const NAV: { page: Page; icon: IconName }[] = [
   { page: "recipes", icon: "recipes" },
   { page: "grocery", icon: "basket" },
   { page: "pantry", icon: "jar" },
+  { page: "household", icon: "people" },
 ];
 
-/** The Household's settings, each a section of the Household page. */
+/** The Household's settings, each a section the Household page opens. */
 type Setting =
   | "members"
   | "settings"
@@ -46,16 +48,11 @@ type Setting =
   | "resolve"
   | "items"
   | "tag";
-const SETTINGS: Setting[] = [
-  "members",
-  "settings",
-  "calendar",
-  "notifications",
-  "review",
-  "import",
-  "resolve",
-  "items",
-  "tag",
+/** The Household page's rows, in their groups. */
+const SETTING_GROUPS: { group: "people" | "planning" | "recipes"; settings: Setting[] }[] = [
+  { group: "people", settings: ["members"] },
+  { group: "planning", settings: ["settings", "calendar", "notifications"] },
+  { group: "recipes", settings: ["review", "import", "resolve", "items", "tag"] },
 ];
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
@@ -160,7 +157,10 @@ export function App(props: { client: MiseClient }) {
     }),
   );
 
+  // Counts taps on the Household tab while it shows, each taking the Household back to its index.
+  const [householdAgain, setHouseholdAgain] = createSignal(0);
   const go = (to: Page) => {
+    if (to === "household" && page() === "household") setHouseholdAgain((count) => count + 1);
     setOpening(undefined);
     setPage(to);
     window.scrollTo?.({ top: 0 });
@@ -225,7 +225,8 @@ export function App(props: { client: MiseClient }) {
                     </button>
                   </div>
                 </Show>
-                <Show when={page() !== "pantry"}>
+                {/* The nudge shows only where it can be acted on. */}
+                <Show when={page() === "week" || page() === "pantry"}>
                   <PantryBanner client={props.client} onOpen={() => go("pantry")} />
                 </Show>
                 <Switch>
@@ -234,7 +235,6 @@ export function App(props: { client: MiseClient }) {
                       client={props.client}
                       household={household()}
                       online={online()}
-                      onHousehold={() => go("household")}
                       onGrocery={() => go("grocery")}
                       onCook={cook}
                       onWeekShown={setWeekShown}
@@ -262,6 +262,7 @@ export function App(props: { client: MiseClient }) {
                     <HouseholdPage
                       client={props.client}
                       open={openedSetting()}
+                      home={householdAgain()}
                       household={household()}
                       kitchenMode={kitchenMode()}
                       onKitchenMode={setKitchenMode}
@@ -314,86 +315,111 @@ function OfflineGroceryLists(props: { client: MiseClient; household: Household }
 }
 
 /**
- * The Household: what it is, kitchen mode for this device, and its settings one section at a time,
- * opening on `open` when given.
+ * The Household: what it is, kitchen mode for this device, and a row for each of its settings. Each
+ * setting opens as its own page over it, `open` at once when given, and back returns here, as does
+ * each change of `home` (the Household tab tapped again).
  */
 function HouseholdPage(props: {
   client: MiseClient;
   open?: Setting;
+  home: number;
   household: Household;
   kitchenMode: boolean;
   onKitchenMode: (on: boolean) => void;
 }) {
-  const [setting, setSetting] = createSignal<Setting>(props.open ?? "members");
+  const setting = createPushedPages<Setting>("household", props.open);
+  createEffect(on(() => props.home, setting.home, { defer: true }));
 
   return (
-    <section class="screen">
-      <header class="page-heading">
-        <p class="overline">{t("household.overline")}</p>
-        <h1>{t("household.title", { name: props.household.name })}</h1>
-        <p class="meta">
-          {t("household.summary", {
-            weekday: t(`weekday.${props.household.weekStartsOn}`),
-            dinnerTime: props.household.dinnerTime,
-            timezone: props.household.timezone,
-          })}
-        </p>
-        <p class="meta">
-          {t("household.units", {
-            units: t(`units.${props.household.units}`),
-            locale: t(`locale.${props.household.locale}`),
-          })}
-        </p>
-      </header>
-      <SwitchRow
-        label={t("household.kitchenMode")}
-        hint={t("household.kitchenModeHint")}
-        checked={props.kitchenMode}
-        onChange={props.onKitchenMode}
-      />
-      <nav class="chips" aria-label={t("household.settings")}>
-        <For each={SETTINGS}>
-          {(name) => (
-            <button
-              type="button"
-              class="button-row"
-              aria-current={setting() === name ? "page" : undefined}
-              onClick={() => setSetting(name)}
-            >
-              {t(`nav.${name}`)}
+    <Show
+      when={setting.page()}
+      fallback={
+        <section class="screen">
+          <header class="page-heading">
+            <p class="overline">{t("household.overline")}</p>
+            <h1>{t("household.title", { name: props.household.name })}</h1>
+            <p class="meta">
+              {t("household.summary", {
+                weekday: t(`weekday.${props.household.weekStartsOn}`),
+                dinnerTime: props.household.dinnerTime,
+                timezone: props.household.timezone,
+                units: t(`units.${props.household.units}`),
+                locale: t(`locale.${props.household.locale}`),
+              })}
+            </p>
+          </header>
+          <SwitchRow
+            label={t("household.kitchenMode")}
+            hint={t("household.kitchenModeHint")}
+            checked={props.kitchenMode}
+            onChange={props.onKitchenMode}
+          />
+          <For each={SETTING_GROUPS}>
+            {(group) => (
+              <section>
+                <h3 id={`household-${group.group}`}>{t(`household.${group.group}`)}</h3>
+                <ul class="rows" aria-labelledby={`household-${group.group}`}>
+                  <For each={group.settings}>
+                    {(name) => (
+                      <li>
+                        <button type="button" class="row row-open" onClick={() => setting.open(name)}>
+                          <span class="row-body">
+                            <span class="row-title">{t(`nav.${name}`)}</span>
+                          </span>
+                          <span class="row-end">
+                            <Icon name="chevronRight" />
+                          </span>
+                        </button>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </section>
+            )}
+          </For>
+        </section>
+      }
+    >
+      {(open) => (
+        <section class="screen">
+          <header class="page-heading">
+            <button type="button" class="button-link back" onClick={() => setting.back()}>
+              <Icon name="chevronLeft" />
+              {t("household.back")}
             </button>
-          )}
-        </For>
-      </nav>
-      <Switch>
-        <Match when={setting() === "members"}>
-          <MembersSettings client={props.client} members={props.household.members} />
-        </Match>
-        <Match when={setting() === "settings"}>
-          <HouseholdSettingsForm client={props.client} household={props.household} />
-        </Match>
-        <Match when={setting() === "calendar"}>
-          <CalendarSettings client={props.client} />
-        </Match>
-        <Match when={setting() === "notifications"}>
-          <NotificationSettings client={props.client} />
-        </Match>
-        <Match when={setting() === "review"}>
-          <ReviewPage client={props.client} onResolve={() => setSetting("resolve")} />
-        </Match>
-        <Match when={setting() === "import"}>
-          <ImportPage client={props.client} onReview={() => setSetting("review")} />
-        </Match>
-        <Match when={setting() === "resolve"}>
-          <ResolveIngredients client={props.client} />
-        </Match>
-        <Match when={setting() === "items"}>
-          <ItemsSettings client={props.client} />
-        </Match>
-        <Match when={setting() === "tag"}>
-          <TagRecipes client={props.client} />
-        </Match>
-      </Switch>
-    </section>
+            <p class="overline">{t("household.sectionOverline", { section: t(`nav.${open()}`) })}</p>
+          </header>
+          <Switch>
+            <Match when={open() === "members"}>
+              <MembersSettings client={props.client} members={props.household.members} />
+            </Match>
+            <Match when={open() === "settings"}>
+              <HouseholdSettingsForm client={props.client} household={props.household} />
+            </Match>
+            <Match when={open() === "calendar"}>
+              <CalendarSettings client={props.client} />
+            </Match>
+            <Match when={open() === "notifications"}>
+              <NotificationSettings client={props.client} />
+            </Match>
+            <Match when={open() === "review"}>
+              <ReviewPage client={props.client} onResolve={() => setting.open("resolve")} />
+            </Match>
+            <Match when={open() === "import"}>
+              <ImportPage client={props.client} onReview={() => setting.open("review")} />
+            </Match>
+            <Match when={open() === "resolve"}>
+              <ResolveIngredients client={props.client} />
+            </Match>
+            <Match when={open() === "items"}>
+              <ItemsSettings client={props.client} />
+            </Match>
+            <Match when={open() === "tag"}>
+              <TagRecipes client={props.client} />
+            </Match>
+          </Switch>
+        </section>
+      )}
+    </Show>
   );
 }

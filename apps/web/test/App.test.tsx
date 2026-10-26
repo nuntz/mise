@@ -1,5 +1,5 @@
 import { DEFAULT_EFFORT_BUDGETS, type Household, type Member, STORE_SECTIONS } from "@mise/domain";
-import { render, screen } from "@solidjs/testing-library";
+import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
@@ -73,11 +73,12 @@ test("a household change notice keeps unsaved Member input and shows the new dat
     }),
   );
 
-  await screen.findByRole("heading", { name: "The Tremblay-Nguyens" });
-  expect(screen.getByText("Alexandra")).toBeTruthy();
+  await screen.findByText("Alexandra");
   expect(screen.getByText("Jo")).toBeTruthy();
   expect(screen.getByDisplayValue("Samuel")).toBeTruthy();
   expect(screen.getByDisplayValue("Robin")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Household", current: false }));
+  await screen.findByRole("heading", { name: "The Tremblay-Nguyens" });
 });
 
 test("a refresh that fails keeps the settings and their unsaved input, and says so", async () => {
@@ -95,7 +96,7 @@ test("a refresh that fails keeps the settings and their unsaved input, and says 
   notify(new Error("offline"));
 
   await screen.findByRole("alert");
-  expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+  expect(screen.getByText("Household · Members")).toBeTruthy();
   expect(screen.getByDisplayValue("Robin")).toBeTruthy();
 });
 
@@ -117,4 +118,66 @@ test("kitchen mode is a switch, described by its hint, that applies at once", as
   expect(document.documentElement.dataset.theme).toBe("kitchen");
   await user.click(kitchen);
   expect(document.documentElement.dataset.theme).toBeUndefined();
+});
+
+test("Household is the fifth tab, and opens as an index of its sections", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient(household());
+  render(() => <App client={client} />);
+
+  const tab = await screen.findByRole("button", { name: "Household" });
+  await user.click(tab);
+
+  expect(tab.getAttribute("aria-current")).toBe("page");
+  expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Week starts on Monday. Dinner at 18:00, America/Vancouver. Units: Metric. Language: English (Canada).",
+    ),
+  ).toBeTruthy();
+  const groups = ["People", "Planning", "Recipes and Items"].map((name) => screen.getByRole("list", { name }));
+  expect(
+    groups.map((group) =>
+      within(group)
+        .getAllByRole("button")
+        .map((row) => row.textContent),
+    ),
+  ).toEqual([
+    ["Members"],
+    ["Settings", "Calendar", "Notifications"],
+    ["Review", "Import", "Resolve Ingredients", "Items", "Tag Recipes"],
+  ]);
+});
+
+test("a Household section opens as its own page, and the back link or the back gesture returns to the index", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient(household());
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+
+  await user.click(screen.getByRole("button", { name: "Members" }));
+  expect(screen.getByText("Household · Members")).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "The Tremblays" })).toBeNull();
+  expect(screen.queryByRole("switch")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Household", current: false }));
+  await screen.findByRole("heading", { name: "The Tremblays" });
+
+  await user.click(screen.getByRole("button", { name: "Calendar" }));
+  expect(screen.getByText("Household · Calendar")).toBeTruthy();
+  history.back();
+  await screen.findByRole("heading", { name: "The Tremblays" });
+  expect(screen.queryByText("Household · Calendar")).toBeNull();
+});
+
+test("the Household tab, tapped from a section, returns to the index", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient(household());
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+  await user.click(screen.getByRole("button", { name: "Settings" }));
+
+  await user.click(screen.getByRole("button", { name: "Household", current: "page" }));
+
+  expect(await screen.findByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+  expect(screen.queryByText("Household · Settings")).toBeNull();
 });

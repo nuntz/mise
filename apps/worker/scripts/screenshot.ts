@@ -125,7 +125,7 @@ async function screenshot(browser: Browser) {
   console.log(`Saved ${join(out, "week-phone.png")}`);
 }
 
-/** The Household page's settings, in the order of its chips (App.tsx's SETTINGS). */
+/** The Household page's settings, in the order of its rows (App.tsx's SETTING_GROUPS). */
 const SETTINGS = ["members", "settings", "calendar", "notifications", "review", "import", "resolve", "items", "tag"];
 
 /**
@@ -162,10 +162,13 @@ function screens(ids: Map<string, number>): Screen[] {
     },
     { name: "grocery", open: nav(2) },
     { name: "pantry", path: "/?pantry" },
+    { name: "household", open: nav(4) },
     ...SETTINGS.map((setting, index) => ({
       name: `household-${setting}`,
-      path: "/?review",
-      open: (page: Page) => page.locator("nav.chips button").nth(index).click(),
+      open: async (page: Page) => {
+        await nav(4)(page);
+        await page.locator("button.row-open").nth(index).click();
+      },
     })),
   ];
 }

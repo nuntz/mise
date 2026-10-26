@@ -639,7 +639,6 @@ const en = {
   "week.overlineNext": "Mise · Next week",
   "week.title": "The Week",
   "week.range": "{from} to {to}",
-  "week.household": "Household",
   "week.jump": "Jump to a day",
   "week.jumpTo": "Jump to {day}",
   "week.tonight": "Tonight · {day}",
@@ -760,12 +759,16 @@ const en = {
   "conflict.changeIt": "Change it",
 
   "household.title": "{name}",
-  "household.summary": "Week starts on {weekday}. Dinner at {dinnerTime}, {timezone}.",
-  "household.units": "Units: {units}. Language: {locale}.",
+  "household.summary":
+    "Week starts on {weekday}. Dinner at {dinnerTime}, {timezone}. Units: {units}. Language: {locale}.",
   "household.overline": "Mise · Household",
   "household.kitchenMode": "Kitchen mode on this device",
   "household.kitchenModeHint": "Near-black with bigger type, for reading at arm's length with busy hands.",
-  "household.settings": "Household settings",
+  "household.people": "People",
+  "household.planning": "Planning",
+  "household.recipes": "Recipes and Items",
+  "household.back": "Household",
+  "household.sectionOverline": "Household · {section}",
   "settings.save": "Save settings",
   "settings.saving": "Saving…",
   "settings.weekStartHint":

@@ -211,13 +211,18 @@ test("a link to the Review screen, as the share page gives, opens it", async () 
   render(() => <App client={fakeClient({ drafts: [{ recipe: dal, duplicateOf: [] }] }).client} />);
 
   expect(await screen.findByRole("article", { name: "Grandma's dal" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Review" }).getAttribute("aria-current")).toBe("page");
+  expect(screen.getByText("Household · Review")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Household", current: "page" })).toBeTruthy();
   expect(window.location.search).toBe("");
 
-  // Only once: the Household page opened again later opens on its first setting.
+  // Back returns to the Household's index, as if Review had been opened from it.
+  await userEvent.click(screen.getByRole("button", { name: "Household", current: false }));
+  expect(await screen.findByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+
+  // Only once: the Household page opened again later opens on its index.
   await userEvent.click(screen.getByRole("button", { name: "Week" }));
   await userEvent.click(await screen.findByRole("button", { name: "Household" }));
-  expect(screen.getByRole("button", { name: "Members" }).getAttribute("aria-current")).toBe("page");
+  expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
 });
 
 test("a Draft of unknown time and Course says so", async () => {

@@ -1,5 +1,5 @@
 import { DEFAULT_EFFORT_BUDGETS, type Household, type Member, type MemberId, STORE_SECTIONS } from "@mise/domain";
-import { render, screen, within } from "@solidjs/testing-library";
+import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
@@ -97,9 +97,13 @@ test("every setting chosen at setup can be changed from the Household page", asy
       locale: "en-CA",
     },
   ]);
+  await user.click(screen.getByRole("button", { name: "Household", current: false }));
   await screen.findByRole("heading", { name: "The Tremblay-Nguyens" });
-  expect(screen.getByText("Week starts on Sunday. Dinner at 19:30, America/Toronto.")).toBeTruthy();
-  expect(screen.getByText("Units: Imperial. Language: English (Canada).")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Week starts on Sunday. Dinner at 19:30, America/Toronto. Units: Imperial. Language: English (Canada).",
+    ),
+  ).toBeTruthy();
 });
 
 test("a new week start says it applies from the next Week", async () => {
@@ -137,8 +141,9 @@ test("a change made on another device shows in the form without a reload", async
 
   changeElsewhere({ units: "imperial", weekStartsOn: "sunday" });
 
-  await screen.findByText("Units: Imperial. Language: English (Canada).");
-  expect((screen.getByRole("combobox", { name: "Units" }) as HTMLSelectElement).value).toBe("imperial");
+  await waitFor(() =>
+    expect((screen.getByRole("combobox", { name: "Units" }) as HTMLSelectElement).value).toBe("imperial"),
+  );
   expect((screen.getByRole("combobox", { name: "Week starts on" }) as HTMLSelectElement).value).toBe("sunday");
 });
 

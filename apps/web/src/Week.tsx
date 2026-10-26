@@ -61,7 +61,6 @@ export function WeekPage(props: {
   client: MiseClient;
   household: Household;
   online: boolean;
-  onHousehold: () => void;
   onGrocery: () => void;
   onCook: (recipe: RecipeId, servings: number) => void;
   /** Told the start of the Week shown, or undefined while none is. */
@@ -147,19 +146,9 @@ export function WeekPage(props: {
   return (
     <section class="screen" aria-labelledby="week-title">
       <header class="page-header">
-        <div class="page-header-row">
-          <div class="page-heading">
-            <p class="overline">{next() ? t("week.overlineNext") : t("week.overline")}</p>
-            <h1 id="week-title">{week() ? weekRange(week() as Week, props.household.locale) : t("week.title")}</h1>
-          </div>
-          <button
-            type="button"
-            class="icon-button"
-            aria-label={t("week.household")}
-            onClick={() => props.onHousehold()}
-          >
-            <Icon name="people" />
-          </button>
+        <div class="page-heading">
+          <p class="overline">{next() ? t("week.overlineNext") : t("week.overline")}</p>
+          <h1 id="week-title">{week() ? weekRange(week() as Week, props.household.locale) : t("week.title")}</h1>
         </div>
         <div class="segmented">
           <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
