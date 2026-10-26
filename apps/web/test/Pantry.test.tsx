@@ -56,7 +56,7 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefine
 /** A client with rice and eggs due, unless `answers` say otherwise; it records every call. */
 function fakeClient(answers: Record<string, Answer> = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
-  const { client } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
+  const { client, goOffline } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
     const answer = answers[name]?.(input);
     if (answer) return answer;
@@ -79,7 +79,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         throw new Error(`Unexpected tool ${name}`);
     }
   });
-  return { client, calls };
+  return { client, calls, goOffline };
 }
 
 const writes = (calls: { name: string; input: Record<string, unknown> }[]) =>
@@ -95,6 +95,20 @@ test("a banner says when a pantry check is due, and opens it", async () => {
   await user.click(within(banner).getByRole("button", { name: "Check now" }));
 
   expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+});
+
+test("offline, the banner's Check now says it needs a connection: answering isn't kept to sync later", async () => {
+  const { client, goOffline } = fakeClient();
+  render(() => <App client={client} />);
+  const banner = await screen.findByRole("status");
+  const check = within(banner).getByRole("button", { name: "Check now" }) as HTMLButtonElement;
+
+  goOffline();
+
+  expect(check.disabled).toBe(true);
+  const reason = document.getElementById(String(check.getAttribute("aria-describedby")));
+  expect(reason?.textContent).toBe("Needs a connection.");
+  expect(check.nextElementSibling).toBe(reason);
 });
 
 test("the banner shows on Week and Pantry, where it can be acted on, and on no other page", async () => {

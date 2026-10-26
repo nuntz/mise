@@ -156,7 +156,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     servings: 4,
     locked: true,
   });
-  const { client, notify } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
+  const { client, notify, goOffline } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
     const answer = answers[name]?.(input);
     if (answer) return answer;
@@ -192,8 +192,12 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         throw new Error(`Unexpected tool ${name}`);
     }
   });
-  return { client, calls, notify };
+  return { client, calls, notify, goOffline };
 }
+
+/** The text of what `control` names as its accessible description. */
+const description = (control: HTMLElement) =>
+  document.getElementById(String(control.getAttribute("aria-describedby")))?.textContent;
 
 const writes = (calls: { name: string; input: unknown }[]) =>
   calls.filter(
@@ -704,6 +708,38 @@ test("an empty Week offers Propose, without Use it up, and has nothing to clear"
   expect(screen.getByRole("button", { name: "Propose dinners" })).toBeTruthy();
   expect(screen.queryByRole("form", { name: "Use it up" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Clear this Week" })).toBeNull();
+});
+
+test("offline, proposing says it needs a connection under the control, and its helper text goes", async () => {
+  const { client, goOffline } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  render(() => <App client={client} />);
+  const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
+  expect(screen.getByText(/Fills the dinners that aren't Locked/)).toBeTruthy();
+
+  goOffline();
+
+  const again = screen.getByRole("button", { name: "Propose again" }) as HTMLButtonElement;
+  for (const control of [reroll, again]) {
+    expect(control.disabled).toBe(true);
+    expect(description(control)).toBe("Needs a connection.");
+  }
+  expect(screen.queryByText(/Fills the dinners that aren't Locked/)).toBeNull();
+});
+
+test("offline, an empty Week's Propose says it needs a connection", async () => {
+  const { client, goOffline } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByText("Nothing planned yet");
+
+  goOffline();
+
+  const propose = screen.getByRole("button", { name: "Propose dinners" }) as HTMLButtonElement;
+  expect(propose.disabled).toBe(true);
+  expect(description(propose)).toBe("Needs a connection.");
+  expect(propose.nextElementSibling?.textContent).toBe("Needs a connection.");
 });
 
 test("Use it up is offered on proposing, and its Items go with the Proposal and the re-rolls after it", async () => {

@@ -199,6 +199,9 @@ test("offline, the chat can't be opened: the agent needs the connection", async 
   goOffline();
 
   expect(button.disabled).toBe(true);
+  const reason = document.getElementById(String(button.getAttribute("aria-describedby")));
+  expect(reason?.textContent).toBe("Needs a connection.");
+  expect(button.nextElementSibling).toBe(reason);
 });
 
 /** A screen touched by a finger, where focusing a field brings up the keyboard; jsdom has no `matchMedia`. */

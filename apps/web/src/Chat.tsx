@@ -4,6 +4,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
+import { NeedsConnection } from "./NeedsConnection";
 import { Sheet } from "./Sheet";
 
 /**
@@ -13,13 +14,23 @@ import { Sheet } from "./Sheet";
  */
 export function Chat(props: { client: MiseClient; online: boolean; where: () => ChatWhere }) {
   const [open, setOpen] = createSignal(false);
+  const reasonId = createUniqueId();
 
   return (
     <>
-      <button type="button" class="button-row" disabled={!props.online} onClick={() => setOpen(true)}>
-        <Icon name="chat" />
-        {t("chat.action")}
-      </button>
+      <div class="control">
+        <button
+          type="button"
+          class="button-row"
+          disabled={!props.online}
+          aria-describedby={props.online ? undefined : reasonId}
+          onClick={() => setOpen(true)}
+        >
+          <Icon name="chat" />
+          {t("chat.action")}
+        </button>
+        <NeedsConnection id={reasonId} online={props.online} />
+      </div>
       <Show when={open()}>
         <ChatSheet client={props.client} where={props.where} onClose={() => setOpen(false)} />
       </Show>

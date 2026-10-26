@@ -18,6 +18,7 @@ import { errorText } from "./errors";
 import { Icon } from "./icons";
 import { itemNamed } from "./items";
 import { t } from "./messages";
+import { NeedsConnection } from "./NeedsConnection";
 import { Sheet } from "./Sheet";
 
 /** What the Week, and proposing it, need to know of the Household. */
@@ -32,7 +33,7 @@ export function ProposalControls(props: {
   client: MiseClient;
   week: Week;
   items: Map<ItemId, Item>;
-  readOnly: boolean;
+  online: boolean;
   onGrocery: () => void;
 }) {
   const [busy, setBusy] = createSignal(false);
@@ -65,8 +66,22 @@ export function ProposalControls(props: {
       }),
     );
   const offerUseUp = () => setDraft(useUp());
-  const disabled = () => busy() || props.readOnly;
+  const disabled = () => busy() || !props.online;
   const titleId = createUniqueId();
+  // Proposing needs the connection, and offline says so under the control.
+  const reasonId = createUniqueId();
+  const describedBy = () => (props.online ? undefined : reasonId);
+  const proposeButton = () => (
+    <button
+      type="button"
+      class="button-primary"
+      disabled={disabled()}
+      aria-describedby={describedBy()}
+      onClick={offerUseUp}
+    >
+      {t("week.propose")}
+    </button>
+  );
 
   return (
     <>
@@ -94,39 +109,50 @@ export function ProposalControls(props: {
             <Icon name="calendarPlus" />
             <p class="empty-title">{t("week.emptyTitle")}</p>
             <p>{t("week.emptyBody")}</p>
-            <button type="button" class="button-primary" disabled={disabled()} onClick={offerUseUp}>
-              {t("week.propose")}
-            </button>
+            <div class="control">
+              {proposeButton()}
+              <NeedsConnection id={reasonId} online={props.online} />
+            </div>
           </div>
         }
       >
         <div class="actions">
-          <Show
-            when={proposed()}
-            fallback={
-              <button type="button" class="button-primary" disabled={disabled()} onClick={offerUseUp}>
-                {t("week.propose")}
+          <div class="control">
+            <Show when={proposed()} fallback={proposeButton()}>
+              <button
+                type="button"
+                class="button-primary"
+                disabled={disabled()}
+                aria-describedby={describedBy()}
+                onClick={() => proposeWeek(true)}
+              >
+                <Icon name="refresh" />
+                {t("week.reroll")}
               </button>
-            }
-          >
-            <button type="button" class="button-primary" disabled={disabled()} onClick={() => proposeWeek(true)}>
-              <Icon name="refresh" />
-              {t("week.reroll")}
-            </button>
-          </Show>
+            </Show>
+            <NeedsConnection id={reasonId} online={props.online} />
+          </div>
           <button type="button" class="button-secondary" onClick={() => props.onGrocery()}>
             <Icon name="basket" />
             {t("week.groceryList")}
           </button>
         </div>
         <Show when={proposed()}>
-          <button type="button" class="button-link" disabled={disabled()} onClick={offerUseUp}>
+          <button
+            type="button"
+            class="button-link"
+            disabled={disabled()}
+            aria-describedby={describedBy()}
+            onClick={offerUseUp}
+          >
             {t("week.proposeAgain")}
           </button>
         </Show>
-        <small>{t("week.proposeHint")}</small>
+        <Show when={props.online}>
+          <small>{t("week.proposeHint")}</small>
+        </Show>
       </Show>
-      <Show when={!props.readOnly && draft()}>
+      <Show when={props.online && draft()}>
         {(picked) => (
           <Sheet labelledBy={titleId} onEscape={() => setDraft(undefined)} focusField={false}>
             <div class="sheet-header">

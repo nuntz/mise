@@ -167,8 +167,11 @@ test("offline, Ran out says it needs a connection and can't be opened", async ()
   goOffline();
 
   expect((action as HTMLButtonElement).disabled).toBe(true);
+  // The reason is under the control it explains, not a note floating in the header.
   const hint = document.getElementById(String(action.getAttribute("aria-describedby")));
-  expect(hint?.textContent).toBe("Recording a Staple needs a connection.");
+  expect(hint?.textContent).toBe("Needs a connection.");
+  expect(action.nextElementSibling).toBe(hint);
+  expect(screen.queryByText("Recording a Staple needs a connection.")).toBeNull();
 });
 
 test("losing the connection with the picker open stops Staples being recorded", async () => {

@@ -3,6 +3,7 @@ const en = {
   "app.name": "Mise",
   "app.loading": "Loading…",
   "app.error": "Something went wrong talking to Mise. It will retry when the connection comes back.",
+  "app.needsConnection": "Needs a connection.",
 
   "setup.overline": "Mise · Setup",
   "setup.title": "Set up your Household",

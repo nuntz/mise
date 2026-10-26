@@ -10,13 +10,14 @@ import {
   type StapleLocation,
   type StapleStatus,
 } from "@mise/domain";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { amountText } from "./Grocery";
 import { Icon, type IconName } from "./icons";
 import { createItems, itemNamed } from "./items";
 import { nameText, t } from "./messages";
+import { NeedsConnection } from "./NeedsConnection";
 
 /**
  * How many Staples are due for a check, kept current; zero until loaded or when loading fails.
@@ -36,16 +37,28 @@ export function createDueCount(client: MiseClient): () => number {
   return due;
 }
 
-/** "Pantry check: 3 Staples", with a way to start it, while any Staple is due. */
-export function PantryBanner(props: { client: MiseClient; onOpen: () => void }) {
+/**
+ * "Pantry check: 3 Staples", with a way to start it, while any Staple is due. Answers aren't kept to
+ * sync later as Grocery ticks are, so offline the check can't be started.
+ */
+export function PantryBanner(props: { client: MiseClient; online: boolean; onOpen: () => void }) {
   const due = createDueCount(props.client);
+  const reasonId = createUniqueId();
   return (
     <Show when={due() > 0}>
       <div class="banner banner-plum banner-nowrap" role="status">
         <p>{due() === 1 ? t("pantry.bannerOne") : t("pantry.banner", { count: String(due()) })}</p>
-        <button type="button" onClick={() => props.onOpen()}>
-          {t("pantry.checkNow")}
-        </button>
+        <div class="control">
+          <button
+            type="button"
+            disabled={!props.online}
+            aria-describedby={props.online ? undefined : reasonId}
+            onClick={() => props.onOpen()}
+          >
+            {t("pantry.checkNow")}
+          </button>
+          <NeedsConnection id={reasonId} online={props.online} />
+        </div>
       </div>
     </Show>
   );

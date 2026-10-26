@@ -194,7 +194,7 @@ export function WeekPage(props: {
                 client={props.client}
                 week={shown()}
                 items={items()}
-                readOnly={readOnly()}
+                online={props.online}
                 onGrocery={() => props.onGrocery()}
               />
             </>

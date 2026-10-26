@@ -440,6 +440,38 @@ details[open] > summary::after {
   padding: var(--space-3) var(--space-4) 0;
 }
 
+/* A control and, while it can't work for a reason outside Mise, that reason under it. */
+.control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.app-header .control {
+  align-items: flex-end;
+}
+
+.actions .control {
+  align-items: stretch;
+}
+
+.empty .control {
+  align-self: stretch;
+  align-items: center;
+}
+
+.banner .control {
+  flex: none;
+  align-items: flex-end;
+}
+
+.control-reason {
+  margin: 0;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
 .app-header-note {
   flex: 1 1 12em;
   font: var(--type-meta);

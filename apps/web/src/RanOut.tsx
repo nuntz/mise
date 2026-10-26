@@ -5,6 +5,7 @@ import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { nameMatches } from "./items";
 import { nameText, t } from "./messages";
+import { NeedsConnection } from "./NeedsConnection";
 import { Sheet } from "./Sheet";
 
 /** How long the note saying what was recorded stays up. */
@@ -17,7 +18,7 @@ const NOTE_MS = 6000;
 export function RanOut(props: { client: MiseClient; online: boolean }) {
   const [open, setOpen] = createSignal(false);
   const [note, setNote] = createSignal<string>();
-  const hintId = createUniqueId();
+  const reasonId = createUniqueId();
   let timer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(timer));
 
@@ -35,24 +36,22 @@ export function RanOut(props: { client: MiseClient; online: boolean }) {
           {note()}
         </p>
       </Show>
-      <Show when={!props.online}>
-        <span id={hintId} class="meta">
-          {t("ranOut.needsConnection")}
-        </span>
-      </Show>
-      <button
-        type="button"
-        class="button-row"
-        disabled={!props.online}
-        aria-describedby={props.online ? undefined : hintId}
-        onClick={() => {
-          setNote(undefined);
-          setOpen(true);
-        }}
-      >
-        <Icon name="low" />
-        {t("ranOut.action")}
-      </button>
+      <div class="control">
+        <button
+          type="button"
+          class="button-row"
+          disabled={!props.online}
+          aria-describedby={props.online ? undefined : reasonId}
+          onClick={() => {
+            setNote(undefined);
+            setOpen(true);
+          }}
+        >
+          <Icon name="low" />
+          {t("ranOut.action")}
+        </button>
+        <NeedsConnection id={reasonId} online={props.online} />
+      </div>
       <Show when={open()}>
         <Picker client={props.client} online={props.online} onRecorded={recorded} onClose={() => setOpen(false)} />
       </Show>
