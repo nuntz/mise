@@ -42,7 +42,7 @@ export function RanOut(props: { client: MiseClient; online: boolean }) {
       </Show>
       <button
         type="button"
-        class="button-small"
+        class="button-row"
         disabled={!props.online}
         aria-describedby={props.online ? undefined : hintId}
         onClick={() => {
@@ -152,7 +152,7 @@ function Picker(props: {
                           {(status) => (
                             <button
                               type="button"
-                              class="button-small"
+                              class="button-row"
                               disabled={busy() || !props.online}
                               aria-pressed={staple.status === status}
                               onClick={() => record(staple, status)}

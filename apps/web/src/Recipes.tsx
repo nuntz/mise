@@ -317,16 +317,16 @@ function RecipeDetail(props: {
             <Show when={sourceText(current())}>{(text) => <p class="meta">{text()}</p>}</Show>
 
             <div class="slot-actions">
-              <button type="button" class="button-small" onClick={() => props.onEdit(current())}>
+              <button type="button" class="button-row" onClick={() => props.onEdit(current())}>
                 {t("recipe.edit")}
               </button>
-              <button type="button" class="button-small" disabled={busy()} onClick={() => remove(current())}>
+              <button type="button" class="button-danger" disabled={busy()} onClick={() => remove(current())}>
                 {t("recipe.delete")}
               </button>
               <Show when={current().photoKey}>
                 <button
                   type="button"
-                  class="button-small"
+                  class="button-row"
                   disabled={busy()}
                   onClick={() => changePhoto(() => props.client.removePhoto(current().id))}
                 >

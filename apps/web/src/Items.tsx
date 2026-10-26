@@ -86,7 +86,7 @@ function ItemRow(props: { client: MiseClient; item: Item }) {
       <Show
         when={editing()}
         fallback={
-          <button type="button" class="button-small" onClick={() => setEditing(true)}>
+          <button type="button" class="button-row" onClick={() => setEditing(true)}>
             {t("items.edit")}
           </button>
         }

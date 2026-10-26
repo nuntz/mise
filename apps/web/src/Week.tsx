@@ -224,7 +224,7 @@ export function WeekPage(props: {
             </div>
             <Show when={!readOnly()}>
               <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
-              <button type="button" class="button-quiet" onClick={() => clear(shown())}>
+              <button type="button" class="button-danger" onClick={() => clear(shown())}>
                 {t("week.clear")}
               </button>
             </Show>
@@ -336,7 +336,7 @@ function Day(props: {
         fallback={
           <Show when={!props.readOnly}>
             <div class="slot-actions">
-              <button type="button" class="button-small" onClick={() => setEditingDiners(true)}>
+              <button type="button" class="button-row" onClick={() => setEditingDiners(true)}>
                 <Icon name="people" />
                 {t("week.dayDiners")}
               </button>
@@ -465,7 +465,7 @@ function SlotView(props: {
               <Cooking client={props.client} household={props.household} slot={props.slot} readOnly={props.readOnly} />
             </Show>
             <Show when={!props.readOnly}>
-              <button type="button" class="button-small" onClick={() => setEditing(true)}>
+              <button type="button" class="button-row" onClick={() => setEditing(true)}>
                 {t("slot.edit", { meal: meal() })}
               </button>
             </Show>
@@ -607,7 +607,7 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot; 
           <Show when={!props.readOnly}>
             <button
               type="button"
-              class="button-small"
+              class="button-row"
               disabled={busy()}
               onClick={() => call(() => props.client.call("mark_cooked", where()))}
             >

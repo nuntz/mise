@@ -84,7 +84,7 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
           <button type="button" onClick={() => setDraft(draftOf(props.member))}>
             {t("member.edit")}
           </button>
-          <button type="button" disabled={busy()} onClick={remove}>
+          <button type="button" class="button-danger" disabled={busy()} onClick={remove}>
             {t("member.remove")}
           </button>
           <Show when={error()}>

@@ -217,7 +217,7 @@ export function App(props: { client: MiseClient }) {
                 <Show when={refused() > 0}>
                   <div class="banner banner-warn" role="alert">
                     <p>{t("offline.refused")}</p>
-                    <button type="button" class="button-small" onClick={() => queue.dismissRefused()}>
+                    <button type="button" class="button-row" onClick={() => queue.dismissRefused()}>
                       {t("offline.dismiss")}
                     </button>
                   </div>
@@ -358,7 +358,7 @@ function HouseholdPage(props: {
           {(name) => (
             <button
               type="button"
-              class="button-small"
+              class="button-row"
               aria-current={setting() === name ? "page" : undefined}
               onClick={() => setSetting(name)}
             >

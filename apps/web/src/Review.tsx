@@ -181,7 +181,7 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
             </button>
             <button
               type="button"
-              class="button-secondary"
+              class="button-danger"
               disabled={busy()}
               onClick={() => {
                 // Discarding is deleting, confirmed as any Recipe's deletion is.

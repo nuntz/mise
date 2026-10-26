@@ -143,7 +143,7 @@ type Screen = {
 function screens(ids: Map<string, number>): Screen[] {
   const recipe = ids.get(sampleWeek.dinners[0]?.recipe ?? "");
   const nav = (index: number) => (page: Page) => page.locator("nav.nav button").nth(index).click();
-  const header = (index: number) => (page: Page) => page.locator(".app-header .button-small").nth(index).click();
+  const header = (index: number) => (page: Page) => page.locator(".app-header .button-row").nth(index).click();
   return [
     { name: "week" },
     { name: "week-dinner", open: (page) => page.locator(".dish-open").first().click(), overlay: true },

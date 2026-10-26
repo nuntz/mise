@@ -95,12 +95,12 @@ button,
   gap: var(--space-2);
   min-height: var(--touch-min);
   min-width: var(--touch-min);
-  padding: var(--space-2) var(--space-4);
-  border: 0;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--line-control);
   border-radius: var(--radius-full);
-  background: var(--surface-raised);
+  background: transparent;
   color: var(--ink);
-  font: var(--type-button);
+  font: var(--type-strip);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
@@ -115,16 +115,29 @@ button .icon {
   flex: none;
 }
 
+/* Five roles: primary, secondary, row, quiet and danger. Row is the hairline pill, and a bare button
+ * takes it; primary, secondary, quiet and the inline link take the larger button type. Disabled is
+ * none of them: a dashed outline in muted text, never a fill. */
+
 button:disabled,
 button[aria-disabled="true"] {
   cursor: not-allowed;
-  background: var(--surface-raised);
+  border: var(--hairline) dashed var(--line-control);
+  background: transparent;
   color: var(--ink-muted);
-  border-color: var(--line);
+}
+
+.button-primary,
+.button-secondary,
+.button-quiet,
+.button-link {
+  padding-inline: var(--space-4);
+  font: var(--type-button);
 }
 
 .button-primary {
   min-height: var(--control);
+  border-color: var(--plum);
   background: var(--plum);
   color: var(--on-plum);
 }
@@ -132,32 +145,28 @@ button[aria-disabled="true"] {
 .button-secondary {
   min-height: var(--control);
   border: 2px solid var(--ink);
-  background: transparent;
 }
 
 .button-quiet {
-  background: transparent;
+  border-color: transparent;
   color: var(--ink-muted);
 }
 
 .button-link {
-  background: transparent;
+  border-color: transparent;
   color: var(--plum);
   padding-inline: var(--space-2);
 }
 
-.button-small {
-  min-height: var(--touch-min);
-  padding: var(--space-2) var(--space-3);
-  border: var(--hairline) solid var(--line-control);
-  background: transparent;
-  font: var(--type-strip);
-}
-
-.button-small[aria-current="page"] {
+.button-row[aria-current="page"] {
   border-color: var(--ink);
   background: var(--ink);
   color: var(--surface);
+}
+
+.button-danger {
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 .button-block {
@@ -391,6 +400,7 @@ details[open] > summary::after {
   gap: var(--space-1);
   height: var(--nav);
   padding: var(--space-1);
+  border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--ink-muted);
@@ -453,6 +463,8 @@ details[open] > summary::after {
 
 .banner button {
   flex: none;
+  padding-inline: var(--space-4);
+  border-color: var(--plum);
   background: var(--plum);
   color: var(--on-plum);
   font: var(--type-button);
@@ -465,7 +477,8 @@ details[open] > summary::after {
 }
 
 .banner button:disabled {
-  background: var(--surface-raised);
+  border: var(--hairline) dashed var(--line-control);
+  background: transparent;
   color: var(--ink-muted);
 }
 
@@ -521,6 +534,8 @@ details[open] > summary::after {
 
 .segmented button {
   min-height: var(--touch-min);
+  font: var(--type-button);
+  border: 0;
   border-radius: calc(var(--radius-md) - var(--space-1));
   background: transparent;
 }
@@ -817,6 +832,7 @@ details[open] > summary::after {
   min-width: 0;
   height: var(--day-rail);
   padding: 0;
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--surface-raised);
   font: var(--type-label);
@@ -946,6 +962,7 @@ details[open] > summary::after {
   min-height: 0;
   min-width: 0;
   padding: 0;
+  border: 0;
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -1486,6 +1503,7 @@ details[open] > summary::after {
   align-items: center;
   width: 100%;
   padding: var(--space-3) 0;
+  border: 0;
   border-radius: 0;
   background: transparent;
   font: inherit;

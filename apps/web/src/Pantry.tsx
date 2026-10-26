@@ -450,7 +450,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
               <span>{summary(staple)}</span>
               <button
                 type="button"
-                class="button-small"
+                class="button-row"
                 aria-label={t("pantry.edit", { name: staple.name })}
                 onClick={() => setDraft(draftOf(staple))}
               >
@@ -458,7 +458,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
               </button>
               <button
                 type="button"
-                class="button-small"
+                class="button-danger"
                 aria-label={t("pantry.remove", { name: staple.name })}
                 onClick={() => remove(staple)}
               >
@@ -590,7 +590,7 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
                 {(status) => (
                   <button
                     type="button"
-                    class="button-small"
+                    class="button-row"
                     aria-label={`${staple.name}: ${t(`staple.${status}`)}`}
                     aria-pressed={staple.status === status}
                     onClick={() => record(staple, status)}

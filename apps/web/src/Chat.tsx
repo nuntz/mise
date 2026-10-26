@@ -16,7 +16,7 @@ export function Chat(props: { client: MiseClient; online: boolean; where: () => 
 
   return (
     <>
-      <button type="button" class="button-small" disabled={!props.online} onClick={() => setOpen(true)}>
+      <button type="button" class="button-row" disabled={!props.online} onClick={() => setOpen(true)}>
         <Icon name="chat" />
         {t("chat.action")}
       </button>
