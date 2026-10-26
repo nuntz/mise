@@ -573,6 +573,7 @@ const en = {
   "recipe.unresolved": "Unresolved",
   "recipe.allergensKnown": "Contains: {allergens}.",
   "recipe.allergensNone": "No Allergens.",
+  "recipe.allergensUnknownChip": "Allergens unknown",
   "recipe.allergensUnknown": "Allergens unknown: {count} Ingredient is Unresolved.",
   "recipe.allergensUnknownMany": "Allergens unknown: {count} Ingredients are Unresolved.",
   "recipe.allergensAtLeast": "Contains at least: {allergens}.",

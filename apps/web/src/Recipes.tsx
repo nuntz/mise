@@ -147,26 +147,41 @@ function RecipeList(props: {
           >
             <ul class="rows">
               <For each={found()}>
-                {(recipe) => (
-                  <li>
-                    <button type="button" class="recipe-row" onClick={() => props.onOpen(recipe)}>
-                      <span class="thumb" aria-hidden="true">
-                        <Show when={recipe.photoKey} fallback={<PlateGlyph size={30} />}>
-                          {(key) => <img src={props.client.photoUrl(recipe.id, key())} alt="" />}
-                        </Show>
-                      </span>
-                      <span class="dish">
-                        <span class="dish-title">{recipe.title}</span>
-                      </span>
-                    </button>
-                    <div class="row-body">
-                      <span class="row-meta">
-                        {[...recipe.tags.map(nameText), effortText(recipe.effortMinutes)].join(" · ")}
-                      </span>
-                      <p class="row-meta">{allergensText(recipe.allergens)}</p>
-                    </div>
-                  </li>
-                )}
+                {(recipe) => {
+                  const id = `recipe-${recipe.id}`;
+                  return (
+                    <li>
+                      {/* The whole row opens the Recipe, named by its title and described by its details. */}
+                      <button
+                        type="button"
+                        class="row row-open recipe-row"
+                        aria-labelledby={`${id}-title`}
+                        aria-describedby={`${id}-meta ${id}-allergens`}
+                        onClick={() => props.onOpen(recipe)}
+                      >
+                        <span class="row-lead thumb" aria-hidden="true">
+                          <Show when={recipe.photoKey} fallback={<PlateGlyph size={30} />}>
+                            {(key) => <img src={props.client.photoUrl(recipe.id, key())} alt="" />}
+                          </Show>
+                        </span>
+                        <span class="row-body">
+                          <span class="dish-title" id={`${id}-title`}>
+                            {recipe.title}
+                          </span>
+                          <span class="row-meta" id={`${id}-meta`}>
+                            {[...recipe.tags.map(nameText), effortText(recipe.effortMinutes)].join(" · ")}
+                          </span>
+                          <Show when={recipe.allergens.kind === "unknown"}>
+                            <span class="chip chip-amber">{t("recipe.allergensUnknownChip")}</span>
+                          </Show>
+                          <span class="row-meta" id={`${id}-allergens`}>
+                            {allergensText(recipe.allergens)}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                }}
               </For>
             </ul>
           </Show>

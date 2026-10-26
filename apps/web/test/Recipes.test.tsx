@@ -146,6 +146,28 @@ test("the Recipes are listed, and searching narrows them", async () => {
   expect(calls.filter((call) => call.name === "search_recipes").at(-1)?.input).toEqual({ query: "ric" });
 });
 
+test("tapping anywhere on a Recipe row opens the Recipe", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient([toast, rice]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByText("Breakfast · 5 minutes"));
+
+  expect(await screen.findByRole("heading", { name: "Toast" })).toBeTruthy();
+});
+
+test("a Recipe row with Unresolved Ingredients shows an amber Allergens unknown chip and its sentence", async () => {
+  const { client } = fakeClient([toast, rice]);
+  await openRecipes(client);
+
+  const row = await screen.findByRole("button", { name: "Toast" });
+  expect(within(row).getByText("Allergens unknown").classList.contains("chip-amber")).toBe(true);
+  expect(within(row).getByText("Allergens unknown: 1 Ingredient is Unresolved. Contains at least: Milk.")).toBeTruthy();
+  const known = screen.getByRole("button", { name: "Rice" });
+  expect(within(known).queryByText("Allergens unknown")).toBeNull();
+  expect(within(known).getByText("No Allergens.")).toBeTruthy();
+});
+
 test("a Recipe shows how each line resolved, and Allergens unknown while one is Unresolved", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient([toast, rice]);

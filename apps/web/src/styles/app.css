@@ -1822,26 +1822,9 @@ fieldset.row {
 
 /* ---------- Recipes ---------- */
 
-.recipe-row {
-  display: grid;
-  grid-template-columns: var(--thumb) minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: center;
-  width: 100%;
-  padding: var(--space-1) 0 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  font: inherit;
-  text-align: start;
-}
-
+/* A Recipe row: its thumb, then the title with its tags, time and Allergens under it. */
 .recipe-row .dish-title {
   font: var(--type-title-sm);
-}
-
-.recipe-row .dish {
-  padding: 0;
 }
 
 .hero {
