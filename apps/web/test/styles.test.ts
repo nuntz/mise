@@ -33,3 +33,15 @@ test("a danger button is a hairline and text in warn", () => {
   expect(declarations(".button-danger")).toMatch(/border-color:\s*var\(--warn\)/);
   expect(declarations(".button-danger")).toMatch(/color:\s*var\(--warn\)/);
 });
+
+test("h2, h3 and h4 are three heading roles: section head, overline and body at 600", () => {
+  expect(declarations("h2")).toMatch(/font:\s*var\(--type-title-sm\)/);
+  expect(declarations("h3")).toMatch(/font:\s*var\(--type-label\)/);
+  expect(declarations("h3")).toMatch(/text-transform:\s*uppercase/);
+  expect(declarations("h4")).toMatch(/font:\s*var\(--type-body\)/);
+  expect(declarations("h4")).toMatch(/font-weight:\s*600/);
+});
+
+test("a sheet's title takes the header's remaining width, so the close button sits at the right edge", () => {
+  expect(declarations(".sheet-header .page-heading")).toMatch(/flex:\s*1/);
+});

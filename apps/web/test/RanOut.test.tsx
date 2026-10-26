@@ -117,6 +117,16 @@ test("Ran out finds a Staple by search and records it out", async () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+test("the Ran out sheet's overline names what it holds, not the page it opened from", async () => {
+  const { client } = fakeClient();
+  render(() => <App client={client} />);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Ran out" }));
+  const picker = await screen.findByRole("dialog", { name: "What ran out?" });
+  expect(within(picker).getByText("Staples")).toBeTruthy();
+  expect(within(picker).queryByText(/^Mise · /)).toBeNull();
+});
+
 test("Ran out can record a Staple low", async () => {
   const { client, recorded } = fakeClient();
   const user = userEvent.setup();

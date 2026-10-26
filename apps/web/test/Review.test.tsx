@@ -197,6 +197,14 @@ test("a Draft shows what to check, says AI read it, and is accepted in one tap",
   expect(await screen.findByText("Nothing is waiting on you.")).toBeTruthy();
 });
 
+test("Waiting on you, Drafts and a Draft's title are three heading roles", async () => {
+  await openReview(fakeClient({ drafts: [{ recipe: dal, duplicateOf: [] }] }).client);
+
+  expect(await screen.findByRole("heading", { level: 4, name: "Grandma's dal" })).toBeTruthy();
+  expect(screen.getByRole("heading", { level: 3, name: "Drafts" })).toBeTruthy();
+  expect(screen.getByRole("heading", { level: 2, name: "Waiting on you" })).toBeTruthy();
+});
+
 test("a link to the Review screen, as the share page gives, opens it", async () => {
   window.history.replaceState(null, "", "/?review");
   onTestFinished(() => window.history.replaceState(null, "", "/"));

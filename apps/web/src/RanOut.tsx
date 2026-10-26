@@ -109,7 +109,7 @@ function Picker(props: {
     <Sheet labelledBy={titleId} onEscape={() => props.onClose()}>
       <div class="sheet-header">
         <div class="page-heading">
-          <p class="overline">{t("pantry.overline")}</p>
+          <p class="overline">{t("ranOut.overline")}</p>
           <h2 id={titleId} class="dish-title">
             {t("ranOut.title")}
           </h2>

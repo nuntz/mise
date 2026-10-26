@@ -72,7 +72,7 @@ function ItemRow(props: { client: MiseClient; item: Item }) {
 
   return (
     <article aria-label={props.item.name}>
-      <h3>{props.item.name}</h3>
+      <h4>{props.item.name}</h4>
       <p class="meta">{shipped() ? t("items.shipped") : t("items.yours")}</p>
       <p>
         {t("items.summary", {

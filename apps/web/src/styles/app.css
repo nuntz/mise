@@ -46,13 +46,22 @@ h1 {
   letter-spacing: -0.01em;
 }
 
+/* Three heading roles, never two serif heads in a row: h2 is the section head, h3 an overline, h4
+ * body type at 600. */
 h2 {
   font: var(--type-title-sm);
 }
 
-h3,
+h3 {
+  font: var(--type-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
 h4 {
-  font: var(--type-title-sm);
+  font: var(--type-body);
+  font-weight: 600;
 }
 
 a {
@@ -342,6 +351,31 @@ details[open] > summary::after {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/* The rhythm: space-2 from a heading to its body, space-4 between blocks and space-6 between
+ * sections, so a button never runs into the next heading. Sections and articles the screens don't lay
+ * out themselves take it. */
+section:not([class]),
+article:not([class]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+:is(section, article):not([class]) > :is(button, .button) {
+  align-self: flex-start;
+}
+
+.screen > * + :is(section, article):not([class]),
+:is(section, article):not([class]) > * + :is(h2, h3, section, article),
+.sheet-body > * + :is(h2, h3, section, article) {
+  margin-top: calc(var(--space-6) - var(--space-4));
+}
+
+:is(section, article):not([class]) > :is(h2, h3, h4) + *,
+.sheet-body > :is(h2, h3, h4) + * {
+  margin-top: calc(var(--space-2) - var(--space-4));
 }
 
 .page-header {
@@ -709,6 +743,10 @@ details[open] > summary::after {
   padding: var(--space-5) var(--space-4) var(--space-4);
 }
 
+.sheet-header .page-heading {
+  flex: 1;
+}
+
 .sheet-header .icon {
   flex: none;
   width: var(--icon);
@@ -941,8 +979,12 @@ details[open] > summary::after {
   gap: var(--space-2);
 }
 
+/* A dish's name, whatever level of heading it is. */
 .dish-title {
   font: var(--type-title);
+  letter-spacing: normal;
+  text-transform: none;
+  color: inherit;
 }
 
 /* A Slot's title opens its Recipe; on a card its tap area stretches over the photo, or the thumb. */

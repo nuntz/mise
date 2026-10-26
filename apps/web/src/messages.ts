@@ -255,6 +255,7 @@ const en = {
   "chat.disclaimer": "Mise's answers come from an AI model reading your plan. Check anything that matters.",
 
   "ranOut.action": "Ran out",
+  "ranOut.overline": "Staples",
   "ranOut.title": "What ran out?",
   "ranOut.search": "Find a Staple",
   "ranOut.close": "Close",

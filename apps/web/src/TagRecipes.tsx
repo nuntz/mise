@@ -73,7 +73,7 @@ function TagRow(props: { client: MiseClient; recipe: RecipeSummary }) {
 
   return (
     <form aria-label={props.recipe.title} onSubmit={submit}>
-      <h3>{props.recipe.title}</h3>
+      <h4>{props.recipe.title}</h4>
       <label>
         {t("recipeForm.cuisine")}
         <input value={cuisine()} onInput={(e) => setCuisine(e.currentTarget.value)} />

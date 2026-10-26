@@ -165,7 +165,7 @@ function GroupRow(props: {
 
   return (
     <article aria-label={props.group.text || t("resolve.blank")}>
-      <h3>{props.group.text || t("resolve.blank")}</h3>
+      <h4>{props.group.text || t("resolve.blank")}</h4>
       <p>
         {t(props.group.count === 1 ? "resolve.countOne" : "resolve.count", {
           count: String(props.group.count),
