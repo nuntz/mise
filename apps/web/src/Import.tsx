@@ -7,9 +7,10 @@ import {
   type ToolError,
   type ToolOutput,
 } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { FilePicker } from "./FilePicker";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
 
@@ -65,19 +66,14 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
       <DriveSync client={props.client} runs={runs()} />
       <h2>{t("import.title")}</h2>
       <p>{t("import.intro")}</p>
-      <label>
-        {t("import.file")}
-        <input
-          type="file"
-          accept=".paprikarecipes"
-          disabled={busy()}
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0];
-            e.currentTarget.value = "";
-            if (file) void importFile(file);
-          }}
-        />
-      </label>
+      <FilePicker
+        label={t("import.file")}
+        accept=".paprikarecipes"
+        disabled={busy()}
+        onPick={([file]) => {
+          if (file) void importFile(file);
+        }}
+      />
       <Show when={busy()}>
         <p>{t("import.importing")}</p>
       </Show>
@@ -331,7 +327,6 @@ function linkError({ run }: ToolOutput<"import_url">, link: string): string | un
  * or screenshots of it. Exported for the Review screen, which offers it on each link-only Draft.
  */
 export function FillDraft(props: { client: MiseClient; draft: { id: number; title: string }; onReview?: () => void }) {
-  const screenshots = createUniqueId();
   const [text, setText] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
@@ -363,9 +358,8 @@ export function FillDraft(props: { client: MiseClient; draft: { id: number; titl
       fallback={
         // Not a form of its own: it may sit inside the link's form.
         <div>
-          <label for={screenshots}>{t("fill.screenshots", { title: props.draft.title })}</label>
-          <ScreenshotInput
-            id={screenshots}
+          <ScreenshotPicker
+            label={t("fill.screenshots", { title: props.draft.title })}
             disabled={busy()}
             onPick={(files) => void fill(() => readScreenshots(props.client, files, props.draft.id))}
           />
@@ -402,7 +396,6 @@ export function FillDraft(props: { client: MiseClient; draft: { id: number; titl
 
 /** Screenshots of one recipe, read together by the model into a Draft (ADR 0023). */
 function ImportScreenshots(props: { client: MiseClient; onReview: () => void }) {
-  const screenshots = createUniqueId();
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const [made, setMade] = createSignal<string>();
@@ -426,8 +419,7 @@ function ImportScreenshots(props: { client: MiseClient; onReview: () => void }) 
     <section>
       <h2>{t("shots.title")}</h2>
       <p>{t("shots.intro")}</p>
-      <label for={screenshots}>{t("shots.files")}</label>
-      <ScreenshotInput id={screenshots} disabled={busy()} onPick={(files) => void read(files)} />
+      <ScreenshotPicker label={t("shots.files")} disabled={busy()} onPick={(files) => void read(files)} />
       <Show when={busy()}>
         <p>{t("shots.reading")}</p>
       </Show>
@@ -450,20 +442,15 @@ function ImportScreenshots(props: { client: MiseClient; onReview: () => void }) 
   );
 }
 
-/** A file input for screenshots, several at once; cleared once picked, so the same ones can be picked again. */
-function ScreenshotInput(props: { id: string; disabled: boolean; onPick: (files: File[]) => void }) {
+/** A file picker for screenshots, several at once. */
+function ScreenshotPicker(props: { label: string; disabled: boolean; onPick: (files: File[]) => void }) {
   return (
-    <input
-      id={props.id}
-      type="file"
+    <FilePicker
+      label={props.label}
       accept={SCREENSHOT_TYPES.join(",")}
       multiple
       disabled={props.disabled}
-      onChange={(e) => {
-        const files = [...(e.currentTarget.files ?? [])];
-        e.currentTarget.value = "";
-        if (files.length > 0) props.onPick(files);
-      }}
+      onPick={props.onPick}
     />
   );
 }

@@ -76,9 +76,13 @@ const rice: Recipe = {
 const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }: Recipe) =>
   ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }) satisfies RecipeSummary;
 
-/** A client over a fixed set of Recipes that records every tool call made; offline, every call fails. */
+/**
+ * A client over a fixed set of Recipes that records every tool call made and every photo uploaded;
+ * offline, every call fails.
+ */
 function fakeClient(recipes: Recipe[], { online = true } = {}) {
   const calls: { name: string; input: unknown }[] = [];
+  const photos: { recipeId: number; photo: Blob }[] = [];
   const { client } = createFakeClient(
     async (name: string, input: Record<string, unknown>) => {
       calls.push({ name, input });
@@ -108,9 +112,15 @@ function fakeClient(recipes: Recipe[], { online = true } = {}) {
           throw new Error(`Unexpected tool ${name}`);
       }
     },
-    { online },
+    {
+      online,
+      uploadPhoto: async (recipeId, photo) => {
+        photos.push({ recipeId, photo });
+        return true;
+      },
+    },
   );
-  return { client, calls };
+  return { client, calls, photos };
 }
 
 test("the Recipes are listed, and searching narrows them", async () => {
@@ -153,6 +163,19 @@ test("a Recipe whose lines all resolved lists its Allergens", async () => {
   await user.click(await screen.findByRole("button", { name: "Rice" }));
 
   expect(await screen.findByText("No Allergens.")).toBeTruthy();
+});
+
+test("a Recipe's photo is chosen with Mise's file picker, which names the file chosen", async () => {
+  const user = userEvent.setup();
+  const { client, photos } = fakeClient([toast, rice]);
+  await openRecipes(client);
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+
+  const photo = new File([new Uint8Array([0xff, 0xd8])], "toast.jpg", { type: "image/jpeg" });
+  await user.upload(await screen.findByLabelText("Add or replace photo"), photo);
+
+  expect(await screen.findByText("Chosen: toast.jpg")).toBeTruthy();
+  expect(photos).toEqual([{ recipeId: 1, photo }]);
 });
 
 test("a new Recipe is created from its lines and fields", async () => {

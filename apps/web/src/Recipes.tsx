@@ -13,6 +13,7 @@ import type {
 import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { FilePicker } from "./FilePicker";
 import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
@@ -334,18 +335,14 @@ function RecipeDetail(props: {
                 </button>
               </Show>
             </div>
-            <label>
-              {t("recipe.photoUpload")}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-                disabled={busy()}
-                onChange={(e) => {
-                  const file = e.currentTarget.files?.[0];
-                  if (file) void changePhoto(() => props.client.uploadPhoto(current().id, file));
-                }}
-              />
-            </label>
+            <FilePicker
+              label={t("recipe.photoUpload")}
+              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              disabled={busy()}
+              onPick={([file]) => {
+                if (file) void changePhoto(() => props.client.uploadPhoto(current().id, file));
+              }}
+            />
           </article>
         )}
       </Show>

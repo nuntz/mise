@@ -21,6 +21,7 @@ import { RecipesPage } from "./Recipes";
 import { ResolveIngredients } from "./ResolveIngredients";
 import { ReviewPage } from "./Review";
 import { SetupForm } from "./SetupForm";
+import { SwitchRow } from "./SwitchRow";
 import { TagRecipes } from "./TagRecipes";
 import { createKitchenMode } from "./theme";
 import { WeekPage } from "./Week";
@@ -342,17 +343,12 @@ function HouseholdPage(props: {
           })}
         </p>
       </header>
-      <label>
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={props.kitchenMode}
-          checked={props.kitchenMode}
-          onChange={(event) => props.onKitchenMode(event.currentTarget.checked)}
-        />
-        {t("household.kitchenMode")}
-      </label>
-      <small>{t("household.kitchenModeHint")}</small>
+      <SwitchRow
+        label={t("household.kitchenMode")}
+        hint={t("household.kitchenModeHint")}
+        checked={props.kitchenMode}
+        onChange={props.onKitchenMode}
+      />
       <nav class="chips" aria-label={t("household.settings")}>
         <For each={SETTINGS}>
           {(name) => (

@@ -226,12 +226,123 @@ input[type="radio"] {
   height: var(--icon);
   min-height: 0;
   margin: 0;
+  padding: 0;
   flex: none;
   accent-color: var(--plum);
 }
 
-input[type="file"] {
-  padding: var(--space-2);
+/* A checkbox drawn from the tokens, never the browser's grey square: a box at 3:1, filled plum with
+ * a check when ticked. */
+input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  border: 2px solid var(--line-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-control) var(--ease-in),
+    border-color var(--duration-control) var(--ease-in);
+}
+
+input[type="checkbox"]:checked {
+  border-color: var(--plum);
+  background: var(--plum);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  width: calc(var(--icon) / 4);
+  height: calc(var(--icon) / 2);
+  border: solid var(--on-plum);
+  border-width: 0 3px 3px 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+input[type="checkbox"]:checked:disabled {
+  border-color: var(--ink-muted);
+  background: var(--ink-muted);
+}
+
+/* A switch, for a setting that applies at once: a track that fills plum, with its thumb moving across. */
+input[type="checkbox"][role="switch"] {
+  width: calc(var(--icon) * 2);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--line-control);
+}
+
+input[type="checkbox"][role="switch"]::after {
+  content: "";
+  position: absolute;
+  top: var(--space-1);
+  left: var(--space-1);
+  width: calc(var(--icon) - var(--space-2));
+  height: calc(var(--icon) - var(--space-2));
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  transform: none;
+  transition: transform var(--duration-control) var(--ease-in);
+}
+
+input[type="checkbox"][role="switch"]:checked {
+  background: var(--plum);
+}
+
+input[type="checkbox"][role="switch"]:checked::after {
+  transform: translateX(var(--icon));
+}
+
+.switch-row {
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-block: var(--space-3);
+}
+
+/* A file picker: the input is hidden but still takes focus, its label is a row button, and a meta line
+ * under it names what was chosen, in the Household's language rather than the browser's. */
+.file-picker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.file-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  opacity: 0;
+}
+
+.file-picker label {
+  flex-direction: row;
+  color: var(--ink);
+}
+
+.file-picker input:focus-visible + label {
+  box-shadow: var(--focus-ring);
+}
+
+.file-picker input:disabled + label {
+  cursor: not-allowed;
+  border-style: dashed;
+  color: var(--ink-muted);
 }
 
 label {
@@ -1216,6 +1327,11 @@ article:not([class]) {
 .tick input:checked {
   border-color: var(--leaf);
   background: var(--leaf);
+}
+
+/* The tick draws its check with an icon, not the checkbox's own mark. */
+.tick input:checked::after {
+  content: none;
 }
 
 .tick .icon {

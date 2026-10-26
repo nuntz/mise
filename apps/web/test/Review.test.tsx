@@ -335,7 +335,7 @@ test("a TikTok or Instagram link-only Draft shows its link, and screenshots of i
   expect(within(draft).getByText(/Add screenshots or paste the recipe's text/)).toBeTruthy();
 
   await userEvent.upload(
-    within(draft).getByLabelText("Screenshots of the recipe, for Instagram reel"),
+    within(draft).getByLabelText("Choose screenshots of Instagram reel"),
     new File([new Uint8Array([0x89, 0x50])], "reel.png", { type: "image/png" }),
   );
 

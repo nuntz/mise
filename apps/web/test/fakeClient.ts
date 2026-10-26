@@ -19,7 +19,14 @@ export function createFakeClient(
   }: { online?: boolean } & Partial<
     Pick<
       MiseClient,
-      "photoUrl" | "uploadExport" | "uploadScreenshot" | "chat" | "conversation" | "confirm" | "signedIn"
+      | "photoUrl"
+      | "uploadPhoto"
+      | "uploadExport"
+      | "uploadScreenshot"
+      | "chat"
+      | "conversation"
+      | "confirm"
+      | "signedIn"
     >
   > = {},
 ) {

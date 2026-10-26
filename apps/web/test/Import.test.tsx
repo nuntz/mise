@@ -202,12 +202,13 @@ test("importing a Paprika export uploads it, runs the import and shows what it d
   const { client, calls, uploads } = fakeClient();
   await openImport(client);
 
-  await userEvent.upload(await screen.findByLabelText("Paprika export (.paprikarecipes)"), exportFile());
+  await userEvent.upload(await screen.findByLabelText("Choose a Paprika export (.paprikarecipes)"), exportFile());
 
   expect(await screen.findByRole("status")).toHaveProperty(
     "textContent",
     "Imported: 1 created, 3 updated, 118 skipped, 1 flagged.",
   );
+  expect(screen.getByText("Chosen: My Recipes.paprikarecipes")).toBeTruthy();
   expect(uploads.map((file) => (file as File).name)).toEqual(["My Recipes.paprikarecipes"]);
   expect(calls).toContainEqual({
     name: "run_paprika_import",
@@ -227,7 +228,7 @@ test("an upload that fails says so and runs nothing", async () => {
   const { client, calls } = fakeClient({ upload: null });
   await openImport(client);
 
-  await userEvent.upload(await screen.findByLabelText("Paprika export (.paprikarecipes)"), exportFile());
+  await userEvent.upload(await screen.findByLabelText("Choose a Paprika export (.paprikarecipes)"), exportFile());
 
   expect((await screen.findByRole("alert")).textContent).toBe("The export could not be uploaded.");
   expect(calls.map((call) => call.name)).not.toContain("run_paprika_import");
@@ -413,11 +414,12 @@ test("screenshots of a recipe are uploaded and read together into a Draft, to ch
   });
   await openImport(client);
 
-  await userEvent.upload(await screen.findByLabelText("Screenshots of a recipe"), screenshotFiles());
+  await userEvent.upload(await screen.findByLabelText("Choose screenshots"), screenshotFiles());
 
   expect(
     await screen.findByText("Cabbage Salad is waiting on the Review screen as a Draft, until someone checks it."),
   ).toBeTruthy();
+  expect(screen.getByText("2 files chosen")).toBeTruthy();
   expect(screenshots.map((file) => (file as File).name)).toEqual(["ingredients.png", "steps.png"]);
   expect(calls).toContainEqual({ name: "import_screenshots", input: { uploads: ["upload-1", "upload-2"] } });
 });
@@ -426,7 +428,7 @@ test("screenshots that can't be uploaded say so, and nothing is read", async () 
   const { client, calls } = fakeClient({ screenshotUploads: false });
   await openImport(client);
 
-  await userEvent.upload(await screen.findByLabelText("Screenshots of a recipe"), screenshotFiles());
+  await userEvent.upload(await screen.findByLabelText("Choose screenshots"), screenshotFiles());
 
   expect((await screen.findByRole("alert")).textContent).toBe("The screenshots could not be uploaded.");
   expect(calls.map((call) => call.name)).not.toContain("import_screenshots");
@@ -438,7 +440,7 @@ test("screenshots with no recipe in them say so", async () => {
   });
   await openImport(client);
 
-  await userEvent.upload(await screen.findByLabelText("Screenshots of a recipe"), screenshotFiles());
+  await userEvent.upload(await screen.findByLabelText("Choose screenshots"), screenshotFiles());
 
   expect((await screen.findByRole("alert")).textContent).toBe("No recipe was found in those screenshots.");
 });
@@ -457,10 +459,7 @@ test("a link Mise could not read takes screenshots of its recipe, too", async ()
   await openImport(client);
   await pasteLink();
 
-  await userEvent.upload(
-    await screen.findByLabelText("Screenshots of the recipe, for Instagram reel"),
-    screenshotFiles(),
-  );
+  await userEvent.upload(await screen.findByLabelText("Choose screenshots of Instagram reel"), screenshotFiles());
 
   expect(calls).toContainEqual({
     name: "import_screenshots",

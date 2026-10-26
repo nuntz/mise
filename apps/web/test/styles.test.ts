@@ -78,3 +78,11 @@ test("no list renders the browser's markers", () => {
 test("every list in the web components is classed, so none falls back to the browser's look", () => {
   expect(inComponents(/<(?:ul|ol)\b[^>]*>/g).filter((tag) => !/\bclass=/.test(tag))).toEqual([]);
 });
+
+test("a file input is only ever Mise's file picker, never the browser's", () => {
+  expect(inComponents(/type="file"/g).filter((match) => !match.startsWith("FilePicker.tsx"))).toEqual([]);
+});
+
+test("a checkbox is drawn from the tokens, never the browser's", () => {
+  expect(declarations('input[type="checkbox"]')).toMatch(/appearance:\s*none/);
+});

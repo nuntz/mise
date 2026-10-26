@@ -372,13 +372,15 @@ const en = {
   "share.signIn":
     "Safari isn't signed in to Mise yet. Sign in once, and every link you share after that goes straight in.",
   "share.signInLink": "Sign in and import the link",
+  "file.chosenOne": "Chosen: {name}",
+  "file.chosen": "{count} files chosen",
   "fill.text": "The recipe's text, for {title}",
   "fill.read": "Fill in the Draft",
-  "fill.screenshots": "Screenshots of the recipe, for {title}",
+  "fill.screenshots": "Choose screenshots of {title}",
   "shots.title": "Import screenshots",
   "shots.intro":
     "Pick screenshots of one recipe: the ingredients on one, the steps on the next. AI reads them together into a Draft, to check on the Review screen.",
-  "shots.files": "Screenshots of a recipe",
+  "shots.files": "Choose screenshots",
   "shots.reading": "Reading the screenshots…",
   "shots.uploadFailed": "The screenshots could not be uploaded.",
   "shots.tooMany": "Pick at most {count} screenshots at a time.",
@@ -419,7 +421,7 @@ const en = {
   "import.title": "Import from Paprika",
   "import.intro":
     "In Paprika, export your Recipes (all of them, with photos) and choose the .paprikarecipes file here. Importing again brings in what changed; nothing is ever deleted.",
-  "import.file": "Paprika export (.paprikarecipes)",
+  "import.file": "Choose a Paprika export (.paprikarecipes)",
   "import.importing": "Importing…",
   "import.uploadFailed": "The export could not be uploaded.",
   "import.done": "Imported: {counts}.",

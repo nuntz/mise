@@ -98,3 +98,23 @@ test("a refresh that fails keeps the settings and their unsaved input, and says 
   expect(screen.getByRole("heading", { name: "The Tremblays" })).toBeTruthy();
   expect(screen.getByDisplayValue("Robin")).toBeTruthy();
 });
+
+test("kitchen mode is a switch, described by its hint, that applies at once", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient(household());
+  render(() => <App client={client} />);
+
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+  const kitchen = await screen.findByRole("switch", {
+    name: "Kitchen mode on this device",
+    description: "Near-black with bigger type, for reading at arm's length with busy hands.",
+  });
+  expect(kitchen.getAttribute("aria-checked")).toBe("false");
+
+  await user.click(kitchen);
+
+  expect(kitchen.getAttribute("aria-checked")).toBe("true");
+  expect(document.documentElement.dataset.theme).toBe("kitchen");
+  await user.click(kitchen);
+  expect(document.documentElement.dataset.theme).toBeUndefined();
+});
