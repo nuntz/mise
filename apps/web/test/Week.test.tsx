@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { setPseudoLocale } from "../src/messages";
 import { createFakeClient } from "./fakeClient";
 
 const robin: Member = { id: 1, name: "Robin", email: null, constraints: [] };
@@ -352,7 +353,7 @@ test("editing a dinner sends what changed in one change to the Slot, then the Lo
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
 
-  await user.click(within(tuesday).getByRole("button", { name: "Edit Dinner" }));
+  await user.click(within(tuesday).getByRole("button", { name: "Edit dinner" }));
   const form = within(tuesday).getByRole("form", { name: "Dinner" });
   await within(form).findByRole("option", { name: "Curry" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
@@ -384,7 +385,7 @@ test("Guests and their Constraints are set on the Slot", async () => {
   render(() => <App client={client} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(within(monday).getByRole("button", { name: "Edit Dinner" }));
+  await user.click(within(monday).getByRole("button", { name: "Edit dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Eating out");
   await user.clear(within(form).getByRole("spinbutton", { name: "Guests" }));
@@ -540,7 +541,7 @@ test("a change refused for a Conflict names the person and the Allergen, and sav
   render(() => <App client={client} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(within(monday).getByRole("button", { name: "Edit Dinner" }));
+  await user.click(within(monday).getByRole("button", { name: "Edit dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
   await within(form).findByRole("option", { name: "Curry" });
@@ -628,7 +629,7 @@ test("changing the Slot after a refusal takes the warning away, and its reasons 
   render(() => <App client={client} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(within(monday).getByRole("button", { name: "Edit Dinner" }));
+  await user.click(within(monday).getByRole("button", { name: "Edit dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
   await within(form).findByRole("option", { name: "Curry" });
@@ -717,6 +718,54 @@ test("a dinner cooked for its Leftovers says how many to cook for, and the Lefto
   const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
   expect(within(dinner).getByRole("heading", { name: "Leftovers of Curry" })).toBeTruthy();
   expect(within(dinner).getByText("Leftovers of Monday's dinner, cooked for both.")).toBeTruthy();
+});
+
+test("a dinner cooked for a lunch's Leftovers, or for several, says so in one sentence", async () => {
+  const week = emptyWeek("2026-10-26");
+  const curryRecipe = { id: 2, title: "Curry", baseServings: 4, photoKey: null };
+  Object.assign(week.slots[2] as Slot, {
+    kind: "recipe",
+    recipe: curryRecipe,
+    cookFor: 6,
+    leftovers: [{ date: "2026-10-27", meal: "lunch" }],
+  });
+  Object.assign(week.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { ...curryRecipe, id: 3, title: "Stew" },
+    cookFor: 8,
+    leftovers: [
+      { date: "2026-10-28", meal: "lunch" },
+      { date: "2026-10-29", meal: "dinner" },
+    ],
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  expect(within(monday).getByText("Cook for 6, with Tuesday's lunch Leftovers.")).toBeTruthy();
+  const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
+  expect(within(tuesday).getByText("Cook for 8, with Leftovers on Wednesday and Thursday.")).toBeTruthy();
+});
+
+test("in the pseudo-locale, the Cook-for line and Edit actions are each one message", async () => {
+  setPseudoLocale(true);
+  onTestFinished(() => setPseudoLocale(false));
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[2] as Slot, {
+    kind: "recipe",
+    recipe: { id: 2, title: "Curry", baseServings: 4, photoKey: null },
+    cookFor: 6,
+    leftovers: [{ date: "2026-10-27", meal: "dinner" }],
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: /Monday/ });
+  const cookFor = within(monday).getByText(/^\[Çööķ ƒöŕ 6/);
+  expect(cookFor.textContent).not.toMatch(/\[.*\[/);
+  for (const edit of within(monday).getAllByRole("button", { name: /^\[Éđîţ/ })) {
+    expect(edit.textContent).not.toMatch(/\[.*\[/);
+  }
 });
 
 test("Leftovers open the Recipe they're of, scaled as it's cooked, with nothing to cook", async () => {
@@ -952,7 +1001,7 @@ test("offline, the Week last loaded opens read-only: it can be cooked from, not 
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
   expect(within(tuesday).getByRole("heading", { name: "Pasta" })).toBeTruthy();
   expect(within(tuesday).getByRole("button", { name: "Cook" })).toBeTruthy();
-  expect(within(tuesday).queryByRole("button", { name: "Edit Dinner" })).toBeNull();
+  expect(within(tuesday).queryByRole("button", { name: "Edit dinner" })).toBeNull();
   expect(within(tuesday).queryByRole("button", { name: "Mark cooked" })).toBeNull();
   expect((screen.getByRole("button", { name: "Propose dinners" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("alert")).toBeNull();

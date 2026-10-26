@@ -163,6 +163,21 @@ test("a Recipe shows how each line resolved, and Allergens unknown while one is 
   expect(screen.getByText("Every week")).toBeTruthy();
 });
 
+test("a Recipe's tags, cuisine and main protein are sentence-cased, and its lines are not", async () => {
+  const user = userEvent.setup();
+  const tagged = { ...rice, tags: ["weeknight"], cuisine: "mediterranean", mainProtein: "chicken" };
+  const { client } = fakeClient([tagged]);
+  await openRecipes(client);
+
+  expect(await screen.findByText("Weeknight · 5 minutes")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Rice" }));
+
+  expect(await screen.findByText(/Mediterranean · Chicken/)).toBeTruthy();
+  expect(screen.getByText("Weeknight")).toBeTruthy();
+  const lines = within(screen.getByRole("list", { name: "Ingredients" })).getAllByRole("listitem");
+  expect(lines[0]?.textContent).toMatch(/^1 cup rice/);
+});
+
 test("a Recipe whose lines all resolved lists its Allergens", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient([toast, rice]);

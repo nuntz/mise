@@ -19,7 +19,7 @@ import { Done } from "./Done";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { createItems, itemNamed } from "./items";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 
 /**
  * Unresolved Ingredients grouped by text, most frequent first; each group resolves in one go, by hand
@@ -168,10 +168,12 @@ function GroupRow(props: {
     }
   };
 
+  const title = () => (props.group.text ? nameText(props.group.text) : t("resolve.blank"));
+
   return (
-    <article class="row" aria-label={props.group.text || t("resolve.blank")}>
+    <article class="row" aria-label={title()}>
       <div class="row-body">
-        <h4 class="row-title">{props.group.text || t("resolve.blank")}</h4>
+        <h4 class="row-title name">{title()}</h4>
         <p class="row-meta">
           {t(props.group.count === 1 ? "resolve.countOne" : "resolve.count", {
             count: String(props.group.count),

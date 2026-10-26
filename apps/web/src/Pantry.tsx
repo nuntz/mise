@@ -16,7 +16,7 @@ import { keepFresh } from "./fresh";
 import { amountText } from "./Grocery";
 import { Icon, type IconName } from "./icons";
 import { createItems, itemNamed } from "./items";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 
 /**
  * How many Staples are due for a check, kept current; zero until loaded or when loading fails.
@@ -182,7 +182,7 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
             fallback={
               <Show when={staples()[index()]} fallback={<CheckInDone answers={answers()} onWeek={props.onWeek} />}>
                 {(staple) => (
-                  <fieldset class="answers" aria-label={staple().name}>
+                  <fieldset class="answers" aria-label={nameText(staple().name)}>
                     <Dots done={index()} count={staples().length} />
                     <p class="visually-hidden">
                       {t("pantry.progress", {
@@ -196,7 +196,7 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
                         <p class="overline">{t(`location.${staple().location}`)}</p>
                         <span class="chip">{intervalText(staple())}</span>
                       </div>
-                      <h2 class="check-card-title">{staple().name}</h2>
+                      <h2 class="check-card-title">{nameText(staple().name)}</h2>
                       <p>{lastCheckedText(staple(), props.locale)}</p>
                     </div>
                     <For each={STAPLE_STATUSES}>
@@ -428,7 +428,6 @@ function StapleList(props: { client: MiseClient; locale: string }) {
 
   const summary = (staple: Staple) =>
     [
-      staple.name,
       t(`location.${staple.location}`),
       staple.alwaysBuy
         ? t("pantry.alwaysBought")
@@ -446,7 +445,10 @@ function StapleList(props: { client: MiseClient; locale: string }) {
         <For each={staples()} fallback={<li>{t("pantry.noStaples")}</li>}>
           {(staple) => (
             <li>
-              <span class="row-body">{summary(staple)}</span>
+              <span class="row-body">
+                <span class="row-title name">{nameText(staple.name)}</span>
+                <span class="row-meta">{summary(staple)}</span>
+              </span>
               <div class="row-end">
                 <button
                   type="button"
@@ -588,13 +590,13 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
         <For each={staples()}>
           {(staple) => (
             <p class="slot-actions">
-              {staple.name}: {t(`staple.${staple.status}`)}
+              <span class="name">{nameText(staple.name)}</span> <span class="chip">{t(`staple.${staple.status}`)}</span>
               <For each={["low", "out"] as const}>
                 {(status) => (
                   <button
                     type="button"
                     class="button-row"
-                    aria-label={`${staple.name}: ${t(`staple.${status}`)}`}
+                    aria-label={t(`pantry.record.${status}`, { name: staple.name })}
                     aria-pressed={staple.status === status}
                     onClick={() => record(staple, status)}
                   >

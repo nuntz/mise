@@ -1655,6 +1655,11 @@ article:not([class]) {
   font: var(--type-item);
 }
 
+/* A name (Item, Staple, Member, Unresolved Ingredient) is set in the display face wherever it sits. */
+.name {
+  font-family: var(--font-display);
+}
+
 .row-meta {
   font: var(--type-meta);
   color: var(--ink-muted);

@@ -126,12 +126,12 @@ async function openPage(name: string, options?: Parameters<typeof fakeClient>[0]
 test("Unresolved Ingredients are listed by text, with their lines and Recipes", async () => {
   await openPage("Resolve Ingredients");
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   expect(within(gochujang).getByText("2 lines, in Bibimbap, Tteokbokki")).toBeTruthy();
   expect(within(gochujang).getByText("1 tbsp Gochujang")).toBeTruthy();
   expect(screen.getAllByRole("article").map((article) => article.getAttribute("aria-label"))).toEqual([
-    "gochujang",
-    "beurre",
+    "Gochujang",
+    "Beurre",
     "(no name)",
   ]);
   const blank = screen.getByRole("article", { name: "(no name)" });
@@ -142,7 +142,7 @@ test("Unresolved Ingredients are listed by text, with their lines and Recipes", 
 test("a group is mapped to an existing Item by its name", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const beurre = await screen.findByRole("article", { name: "beurre" });
+  const beurre = await screen.findByRole("article", { name: "Beurre" });
   await user.click(within(beurre).getByRole("button", { name: "Map to an Item" }));
   // By an alias of the Item, not only its name.
   await user.type(within(beurre).getByRole("combobox", { name: "Item" }), "unsalted butters");
@@ -154,7 +154,7 @@ test("a group is mapped to an existing Item by its name", async () => {
 test("a name that is no Item asks to pick from the list", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const beurre = await screen.findByRole("article", { name: "beurre" });
+  const beurre = await screen.findByRole("article", { name: "Beurre" });
   await user.click(within(beurre).getByRole("button", { name: "Map to an Item" }));
   await user.type(within(beurre).getByRole("combobox", { name: "Item" }), "unobtainium");
   await user.click(within(beurre).getByRole("button", { name: "Resolve" }));
@@ -166,7 +166,7 @@ test("a name that is no Item asks to pick from the list", async () => {
 test("a new Item is created from a group with its Allergens and Store Section, the text kept as an alias", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   await user.click(within(gochujang).getByRole("button", { name: "Create an Item" }));
   const name = within(gochujang).getByRole("textbox", { name: "Name" });
   await user.clear(name);
@@ -189,7 +189,7 @@ test("a new Item is created from a group with its Allergens and Store Section, t
 test("a new Item needs its Allergens ticked, or none of them ticked on purpose", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   await user.click(within(gochujang).getByRole("button", { name: "Create an Item" }));
   await user.click(within(gochujang).getByRole("button", { name: "Create Item" }));
 
@@ -207,7 +207,7 @@ test("a new Item needs its Allergens ticked, or none of them ticked on purpose",
 test("a new Item named as the group has no alias, and a name in use is reported", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   await user.click(within(gochujang).getByRole("button", { name: "Create an Item" }));
   await user.click(within(gochujang).getByRole("checkbox", { name: "Contains none of these" }));
   await user.click(within(gochujang).getByRole("button", { name: "Create Item" }));
@@ -223,11 +223,11 @@ test("a new Item named as the group has no alias, and a name in use is reported"
 test("a Suggestion shows on its group, marked as AI-drafted and not guaranteed complete", async () => {
   await openPage("Resolve Ingredients");
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
   expect(suggestion.textContent).toContain("AI-drafted, not guaranteed complete");
   expect(suggestion.textContent).toContain("A new Item: gochujang, in International, with Soy");
-  const beurre = screen.getByRole("article", { name: "beurre" });
+  const beurre = screen.getByRole("article", { name: "Beurre" });
   expect(within(beurre).getByRole("region", { name: "Suggestion" }).textContent).toContain(
     "Another name for butter (Milk)",
   );
@@ -237,9 +237,9 @@ test("a Suggestion shows on its group, marked as AI-drafted and not guaranteed c
 test("a Suggestion is accepted, or dismissed, in one tap", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const beurre = await screen.findByRole("article", { name: "beurre" });
+  const beurre = await screen.findByRole("article", { name: "Beurre" });
   await user.click(await within(beurre).findByRole("button", { name: "Accept" }));
-  const gochujang = screen.getByRole("article", { name: "gochujang" });
+  const gochujang = screen.getByRole("article", { name: "Gochujang" });
   await user.click(within(gochujang).getByRole("button", { name: "Dismiss" }));
 
   expect(calls.find((call) => call.name === "accept_suggestion")?.input).toEqual({ id: 8 });
@@ -249,7 +249,7 @@ test("a Suggestion is accepted, or dismissed, in one tap", async () => {
 test("a Suggestion for a new Item is accepted after a person edits its Allergens", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   await user.click(await within(gochujang).findByRole("button", { name: "Edit" }));
   expect(within(gochujang).getByRole<HTMLInputElement>("checkbox", { name: "Soy" }).checked).toBe(true);
   await user.click(within(gochujang).getByRole("checkbox", { name: "Wheat" }));
@@ -276,7 +276,7 @@ test("a Suggestion of a new Item with no Allergens is accepted only once a perso
   };
   const { user, calls } = await openPage("Resolve Ingredients", { listed: [noAllergens] });
 
-  const gochujang = await screen.findByRole("article", { name: "gochujang" });
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
   expect(suggestion.textContent).toContain("with no Allergens");
   expect(suggestion.textContent).toContain(
@@ -306,7 +306,7 @@ test("a Suggestion of a new Item with no Allergens is accepted only once a perso
 test("a Suggestion of an existing Item is accepted with another Item a person picked", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 
-  const beurre = await screen.findByRole("article", { name: "beurre" });
+  const beurre = await screen.findByRole("article", { name: "Beurre" });
   await user.click(await within(beurre).findByRole("button", { name: "Edit" }));
   const item = within(beurre).getByRole<HTMLInputElement>("combobox", { name: "Item" });
   expect(item.value).toBe("butter");

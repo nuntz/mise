@@ -24,7 +24,6 @@ import {
   type Week,
   type WeekSpan,
   weekDates,
-  weekdayOf,
 } from "@mise/domain";
 import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
@@ -35,7 +34,7 @@ import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
 import { type ConstraintDraft, ConstraintFields, constraintDraftsOf, constraintsOf } from "./MemberFields";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 import { savedWeek, saveWeek } from "./offline";
 import { RunOut } from "./Pantry";
 import {
@@ -471,7 +470,7 @@ function SlotView(props: {
             </Show>
             <Show when={!props.readOnly}>
               <button type="button" class="button-row" onClick={() => setEditing(true)}>
-                {t("slot.edit", { meal: meal() })}
+                {t(`slot.edit.${props.slot.meal}`)}
               </button>
             </Show>
           </div>
@@ -1028,7 +1027,7 @@ function DinersFields(props: { members: Member[]; draft: DinersDraft; onChange: 
               checked={props.draft.everyone || props.draft.diners.includes(member.id)}
               onChange={(e) => toggle(member.id, e.currentTarget.checked)}
             />
-            {member.name}
+            <span class="name">{nameText(member.name)}</span>
           </label>
         )}
       </For>
@@ -1053,17 +1052,19 @@ function slotTitle(slot: Slot): string {
   return slot.recipe?.title ?? t(`slotKind.${slot.kind}`);
 }
 
-/** How many a Slot's Recipe is cooked for, and which Leftovers that includes. */
+/**
+ * How many a Slot's Recipe is cooked for, and which Leftovers that includes: one sentence per meal for
+ * one Leftover, else the days. Weekdays come from Intl, so no message is pasted into another.
+ */
 function cookForText(slot: Slot, household: Household): string {
-  const which = slot.leftovers.map(({ date, meal }) => {
-    const day = t(`weekday.${weekdayOf(date)}`);
-    return meal === "dinner"
-      ? t("slot.leftoversDay", { day })
-      : t("slot.leftoversDayMeal", { day, meal: t(`meal.${meal}`).toLowerCase() });
-  });
-  return t("slot.cookFor", {
-    count: String(slot.cookFor),
-    which: new Intl.ListFormat(household.locale, { type: "conjunction" }).format(which),
+  const count = String(slot.cookFor);
+  const weekday = (date: LocalDate) => formatDate(date, household.locale, { weekday: "long" });
+  const [only, ...others] = slot.leftovers;
+  if (only && others.length === 0) return t(`slot.cookFor.${only.meal}`, { count, day: weekday(only.date) });
+  const days = [...new Set(slot.leftovers.map(({ date }) => weekday(date)))];
+  return t("slot.cookForDays", {
+    count,
+    days: new Intl.ListFormat(household.locale, { type: "conjunction" }).format(days),
   });
 }
 

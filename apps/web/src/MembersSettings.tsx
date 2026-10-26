@@ -1,11 +1,11 @@
-import { type Constraint, constraintSeverity, type Member, type MemberId, type ToolError } from "@mise/domain";
+import type { Constraint, Member, MemberId, ToolError } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { draftOf, emptyMember, type MemberDraft, MemberFields, memberOf } from "./MemberFields";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 
 /** Settings: the Household's Members and their Constraints, editable at any time. */
 export function MembersSettings(props: { client: MiseClient; members: Member[] }) {
@@ -85,7 +85,7 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
           <div class="row">
             <div class="row-body">
               <span class="row-title">
-                {props.member.name} {props.isCaller && t("member.you")}
+                <span class="name">{nameText(props.member.name)}</span> {props.isCaller && t("member.you")}
               </span>
               <span class="row-meta">{props.member.email ?? t("member.noEmail")}</span>
               <span class="row-meta">
@@ -183,9 +183,10 @@ function AddMember(props: { client: MiseClient }) {
   );
 }
 
-/** "Allergy (hard): Peanut", "Dislike (soft): mushrooms". */
+/** "Peanut allergy", "Milk intolerance: lactose", "Dislikes cilantro": one message per kind and Allergen. */
 function constraintText(constraint: Constraint): string {
-  const kind = `${t(`constraint.${constraint.kind}`)} (${t(`constraint.${constraintSeverity(constraint.kind)}`)})`;
-  const named = [constraint.allergen && t(`allergen.${constraint.allergen}`), constraint.term].filter(Boolean);
-  return `${kind}: ${named.join(", ")}`;
+  const term = constraint.term ?? "";
+  if (!constraint.allergen) return t("memberConstraint.dislike.termOnly", { term });
+  const key = `memberConstraint.${constraint.kind}.${constraint.allergen}` as const;
+  return term ? t(`${key}.term`, { term }) : t(key);
 }

@@ -126,12 +126,12 @@ test("the check-in asks about each due Staple in turn, as tap-through cards", as
   const user = await openPantry(client);
   await user.click(await screen.findByRole("button", { name: "Start the pantry check" }));
 
-  const first = screen.getByRole("group", { name: "rice" });
+  const first = screen.getByRole("group", { name: "Rice" });
   expect(within(first).getByText("1 of 2 · Pantry")).toBeTruthy();
   const before = Date.now();
   await user.click(within(first).getByRole("button", { name: "Stocked" }));
 
-  const second = await screen.findByRole("group", { name: "egg" });
+  const second = await screen.findByRole("group", { name: "Egg" });
   expect(within(second).getByText("2 of 2 · Fridge")).toBeTruthy();
   await user.click(within(second).getByRole("button", { name: "Out" }));
 
@@ -153,8 +153,8 @@ test("a Staple out three times in a row is suggested for always buying", async (
   });
   const user = await openPantry(client);
   await user.click(await screen.findByRole("button", { name: "Start the pantry check" }));
-  await user.click(within(screen.getByRole("group", { name: "rice" })).getByRole("button", { name: "Low" }));
-  await user.click(within(await screen.findByRole("group", { name: "egg" })).getByRole("button", { name: "Out" }));
+  await user.click(within(screen.getByRole("group", { name: "Rice" })).getByRole("button", { name: "Low" }));
+  await user.click(within(await screen.findByRole("group", { name: "Egg" })).getByRole("button", { name: "Out" }));
 
   expect(await screen.findByText("egg has run out three checks in a row. Always buy it?")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Always buy egg" }));
@@ -167,9 +167,16 @@ test("lists the Staples, and adds, changes and removes them", async () => {
   const user = await openPantry(client);
 
   const staples = await screen.findByRole("region", { name: "Staples" });
-  expect(within(staples).getByText("rice · Pantry · every 14 days · Stocked")).toBeTruthy();
-  expect(within(staples).getByText("egg · Fridge · every shop · Low · 12 per shop")).toBeTruthy();
-  expect(within(staples).getByText("milk · Fridge · always bought · Stocked")).toBeTruthy();
+  const row = (name: string): HTMLElement => {
+    const found = within(staples)
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByText(name));
+    if (!found) throw new Error(`No Staple row for ${name}`);
+    return found;
+  };
+  expect(within(row("Rice")).getByText("Pantry · every 14 days · Stocked")).toBeTruthy();
+  expect(within(row("Egg")).getByText("Fridge · every shop · Low · 12 per shop")).toBeTruthy();
+  expect(within(row("Milk")).getByText("Fridge · always bought · Stocked")).toBeTruthy();
 
   const form = within(staples).getByRole("form", { name: "Add or change a Staple" });
   await user.type(within(form).getByRole("combobox", { name: "Item" }), "Butter");

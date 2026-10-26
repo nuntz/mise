@@ -14,7 +14,7 @@ import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { nameMatches } from "./items";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 
 /** Every Item, shipped or the Household's own, searchable, each edited in place. */
 export function ItemsSettings(props: { client: MiseClient }) {
@@ -73,9 +73,9 @@ function ItemRow(props: { client: MiseClient; item: Item }) {
   const shipped = () => SHIPPED_ITEMS.item(props.item.id);
 
   return (
-    <article class="row" aria-label={props.item.name}>
+    <article class="row" aria-label={nameText(props.item.name)}>
       <div class="row-body">
-        <h4 class="row-title">{props.item.name}</h4>
+        <h4 class="row-title name">{nameText(props.item.name)}</h4>
         <p class="row-meta">{shipped() ? t("items.shipped") : t("items.yours")}</p>
         <p class="row-meta">
           {t("items.summary", {

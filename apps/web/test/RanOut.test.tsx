@@ -102,14 +102,14 @@ test("Ran out finds a Staple by search and records it out", async () => {
 
   await user.click(await screen.findByRole("button", { name: "Ran out" }));
   const picker = await screen.findByRole("dialog", { name: "What ran out?" });
-  expect(await within(picker).findByRole("group", { name: "rice" })).toBeTruthy();
-  expect(within(picker).getByRole("group", { name: "milk" })).toBeTruthy();
+  expect(await within(picker).findByRole("group", { name: "Rice" })).toBeTruthy();
+  expect(within(picker).getByRole("group", { name: "Milk" })).toBeTruthy();
   await user.type(within(picker).getByRole("searchbox", { name: "Find a Staple" }), "EG");
 
-  expect(within(picker).queryByRole("group", { name: "rice" })).toBeNull();
-  expect(within(picker).queryByRole("group", { name: "milk" })).toBeNull();
+  expect(within(picker).queryByRole("group", { name: "Rice" })).toBeNull();
+  expect(within(picker).queryByRole("group", { name: "Milk" })).toBeNull();
   const before = Date.now();
-  await user.click(within(within(picker).getByRole("group", { name: "egg" })).getByRole("button", { name: "Out" }));
+  await user.click(within(within(picker).getByRole("group", { name: "Egg" })).getByRole("button", { name: "Out" }));
 
   expect(recorded).toEqual([{ item: "egg", status: "out", at: expect.any(String) }]);
   expect(Date.parse(String(recorded[0]?.at))).toBeGreaterThanOrEqual(before);
@@ -135,7 +135,7 @@ test("Ran out can record a Staple low", async () => {
   await user.click(await screen.findByRole("button", { name: "Ran out" }));
   const picker = await screen.findByRole("dialog", { name: "What ran out?" });
   await user.click(
-    within(await within(picker).findByRole("group", { name: "rice" })).getByRole("button", { name: "Low" }),
+    within(await within(picker).findByRole("group", { name: "Rice" })).getByRole("button", { name: "Low" }),
   );
 
   expect(recorded.map(({ item, status }) => ({ item, status }))).toEqual([{ item: "rice", status: "low" }]);
@@ -152,12 +152,12 @@ test("the Pantry page and its check-in show a Staple recorded from Ran out strai
   await user.click(screen.getByRole("button", { name: "Ran out" }));
   const picker = await screen.findByRole("dialog", { name: "What ran out?" });
   await user.click(
-    within(await within(picker).findByRole("group", { name: "milk" })).getByRole("button", { name: "Out" }),
+    within(await within(picker).findByRole("group", { name: "Milk" })).getByRole("button", { name: "Out" }),
   );
 
   expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
   const staples = screen.getByRole("region", { name: "Staples" });
-  expect(await within(staples).findByText("milk · Fridge · every 14 days · Out")).toBeTruthy();
+  expect(await within(staples).findByText("Fridge · every 14 days · Out")).toBeTruthy();
 });
 
 test("offline, Ran out says it needs a connection and can't be opened", async () => {
@@ -178,7 +178,7 @@ test("losing the connection with the picker open stops Staples being recorded", 
 
   await user.click(await screen.findByRole("button", { name: "Ran out" }));
   const picker = await screen.findByRole("dialog", { name: "What ran out?" });
-  const rice = await within(picker).findByRole("group", { name: "rice" });
+  const rice = await within(picker).findByRole("group", { name: "Rice" });
   goOffline();
 
   expect(await within(picker).findByText("Recording a Staple needs a connection.")).toBeTruthy();

@@ -69,11 +69,12 @@ const updates = (calls: { name: string; input: unknown }[]) =>
 test("shipped and Household Items are listed with their Store Section and Allergens", async () => {
   await openItems();
 
-  const mine = await screen.findByRole("article", { name: "mystery masala" });
+  const mine = await screen.findByRole("article", { name: "Mystery masala" });
+  expect(within(mine).getByRole("heading", { name: "Mystery masala" })).toBeTruthy();
   expect(within(mine).getByText("Yours")).toBeTruthy();
   expect(within(mine).getByText("Spices · Milk, Mustard")).toBeTruthy();
   expect(within(mine).getByText("Also called: masala mix")).toBeTruthy();
-  const butter = screen.getByRole("article", { name: "butter" });
+  const butter = screen.getByRole("article", { name: "Butter" });
   expect(within(butter).getByText("Ships with Mise")).toBeTruthy();
   expect(within(butter).getByText("Dairy · Milk")).toBeTruthy();
 });
@@ -84,14 +85,14 @@ test("the list narrows to the Items a search names, by name or alias", async () 
   await user.type(await screen.findByRole("searchbox", { name: "Find an Item" }), "Masala Mix");
 
   expect(screen.getAllByRole("article").map((article) => article.getAttribute("aria-label"))).toEqual([
-    "mystery masala",
+    "Mystery masala",
   ]);
 });
 
 test("a Household Item's name, aliases, section, measure and Allergens are edited", async () => {
   const { user, calls, notify } = await openItems();
 
-  const mine = await screen.findByRole("article", { name: "mystery masala" });
+  const mine = await screen.findByRole("article", { name: "Mystery masala" });
   await user.click(within(mine).getByRole("button", { name: "Edit" }));
   const name = within(mine).getByRole("textbox", { name: "Name" });
   await user.clear(name);
@@ -115,14 +116,14 @@ test("a Household Item's name, aliases, section, measure and Allergens are edite
     },
   ]);
   notify("recipes");
-  const saved = await screen.findByRole("article", { name: "house masala" });
+  const saved = await screen.findByRole("article", { name: "House masala" });
   expect(await within(saved).findByText("International · Milk, Sesame, Mustard")).toBeTruthy();
 });
 
 test("a name that already names another Item is reported", async () => {
   const { user } = await openItems();
 
-  const mine = await screen.findByRole("article", { name: "mystery masala" });
+  const mine = await screen.findByRole("article", { name: "Mystery masala" });
   await user.click(within(mine).getByRole("button", { name: "Edit" }));
   const name = within(mine).getByRole("textbox", { name: "Name" });
   await user.clear(name);
@@ -135,7 +136,7 @@ test("a name that already names another Item is reported", async () => {
 test("taking an Allergen away has to be confirmed, and taking them all away said on purpose", async () => {
   const { user, calls } = await openItems();
 
-  const mine = await screen.findByRole("article", { name: "mystery masala" });
+  const mine = await screen.findByRole("article", { name: "Mystery masala" });
   await user.click(within(mine).getByRole("button", { name: "Edit" }));
   await user.click(within(mine).getByRole("checkbox", { name: "Milk" }));
   await user.click(within(mine).getByRole("button", { name: "Save" }));
@@ -161,7 +162,7 @@ test("taking an Allergen away has to be confirmed, and taking them all away said
 test("a shipped Item gains aliases and a Store Section, but its Allergens can't be edited", async () => {
   const { user, calls } = await openItems();
 
-  const butter = await screen.findByRole("article", { name: "butter" });
+  const butter = await screen.findByRole("article", { name: "Butter" });
   await user.click(within(butter).getByRole("button", { name: "Edit" }));
   expect(within(butter).queryByRole("textbox", { name: "Name" })).toBeNull();
   expect(within(butter).queryByRole("checkbox", { name: "Milk" })).toBeNull();

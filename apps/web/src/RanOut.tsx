@@ -4,7 +4,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { nameMatches } from "./items";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 import { Sheet } from "./Sheet";
 
 /** How long the note saying what was recorded stays up. */
@@ -140,9 +140,9 @@ function Picker(props: {
                 <For each={shown()} fallback={<li>{t("ranOut.noMatch", { query: query().trim() })}</li>}>
                   {(staple) => (
                     <li>
-                      <fieldset class="row" aria-label={staple.name}>
+                      <fieldset class="row" aria-label={nameText(staple.name)}>
                         <span class="row-body">
-                          <span class="row-title">{staple.name}</span>
+                          <span class="row-title name">{nameText(staple.name)}</span>
                           <span class="row-meta">
                             {t(`location.${staple.location}`)} · {t(`staple.${staple.status}`)}
                           </span>

@@ -18,7 +18,7 @@ import { FilePicker } from "./FilePicker";
 import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
-import { t } from "./messages";
+import { nameText, t } from "./messages";
 import { lastRecipe, savedRecipe, saveRecipe } from "./offline";
 import { RecipeForm } from "./RecipeForm";
 
@@ -160,7 +160,9 @@ function RecipeList(props: {
                       </span>
                     </button>
                     <div class="row-body">
-                      <span class="row-meta">{[...recipe.tags, effortText(recipe.effortMinutes)].join(" · ")}</span>
+                      <span class="row-meta">
+                        {[...recipe.tags.map(nameText), effortText(recipe.effortMinutes)].join(" · ")}
+                      </span>
                       <p class="row-meta">{allergensText(recipe.allergens)}</p>
                     </div>
                   </li>
@@ -264,8 +266,7 @@ function RecipeDetail(props: {
                 {[
                   t("recipe.servings", { count: String(current().baseServings) }),
                   effortText(current().effortMinutes),
-                  current().cuisine,
-                  current().mainProtein,
+                  ...[current().cuisine, current().mainProtein].map((name) => name && nameText(name)),
                   courseText(current().course),
                 ]
                   .filter(Boolean)
@@ -279,7 +280,7 @@ function RecipeDetail(props: {
               <Show when={current().yieldsLeftovers}>
                 <span class="chip">{t("recipe.yieldsLeftovers")}</span>
               </Show>
-              <For each={current().tags}>{(tag) => <span class="chip">{tag}</span>}</For>
+              <For each={current().tags}>{(tag) => <span class="chip">{nameText(tag)}</span>}</For>
             </div>
             <Show when={current().prepAhead}>
               {(note) => <p class="banner banner-plum">{t("recipe.prepAhead", { note: note() })}</p>}

@@ -1,8 +1,9 @@
 import { DEFAULT_EFFORT_BUDGETS, type Household, type Member, type MemberId, STORE_SECTIONS } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
+import { setPseudoLocale } from "../src/messages";
 import { createFakeClient } from "./fakeClient";
 
 const robin: Member = { id: 1, name: "Robin", email: null, constraints: [] };
@@ -24,8 +25,8 @@ const tremblays: Household = {
  * A household whose settings change as `update_household_settings` is called, or as the test says
  * another device changed them; each change sends a change notice, as the real one does.
  */
-function fakeHousehold(refuse?: { path: string }) {
-  let current = tremblays;
+function fakeHousehold(refuse?: { path: string }, start: Partial<Household> = {}) {
+  let current = { ...tremblays, ...start };
   const updates: Record<string, unknown>[] = [];
   const removed: MemberId[] = [];
   const fake = createFakeClient((name, input) => {
@@ -163,4 +164,54 @@ test("removing a Member asks in Mise's own sheet, and Cancel keeps them", async 
 
   expect(removed).toEqual([1]);
   expect(await screen.findByText("No Members yet.")).toBeTruthy();
+});
+
+test("a Member's Constraints each read as one sentence", async () => {
+  const user = userEvent.setup();
+  const jo: Member = {
+    id: 1,
+    name: "Jo",
+    email: null,
+    constraints: [
+      { kind: "allergy", allergen: "peanut", term: "anaphylactic" },
+      { kind: "intolerance", allergen: "milk" },
+      { kind: "diet", allergen: "wheat" },
+      { kind: "dislike", term: "cilantro" },
+      { kind: "dislike", allergen: "fish", term: "salmon" },
+    ],
+  };
+  const { client } = fakeHousehold(undefined, { members: [jo] });
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+  await user.click(screen.getByRole("button", { name: "Members" }));
+
+  expect(
+    screen.getByText(
+      "Peanut allergy: anaphylactic; Milk intolerance; Wheat-free diet; Dislikes cilantro; Dislikes fish: salmon",
+    ),
+  ).toBeTruthy();
+});
+
+test("in the pseudo-locale, no Constraint has a message pasted inside it", async () => {
+  setPseudoLocale(true);
+  onTestFinished(() => setPseudoLocale(false));
+  const user = userEvent.setup();
+  const jo: Member = {
+    id: 1,
+    name: "Jo",
+    email: null,
+    constraints: [
+      { kind: "allergy", allergen: "tree_nut" },
+      { kind: "dislike", allergen: "shellfish" },
+    ],
+  };
+  const { client } = fakeHousehold(undefined, { members: [jo] });
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: /^\[Ĥöûšéĥöĺđ/ }));
+  await user.click(screen.getByRole("button", { name: /^\[Ṁéɱƀéŕš/ }));
+
+  const constraints = screen.getByText(/^\[Ţŕéé/);
+  for (const constraint of (constraints.textContent ?? "").split("; ")) {
+    expect(constraint).toMatch(/^\[[^[\]]*\]$/);
+  }
 });

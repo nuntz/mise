@@ -1,5 +1,5 @@
 import { type ChatWhere, type Household, type LocalDate, type QueuedChange, RecipeId } from "@mise/domain";
-import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createComputed, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CalendarSettings } from "./Calendar";
 import { Chat } from "./Chat";
@@ -12,7 +12,7 @@ import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
 import { MembersSettings } from "./MembersSettings";
-import { t } from "./messages";
+import { setLocale, t } from "./messages";
 import { NotificationSettings } from "./Notifications";
 import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
@@ -131,6 +131,8 @@ export function App(props: { client: MiseClient }) {
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
   // refresh updates the settings without remounting them and throwing away a form someone is filling in.
   const [loaded, setLoaded] = createStore<{ household: Household | null }>({ household: saved ?? null });
+  // Set before the pages render, so names are cased for the Household's locale.
+  createComputed(() => loaded.household && setLocale(loaded.household.locale));
   const [online, setOnline] = createSignal(true);
   onCleanup(props.client.onConnection(setOnline));
 

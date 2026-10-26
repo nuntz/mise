@@ -58,6 +58,96 @@ const en = {
   "constraint.hard": "hard",
   "constraint.soft": "soft",
 
+  "memberConstraint.allergy.peanut": "Peanut allergy",
+  "memberConstraint.allergy.peanut.term": "Peanut allergy: {term}",
+  "memberConstraint.allergy.tree_nut": "Tree nut allergy",
+  "memberConstraint.allergy.tree_nut.term": "Tree nut allergy: {term}",
+  "memberConstraint.allergy.milk": "Milk allergy",
+  "memberConstraint.allergy.milk.term": "Milk allergy: {term}",
+  "memberConstraint.allergy.egg": "Egg allergy",
+  "memberConstraint.allergy.egg.term": "Egg allergy: {term}",
+  "memberConstraint.allergy.wheat": "Wheat allergy",
+  "memberConstraint.allergy.wheat.term": "Wheat allergy: {term}",
+  "memberConstraint.allergy.soy": "Soy allergy",
+  "memberConstraint.allergy.soy.term": "Soy allergy: {term}",
+  "memberConstraint.allergy.fish": "Fish allergy",
+  "memberConstraint.allergy.fish.term": "Fish allergy: {term}",
+  "memberConstraint.allergy.shellfish": "Shellfish allergy",
+  "memberConstraint.allergy.shellfish.term": "Shellfish allergy: {term}",
+  "memberConstraint.allergy.sesame": "Sesame allergy",
+  "memberConstraint.allergy.sesame.term": "Sesame allergy: {term}",
+  "memberConstraint.allergy.mustard": "Mustard allergy",
+  "memberConstraint.allergy.mustard.term": "Mustard allergy: {term}",
+  "memberConstraint.allergy.sulphite": "Sulphite allergy",
+  "memberConstraint.allergy.sulphite.term": "Sulphite allergy: {term}",
+  "memberConstraint.intolerance.peanut": "Peanut intolerance",
+  "memberConstraint.intolerance.peanut.term": "Peanut intolerance: {term}",
+  "memberConstraint.intolerance.tree_nut": "Tree nut intolerance",
+  "memberConstraint.intolerance.tree_nut.term": "Tree nut intolerance: {term}",
+  "memberConstraint.intolerance.milk": "Milk intolerance",
+  "memberConstraint.intolerance.milk.term": "Milk intolerance: {term}",
+  "memberConstraint.intolerance.egg": "Egg intolerance",
+  "memberConstraint.intolerance.egg.term": "Egg intolerance: {term}",
+  "memberConstraint.intolerance.wheat": "Wheat intolerance",
+  "memberConstraint.intolerance.wheat.term": "Wheat intolerance: {term}",
+  "memberConstraint.intolerance.soy": "Soy intolerance",
+  "memberConstraint.intolerance.soy.term": "Soy intolerance: {term}",
+  "memberConstraint.intolerance.fish": "Fish intolerance",
+  "memberConstraint.intolerance.fish.term": "Fish intolerance: {term}",
+  "memberConstraint.intolerance.shellfish": "Shellfish intolerance",
+  "memberConstraint.intolerance.shellfish.term": "Shellfish intolerance: {term}",
+  "memberConstraint.intolerance.sesame": "Sesame intolerance",
+  "memberConstraint.intolerance.sesame.term": "Sesame intolerance: {term}",
+  "memberConstraint.intolerance.mustard": "Mustard intolerance",
+  "memberConstraint.intolerance.mustard.term": "Mustard intolerance: {term}",
+  "memberConstraint.intolerance.sulphite": "Sulphite intolerance",
+  "memberConstraint.intolerance.sulphite.term": "Sulphite intolerance: {term}",
+  "memberConstraint.diet.peanut": "Peanut-free diet",
+  "memberConstraint.diet.peanut.term": "Peanut-free diet: {term}",
+  "memberConstraint.diet.tree_nut": "Tree-nut-free diet",
+  "memberConstraint.diet.tree_nut.term": "Tree-nut-free diet: {term}",
+  "memberConstraint.diet.milk": "Milk-free diet",
+  "memberConstraint.diet.milk.term": "Milk-free diet: {term}",
+  "memberConstraint.diet.egg": "Egg-free diet",
+  "memberConstraint.diet.egg.term": "Egg-free diet: {term}",
+  "memberConstraint.diet.wheat": "Wheat-free diet",
+  "memberConstraint.diet.wheat.term": "Wheat-free diet: {term}",
+  "memberConstraint.diet.soy": "Soy-free diet",
+  "memberConstraint.diet.soy.term": "Soy-free diet: {term}",
+  "memberConstraint.diet.fish": "Fish-free diet",
+  "memberConstraint.diet.fish.term": "Fish-free diet: {term}",
+  "memberConstraint.diet.shellfish": "Shellfish-free diet",
+  "memberConstraint.diet.shellfish.term": "Shellfish-free diet: {term}",
+  "memberConstraint.diet.sesame": "Sesame-free diet",
+  "memberConstraint.diet.sesame.term": "Sesame-free diet: {term}",
+  "memberConstraint.diet.mustard": "Mustard-free diet",
+  "memberConstraint.diet.mustard.term": "Mustard-free diet: {term}",
+  "memberConstraint.diet.sulphite": "Sulphite-free diet",
+  "memberConstraint.diet.sulphite.term": "Sulphite-free diet: {term}",
+  "memberConstraint.dislike.peanut": "Dislikes peanuts",
+  "memberConstraint.dislike.peanut.term": "Dislikes peanuts: {term}",
+  "memberConstraint.dislike.tree_nut": "Dislikes tree nuts",
+  "memberConstraint.dislike.tree_nut.term": "Dislikes tree nuts: {term}",
+  "memberConstraint.dislike.milk": "Dislikes milk",
+  "memberConstraint.dislike.milk.term": "Dislikes milk: {term}",
+  "memberConstraint.dislike.egg": "Dislikes eggs",
+  "memberConstraint.dislike.egg.term": "Dislikes eggs: {term}",
+  "memberConstraint.dislike.wheat": "Dislikes wheat",
+  "memberConstraint.dislike.wheat.term": "Dislikes wheat: {term}",
+  "memberConstraint.dislike.soy": "Dislikes soy",
+  "memberConstraint.dislike.soy.term": "Dislikes soy: {term}",
+  "memberConstraint.dislike.fish": "Dislikes fish",
+  "memberConstraint.dislike.fish.term": "Dislikes fish: {term}",
+  "memberConstraint.dislike.shellfish": "Dislikes shellfish",
+  "memberConstraint.dislike.shellfish.term": "Dislikes shellfish: {term}",
+  "memberConstraint.dislike.sesame": "Dislikes sesame",
+  "memberConstraint.dislike.sesame.term": "Dislikes sesame: {term}",
+  "memberConstraint.dislike.mustard": "Dislikes mustard",
+  "memberConstraint.dislike.mustard.term": "Dislikes mustard: {term}",
+  "memberConstraint.dislike.sulphite": "Dislikes sulphites",
+  "memberConstraint.dislike.sulphite.term": "Dislikes sulphites: {term}",
+  "memberConstraint.dislike.termOnly": "Dislikes {term}",
+
   "allergen.peanut": "Peanut",
   "allergen.tree_nut": "Tree nuts",
   "allergen.milk": "Milk",
@@ -234,6 +324,8 @@ const en = {
   "staple.stocked": "Stocked",
   "staple.low": "Low",
   "staple.out": "Out",
+  "pantry.record.low": "{name}: Low",
+  "pantry.record.out": "{name}: Out",
 
   "chat.action": "Ask Mise",
   "chat.overline": "Chat",
@@ -611,7 +703,9 @@ const en = {
   "slotKind.unplanned": "Nothing planned",
   "slotKind.skip": "No meal",
 
-  "slot.edit": "Edit {meal}",
+  "slot.edit.breakfast": "Edit breakfast",
+  "slot.edit.lunch": "Edit lunch",
+  "slot.edit.dinner": "Edit dinner",
   "slot.kind": "What",
   "slot.recipe": "Recipe",
   "slot.chooseRecipe": "Choose a Recipe",
@@ -626,9 +720,10 @@ const en = {
   "slot.saving": "Saving…",
   "slot.cancel": "Cancel",
   "slot.nobody": "Nobody eating.",
-  "slot.cookFor": "Cook for {count}, with {which} Leftovers.",
-  "slot.leftoversDay": "{day}'s",
-  "slot.leftoversDayMeal": "{day}'s {meal}",
+  "slot.cookFor.breakfast": "Cook for {count}, with {day}'s breakfast Leftovers.",
+  "slot.cookFor.lunch": "Cook for {count}, with {day}'s lunch Leftovers.",
+  "slot.cookFor.dinner": "Cook for {count}, with {day}'s Leftovers.",
+  "slot.cookForDays": "Cook for {count}, with Leftovers on {days}.",
   "slot.leftoversOf": "Leftovers of {title}",
   "slot.serves": "Serves {count} ({who}).",
   "slot.servesRecipe": "Serves {count} ({who}); the Recipe makes {base}.",
@@ -693,6 +788,7 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 let pseudo = false;
+let locale: string | undefined;
 
 /**
  * Turns the pseudo-locale on or off: every message accented, bracketed and made 40% longer, to check
@@ -700,6 +796,20 @@ let pseudo = false;
  */
 export function setPseudoLocale(on: boolean): void {
   pseudo = on;
+}
+
+/** Sets the Household's locale, which names are cased for. */
+export function setLocale(next: string): void {
+  locale = next;
+}
+
+/**
+ * A name standing alone, as a row title, chip or tag, with its first letter upper-cased for the
+ * Household's locale: "cumin" reads "Cumin". Never used inside a sentence; stored names don't change.
+ */
+export function nameText(name: string): string {
+  const [first = "", ...rest] = name;
+  return first.toLocaleUpperCase(locale) + rest.join("");
 }
 
 /** Looks up a message and fills `{placeholders}` from `params`. */
