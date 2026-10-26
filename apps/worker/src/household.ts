@@ -238,8 +238,11 @@ class HouseholdAgent extends Agent<Env> {
     const { sql } = this.ctx.storage;
     const caller = handlers.get_caller(sql, {}, { caller: this.callerOf(getCurrentAgent().connection) });
     const speaker = caller.ok ? caller.value : null;
-    const turn = recordTurn(sql, speaker, new Date().toISOString());
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), where: from.data, text: message.data });
+    const now = new Date();
+    const turn = recordTurn(sql, speaker, now.toISOString());
+    // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
+    const today = localDate(now, this.household()?.timezone ?? "UTC");
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where: from.data, text: message.data });
     const entry: TurnData = { turn, text: message.data };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {

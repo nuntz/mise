@@ -43,9 +43,22 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
   household: "Household",
 };
 
-/** A turn as the model is shown it: who is speaking and from where, then what they said. */
-export function presentTurn(turn: { speaker: string | null; where: ChatWhere; text: string }): string {
-  const parts = [turn.speaker ?? "Someone not signed in", `on the ${SCREEN_NAMES[turn.where.screen]} screen`];
+/**
+ * A turn as the model is shown it: who is speaking, on which day in the Household's timezone (the
+ * conversation spans days, so "tomorrow" in an earlier turn meant another day), and from where, then
+ * what they said.
+ */
+export function presentTurn(turn: {
+  speaker: string | null;
+  today: LocalDate;
+  where: ChatWhere;
+  text: string;
+}): string {
+  const parts = [
+    turn.speaker ?? "Someone not signed in",
+    `writing on ${capitalised(weekdayOf(turn.today))} ${turn.today}`,
+    `on the ${SCREEN_NAMES[turn.where.screen]} screen`,
+  ];
   if (turn.where.week) parts.push(`showing the Week of ${capitalised(weekdayOf(turn.where.week))} ${turn.where.week}`);
   return `[${parts.join(", ")}]\n${turn.text}`;
 }

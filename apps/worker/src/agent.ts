@@ -217,8 +217,10 @@ function preamble(household: Household | null): string {
       ? household.members.map((member) => `- ${member.name} (Member ${member.id})${constraintsOf(member.constraints)}`)
       : ["- none yet"]),
     "",
-    "Each message starts with who is speaking and the screen (and Week) they are looking at, in brackets. " +
-      "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see.",
+    "Each message starts, in brackets, with who is speaking, the day they wrote it, and the screen (and Week) " +
+      "they are looking at. " +
+      "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see. " +
+      "“Today”, “tonight” and “tomorrow” count from the day the message was written, whatever Week they see.",
     "Change things only through the tools. Answer from what they return: never guess what is planned, read it. " +
       "Don't say why something happened, or what a Week or list holds, unless a tool you just called says so; " +
       "if the tools don't tell you, say you don't know. " +

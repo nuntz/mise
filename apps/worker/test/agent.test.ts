@@ -7,7 +7,7 @@ import {
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import type { ChatWhere } from "@mise/domain";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
 import { caller, dinnerOn, familyHousehold, lastText, scriptModel, textOf, weekOf } from "./scripted";
@@ -249,9 +249,14 @@ describe("who is speaking", () => {
     const household = await familyHousehold();
     const robin = await connectAs(household, "robin@example.com");
 
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-27T12:00:00-07:00"));
     const reply = await robin.rpc("chat", ["Who am I?", ON_THE_WEEK]);
+    vi.useRealTimers();
 
-    expect(seen).toEqual(["[Robin, on the Week screen, showing the Week of Monday 2026-10-26]\nWho am I?"]);
+    expect(seen).toEqual([
+      "[Robin, writing on Tuesday 2026-10-27, on the Week screen, showing the Week of Monday 2026-10-26]\nWho am I?",
+    ]);
     expect(reply).toEqual({ ok: true, value: { role: "agent", text: "You are robin@example.com." } });
     expect(await household.conversation()).toEqual([
       { role: "member", speaker: "Robin", text: "Who am I?" },
