@@ -715,6 +715,8 @@ test("Use it up is offered on proposing, and its Items go with the Proposal and 
 
   await user.click(screen.getByRole("button", { name: "Propose again" }));
   const sheet = screen.getByRole("dialog", { name: "Use it up" });
+  // The sheet takes the focus, not its field, so a phone doesn't open the keyboard and its suggestions.
+  await vi.waitFor(() => expect(document.activeElement).toBe(sheet));
   const useUp = within(sheet).getByRole("form", { name: "Use it up" });
   const field = within(useUp).getByRole("combobox", { name: "Item on hand" });
   await user.type(field, "baby spinach");

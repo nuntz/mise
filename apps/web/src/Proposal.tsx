@@ -128,7 +128,7 @@ export function ProposalControls(props: {
       </Show>
       <Show when={!props.readOnly && draft()}>
         {(picked) => (
-          <Sheet labelledBy={titleId} onEscape={() => setDraft(undefined)}>
+          <Sheet labelledBy={titleId} onEscape={() => setDraft(undefined)} focusField={false}>
             <div class="sheet-header">
               <div class="page-heading">
                 <h2 id={titleId} class="dish-title">
