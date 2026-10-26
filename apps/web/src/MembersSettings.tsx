@@ -22,7 +22,7 @@ export function MembersSettings(props: { client: MiseClient; members: Member[] }
     <section>
       <h2>{t("members.title")}</h2>
       <Show when={props.members.length > 0} fallback={<p>{t("members.none")}</p>}>
-        <ul>
+        <ul class="rows">
           <For each={props.members}>
             {(member) => (
               <li>
@@ -73,20 +73,26 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
     <Show
       when={draft()}
       fallback={
-        <div>
-          <strong>{props.member.name}</strong> {props.isCaller && t("member.you")}{" "}
-          <span>{props.member.email ?? t("member.noEmail")}</span>
-          <p>
-            {props.member.constraints.length > 0
-              ? props.member.constraints.map(constraintText).join("; ")
-              : t("member.noConstraints")}
-          </p>
-          <button type="button" onClick={() => setDraft(draftOf(props.member))}>
-            {t("member.edit")}
-          </button>
-          <button type="button" class="button-danger" disabled={busy()} onClick={remove}>
-            {t("member.remove")}
-          </button>
+        <div class="row">
+          <div class="row-body">
+            <span class="row-title">
+              {props.member.name} {props.isCaller && t("member.you")}
+            </span>
+            <span class="row-meta">{props.member.email ?? t("member.noEmail")}</span>
+            <span class="row-meta">
+              {props.member.constraints.length > 0
+                ? props.member.constraints.map(constraintText).join("; ")
+                : t("member.noConstraints")}
+            </span>
+          </div>
+          <div class="row-end">
+            <button type="button" onClick={() => setDraft(draftOf(props.member))}>
+              {t("member.edit")}
+            </button>
+            <button type="button" class="button-danger" disabled={busy()} onClick={remove}>
+              {t("member.remove")}
+            </button>
+          </div>
           <Show when={error()}>
             <p role="alert">{error()}</p>
           </Show>

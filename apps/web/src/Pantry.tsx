@@ -297,17 +297,16 @@ function CheckInDone(props: { answers: { staple: Staple; status: StapleStatus }[
         <Icon name="check" />
       </div>
       <h2 class="check-card-title center">{t("pantry.done")}</h2>
-      <ul class="summary-list">
+      <ul class="rows">
         <For each={STAPLE_STATUSES.filter((status) => of(status).length > 0)}>
           {(status) => (
             <li>
-              <span class={`status-mark status-${status}`}>
+              <span class={`row-lead status-mark status-${status}`}>
                 <Icon name={STATUS_ICON[status]} />
               </span>
-              <span>
-                <strong>{t(`pantry.summary.${status}`, { count: String(of(status).length) })}</strong>{" "}
-                <span class="body-muted">
-                  ·{" "}
+              <span class="row-body">
+                <strong class="row-title">{t(`pantry.summary.${status}`, { count: String(of(status).length) })}</strong>
+                <span class="row-meta">
                   {of(status)
                     .map((answer) => answer.staple.name)
                     .join(", ")}
@@ -447,23 +446,25 @@ function StapleList(props: { client: MiseClient; locale: string }) {
         <For each={staples()} fallback={<li>{t("pantry.noStaples")}</li>}>
           {(staple) => (
             <li>
-              <span>{summary(staple)}</span>
-              <button
-                type="button"
-                class="button-row"
-                aria-label={t("pantry.edit", { name: staple.name })}
-                onClick={() => setDraft(draftOf(staple))}
-              >
-                {t("member.edit")}
-              </button>
-              <button
-                type="button"
-                class="button-danger"
-                aria-label={t("pantry.remove", { name: staple.name })}
-                onClick={() => remove(staple)}
-              >
-                {t("member.remove")}
-              </button>
+              <span class="row-body">{summary(staple)}</span>
+              <div class="row-end">
+                <button
+                  type="button"
+                  class="button-row"
+                  aria-label={t("pantry.edit", { name: staple.name })}
+                  onClick={() => setDraft(draftOf(staple))}
+                >
+                  {t("member.edit")}
+                </button>
+                <button
+                  type="button"
+                  class="button-danger"
+                  aria-label={t("pantry.remove", { name: staple.name })}
+                  onClick={() => remove(staple)}
+                >
+                  {t("member.remove")}
+                </button>
+              </div>
             </li>
           )}
         </For>

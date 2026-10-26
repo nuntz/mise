@@ -2,6 +2,7 @@ import type { RecipeSummary } from "@mise/domain";
 import { createSignal, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
+import { Done } from "./Done";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
@@ -31,8 +32,8 @@ export function TagRecipes(props: { client: MiseClient }) {
       </Show>
       <Show when={loaded.recipes}>
         {(recipes) => (
-          <Show when={recipes().length > 0} fallback={<p>{t("tag.none")}</p>}>
-            <ul>
+          <Show when={recipes().length > 0} fallback={<Done>{t("tag.none")}</Done>}>
+            <ul class="rows">
               <For each={recipes()}>
                 {(recipe) => (
                   <li>

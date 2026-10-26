@@ -68,7 +68,15 @@ const untagged: RecipeSummary[] = [
  * A client with fixed Unresolved Ingredients, their Suggestions and untagged Recipes that records every
  * tool call made. `request_suggestions` answers with `requested` in turn.
  */
-function fakeClient(requested: unknown[] = [], listed: Suggestion[] = suggestions) {
+function fakeClient({
+  requested = [],
+  listed = suggestions,
+  waiting = { groups, untagged },
+}: {
+  requested?: unknown[];
+  listed?: Suggestion[];
+  waiting?: { groups: UnresolvedGroup[]; untagged: RecipeSummary[] };
+} = {}) {
   const calls: { name: string; input: unknown }[] = [];
   const { client } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
@@ -80,7 +88,7 @@ function fakeClient(requested: unknown[] = [], listed: Suggestion[] = suggestion
       case "list_items":
         return { ok: true, value: ITEMS };
       case "list_unresolved_ingredients":
-        return { ok: true, value: groups };
+        return { ok: true, value: waiting.groups };
       case "list_suggestions":
         return { ok: true, value: listed };
       case "request_suggestions":
@@ -90,7 +98,7 @@ function fakeClient(requested: unknown[] = [], listed: Suggestion[] = suggestion
       case "dismiss_suggestion":
         return { ok: true, value: suggestions[0] };
       case "list_untagged_recipes":
-        return { ok: true, value: untagged };
+        return { ok: true, value: waiting.untagged };
       case "resolve_ingredient":
         return { ok: true, value: { item: ITEMS[0], resolved: 1 } };
       case "create_item":
@@ -106,9 +114,9 @@ function fakeClient(requested: unknown[] = [], listed: Suggestion[] = suggestion
   return { client, calls };
 }
 
-async function openPage(name: string, requested?: unknown[], listed?: Suggestion[]) {
+async function openPage(name: string, options?: Parameters<typeof fakeClient>[0]) {
   const user = userEvent.setup();
-  const fake = fakeClient(requested, listed);
+  const fake = fakeClient(options);
   render(() => <App client={fake.client} />);
   await user.click(await screen.findByRole("button", { name: "Household" }));
   await user.click(await screen.findByRole("button", { name }));
@@ -266,7 +274,7 @@ test("a Suggestion of a new Item with no Allergens is accepted only once a perso
     suggested: { kind: "new", name: "gochujang", section: "international", unitFamily: "volume", allergens: [] },
     suggestedAt: "2026-10-23T12:00:00.000Z",
   };
-  const { user, calls } = await openPage("Resolve Ingredients", [], [noAllergens]);
+  const { user, calls } = await openPage("Resolve Ingredients", { listed: [noAllergens] });
 
   const gochujang = await screen.findByRole("article", { name: "gochujang" });
   const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
@@ -313,10 +321,12 @@ test("a Suggestion of an existing Item is accepted with another Item a person pi
 });
 
 test("Suggest for all asks in batches until no text is left", async () => {
-  const { user, calls } = await openPage("Resolve Ingredients", [
-    { ok: true, value: { suggestions: [suggestions[0]], remaining: 40 } },
-    { ok: true, value: { suggestions: [], remaining: 0 } },
-  ]);
+  const { user, calls } = await openPage("Resolve Ingredients", {
+    requested: [
+      { ok: true, value: { suggestions: [suggestions[0]], remaining: 40 } },
+      { ok: true, value: { suggestions: [], remaining: 0 } },
+    ],
+  });
 
   await user.click(await screen.findByRole("button", { name: "Suggest for all" }));
 
@@ -325,10 +335,12 @@ test("Suggest for all asks in batches until no text is left", async () => {
 });
 
 test("Suggest for all says when the model fails, keeping what it already made", async () => {
-  const { user } = await openPage("Resolve Ingredients", [
-    { ok: true, value: { suggestions: [suggestions[0], suggestions[1]], remaining: 40 } },
-    { ok: false, error: { code: "model_failed", message: "" } },
-  ]);
+  const { user } = await openPage("Resolve Ingredients", {
+    requested: [
+      { ok: true, value: { suggestions: [suggestions[0], suggestions[1]], remaining: 40 } },
+      { ok: false, error: { code: "model_failed", message: "" } },
+    ],
+  });
 
   await user.click(await screen.findByRole("button", { name: "Suggest for all" }));
 
@@ -350,4 +362,19 @@ test("a Recipe missing a main protein is tagged in place", async () => {
     cuisine: "korean",
     mainProtein: "beef",
   });
+});
+
+test("with every Ingredient resolved, Resolve Ingredients says it is done, with no list", async () => {
+  await openPage("Resolve Ingredients", { waiting: { groups: [], untagged } });
+
+  expect(await screen.findByText("Every Ingredient is resolved.")).toBeTruthy();
+  expect(screen.queryByRole("list")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Suggest for all" })).toBeNull();
+});
+
+test("with every Recipe tagged, Tag Recipes says it is done, with no list", async () => {
+  await openPage("Tag Recipes", { waiting: { groups, untagged: [] } });
+
+  expect(await screen.findByText("Every Recipe has a cuisine and a main protein.")).toBeTruthy();
+  expect(screen.queryByRole("list")).toBeNull();
 });

@@ -160,7 +160,7 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
           <For each={props.picked}>
             {(id) => (
               <li>
-                <span>{nameOf(id)}</span>
+                <span class="row-body">{nameOf(id)}</span>
                 <button
                   type="button"
                   class="button-row"

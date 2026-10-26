@@ -140,12 +140,11 @@ function Picker(props: {
                 <For each={shown()} fallback={<li>{t("ranOut.noMatch", { query: query().trim() })}</li>}>
                   {(staple) => (
                     <li>
-                      <fieldset class="row-group" aria-label={staple.name}>
-                        <span>
-                          {staple.name}
-                          <span class="body-muted">
-                            {" "}
-                            · {t(`location.${staple.location}`)} · {t(`staple.${staple.status}`)}
+                      <fieldset class="row" aria-label={staple.name}>
+                        <span class="row-body">
+                          <span class="row-title">{staple.name}</span>
+                          <span class="row-meta">
+                            {t(`location.${staple.location}`)} · {t(`staple.${staple.status}`)}
                           </span>
                         </span>
                         <For each={["low", "out"] as const}>

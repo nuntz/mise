@@ -100,7 +100,7 @@ export function ConstraintFields(props: {
 
   return (
     <>
-      <ul>
+      <ul class="rows">
         <Index each={props.constraints}>
           {(constraint, index) => (
             <li>

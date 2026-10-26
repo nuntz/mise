@@ -11,6 +11,7 @@ import {
 import { createSignal, createUniqueId, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
+import { Done } from "./Done";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { FillDraft, flagText } from "./Import";
@@ -68,7 +69,7 @@ export function ReviewPage(props: { client: MiseClient; onResolve: () => void })
         <p role="alert">{t("app.error")}</p>
       </Show>
       <Show when={nothing()}>
-        <p>{t("review.none")}</p>
+        <Done>{t("review.none")}</Done>
       </Show>
       <Show when={(loaded.drafts ?? []).length > 0}>
         <h3>{t("review.drafts")}</h3>
@@ -76,18 +77,26 @@ export function ReviewPage(props: { client: MiseClient; onResolve: () => void })
       </Show>
       <Show when={flags().length > 0}>
         <h3 id="review-flags">{t("import.flags")}</h3>
-        <ul aria-labelledby="review-flags">
-          <For each={flags()}>{(flag) => <li>{flagText(flag)}</li>}</For>
+        <ul class="rows" aria-labelledby="review-flags">
+          <For each={flags()}>
+            {(flag) => (
+              <li>
+                <span class="row-body">{flagText(flag)}</span>
+              </li>
+            )}
+          </For>
         </ul>
       </Show>
       <Show when={(loaded.suggestions ?? []).length > 0}>
         <h3 id="review-suggestions">{t("review.suggestions")}</h3>
         <p>{t("suggestion.disclosure")}</p>
-        <ul aria-labelledby="review-suggestions">
+        <ul class="rows" aria-labelledby="review-suggestions">
           <For each={loaded.suggestions}>
             {(suggestion) => (
               <li>
-                {suggestion.text}: {suggestionSummary(suggestion.suggested, items())}
+                <span class="row-body">
+                  {suggestion.text}: {suggestionSummary(suggestion.suggested, items())}
+                </span>
               </li>
             )}
           </For>

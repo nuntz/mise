@@ -143,7 +143,7 @@ function RecipeList(props: {
             when={found().length > 0}
             fallback={<p class="empty">{query().trim() ? t("recipes.noMatch") : t("recipes.none")}</p>}
           >
-            <ul class="recipe-rows">
+            <ul class="rows">
               <For each={found()}>
                 {(recipe) => (
                   <li>
@@ -157,9 +157,9 @@ function RecipeList(props: {
                         <span class="dish-title">{recipe.title}</span>
                       </span>
                     </button>
-                    <div class="stack recipe-row-meta">
-                      <span class="meta">{[...recipe.tags, effortText(recipe.effortMinutes)].join(" · ")}</span>
-                      <p class="meta">{allergensText(recipe.allergens)}</p>
+                    <div class="row-body">
+                      <span class="row-meta">{[...recipe.tags, effortText(recipe.effortMinutes)].join(" · ")}</span>
+                      <p class="row-meta">{allergensText(recipe.allergens)}</p>
                     </div>
                   </li>
                 )}

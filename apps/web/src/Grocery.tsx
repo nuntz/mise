@@ -412,29 +412,33 @@ function WalkingOrder(props: { client: MiseClient; sections: StoreSection[]; onl
     <section class="slot-form stack" aria-labelledby="walking-order">
       <h2 id="walking-order">{t("grocery.walkingOrder")}</h2>
       <p class="meta">{t("grocery.walkingOrderHint")}</p>
-      <ol class="reorder">
+      <ol class="rows">
         <For each={props.sections}>
           {(section, index) => (
             <li>
-              <span>{sectionName(section)}</span>
-              <button
-                type="button"
-                class="icon-button"
-                disabled={index() === 0 || !props.online}
-                aria-label={t("grocery.moveUp", { section: sectionName(section) })}
-                onClick={() => move(index(), -1)}
-              >
-                <Icon name="arrowUp" />
-              </button>
-              <button
-                type="button"
-                class="icon-button"
-                disabled={index() === props.sections.length - 1 || !props.online}
-                aria-label={t("grocery.moveDown", { section: sectionName(section) })}
-                onClick={() => move(index(), 1)}
-              >
-                <Icon name="arrowDown" />
-              </button>
+              <span class="row-body">
+                <span class="row-title">{sectionName(section)}</span>
+              </span>
+              <div class="row-end">
+                <button
+                  type="button"
+                  class="icon-button"
+                  disabled={index() === 0 || !props.online}
+                  aria-label={t("grocery.moveUp", { section: sectionName(section) })}
+                  onClick={() => move(index(), -1)}
+                >
+                  <Icon name="arrowUp" />
+                </button>
+                <button
+                  type="button"
+                  class="icon-button"
+                  disabled={index() === props.sections.length - 1 || !props.online}
+                  aria-label={t("grocery.moveDown", { section: sectionName(section) })}
+                  onClick={() => move(index(), 1)}
+                >
+                  <Icon name="arrowDown" />
+                </button>
+              </div>
             </li>
           )}
         </For>

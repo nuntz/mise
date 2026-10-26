@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
@@ -44,4 +44,21 @@ test("h2, h3 and h4 are three heading roles: section head, overline and body at 
 
 test("a sheet's title takes the header's remaining width, so the close button sits at the right edge", () => {
   expect(declarations(".sheet-header .page-heading")).toMatch(/flex:\s*1/);
+});
+
+test("no list renders the browser's markers", () => {
+  expect(declarations("ul, ol")).toMatch(/list-style:\s*none/);
+  expect(appCss).not.toMatch(/list-style:\s*(?!none)[a-z]/);
+});
+
+test("every list in the web components is classed, so none falls back to the browser's look", () => {
+  const sources = join(import.meta.dirname, "../src");
+  const unclassed = readdirSync(sources, { recursive: true, encoding: "utf8" })
+    .filter((file) => file.endsWith(".tsx"))
+    .flatMap((file) =>
+      [...readFileSync(join(sources, file), "utf8").matchAll(/<(?:ul|ol)\b[^>]*>/g)]
+        .filter(([tag]) => !/\bclass=/.test(tag))
+        .map(([tag]) => `${file}: ${tag}`),
+    );
+  expect(unclassed).toEqual([]);
 });

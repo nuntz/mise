@@ -72,16 +72,12 @@ img {
   max-width: 100%;
 }
 
+/* No list shows the browser's markers: a collection is a list of rows. */
 ul,
 ol {
   margin: 0;
   padding: 0;
-}
-
-/* Lists the screens don't lay out themselves keep their markers inside the gutter. */
-ul:not([class]),
-ol:not([class]) {
-  padding-inline-start: 1.25em;
+  list-style: none;
 }
 
 small {
@@ -534,6 +530,13 @@ article:not([class]) {
   font: var(--type-chip);
 }
 
+/* A status chip's colour means one thing: leaf done or stocked, amber caution or unknown,
+   warn a safety conflict or Out, and plum Mise's own marks. */
+.chip-leaf {
+  background: var(--leaf-soft);
+  color: var(--leaf);
+}
+
 .chip-warn {
   background: var(--warn-soft);
   color: var(--warn);
@@ -614,7 +617,8 @@ article:not([class]) {
   font: var(--type-title-sm);
 }
 
-.empty p {
+.empty p,
+.done p {
   max-width: 300px;
   color: var(--ink-muted);
 }
@@ -622,6 +626,16 @@ article:not([class]) {
 .empty .button-primary {
   width: 100%;
   margin-top: var(--space-2);
+}
+
+/* Done is not empty: a leaf check and one sentence, with no outline and nothing to start. */
+.done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
 }
 
 /* Still blocks with the final layout's shape, so nothing jumps when content lands. No shimmer. */
@@ -799,7 +813,6 @@ article:not([class]) {
   gap: var(--space-2);
   margin: 0;
   padding: 0;
-  list-style: none;
 }
 
 .chat-turn {
@@ -1299,20 +1312,6 @@ article:not([class]) {
   transition: width var(--duration-sheet) var(--ease-in);
 }
 
-.reorder li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 52px;
-  border-bottom: var(--hairline) solid var(--line);
-  list-style: none;
-}
-
-.reorder li > span {
-  flex: 1;
-  font: var(--type-title-sm);
-}
-
 /* ---------- Pantry check-in ---------- */
 
 .dots {
@@ -1459,20 +1458,6 @@ article:not([class]) {
   stroke-width: 2.8;
 }
 
-.summary-list li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: var(--space-2) 0;
-  border-bottom: var(--hairline) solid var(--line);
-  list-style: none;
-}
-
-.summary-list li:first-child {
-  border-top: var(--hairline) solid var(--line);
-}
-
 .status-mark {
   display: inline-flex;
   flex: none;
@@ -1504,39 +1489,73 @@ article:not([class]) {
   color: var(--warn);
 }
 
-.rows li {
+/* ---------- Rows ---------- */
+
+/* Every collection is a list of rows: an optional lead, a body (a title, one meta line, chips) and
+   one trailing control, with a hairline between rows. A form or an editor opened in a row wraps
+   under it. */
+.rows > li,
+.row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  min-height: 52px;
+  gap: var(--space-2) var(--space-3);
+}
+
+.rows > li {
+  min-height: var(--control);
   padding: var(--space-2) 0;
   border-bottom: var(--hairline) solid var(--line);
-  list-style: none;
 }
 
-.rows li > :first-child,
-.row-group > :first-child {
+/* A row whose content is one element, such as an article, lays that element out as the row. */
+.rows > li > .row {
+  flex: 1 1 100%;
+}
+
+/* Whatever else a row holds, such as a form, an editor or an error, wraps under it at full width. */
+:is(.rows > li, .row) > :not(.row-lead, .row-body, .row-end, .row, button) {
+  flex-basis: 100%;
+}
+
+.row-lead {
+  flex: none;
+}
+
+.row-body {
+  display: flex;
   flex: 1 1 12em;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
-/* A row's controls grouped under its name, laid out as the row itself. */
-.row-group {
-  flex: 1 1 auto;
-  flex-direction: row;
+.row-title {
+  font: var(--type-item);
+}
+
+.row-meta {
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.row-end {
+  display: flex;
+  flex: none;
   align-items: center;
-  flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* A row's controls grouped under its name, as a fieldset laid out as the row itself. */
+fieldset.row {
+  flex-direction: row;
   padding: 0;
   border: 0;
+  border-radius: 0;
 }
 
 /* ---------- Recipes ---------- */
-
-.recipe-rows li {
-  list-style: none;
-  border-bottom: var(--hairline) solid var(--line);
-}
 
 .recipe-row {
   display: grid;
@@ -1544,7 +1563,7 @@ article:not([class]) {
   gap: var(--space-3);
   align-items: center;
   width: 100%;
-  padding: var(--space-3) 0;
+  padding: var(--space-1) 0 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1572,7 +1591,6 @@ article:not([class]) {
   min-height: var(--touch-min);
   padding: var(--space-2) 0;
   border-bottom: var(--hairline) solid var(--line);
-  list-style: none;
 }
 
 .steps {
@@ -1585,7 +1603,6 @@ article:not([class]) {
   gap: var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: var(--hairline) solid var(--line);
-  list-style: none;
   counter-increment: step;
 }
 
@@ -1664,10 +1681,6 @@ article:not([class]) {
 
 .back {
   align-self: flex-start;
-}
-
-.recipe-row-meta {
-  padding-bottom: var(--space-3);
 }
 
 .visually-hidden {

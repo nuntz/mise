@@ -90,8 +90,14 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
             <p role="status">{t("import.done", { counts: countsText(run()) })}</p>
             <Show when={run().errors.length > 0}>
               <h3 id="import-errors">{t("import.errors")}</h3>
-              <ul aria-labelledby="import-errors">
-                <For each={run().errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
+              <ul class="rows" aria-labelledby="import-errors">
+                <For each={run().errors}>
+                  {(problem) => (
+                    <li>
+                      <span class="row-body">{errorLine(problem)}</span>
+                    </li>
+                  )}
+                </For>
               </ul>
             </Show>
           </>
@@ -103,19 +109,21 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
       <Show when={runs()}>
         {(listed) => (
           <Show when={listed().length > 0} fallback={<p>{t("import.noRuns")}</p>}>
-            <ul aria-labelledby="import-runs">
+            <ul class="rows" aria-labelledby="import-runs">
               <For each={listed()}>
                 {(run) => (
                   <li>
-                    {t("import.run", {
-                      when: whenText(run.startedAt),
-                      source: t(`import.source.${run.source}`),
-                      counts: countsText(run),
-                    })}
+                    <span class="row-body">
+                      {t("import.run", {
+                        when: whenText(run.startedAt),
+                        source: t(`import.source.${run.source}`),
+                        counts: countsText(run),
+                      })}
+                    </span>
                     <Show when={run.errors.length > 0}>
                       <details>
                         <summary>{t("import.runErrors", { count: String(run.errors.length) })}</summary>
-                        <ul>
+                        <ul class="row-meta">
                           <For each={run.errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
                         </ul>
                       </details>
@@ -129,8 +137,14 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
       </Show>
       <Show when={flags().length > 0}>
         <h3 id="import-flags">{t("import.flags")}</h3>
-        <ul aria-labelledby="import-flags">
-          <For each={flags()}>{(flag) => <li>{flagText(flag)}</li>}</For>
+        <ul class="rows" aria-labelledby="import-flags">
+          <For each={flags()}>
+            {(flag) => (
+              <li>
+                <span class="row-body">{flagText(flag)}</span>
+              </li>
+            )}
+          </For>
         </ul>
       </Show>
     </section>
@@ -186,8 +200,14 @@ function DriveSync(props: { client: MiseClient; runs: ImportRun[] | undefined })
             <p role="status">{t("drive.done", { counts: countsText(run()) })}</p>
             <Show when={run().errors.length > 0}>
               <h3 id="drive-errors">{t("drive.errors")}</h3>
-              <ul aria-labelledby="drive-errors">
-                <For each={run().errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
+              <ul class="rows" aria-labelledby="drive-errors">
+                <For each={run().errors}>
+                  {(problem) => (
+                    <li>
+                      <span class="row-body">{errorLine(problem)}</span>
+                    </li>
+                  )}
+                </For>
               </ul>
             </Show>
           </>

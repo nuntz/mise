@@ -51,7 +51,7 @@ export function ItemsSettings(props: { client: MiseClient }) {
       </label>
       <Show when={loaded.items}>
         <Show when={shown().length > 0} fallback={<p>{t("items.none")}</p>}>
-          <ul>
+          <ul class="rows">
             <For each={shown()}>
               {(item) => (
                 <li>
@@ -71,18 +71,20 @@ function ItemRow(props: { client: MiseClient; item: Item }) {
   const shipped = () => SHIPPED_ITEMS.item(props.item.id);
 
   return (
-    <article aria-label={props.item.name}>
-      <h4>{props.item.name}</h4>
-      <p class="meta">{shipped() ? t("items.shipped") : t("items.yours")}</p>
-      <p>
-        {t("items.summary", {
-          section: t(`section.${props.item.section}`),
-          allergens: allergenList(props.item.allergens) || t("item.noAllergens"),
-        })}
-      </p>
-      <Show when={props.item.aliases.length > 0}>
-        <p>{t("items.aliases", { aliases: props.item.aliases.join(", ") })}</p>
-      </Show>
+    <article class="row" aria-label={props.item.name}>
+      <div class="row-body">
+        <h4 class="row-title">{props.item.name}</h4>
+        <p class="row-meta">{shipped() ? t("items.shipped") : t("items.yours")}</p>
+        <p class="row-meta">
+          {t("items.summary", {
+            section: t(`section.${props.item.section}`),
+            allergens: allergenList(props.item.allergens) || t("item.noAllergens"),
+          })}
+        </p>
+        <Show when={props.item.aliases.length > 0}>
+          <p class="row-meta">{t("items.aliases", { aliases: props.item.aliases.join(", ") })}</p>
+        </Show>
+      </div>
       <Show
         when={editing()}
         fallback={

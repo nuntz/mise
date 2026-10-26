@@ -15,6 +15,7 @@ import {
 import { createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
+import { Done } from "./Done";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { createItems, itemNamed } from "./items";
@@ -60,9 +61,9 @@ export function ResolveIngredients(props: { client: MiseClient }) {
       </Show>
       <Show when={loaded.groups}>
         {(groups) => (
-          <Show when={groups().length > 0} fallback={<p>{t("resolve.none")}</p>}>
+          <Show when={groups().length > 0} fallback={<Done>{t("resolve.none")}</Done>}>
             <SuggestAll client={props.client} />
-            <ul>
+            <ul class="rows">
               <For each={groups()}>
                 {(group) => (
                   <li>
@@ -164,17 +165,19 @@ function GroupRow(props: {
   };
 
   return (
-    <article aria-label={props.group.text || t("resolve.blank")}>
-      <h4>{props.group.text || t("resolve.blank")}</h4>
-      <p>
-        {t(props.group.count === 1 ? "resolve.countOne" : "resolve.count", {
-          count: String(props.group.count),
-          recipes: props.group.recipes.map((recipe) => recipe.title).join(", "),
-        })}
-      </p>
-      <ul>
-        <For each={props.group.lines}>{(line) => <li>{line}</li>}</For>
-      </ul>
+    <article class="row" aria-label={props.group.text || t("resolve.blank")}>
+      <div class="row-body">
+        <h4 class="row-title">{props.group.text || t("resolve.blank")}</h4>
+        <p class="row-meta">
+          {t(props.group.count === 1 ? "resolve.countOne" : "resolve.count", {
+            count: String(props.group.count),
+            recipes: props.group.recipes.map((recipe) => recipe.title).join(", "),
+          })}
+        </p>
+        <ul class="row-meta">
+          <For each={props.group.lines}>{(line) => <li>{line}</li>}</For>
+        </ul>
+      </div>
       <Show when={props.group.text !== "" && props.suggestion}>
         {(suggestion) => (
           <SuggestionPanel
@@ -193,12 +196,14 @@ function GroupRow(props: {
           <p>{t("resolve.blankHint")}</p>
         </Match>
         <Match when={mode() === "idle"}>
-          <button type="button" onClick={() => setMode("map")}>
-            {t("resolve.map")}
-          </button>
-          <button type="button" onClick={() => setMode("create")}>
-            {t("resolve.create")}
-          </button>
+          <div class="row-end">
+            <button type="button" onClick={() => setMode("map")}>
+              {t("resolve.map")}
+            </button>
+            <button type="button" onClick={() => setMode("create")}>
+              {t("resolve.create")}
+            </button>
+          </div>
         </Match>
         <Match when={mode() === "edit" && props.suggestion}>
           {(suggestion) => {
