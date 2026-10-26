@@ -22,13 +22,26 @@ const household = (overrides: Partial<Household> = {}): Household => ({
   ...overrides,
 });
 
+/** What waits on the Household, by how many of each the listing tools return. */
+type Waiting = { drafts?: number; flags?: number; unresolved?: number; untagged?: number };
+
+/** `count` stand-ins for a listing's entries, each on its own Recipe, numbered from `first`. */
+const entries = (first: number, count = 0) =>
+  Array.from({ length: count }, (_, index) => ({ recipe: { id: first + index } }));
+
 /**
  * A client whose Household the test controls; `notify` stands in for a `household` change notice
- * whose refetch returns `next`, or fails when `next` is an Error.
+ * whose refetch returns `next`, or fails when `next` is an Error. `wait` changes what waits on the
+ * Household and sends a `recipes` change notice.
  */
-function fakeClient(initial: Household) {
+function fakeClient(initial: Household, initialWaiting: Waiting = {}) {
   let current: Household | Error = initial;
+  let waiting = initialWaiting;
   const fake = createFakeClient((name) => {
+    if (name === "list_drafts") return { ok: true, value: entries(100, waiting.drafts) };
+    if (name === "list_import_flags") return { ok: true, value: entries(200, waiting.flags) };
+    if (name === "list_unresolved_ingredients") return { ok: true, value: entries(300, waiting.unresolved) };
+    if (name === "list_untagged_recipes") return { ok: true, value: entries(400, waiting.untagged) };
     if (name === "get_household") {
       if (current instanceof Error) throw current;
       return { ok: true, value: current };
@@ -45,7 +58,11 @@ function fakeClient(initial: Household) {
     current = next;
     fake.notify("household");
   };
-  return { client: fake.client, notify };
+  const wait = (next: Waiting) => {
+    waiting = next;
+    fake.notify("recipes");
+  };
+  return { client: fake.client, notify, wait };
 }
 
 test("a household change notice keeps unsaved Member input and shows the new data", async () => {
@@ -140,7 +157,7 @@ test("Household is the fifth tab, and opens as an index of its sections", async 
     groups.map((group) =>
       within(group)
         .getAllByRole("button")
-        .map((row) => row.textContent),
+        .map((row) => row.querySelector(".row-title")?.textContent),
     ),
   ).toEqual([
     ["Members"],
@@ -180,4 +197,27 @@ test("the Household tab, tapped from a section, returns to the index", async () 
 
   expect(await screen.findByRole("heading", { name: "The Tremblays" })).toBeTruthy();
   expect(screen.queryByText("Household · Settings")).toBeNull();
+});
+
+test("a Household row shows a chip where something waits, and none where nothing does", async () => {
+  const user = userEvent.setup();
+  const { client, wait } = fakeClient(household(), { drafts: 1, unresolved: 3, untagged: 2 });
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+
+  const review = screen.getByRole("button", { name: /^Review/ });
+  expect(await within(review).findByText("1 Draft")).toBeTruthy();
+  const resolve = screen.getByRole("button", { name: /^Resolve Ingredients/ });
+  expect(within(resolve).getByText("3 Unresolved").classList.contains("chip-amber")).toBe(true);
+  const tag = screen.getByRole("button", { name: /^Tag Recipes/ });
+  expect(within(tag).getByText("2 untagged")).toBeTruthy();
+  expect(within(screen.getByRole("button", { name: /^Import/ })).queryByText(/./, { selector: ".chip" })).toBeNull();
+
+  // The Household reviews the Draft, resolves the Ingredients and tags the Recipes.
+  wait({ flags: 2 });
+
+  expect(await within(review).findByText("2 Import Flags")).toBeTruthy();
+  expect(within(review).queryByText("1 Draft")).toBeNull();
+  expect(within(resolve).queryByText(/Unresolved/)).toBeNull();
+  expect(within(tag).getByText("All tagged").classList.contains("chip-leaf")).toBe(true);
 });

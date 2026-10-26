@@ -7,6 +7,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
 import { HouseholdSettingsForm } from "./HouseholdSettings";
+import { createHouseholdStatus, type StatusChip } from "./householdStatus";
 import { ImportPage } from "./Import";
 import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
@@ -54,6 +55,13 @@ const SETTING_GROUPS: { group: "people" | "planning" | "recipes"; settings: Sett
   { group: "planning", settings: ["settings", "calendar", "notifications"] },
   { group: "recipes", settings: ["review", "import", "resolve", "items", "tag"] },
 ];
+
+/** A Household row's chip, drawn in its status colour. */
+const CHIP_CLASS = {
+  plain: "chip",
+  leaf: "chip chip-leaf",
+  amber: "chip chip-amber",
+} satisfies Record<NonNullable<StatusChip["tone"]> | "plain", string>;
 
 /** The Recipe open in kitchen mode, scaled to `servings` when given. */
 type KitchenRecipe = { id: RecipeId; servings?: number };
@@ -328,6 +336,11 @@ function HouseholdPage(props: {
   onKitchenMode: (on: boolean) => void;
 }) {
   const setting = createPushedPages<Setting>("household", props.open);
+  const status = createHouseholdStatus(props.client);
+  const chips = (name: Setting) => {
+    const shown: Partial<Record<Setting, StatusChip[]>> = status();
+    return shown[name] ?? [];
+  };
   createEffect(on(() => props.home, setting.home, { defer: true }));
 
   return (
@@ -365,6 +378,13 @@ function HouseholdPage(props: {
                         <button type="button" class="row row-open" onClick={() => setting.open(name)}>
                           <span class="row-body">
                             <span class="row-title">{t(`nav.${name}`)}</span>
+                            <Show when={chips(name).length > 0}>
+                              <span class="chips">
+                                <For each={chips(name)}>
+                                  {(chip) => <span class={CHIP_CLASS[chip.tone ?? "plain"]}>{chip.text}</span>}
+                                </For>
+                              </span>
+                            </Show>
                           </span>
                           <span class="row-end">
                             <Icon name="chevronRight" />

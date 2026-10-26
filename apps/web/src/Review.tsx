@@ -22,6 +22,12 @@ import { RecipeForm } from "./RecipeForm";
 import { courseText, effortText, resolutionText } from "./Recipes";
 import { suggestionSummary } from "./ResolveIngredients";
 
+/** The Import Flags not on a Draft: a Draft's flags show on the Draft itself, reviewed with it. */
+export function flagsOutsideDrafts(drafts: readonly Draft[], flags: readonly ImportFlag[]): ImportFlag[] {
+  const ids = new Set(drafts.map((draft) => draft.recipe.id));
+  return flags.filter((flag) => !ids.has(flag.recipe.id));
+}
+
 /** A Draft as the screen keeps it: keyed by its Recipe's id, so a refresh keeps a Draft being edited. */
 type ListedDraft = Draft & { id: number };
 
@@ -54,11 +60,7 @@ export function ReviewPage(props: { client: MiseClient; onResolve: () => void })
     () => setFailed(true),
   );
 
-  // A Draft's flags show on the Draft itself.
-  const flags = () => {
-    const drafts = new Set((loaded.drafts ?? []).map((draft) => draft.id));
-    return (loaded.flags ?? []).filter((flag) => !drafts.has(flag.recipe.id));
-  };
+  const flags = () => flagsOutsideDrafts(loaded.drafts ?? [], loaded.flags ?? []);
   const loadedAll = () => loaded.drafts && loaded.flags && loaded.suggestions;
   const nothing = () =>
     loadedAll() && loaded.drafts?.length === 0 && flags().length === 0 && loaded.suggestions?.length === 0;
