@@ -224,8 +224,10 @@ test("the Week opens first: each day's dinner with its photo, breakfast and lunc
   expect(within(dinner).getByText("Use the fresh basil")).toBeTruthy();
   expect(within(dinner).getByText("Locked")).toBeTruthy();
 
-  const otherMeals = within(tuesday).getByText("Breakfast and lunch").closest("details");
-  expect(otherMeals?.open).toBe(false);
+  expect(
+    within(tuesday).getByRole("button", { name: "Breakfast and lunch not planned" }).getAttribute("aria-expanded"),
+  ).toBe("false");
+  expect(within(tuesday).queryByRole("region", { name: "Breakfast" })).toBeNull();
   expect(
     within(screen.getByRole("region", { name: "Monday, October 26" })).getByText("Mon 26 · Nothing planned"),
   ).toBeTruthy();
@@ -314,7 +316,7 @@ test("breakfast's Recipe opens over the Week from the folded strip too", async (
   render(() => <App client={client} />);
 
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  await user.click(within(tuesday).getByText("Breakfast and lunch"));
+  await user.click(within(tuesday).getByRole("button", { name: "Breakfast: Pasta · Lunch not planned" }));
   const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
   await user.click(within(breakfast).getByRole("button", { name: "Pasta" }));
 
@@ -422,7 +424,8 @@ test("who's eating can be set for a whole day", async () => {
   render(() => <App client={client} />);
   const wednesday = await screen.findByRole("region", { name: "Wednesday, October 28" });
 
-  await user.click(within(wednesday).getByRole("button", { name: "Who's eating today" }));
+  expect(within(wednesday).queryByRole("button", { name: "Who's eating today" })).toBeNull();
+  await user.click(within(wednesday).getByRole("button", { name: "3 eating" }));
   const form = within(wednesday).getByRole("form", { name: "Who's eating today" });
   await user.click(within(form).getByRole("checkbox", { name: "Everyone" }));
   await user.click(within(form).getByRole("checkbox", { name: "Robin" }));
@@ -464,6 +467,26 @@ test("clearing the Week asks first, in Mise's own sheet", async () => {
 });
 
 const robinsPeanut = { who: 1, allergen: "peanut", constraint: "allergy", cause: "contains" } as const;
+
+test("a breakfast that isn't safe unfolds its Day's strip, which can still be folded", async () => {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[3] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    conflicts: [{ ...robinsPeanut, override: null }],
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+
+  const strip = within(tuesday).getByRole("button", { name: "Breakfast: Pasta · Lunch not planned" });
+  expect(strip.getAttribute("aria-expanded")).toBe("true");
+  expect(within(tuesday).getByRole("region", { name: "Breakfast" })).toBeTruthy();
+  await user.click(strip);
+  expect(strip.getAttribute("aria-expanded")).toBe("false");
+  expect(within(tuesday).queryByRole("region", { name: "Breakfast" })).toBeNull();
+});
 
 test("each Slot shows its Conflicts: blocking ones as warnings, overridden ones with their reason", async () => {
   const { client } = fakeClient({
@@ -593,7 +616,7 @@ test("who's eating for a day is refused and overridden the same way", async () =
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
 
-  await user.click(within(tuesday).getByRole("button", { name: "Who's eating today" }));
+  await user.click(within(tuesday).getByRole("button", { name: "3 eating" }));
   const form = within(tuesday).getByRole("form", { name: "Who's eating today" });
   await user.click(within(form).getByRole("checkbox", { name: "Everyone" }));
   await user.click(within(form).getByRole("checkbox", { name: "Alex" }));
@@ -719,7 +742,8 @@ test("a dinner cooked for its Leftovers says how many to cook for, and the Lefto
   render(() => <App client={client} />);
 
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
-  expect(within(monday).getByText("Cook for 6, with Tuesday's Leftovers.")).toBeTruthy();
+  // A meta line under the title, not a chip: chips are short labels.
+  expect(within(monday).getByText("Cook for 6, with Tuesday's Leftovers.").closest(".chip")).toBeNull();
   const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
   const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
   expect(within(dinner).getByRole("heading", { name: "Leftovers of Curry" })).toBeTruthy();
@@ -944,7 +968,7 @@ test("breakfast and lunch have one action each too, in the folded strip", async 
   const user = userEvent.setup();
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  await user.click(within(tuesday).getByText("Breakfast and lunch"));
+  await user.click(within(tuesday).getByRole("button", { name: /^Breakfast/ }));
 
   const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
   expect(
@@ -1122,7 +1146,14 @@ test("offline, the Week last loaded opens read-only: it can be cooked from, not 
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
   expect(within(tuesday).getByRole("heading", { name: "Pasta" })).toBeTruthy();
   expect(within(tuesday).getByRole("button", { name: "Cook" })).toBeTruthy();
-  expect(within(screen.getByRole("region", { name: "Monday, October 26" })).queryByRole("button")).toBeNull();
+  // Monday can only be unfolded: nothing to choose, and its Diners are shown, not editable.
+  const monday = screen.getByRole("region", { name: "Monday, October 26" });
+  expect(
+    within(monday)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Breakfast and lunch not planned"]);
+  expect(within(monday).getByText("3 eating")).toBeTruthy();
   await userEvent.click(within(tuesday).getByRole("button", { name: "Pasta" }));
   const sheet = await screen.findByRole("dialog");
   expect(within(sheet).queryByRole("button", { name: "Edit dinner" })).toBeNull();

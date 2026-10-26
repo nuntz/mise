@@ -25,7 +25,7 @@ import {
   type WeekSpan,
   weekDates,
 } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { formatDate, shortDate } from "./dates";
@@ -308,6 +308,10 @@ function WeekLoading() {
   );
 }
 
+/** The meals a Day's strip folds away under its dinner. */
+const OTHER_MEALS = ["breakfast", "lunch"] as const;
+type OtherMeal = (typeof OTHER_MEALS)[number];
+
 function Day(props: {
   client: MiseClient;
   household: Household;
@@ -325,6 +329,13 @@ function Day(props: {
   const isEditing = (meal: Meal) => !!props.editing && sameSlot(props.editing, { date: props.date, meal });
   const slot = (meal: Meal) => props.slots.find((s) => s.meal === meal) as Slot;
   const [editingDiners, setEditingDiners] = createSignal(false);
+  const [unfolded, setUnfolded] = createSignal(false);
+  const otherMealsId = createUniqueId();
+  // Unfolds when breakfast or lunch comes to need attention or be edited; it can be folded again.
+  const needsAttention = createMemo(() => OTHER_MEALS.some((meal) => blocking(slot(meal)) || isEditing(meal)));
+  createEffect(() => {
+    if (needsAttention()) setUnfolded(true);
+  });
   const view = (meal: Meal, prominent = false) => (
     <SlotView
       client={props.client}
@@ -342,42 +353,59 @@ function Day(props: {
     />
   );
   // Breakfast and lunch, folded: what's planned for them, if anything.
-  const otherPlans = () =>
-    (["breakfast", "lunch"] as const)
-      .filter((meal) => !["unplanned", "skip"].includes(slot(meal).kind))
-      .map((meal) => `${t(`meal.${meal}`)}: ${slotTitle(slot(meal))}`)
-      .join(" · ") || t("week.otherMealsNone");
+  const planned = (meal: OtherMeal) =>
+    ["unplanned", "skip"].includes(slot(meal).kind) ? undefined : slotTitle(slot(meal));
+  const otherPlans = () => {
+    const breakfast = planned("breakfast");
+    const lunch = planned("lunch");
+    if (breakfast && lunch) return t("week.otherMealsBoth", { breakfast, lunch });
+    if (breakfast) return t("week.otherMealsBreakfast", { breakfast });
+    if (lunch) return t("week.otherMealsLunch", { lunch });
+    return t("week.otherMealsNone");
+  };
+  // Who's eating the day, as dinner has it: the Day's Diners form starts from there too.
+  const eating = () => {
+    const count = slot("dinner").diners.length;
+    if (count === 0) return t("week.eatingNone");
+    return count === 1 ? t("week.eatingOne") : t("week.eating", { count: String(count) });
+  };
+  const eatingText = () => (
+    <>
+      <Icon name="people" />
+      {eating()}
+    </>
+  );
 
   return (
     <section class="day" id={dayId(props.date)} aria-label={title()}>
       <h2 class="visually-hidden">{title()}</h2>
       {view("dinner", true)}
-      <details
-        class="strip"
-        open={(["breakfast", "lunch"] as const).some((meal) => blocking(slot(meal)) || isEditing(meal))}
-      >
-        <summary>
-          <span>{t("week.otherMeals")}</span>
-          <span class="strip-plan">{otherPlans()}</span>
-        </summary>
-        <div class="strip-meals">
-          {view("breakfast")}
-          {view("lunch")}
-        </div>
-      </details>
-      <Show
-        when={editingDiners()}
-        fallback={
-          <Show when={!props.readOnly}>
-            <div class="slot-actions">
-              <button type="button" class="button-row" onClick={() => setEditingDiners(true)}>
-                <Icon name="people" />
-                {t("week.dayDiners")}
-              </button>
-            </div>
-          </Show>
-        }
-      >
+      <div class="strip">
+        <Show when={!props.readOnly && !editingDiners()} fallback={<span class="strip-diners">{eatingText()}</span>}>
+          <button type="button" class="strip-diners" onClick={() => setEditingDiners(true)}>
+            {eatingText()}
+          </button>
+        </Show>
+        <span class="strip-dot" aria-hidden="true">
+          ·
+        </span>
+        <button
+          type="button"
+          class="strip-plan"
+          aria-expanded={unfolded()}
+          aria-controls={otherMealsId}
+          onClick={() => setUnfolded(!unfolded())}
+        >
+          <span>{otherPlans()}</span>
+          <Icon name="chevronDown" />
+        </button>
+      </div>
+      {/* Hidden rather than unmounted when folded, so a form being filled in keeps what was typed. */}
+      <div class="strip-meals" id={otherMealsId} hidden={!unfolded()}>
+        {view("breakfast")}
+        {view("lunch")}
+      </div>
+      <Show when={editingDiners()}>
         <DayDinersForm
           client={props.client}
           household={props.household}
@@ -416,6 +444,16 @@ function SlotView(props: {
     if (conflict) return { kind: "warn", text: conflictChip(conflict, props.household) };
     return props.slot.locked ? { kind: "lock", text: t("slot.locked") } : undefined;
   };
+  // Under the title, in its text column: who it feeds, what it's cooked for, and its note.
+  const meta = () => (
+    <>
+      <p class="meta">{servingsText(props.slot, props.household)}</p>
+      <Show when={props.slot.recipe && props.slot.leftovers.length > 0}>
+        <p class="meta">{cookForText(props.slot, props.household)}</p>
+      </Show>
+      <Show when={props.slot.note}>{(note) => <p class="meta">{note()}</p>}</Show>
+    </>
+  );
   const choose = () => (
     <Show when={!props.readOnly}>
       <button type="button" class="button-row" onClick={() => props.onEdit(true)}>
@@ -442,7 +480,10 @@ function SlotView(props: {
               fallback={
                 <div class="compact compact-end">
                   <SlotThumb client={props.client} slot={props.slot} />
-                  <p class="row-title">{t("week.nothingPlanned", { day: props.day })}</p>
+                  <div class="row-body">
+                    <p class="row-title">{t("week.nothingPlanned", { day: props.day })}</p>
+                    <Show when={props.slot.note}>{(note) => <p class="row-meta">{note()}</p>}</Show>
+                  </div>
                   <Show when={!props.editing}>
                     <div class="row-end">{choose()}</div>
                   </Show>
@@ -454,7 +495,7 @@ function SlotView(props: {
                 <div class="dish">
                   <p class="overline">{props.day}</p>
                   <DishTitle slot={props.slot} onOpen={props.onOpen} />
-                  <p class="meta">{servingsText(props.slot, props.household)}</p>
+                  {meta()}
                   <Show when={flag()}>
                     {(shown) => (
                       <p class="chips">
@@ -485,25 +526,17 @@ function SlotView(props: {
               </div>
               <div class="dish">
                 <DishTitle slot={props.slot} onOpen={props.onOpen} />
-                <p class="meta">{servingsText(props.slot, props.household)}</p>
+                {meta()}
               </div>
             </div>
           )}
         </Show>
       </Show>
-      <Show when={!props.prominent}>
-        <p class="meta">{servingsText(props.slot, props.household)}</p>
-      </Show>
-      <Show when={props.slot.recipe && props.slot.leftovers.length > 0}>
-        <p class="chips">
-          <span class="chip">{cookForText(props.slot, props.household)}</span>
-        </p>
-      </Show>
+      <Show when={!props.prominent}>{meta()}</Show>
       <Show when={props.slot.reason}>
         {(reason) => <p class="meta">{reasonText(reason(), props.household, props.items)}</p>}
       </Show>
       <SlotConflicts household={props.household} slot={props.slot} />
-      <Show when={props.slot.note}>{(note) => <p>{note()}</p>}</Show>
       <Show
         when={props.editing}
         fallback={
@@ -601,28 +634,37 @@ function SlotConflicts(props: { household: Household; slot: Slot }) {
   );
 }
 
-/** A compact row's square: the dish's photo with a Leftovers band, or a dashed box for no cooking. */
+/**
+ * A compact row's square: the dish's photo with a Leftovers band, a solid fork and knife for eating
+ * out, or a dashed box for nothing decided.
+ */
 function SlotThumb(props: { client: MiseClient; slot: Slot }) {
   return (
-    <Show
-      when={props.slot.kind === "leftovers"}
+    <Switch
       fallback={
         <span class="thumb thumb-dashed" aria-hidden="true">
-          <Icon name={props.slot.kind === "eat_out" ? "eatOut" : "calendarPlus"} />
+          <Icon name="calendarPlus" />
         </span>
       }
     >
-      <span class="thumb" aria-hidden="true">
-        <Show when={props.slot.leftoversOf?.recipe} fallback={<PlateGlyph size={30} />}>
-          {(recipe) => (
-            <Show when={recipe().photoKey} fallback={<PlateGlyph size={30} />}>
-              {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
-            </Show>
-          )}
-        </Show>
-        <span class="thumb-band">{t("slotKind.leftovers")}</span>
-      </span>
-    </Show>
+      <Match when={props.slot.kind === "eat_out"}>
+        <span class="thumb thumb-solid" aria-hidden="true">
+          <Icon name="eatOut" />
+        </span>
+      </Match>
+      <Match when={props.slot.kind === "leftovers"}>
+        <span class="thumb thumb-banded" aria-hidden="true">
+          <Show when={props.slot.leftoversOf?.recipe} fallback={<PlateGlyph size={30} />}>
+            {(recipe) => (
+              <Show when={recipe().photoKey} fallback={<PlateGlyph size={30} />}>
+                {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
+              </Show>
+            )}
+          </Show>
+          <span class="thumb-band">{t("slotKind.leftovers")}</span>
+        </span>
+      </Match>
+    </Switch>
   );
 }
 

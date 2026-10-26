@@ -1167,7 +1167,7 @@ article:not([class]) {
 
 .compact {
   display: grid;
-  grid-template-columns: var(--thumb) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-3);
   align-items: center;
 }
@@ -1178,7 +1178,7 @@ article:not([class]) {
 
 /* A compact row with its one action trailing, such as an unplanned dinner's Choose. */
 .compact-end {
-  grid-template-columns: var(--thumb) minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .thumb {
@@ -1208,18 +1208,34 @@ article:not([class]) {
   color: var(--ink-muted);
 }
 
-.thumb-band {
+/* Eating out is decided, not a gap: a solid square, unlike the dashed one of nothing planned. */
+.thumb-solid {
+  background: var(--chip);
+  color: var(--chip-ink);
+}
+
+/* A thumb with a band grows wider than the square rather than wrap its band, as a long translation would. */
+.thumb-banded {
+  align-items: flex-end;
+  width: auto;
+  min-width: var(--thumb);
+}
+
+.thumb-banded > :is(.plate, img) {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 0 var(--space-1);
+  inset: 0;
+  margin: auto;
+}
+
+.thumb-band {
+  position: relative;
+  flex: 1;
+  padding: var(--space-1);
   background: var(--scrim);
   color: var(--on-photo);
   font: var(--type-label);
-  letter-spacing: 0.04em;
   text-align: center;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .slot-actions {
@@ -1239,22 +1255,59 @@ article:not([class]) {
   background: var(--surface);
 }
 
-.strip > summary {
-  justify-content: space-between;
+/* A Day's strip: who's eating, which opens the Day's Diners, then breakfast and lunch, folded. */
+.strip {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
+  min-width: 0;
   font: var(--type-strip);
   color: var(--ink-muted);
 }
 
-.strip > summary .strip-plan {
-  margin-inline-start: auto;
+.strip > button {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: inherit;
+}
+
+.strip-diners {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.strip .icon {
+  width: var(--icon-button);
+  height: var(--icon-button);
+  flex: none;
+}
+
+.strip .strip-plan {
+  flex: 1;
+  justify-content: space-between;
+}
+
+.strip-plan > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.strip[open] > summary {
+.strip-plan .icon {
+  transition: transform var(--duration-sheet) var(--ease-in);
+}
+
+.strip-plan[aria-expanded="true"] {
   color: var(--ink);
+}
+
+.strip-plan[aria-expanded="true"] .icon {
+  transform: rotate(180deg);
 }
 
 .strip-meals {
@@ -1262,6 +1315,10 @@ article:not([class]) {
   flex-direction: column;
   gap: var(--space-3);
   padding-bottom: var(--space-3);
+}
+
+.strip-meals[hidden] {
+  display: none;
 }
 
 .strip-meals .slot {
