@@ -433,11 +433,10 @@ describe("syncing the Drive folder", () => {
     expect(succeeded<ImportRun[]>(await household.callTool("list_import_runs", {}))).toMatchObject([
       { source: "gdrive", created: 1 },
     ]);
-    expect(await household.listSchedules()).toEqual([
-      expect.objectContaining({ callback: "nightlyExport" }),
-      expect.objectContaining({ callback: "nightlyDriveSync" }),
-      expect.objectContaining({ callback: "morningPushes" }),
-    ]);
+    // Listed soonest first, so their order depends on the time of day.
+    const schedules = (await household.listSchedules()) as { callback: string }[];
+    const callbacks = schedules.map((schedule) => schedule.callback);
+    expect(callbacks.sort()).toEqual(["morningPushes", "nightlyDriveSync", "nightlyExport"]);
   });
 
   test("keeps what it read in the export, so a restored Household skips the same Docs", async () => {

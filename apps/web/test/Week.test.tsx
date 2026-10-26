@@ -16,11 +16,18 @@ import {
 } from "@mise/domain";
 import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, onTestFinished, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { setPseudoLocale } from "../src/messages";
 import { createFakeClient } from "./fakeClient";
+
+// The fixtures are the Week of Monday 26 October; on the Sunday before, none of its days is today.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-25T12:00:00-07:00"));
+});
+afterEach(() => vi.useRealTimers());
 
 const robin: Member = { id: 1, name: "Robin", email: null, constraints: [] };
 const alex: Member = { id: 2, name: "Alex", email: null, constraints: [] };

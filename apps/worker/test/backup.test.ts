@@ -605,11 +605,10 @@ describe("nightly export", () => {
 
     const stored = await env.BUCKET.get(key);
     expect(await stored?.text()).toBe(await exportOf(household));
-    expect(await household.listSchedules()).toEqual([
-      expect.objectContaining({ callback: "nightlyExport" }),
-      expect.objectContaining({ callback: "nightlyDriveSync" }),
-      expect.objectContaining({ callback: "morningPushes" }),
-    ]);
+    // Listed soonest first, so their order depends on the time of day.
+    const schedules = (await household.listSchedules()) as { callback: string }[];
+    const callbacks = schedules.map((schedule) => schedule.callback);
+    expect(callbacks.sort()).toEqual(["morningPushes", "nightlyDriveSync", "nightlyExport"]);
   });
 
   test("the nightly Backup prunes old ones once tonight's is written, and leaves a file put there by hand", async () => {
