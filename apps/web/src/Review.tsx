@@ -66,7 +66,9 @@ export function ReviewPage(props: { client: MiseClient; onResolve: () => void })
     <section>
       <h2>{t("review.title")}</h2>
       <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
       </Show>
       <Show when={nothing()}>
         <Done>{t("review.none")}</Done>
@@ -211,7 +213,9 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
         />
       </Show>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
     </article>
   );

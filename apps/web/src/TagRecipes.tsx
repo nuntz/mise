@@ -28,7 +28,9 @@ export function TagRecipes(props: { client: MiseClient }) {
     <section>
       <h2>{t("tag.title")}</h2>
       <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
       </Show>
       <Show when={loaded.recipes}>
         {(recipes) => (
@@ -87,7 +89,9 @@ function TagRow(props: { client: MiseClient; recipe: RecipeSummary }) {
         {t("tag.save")}
       </button>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
     </form>
   );

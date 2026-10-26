@@ -57,7 +57,9 @@ export function SetupForm(props: { client: MiseClient }) {
       </button>
 
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
 
       <button type="submit" disabled={submitting()}>

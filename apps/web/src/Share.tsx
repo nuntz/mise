@@ -46,13 +46,19 @@ export function SharePage(props: { client: MiseClient; url: string | null }) {
           <p>{t("link.importing")}</p>
         </Show>
         <Show when={error()}>
-          <p role="alert">{error()}</p>
+          <p class="banner banner-warn" role="alert">
+            {error()}
+          </p>
         </Show>
         <Show when={unreachable() === "offline"}>
-          <p role="alert">{t("share.unreachable")}</p>
+          <p class="banner banner-warn" role="alert">
+            {t("share.unreachable")}
+          </p>
         </Show>
         <Show when={unreachable() === "signedOut"}>
-          <p role="alert">{t("share.signIn")}</p>
+          <p class="banner banner-warn" role="alert">
+            {t("share.signIn")}
+          </p>
           {/* Opening the page again goes through Access, which signs Safari in and comes back here. */}
           <a href={window.location.href}>{t("share.signInLink")}</a>
         </Show>

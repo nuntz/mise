@@ -544,7 +544,9 @@ function StapleList(props: { client: MiseClient; locale: string }) {
           {t("pantry.save")}
         </button>
         <Show when={error()}>
-          <p role="alert">{error()}</p>
+          <p class="banner banner-warn" role="alert">
+            {error()}
+          </p>
         </Show>
       </form>
     </section>
@@ -604,7 +606,9 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
           )}
         </For>
         <Show when={error()}>
-          <p role="alert">{t("app.error")}</p>
+          <p class="banner banner-warn" role="alert">
+            {t("app.error")}
+          </p>
         </Show>
       </fieldset>
     </Show>

@@ -8,9 +8,33 @@ const appCss = readFileSync(join(import.meta.dirname, "../src/styles/app.css"), 
   "",
 );
 
+/** Each web component's path under src and its source. */
+const srcDir = join(import.meta.dirname, "../src");
+const components = readdirSync(srcDir, { recursive: true, encoding: "utf8" })
+  .filter((file) => file.endsWith(".tsx"))
+  .map((file) => ({ file, source: readFileSync(join(srcDir, file), "utf8") }));
+
+/** Every match of `pattern` in the web components, as "file: match". */
+function inComponents(pattern: RegExp): string[] {
+  return components.flatMap(({ file, source }) => [...source.matchAll(pattern)].map(([match]) => `${file}: ${match}`));
+}
+
 test("type sizes come from the tokens, never a pixel size in the component styles", () => {
   const pixelType = appCss.match(/(?:^|[;{\s])(?:font|font-size|line-height)\s*:[^;}]*\d+(?:\.\d+)?px[^;}]*/g) ?? [];
   expect(pixelType.map((declaration) => declaration.trim())).toEqual([]);
+  expect(
+    inComponents(/["']?(?:font|font-size|fontSize|line-height|lineHeight)["']?\s*:\s*["']?[^"';,}]*\d+(?:\.\d+)?px/g),
+  ).toEqual([]);
+});
+
+test("colours come from the tokens, never a hex colour in the component styles", () => {
+  expect(appCss.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
+});
+
+test("every alert in the web components is a banner, so no error reads as body text", () => {
+  expect(
+    inComponents(/<[a-z]+\b[^>]*\brole="alert"[^>]*>/g).filter((tag) => !/\bclass="[^"]*\bbanner\b/.test(tag)),
+  ).toEqual([]);
 });
 
 /** The declarations of the rule whose selector list is exactly `selector`. */
@@ -52,13 +76,5 @@ test("no list renders the browser's markers", () => {
 });
 
 test("every list in the web components is classed, so none falls back to the browser's look", () => {
-  const sources = join(import.meta.dirname, "../src");
-  const unclassed = readdirSync(sources, { recursive: true, encoding: "utf8" })
-    .filter((file) => file.endsWith(".tsx"))
-    .flatMap((file) =>
-      [...readFileSync(join(sources, file), "utf8").matchAll(/<(?:ul|ol)\b[^>]*>/g)]
-        .filter(([tag]) => !/\bclass=/.test(tag))
-        .map(([tag]) => `${file}: ${tag}`),
-    );
-  expect(unclassed).toEqual([]);
+  expect(inComponents(/<(?:ul|ol)\b[^>]*>/g).filter((tag) => !/\bclass=/.test(tag))).toEqual([]);
 });

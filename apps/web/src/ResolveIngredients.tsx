@@ -57,7 +57,9 @@ export function ResolveIngredients(props: { client: MiseClient }) {
     <section>
       <h2>{t("resolve.title")}</h2>
       <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
       </Show>
       <Show when={loaded.groups}>
         {(groups) => (
@@ -134,7 +136,9 @@ function SuggestAll(props: { client: MiseClient }) {
           <p role="status">{t("suggest.done", { count: String(status().made) })}</p>
         </Match>
         <Match when={status().state === "failed"}>
-          <p role="alert">{t("suggest.failed", { count: String(status().made) })}</p>
+          <p class="banner banner-warn" role="alert">
+            {t("suggest.failed", { count: String(status().made) })}
+          </p>
         </Match>
       </Switch>
     </div>
@@ -258,7 +262,9 @@ function GroupRow(props: {
       </Switch>
       {/* Below the forms and buttons, beside whichever was pressed. */}
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
     </article>
   );

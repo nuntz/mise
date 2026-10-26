@@ -511,7 +511,7 @@ function SlotConflicts(props: { household: Household; slot: Slot }) {
         <Show
           when={conflict.override}
           fallback={
-            <p class="alert" role="alert">
+            <p class="banner banner-warn" role="alert">
               {conflictText(conflict, props.household, slotTitle(props.slot))}
             </p>
           }
@@ -599,7 +599,9 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot; 
   return (
     <>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show
         when={props.slot.cookedAt}
@@ -753,7 +755,9 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
   return (
     <form class="slot-form" aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <label>
         {t("slot.kind")}
@@ -864,7 +868,9 @@ function DayDinersForm(props: {
   return (
     <form class="slot-form" aria-label={t("week.dayDiners")} onSubmit={save}>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <DinersFields members={props.household.members} draft={diners()} onChange={changing(setDiners)} />
       <ConflictOverrides
@@ -922,7 +928,7 @@ function ConflictOverrides(props: {
           </div>
         </div>
         <div class="sheet-body">
-          <div class="stack" role="alert">
+          <div class="banner banner-warn stack" role="alert">
             <p>{t("conflict.refused")}</p>
             <For each={props.conflicts}>{(conflict) => <p>{props.describe(conflict)}</p>}</For>
           </div>

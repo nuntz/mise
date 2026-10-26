@@ -43,7 +43,9 @@ export function ItemsSettings(props: { client: MiseClient }) {
       <h2>{t("items.title")}</h2>
       <p>{t("items.intro")}</p>
       <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
       </Show>
       <label>
         {t("items.search")}
@@ -166,7 +168,9 @@ function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void })
   return (
     <form onSubmit={submit}>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={!shipped}>
         <label>

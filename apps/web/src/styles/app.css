@@ -471,6 +471,15 @@ article:not([class]) {
   flex: none;
 }
 
+/* A banner of several sentences stacks them, each at full width. */
+.banner.stack {
+  align-items: stretch;
+}
+
+.banner.stack > p {
+  flex: none;
+}
+
 .banner-top {
   border-radius: 0;
   padding-inline: var(--space-4);
@@ -550,11 +559,6 @@ article:not([class]) {
 .chip-amber {
   background: var(--amber-soft);
   color: var(--amber);
-}
-
-.alert {
-  color: var(--warn);
-  font-weight: 600;
 }
 
 /* ---------- Segmented control ---------- */

@@ -175,7 +175,9 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
         </ul>
       </Show>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <label>
         {t("useUp.item")}
@@ -259,7 +261,9 @@ function BudgetsForm(props: {
       <fieldset>
         <legend>{props.label}</legend>
         <Show when={error()}>
-          <p role="alert">{error()}</p>
+          <p class="banner banner-warn" role="alert">
+            {error()}
+          </p>
         </Show>
         <For each={WEEKDAYS}>
           {(weekday) => (

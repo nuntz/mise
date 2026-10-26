@@ -210,7 +210,9 @@ export function RecipeForm(props: {
         />
       </label>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <button type="submit" disabled={busy()}>
         {busy() ? t("recipeForm.saving") : t("recipeForm.save")}

@@ -41,7 +41,9 @@ export function CalendarSettings(props: { client: MiseClient }) {
       <h2>{t("calendar.title")}</h2>
       <p>{t("calendar.intro")}</p>
       <Show when={failed()}>
-        <p role="alert">{t("app.error")}</p>
+        <p class="banner banner-warn" role="alert">
+          {t("app.error")}
+        </p>
       </Show>
       <Switch>
         <Match when={token()}>
@@ -65,7 +67,9 @@ export function CalendarSettings(props: { client: MiseClient }) {
                   </button>
                 }
               >
-                <p role="alert">{t("calendar.rotateWarning")}</p>
+                <p class="banner banner-warn" role="alert">
+                  {t("calendar.rotateWarning")}
+                </p>
                 <button type="button" disabled={rotating()} onClick={rotate}>
                   {t("calendar.rotateConfirm")}
                 </button>

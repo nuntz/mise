@@ -94,7 +94,9 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
             </button>
           </div>
           <Show when={error()}>
-            <p role="alert">{error()}</p>
+            <p class="banner banner-warn" role="alert">
+              {error()}
+            </p>
           </Show>
         </div>
       }
@@ -103,7 +105,9 @@ function MemberRow(props: { client: MiseClient; member: Member; isCaller: boolea
         <form onSubmit={save}>
           <MemberFields draft={current()} onChange={setDraft} />
           <Show when={error()}>
-            <p role="alert">{error()}</p>
+            <p class="banner banner-warn" role="alert">
+              {error()}
+            </p>
           </Show>
           <button type="submit" disabled={busy()}>
             {busy() ? t("member.saving") : t("member.save")}
@@ -152,7 +156,9 @@ function AddMember(props: { client: MiseClient }) {
         <form onSubmit={add}>
           <MemberFields draft={current()} onChange={setDraft} />
           <Show when={error()}>
-            <p role="alert">{error()}</p>
+            <p class="banner banner-warn" role="alert">
+              {error()}
+            </p>
           </Show>
           <button type="submit" disabled={busy()}>
             {busy() ? t("member.saving") : t("members.add")}

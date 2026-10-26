@@ -82,7 +82,9 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
         <p>{t("import.importing")}</p>
       </Show>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={latest()}>
         {(run) => (
@@ -192,7 +194,9 @@ function DriveSync(props: { client: MiseClient; runs: ImportRun[] | undefined })
         {busy() ? t("drive.syncing") : t("drive.sync")}
       </button>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={run()}>
         {(run) => (
@@ -256,7 +260,9 @@ function PasteLink(props: { client: MiseClient; onReview: () => void }) {
         {busy() ? t("link.importing") : t("link.import")}
       </button>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={imported()}>
         {(imported) => {
@@ -371,7 +377,9 @@ export function FillDraft(props: { client: MiseClient; draft: { id: number; titl
             {busy() ? t("paste.reading") : t("fill.read")}
           </button>
           <Show when={error()}>
-            <p role="alert">{error()}</p>
+            <p class="banner banner-warn" role="alert">
+              {error()}
+            </p>
           </Show>
         </div>
       }
@@ -424,7 +432,9 @@ function ImportScreenshots(props: { client: MiseClient; onReview: () => void }) 
         <p>{t("shots.reading")}</p>
       </Show>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={made()}>
         {(title) => (
@@ -520,7 +530,9 @@ function PasteRecipe(props: { client: MiseClient; onReview: () => void }) {
         {busy() ? t("paste.reading") : t("paste.read")}
       </button>
       <Show when={error()}>
-        <p role="alert">{error()}</p>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
       </Show>
       <Show when={made()}>
         {(title) => (
