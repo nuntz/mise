@@ -230,9 +230,12 @@ export function WeekPage(props: {
             </div>
             <Show when={!readOnly()}>
               <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
-              <button type="button" class="button-danger" onClick={() => clear(shown())}>
-                {t("week.clear")}
-              </button>
+              {/* Clearing empties breakfast and lunch too, so a Week with only those planned can be cleared. */}
+              <Show when={shown().slots.some((slot) => slot.kind !== "unplanned")}>
+                <button type="button" class="button-danger" onClick={() => clear(shown())}>
+                  {t("week.clear")}
+                </button>
+              </Show>
             </Show>
           </>
         )}

@@ -684,17 +684,38 @@ test("a Week not yet proposed can be proposed, with nothing to re-roll yet", asy
   expect(screen.queryByRole("button", { name: "Re-roll" })).toBeNull();
 
   await user.click(screen.getByRole("button", { name: "Propose dinners" }));
+  await user.click(
+    within(screen.getByRole("dialog", { name: "Use it up" })).getByRole("button", { name: "Propose dinners" }),
+  );
 
   await vi.waitFor(() => expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26" } }]));
 });
 
-test("Items to use up are picked from the catalogue and sent when proposing and re-rolling", async () => {
+test("an empty Week offers Propose, without Use it up, and has nothing to clear", async () => {
+  const { client } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+  expect(screen.getByRole("button", { name: "Clear this Week" })).toBeTruthy();
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByRole("region", { name: "Monday, November 2" });
+  expect(screen.getByText("Nothing planned yet")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Propose dinners" })).toBeTruthy();
+  expect(screen.queryByRole("form", { name: "Use it up" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Clear this Week" })).toBeNull();
+});
+
+test("Use it up is offered on proposing, and its Items go with the Proposal and the re-rolls after it", async () => {
   const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   const user = userEvent.setup();
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
+  expect(screen.queryByRole("form", { name: "Use it up" })).toBeNull();
 
-  const useUp = screen.getByRole("form", { name: "Use it up" });
+  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  const sheet = screen.getByRole("dialog", { name: "Use it up" });
+  const useUp = within(sheet).getByRole("form", { name: "Use it up" });
   const field = within(useUp).getByRole("combobox", { name: "Item on hand" });
   await user.type(field, "baby spinach");
   await user.click(within(useUp).getByRole("button", { name: "Add" }));
@@ -708,18 +729,30 @@ test("Items to use up are picked from the catalogue and sent when proposing and 
       .getAllByRole("listitem")
       .map((item) => item.textContent),
   ).toEqual([expect.stringContaining("spinach"), expect.stringContaining("rice")]);
-
-  await user.click(screen.getByRole("button", { name: "Re-roll" }));
   await user.click(within(useUp).getByRole("button", { name: "Remove rice" }));
-  await user.click(screen.getByRole("button", { name: "Propose again" }));
-  await user.click(within(useUp).getByRole("button", { name: "Remove spinach" }));
+  await user.click(within(sheet).getByRole("button", { name: "Propose dinners" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Re-roll" }));
+
+  // Cancelled, nothing is proposed and nothing picked changes; asked again, the Items picked are still there.
+  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove spinach" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove spinach" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Propose dinners" }));
 
   await vi.waitFor(() =>
     expect(writes(calls)).toEqual([
-      { name: "propose_week", input: { date: "2026-10-26", reroll: true, useUp: ["spinach", "rice"] } },
       { name: "propose_week", input: { date: "2026-10-26", useUp: ["spinach"] } },
-      { name: "propose_week", input: { date: "2026-10-26", reroll: true } },
+      { name: "propose_week", input: { date: "2026-10-26", reroll: true, useUp: ["spinach"] } },
+      { name: "propose_week", input: { date: "2026-10-26", reroll: true, useUp: ["spinach"] } },
+      { name: "propose_week", input: { date: "2026-10-26" } },
     ]),
   );
 });
@@ -859,7 +892,7 @@ test("Effort Budgets are set for this Week, or for every Week", async () => {
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
 
-  await user.click(screen.getByText("Effort Budgets"));
+  await user.click(screen.getByRole("heading", { level: 2, name: "Effort Budgets" }));
   const thisWeek = screen.getByRole("form", { name: "This Week's Effort Budgets" });
   expect((within(thisWeek).getByRole("spinbutton", { name: "Monday" }) as HTMLInputElement).value).toBe("30");
   // Back to the default on Monday, and a lighter Friday.

@@ -18,6 +18,7 @@ import { errorText } from "./errors";
 import { Icon } from "./icons";
 import { itemNamed } from "./items";
 import { t } from "./messages";
+import { Sheet } from "./Sheet";
 
 /** What the Week, and proposing it, need to know of the Household. */
 export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudgets" | "timezone">;
@@ -25,6 +26,7 @@ export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudget
 /**
  * Proposing the Week and re-rolling it, and, while a proposed Week hasn't been looked over, a banner
  * asking for that. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
+ * Proposing first offers Use it up; re-rolling sends the Items picked then again.
  */
 export function ProposalControls(props: {
   client: MiseClient;
@@ -37,6 +39,8 @@ export function ProposalControls(props: {
   const [error, setError] = createSignal<string>();
   // "Use it up" Items aren't stored (ADR 0013): they go with every Proposal asked for from here.
   const [useUp, setUseUp] = createSignal<ItemId[]>([]);
+  // What the Use it up sheet has picked so far: it becomes `useUp` only on proposing, not on Cancel.
+  const [draft, setDraft] = createSignal<ItemId[]>();
   const proposed = () => props.week.proposalSeed !== null;
   const empty = () =>
     !proposed() && props.week.slots.every((slot) => slot.meal !== "dinner" || slot.kind === "unplanned");
@@ -60,13 +64,9 @@ export function ProposalControls(props: {
         ...(useUp().length > 0 ? { useUp: useUp() } : {}),
       }),
     );
-  const propose = () => proposeWeek(false);
+  const offerUseUp = () => setDraft(useUp());
   const disabled = () => busy() || props.readOnly;
-  const picker = () => (
-    <Show when={!props.readOnly}>
-      <UseUpPicker items={props.items} picked={useUp()} onChange={setUseUp} />
-    </Show>
-  );
+  const titleId = createUniqueId();
 
   return (
     <>
@@ -94,8 +94,7 @@ export function ProposalControls(props: {
             <Icon name="calendarPlus" />
             <p class="empty-title">{t("week.emptyTitle")}</p>
             <p>{t("week.emptyBody")}</p>
-            {picker()}
-            <button type="button" class="button-primary" disabled={disabled()} onClick={propose}>
+            <button type="button" class="button-primary" disabled={disabled()} onClick={offerUseUp}>
               {t("week.propose")}
             </button>
           </div>
@@ -105,7 +104,7 @@ export function ProposalControls(props: {
           <Show
             when={proposed()}
             fallback={
-              <button type="button" class="button-primary" disabled={disabled()} onClick={propose}>
+              <button type="button" class="button-primary" disabled={disabled()} onClick={offerUseUp}>
                 {t("week.propose")}
               </button>
             }
@@ -121,12 +120,42 @@ export function ProposalControls(props: {
           </button>
         </div>
         <Show when={proposed()}>
-          <button type="button" class="button-link" disabled={disabled()} onClick={propose}>
+          <button type="button" class="button-link" disabled={disabled()} onClick={offerUseUp}>
             {t("week.proposeAgain")}
           </button>
         </Show>
         <small>{t("week.proposeHint")}</small>
-        {picker()}
+      </Show>
+      <Show when={!props.readOnly && draft()}>
+        {(picked) => (
+          <Sheet labelledBy={titleId} onEscape={() => setDraft(undefined)}>
+            <div class="sheet-header">
+              <div class="page-heading">
+                <h2 id={titleId} class="dish-title">
+                  {t("useUp.title")}
+                </h2>
+              </div>
+            </div>
+            <div class="sheet-body">
+              <UseUpPicker items={props.items} picked={picked()} onChange={setDraft} />
+              <button
+                type="button"
+                class="button-primary"
+                disabled={disabled()}
+                onClick={() => {
+                  setUseUp(picked());
+                  setDraft(undefined);
+                  void proposeWeek(false);
+                }}
+              >
+                {t("week.propose")}
+              </button>
+              <button type="button" class="button-quiet" onClick={() => setDraft(undefined)}>
+                {t("slot.cancel")}
+              </button>
+            </div>
+          </Sheet>
+        )}
       </Show>
     </>
   );
@@ -152,8 +181,7 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
   const nameOf = (id: ItemId) => props.items.get(id)?.name ?? id;
 
   return (
-    <form class="slot-form" aria-label={t("useUp.title")} onSubmit={add}>
-      <h2>{t("useUp.title")}</h2>
+    <form aria-label={t("useUp.title")} onSubmit={add}>
       <p class="meta">{t("useUp.hint")}</p>
       <Show when={props.picked.length > 0}>
         <ul class="rows">
@@ -197,7 +225,9 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
 export function EffortBudgetsEditor(props: { client: MiseClient; household: WeekHousehold; week: Week }) {
   return (
     <details>
-      <summary>{t("effort.title")}</summary>
+      <summary class="section-head">
+        <h2>{t("effort.title")}</h2>
+      </summary>
       <div class="stack">
         <p class="meta">{t("effort.hint")}</p>
         <BudgetsForm
