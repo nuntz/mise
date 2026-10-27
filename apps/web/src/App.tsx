@@ -344,7 +344,8 @@ function OfflineGroceryLists(props: { client: MiseClient; household: Household }
 /**
  * The Household: what it is, kitchen mode for this device, and a row for each of its settings. Each
  * setting opens as its own page over it, `open` at once when given (Resolve Ingredients at the group
- * `resolveAt`), and back returns here, as does each change of `home` (the Household tab tapped again).
+ * `resolveAt`, the first time only), and back returns here, as does each change of `home` (the Household
+ * tab tapped again).
  */
 function HouseholdPage(props: {
   client: MiseClient;
@@ -356,6 +357,10 @@ function HouseholdPage(props: {
   onKitchenMode: (on: boolean) => void;
 }) {
   const setting = createPushedPages<HouseholdPushed>("household", props.open);
+  // Resolve Ingredients opened any other way, even back here later, opens at the top. `setting` has
+  // opened `props.open` already, so the first page change is leaving it.
+  const [resolveAt, setResolveAt] = createSignal(props.open === "resolve" ? props.resolveAt : undefined);
+  createEffect(on(setting.page, () => setResolveAt(undefined), { defer: true }));
   const status = createHouseholdStatus(props.client);
   const chips = (name: Setting) => {
     const shown: Partial<Record<Setting, StatusChip[]>> = status();
@@ -454,7 +459,7 @@ function HouseholdPage(props: {
               />
             </Match>
             <Match when={open() === "resolve"}>
-              <ResolveIngredients client={props.client} at={props.resolveAt} />
+              <ResolveIngredients client={props.client} at={resolveAt()} />
             </Match>
             <Match when={open() === "items"}>
               <ItemsSettings client={props.client} sections={props.household.storeSections} />

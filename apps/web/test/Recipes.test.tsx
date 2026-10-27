@@ -246,6 +246,26 @@ test("tapping an Unresolved chip opens Resolve Ingredients with that Ingredient 
   expect(scrolled).not.toContain(screen.getByRole("article", { name: "Flour" }));
 });
 
+test("Resolve Ingredients opened again from the Household, after an Unresolved chip opened it, opens at the top", async () => {
+  const user = userEvent.setup();
+  const scrolled = watchScrolling();
+  const { client } = fakeClient([toast]);
+  await openRecipes(client);
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+  await user.click(await screen.findByRole("button", { name: "Unresolved" }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("article", { name: "Bread" })));
+
+  await user.click(screen.getByRole("button", { name: "Household", current: false }));
+  scrolled.length = 0;
+  (document.activeElement as HTMLElement).blur();
+  await user.click(await screen.findByRole("button", { name: /^Resolve Ingredients/ }));
+
+  const group = await screen.findByRole("article", { name: "Bread" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(scrolled).not.toContain(group);
+  expect(document.activeElement).not.toBe(group);
+});
+
 /** The elements scrolled into view; jsdom has no scrolling of its own. */
 function watchScrolling() {
   const scrolled: Element[] = [];

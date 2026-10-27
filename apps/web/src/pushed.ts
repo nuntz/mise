@@ -1,6 +1,21 @@
 import { type Accessor, createSignal, onCleanup } from "solid-js";
 
 /**
+ * Pushes held back while a traversal `home` started is still to run. History runs it later, to the
+ * entry it aimed at when started, so it would take off an entry pushed in the meantime. Each push
+ * names the index it's for; undefined when no traversal is pending, for any index.
+ */
+let held: { index: string; push: () => void }[] | undefined;
+/** What each index does once history has moved, held pushes already on it. */
+const afterTraversal = new Set<() => void>();
+window.addEventListener("popstate", () => {
+  const pushes = held ?? [];
+  held = undefined;
+  for (const { push } of pushes) push();
+  for (const moved of afterTraversal) moved();
+});
+
+/**
  * Pages pushed over an index, such as a Household section over the Household page: opening one pushes
  * a history entry, so the phone's back gesture (a `popstate`) returns to the page under it. `key`
  * names this index in the history state, so pages pushed over a pushed page keep the one below.
@@ -19,17 +34,28 @@ export function createPushedPages<T extends string>(
   const depth = (from = state()) => (from[idKey] === id ? (from[depthKey] as number) : 0);
 
   const open = (to: T) => {
-    history.pushState({ ...state(), [key]: to, [idKey]: id, [depthKey]: depth() + 1 }, "");
+    const push = () => history.pushState({ ...state(), [key]: to, [idKey]: id, [depthKey]: depth() + 1 }, "");
+    if (held) held.push({ index: id, push });
+    else push();
     setPage(() => to);
     window.scrollTo?.({ top: 0 });
   };
-  const home = () => {
-    if (depth()) history.go(-depth());
+  /** Takes back this index's held pushes, if any: they'd be pages no longer open. */
+  const unhold = () => {
+    if (held) held = held.filter((entry) => entry.index !== id);
   };
-  const onPop = (event: PopStateEvent) => setPage(() => (depth(event.state ?? {}) ? event.state[key] : undefined));
-  window.addEventListener("popstate", onPop);
+  const home = () => {
+    unhold();
+    if (held) setPage(undefined);
+    else if (depth()) {
+      held = [];
+      history.go(-depth());
+    }
+  };
+  const moved = () => setPage(() => (depth() ? (history.state[key] as T) : undefined));
+  afterTraversal.add(moved);
   onCleanup(() => {
-    window.removeEventListener("popstate", onPop);
+    afterTraversal.delete(moved);
     home();
   });
   if (initial) open(initial);
