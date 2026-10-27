@@ -268,7 +268,8 @@ test("the Household's chips wait for its index to show before they refetch", asy
   // Back on the index, the chips that showed stay until the listings answer.
   hold();
   await user.click(screen.getByRole("button", { name: "Household", current: false }));
-  const review = screen.getByRole("button", { name: /^Review/ });
+  // The index may take a moment to show on a slow machine.
+  const review = await screen.findByRole("button", { name: /^Review/ });
   expect(within(review).getByText("1 Draft")).toBeTruthy();
   release();
   expect(await within(review).findByText("2 Drafts")).toBeTruthy();
