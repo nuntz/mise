@@ -233,8 +233,7 @@ export function WeekPage(props: {
             </div>
             <Show when={!readOnly()}>
               <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
-              {/* Clearing empties breakfast and lunch too, so a Week with only those planned can be cleared. */}
-              <Show when={shown().slots.some((slot) => slot.kind !== "unplanned")}>
+              <Show when={shown().slots.some(clearable)}>
                 <button type="button" class="button-danger" onClick={() => clear(shown())}>
                   {t("week.clear")}
                 </button>
@@ -278,6 +277,24 @@ export function WeekPage(props: {
         )}
       </Show>
     </section>
+  );
+}
+
+/**
+ * Whether clearing its Week changes the Slot, breakfast and lunch as much as dinner: `clear_week` keeps
+ * cooked ones and starts the rest afresh, unlinking Leftovers of them, even in the next Week.
+ */
+function clearable(slot: Slot): boolean {
+  if (slot.cookedAt !== null) return false;
+  return (
+    slot.kind !== "unplanned" ||
+    slot.note !== null ||
+    slot.locked ||
+    !slot.dinersAreDefault ||
+    slot.guests > 0 ||
+    slot.guestConstraints.length > 0 ||
+    slot.reason !== null ||
+    slot.leftovers.length > 0
   );
 }
 
@@ -425,8 +442,9 @@ function Day(props: {
 }
 
 /**
- * A Slot as the Week shows it, with one action by where it stands: nothing chosen, Choose; a Recipe
- * to cook, Cook; cooked, Rate it; rated, none. The rest is in its Recipe's sheet.
+ * A Slot as the Week shows it, with one action by where it stands: nothing chosen, Choose; Leftovers,
+ * a meal out or no meal, Change; a Recipe to cook, Cook; cooked, Rate it; rated, none. The rest is in
+ * its Recipe's sheet.
  */
 function SlotView(props: {
   client: MiseClient;
@@ -463,7 +481,8 @@ function SlotView(props: {
   const choose = () => (
     <Show when={!props.readOnly}>
       <button type="button" class="button-row" onClick={() => props.onEdit(true)}>
-        {t(`slot.choose.${props.slot.meal}`)}
+        {/* Leftovers, a meal out or no meal is decided: its one action changes that. */}
+        {t(`slot.${props.slot.kind === "unplanned" ? "choose" : "change"}.${props.slot.meal}`)}
       </button>
     </Show>
   );

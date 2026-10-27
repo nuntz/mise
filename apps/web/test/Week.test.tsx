@@ -1044,6 +1044,75 @@ test("each dinner card has one action: Choose a dinner, then Cook, then Rate it,
   expect(thursday.getByText("Again")).toBeTruthy();
 });
 
+/** Monday Leftovers, Tuesday a meal out, Wednesday no meal: decided, without a Recipe to cook. */
+function dinnersWithoutRecipe(): Week {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[2] as Slot, { kind: "leftovers" });
+  Object.assign(week.slots[5] as Slot, { kind: "eat_out" });
+  Object.assign(week.slots[8] as Slot, { kind: "skip" });
+  return week;
+}
+
+test("Leftovers, Eat out and Skip dinners have one action, to change them", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: dinnersWithoutRecipe() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  for (const day of ["Monday, October 26", "Tuesday, October 27", "Wednesday, October 28"]) {
+    expect(dinnerActions(day)).toEqual(["Change dinner"]);
+  }
+  const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Change dinner" }));
+  expect(within(tuesday).getByRole("form")).toBeTruthy();
+});
+
+test("in the pseudo-locale, a Leftovers, Eat out or Skip dinner's action doesn't say Choose", async () => {
+  setPseudoLocale(true);
+  onTestFinished(() => setPseudoLocale(false));
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: dinnersWithoutRecipe() }) });
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: /Monday/ });
+
+  for (const day of [/Monday/, /Tuesday/, /Wednesday/]) {
+    const dinner = within(screen.getByRole("region", { name: day })).getByRole("region", { name: /Đîññéŕ/ });
+    const actions = within(dinner).getAllByRole("button");
+    expect(actions.map((button) => button.textContent)).toEqual([expect.stringMatching(/^\[Çĥàñĝé đîññéŕ ·+\]$/)]);
+  }
+});
+
+test("Clear shows when a Week's only changes are on unplanned Slots, or Leftovers linked to one", async () => {
+  for (const change of [
+    { note: "Picnic" },
+    { locked: true },
+    { diners: [1], dinersAreDefault: false, servings: 1 },
+    { leftovers: [{ date: "2026-11-02", meal: "lunch" }] },
+  ]) {
+    const week = emptyWeek("2026-10-26");
+    Object.assign(week.slots[4] as Slot, change);
+    const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+    render(() => <App client={client} />);
+    await screen.findByRole("region", { name: "Monday, October 26" });
+
+    expect(screen.getByRole("button", { name: "Clear this Week" })).toBeTruthy();
+    cleanup();
+  }
+});
+
+test("Clear is hidden when only cooked meals would be left to clear, which it keeps", async () => {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-28T02:00:00.000Z",
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  expect(screen.queryByRole("button", { name: "Clear this Week" })).toBeNull();
+});
+
 test("Rate it opens the dinner's Recipe at its rating, and the rated dinner shows the Rating", async () => {
   let rated = false;
   const fake = fakeClient({

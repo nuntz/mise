@@ -325,6 +325,17 @@ describe("clearing a Week", () => {
       guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
     });
     await household.callTool("set_diners", { date: MONDAY, diners: [1] });
+    // Unplanned still, but with a note or Locked: clearing resets those too.
+    expect(
+      await household.callTool("set_slot", { date: "2026-10-28", meal: "dinner", kind: "unplanned", note: "Picnic" }),
+    ).toMatchObject({
+      ok: true,
+      value: { kind: "unplanned", note: "Picnic" },
+    });
+    expect(await household.callTool("lock_slot", { date: "2026-10-29", meal: "lunch", locked: true })).toMatchObject({
+      ok: true,
+      value: { kind: "unplanned", locked: true },
+    });
     await household.callTool("set_slot", { date: "2026-11-02", meal: "dinner", kind: "eat_out" });
 
     const cleared = weekOf(await household.callTool("clear_week", { date: "2026-10-30", confirm: true }));
