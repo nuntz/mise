@@ -18,6 +18,7 @@
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p scripts",
     "lint": "biome check .",
     "check:private": "bun scripts/check-private.ts",
+    "ci": "bun run lint && bun run typecheck && bun run check:private && bun test packages && bun run --filter @mise/web build && bun run test:worker && bun run test:web",
     "check:export": "bun scripts/check-export.ts",
     "check:stories": "bun scripts/check-story-coverage.ts",
     "wizard": "bash scripts/setup-deployment.sh"
