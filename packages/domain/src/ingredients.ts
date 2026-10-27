@@ -99,6 +99,37 @@ export function leadingAmount(raw: string): { amount: string; rest: string } | n
   return { amount: match[0].trim(), rest: text.slice(match[0].length) };
 }
 
+/**
+ * An Ingredient line with its amount scaled `by`, the rest as written; unscaled, the line as written.
+ * Kitchen mode and the Day Sheet both write lines this way, so the phone and the counter agree.
+ */
+export function scaledLine(ingredient: Ingredient, by: number, locale: string): string {
+  const { amount, unit, name, note } = scaleIngredient(ingredient, by);
+  if (by === 1 || !amount) return ingredient.raw;
+  const number = (value: number) => kitchenNumber(value, locale);
+  const scaled = amount.min === amount.max ? number(amount.min) : `${number(amount.min)}–${number(amount.max)}`;
+  const written = leadingAmount(ingredient.raw);
+  if (written) return `${scaled} ${written.rest}`;
+  return [scaled, unit?.replace("_", " "), name].filter(Boolean).join(" ") + (note ? `, ${note}` : "");
+}
+
+const FRACTIONS: [number, string][] = [
+  [1 / 8, "⅛"],
+  [1 / 4, "¼"],
+  [1 / 3, "⅓"],
+  [1 / 2, "½"],
+  [2 / 3, "⅔"],
+  [3 / 4, "¾"],
+];
+
+/** 1.5 as "1½", the way a cook reads it; a number that isn't a common fraction, to one decimal. */
+function kitchenNumber(value: number, locale: string): string {
+  const whole = Math.floor(value);
+  const fraction = FRACTIONS.find(([part]) => Math.abs(value - whole - part) < 0.01);
+  if (fraction) return `${whole > 0 ? whole : ""}${fraction[1]}`;
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value);
+}
+
 const WHOLE_METRIC = new Set<IngredientUnit>(["mg", "g", "ml", "cl", "dl"]);
 const DECIMAL_METRIC = new Set<IngredientUnit>(["kg", "l"]);
 /** Below 1, an eighth is the smallest step; above it, quarters and thirds. */

@@ -1,4 +1,11 @@
-import { bearerToken, calendarTokenOf, DAY_SHEET_PATH, HOUSEHOLD_AGENT, HOUSEHOLD_PATH } from "@mise/domain";
+import {
+  bearerToken,
+  calendarTokenOf,
+  DAY_SHEET_PATH,
+  type DaySheet,
+  HOUSEHOLD_AGENT,
+  HOUSEHOLD_PATH,
+} from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { routeAgentRequest } from "agents";
 import { resolveCaller, withCaller } from "./identity";
@@ -54,7 +61,30 @@ async function daySheet(request: Request, env: Env): Promise<Response> {
     return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
   }
   if (answer.status === "not_set_up") return json({ error: "not_set_up" }, 409);
-  return json(answer.daySheet, 200);
+  const etag = await daySheetETag(answer.daySheet);
+  if (matches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: { "Content-Type": "application/json", "Cache-Control": "private, no-cache", ETag: etag },
+    });
+  }
+  return json(answer.daySheet, 200, { ETag: etag });
+}
+
+/** A hash of what the Day Sheet says, leaving out when it was made, so an unchanged day keeps its ETag. */
+async function daySheetETag({ generatedAt: _, ...said }: DaySheet): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(said)));
+  const hex = Array.from(new Uint8Array(digest).slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `"${hex}"`;
+}
+
+/** Whether an `If-None-Match` header names `etag` (weakly, as RFC 9110 compares them) or is `*`. */
+function matches(ifNoneMatch: string | null, etag: string): boolean {
+  if (!ifNoneMatch) return false;
+  return ifNoneMatch.split(",").some((tag) => {
+    const named = tag.trim();
+    return named === "*" || named.replace(/^W\//, "") === etag;
+  });
 }
 
 function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {

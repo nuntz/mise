@@ -1,4 +1,6 @@
-import { type DaySheet, daySheet, KitchenDisplay, localDate } from "@mise/domain";
+import { addDays, type DaySheet, daySheet, KitchenDisplay, localDate, type Recipe, type RecipeId } from "@mise/domain";
+import { readPrepAhead } from "./calendar";
+import { readRecipe } from "./recipes";
 import { newToken, tokenHash } from "./tokens";
 import { type Handlers, readSettings } from "./tools";
 import { readSlots } from "./weeks";
@@ -68,5 +70,15 @@ export function readDaySheet(sql: SqlStorage, token: string, now: Date): DayShee
   const settings = readSettings(sql);
   if (!settings) return { status: "not_set_up" };
   const date = localDate(now, settings.timezone);
-  return { status: "ok", daySheet: daySheet({ household: settings, slots: readSlots(sql, date, date), now }) };
+  // Today's Slots with their Recipes; tomorrow's only for the Prep-ahead notes due today.
+  const slots = readSlots(sql, date, addDays(date, 1));
+  const recipes = new Map<RecipeId, Recipe>();
+  for (const slot of slots) {
+    const recipe = slot.date === date && slot.recipe ? readRecipe(sql, slot.recipe.id) : null;
+    if (recipe) recipes.set(recipe.id, recipe);
+  }
+  return {
+    status: "ok",
+    daySheet: daySheet({ household: settings, slots, recipes, prepAhead: readPrepAhead(sql), now }),
+  };
 }

@@ -11,6 +11,8 @@ It differs from the Calendar Feed's token in four ways, because a Kitchen Displa
 
 The Day Sheet (`daySheet` in `packages/domain`) carries no Member or Diner names, Allergens, Constraints, Guest details, notes, Override reasons, Ratings, photos or URLs (nuntz/mise-display ADR 0001). A Conflict shows only as `needsReview`. Its schema is strict, so a test that parses a response finds any field added by mistake. `generatedAt` carries the Household's UTC offset at that moment, because the display has no timezone database and works out local times from it.
 
+Each recipe Slot carries its Recipe, scaled to what the Slot is cooked for, its Ingredient lines written by the same `scaledLine` Kitchen mode uses, so the device does no arithmetic. The `ETag` is a hash of the Day Sheet without `generatedAt`, so an hourly poll of an unchanged day gets a 304. The JSON is held to 64 KB, which the display can keep: past that, each Recipe gets an even share of the room, and the line that would breach its share is cut at a word and ends in "… continued in Mise".
+
 ## Consequences
 
 - Pairing needs no set-up Household. A display paired early gets 409 until set-up is done, then the Day Sheet.

@@ -52,6 +52,7 @@ import {
   type PushKey,
   type PushMessage,
   parseToolInput,
+  prepAheadDue,
   prepAheadMessage,
   presentTurn,
   proposalWeekOn,
@@ -789,8 +790,7 @@ class HouseholdAgent extends Agent<Env> {
       const tomorrow = addDays(today, 1);
       const prepAhead = readPrepAhead(sql);
       for (const slot of readSlots(sql, tomorrow, tomorrow)) {
-        const note =
-          slot.meal === "dinner" && slot.kind === "recipe" && slot.recipe ? prepAhead.get(slot.recipe.id) : undefined;
+        const note = prepAheadDue(slot, prepAhead);
         if (note && slot.recipe) await this.push(prepAheadMessage(slot.recipe, note));
       }
     } catch (error) {

@@ -40,6 +40,14 @@ export type CalendarFeedInput = {
 };
 
 /**
+ * The Prep-ahead note `slot` needs doing the day before: its Recipe's, if it is a dinner with a
+ * Recipe that has one. The Calendar Feed, the morning's Notification and the Day Sheet all go by it.
+ */
+export function prepAheadDue(slot: Slot, prepAhead: ReadonlyMap<RecipeId, string>): string | undefined {
+  return slot.meal === "dinner" && slot.kind === "recipe" && slot.recipe ? prepAhead.get(slot.recipe.id) : undefined;
+}
+
+/**
  * The plan as an iCalendar feed (RFC 5545): one event per planned dinner at the Household's dinner
  * time, in its timezone, and one all-day event the day before for a Recipe's Prep-ahead note.
  */
@@ -60,7 +68,7 @@ export function calendarFeed({ household, dinners, prepAhead, origin, now }: Cal
       ...linkedRecipe(slot).map((id) => `URL:${recipeLink(origin, id)}`),
       "END:VEVENT",
     ];
-    const note = slot.kind === "recipe" && slot.recipe ? prepAhead.get(slot.recipe.id) : undefined;
+    const note = prepAheadDue(slot, prepAhead);
     if (!note || !slot.recipe) return [dinner];
     const prep = [
       "BEGIN:VEVENT",

@@ -1,9 +1,9 @@
-import type { Recipe, RecipeId } from "@mise/domain";
+import { type Recipe, type RecipeId, scaledLine } from "@mise/domain";
 import { createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
-import { scaledForText, scaledLine } from "./Kitchen";
+import { scaledForText } from "./Kitchen";
 import { t } from "./messages";
 import { savedRecipe, saveRecipe } from "./offline";
 import { Sheet } from "./Sheet";
