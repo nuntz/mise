@@ -758,6 +758,21 @@ article:not([class]) {
   gap: var(--space-3);
 }
 
+/* One action with what it says and how it went, such as Suggest for all, set apart in a hairline box. */
+.block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.block > .banner {
+  align-self: stretch;
+}
+
 /* ---------- States: empty and loading ---------- */
 
 .empty {

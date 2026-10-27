@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { App } from "../src/App";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 const household: Household = {
   name: "The Tremblays",
@@ -127,8 +128,14 @@ test("Unresolved Ingredients are listed by text, with their lines and Recipes", 
   await openPage("Resolve Ingredients");
 
   const gochujang = await screen.findByRole("article", { name: "Gochujang" });
-  expect(within(gochujang).getByText("2 lines, in Bibimbap, Tteokbokki")).toBeTruthy();
-  expect(within(gochujang).getByText("1 tbsp Gochujang")).toBeTruthy();
+  expect(
+    within(gochujang).getByText("2 lines, in Bibimbap, Tteokbokki · “2 tbsp gochujang” · “1 tbsp Gochujang”"),
+  ).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Resolve Ingredients" }).nextElementSibling?.textContent).toBe(
+    "3 Unresolved",
+  );
+  const head = screen.getByRole("heading", { name: "Unresolved" });
+  expect(head.parentElement?.querySelector(".chip")?.textContent).toBe("3");
   expect(screen.getAllByRole("article").map((article) => article.getAttribute("aria-label"))).toEqual([
     "Gochujang",
     "Beurre",
@@ -137,6 +144,14 @@ test("Unresolved Ingredients are listed by text, with their lines and Recipes", 
   const blank = screen.getByRole("article", { name: "(no name)" });
   expect(within(blank).getByText("These lines name no Item. Edit their Recipes to say what they are.")).toBeTruthy();
   expect(within(blank).queryByRole("button")).toBeNull();
+});
+
+test("an amber banner names the Recipes whose Allergens are unknown until these are resolved", async () => {
+  await openPage("Resolve Ingredients");
+
+  // Toast has two Unresolved lines and is named once.
+  const banner = await screen.findByText("Bibimbap, Tteokbokki, Toast: Allergens unknown until these are resolved.");
+  expect(banner.closest(".banner-amber")).toBeTruthy();
 });
 
 test("a group is mapped to an existing Item by its name", async () => {
@@ -328,9 +343,15 @@ test("Suggest for all asks in batches until no text is left", async () => {
     ],
   });
 
-  await user.click(await screen.findByRole("button", { name: "Suggest for all" }));
+  const suggestAll = await screen.findByRole("button", { name: "Suggest for all" });
+  // A secondary in one bordered block with its status line, so the page has no primary of its own.
+  expect(suggestAll.classList.contains("button-secondary")).toBe(true);
+  expect(primaries()).toEqual([]);
+  await user.click(suggestAll);
 
-  expect(await screen.findByText("Suggestions made: 1. Every Ingredient has been asked about.")).toBeTruthy();
+  const status = await screen.findByText("Suggestions made: 1. Every Ingredient has been asked about.");
+  expect(suggestAll.closest(".block")).toBeTruthy();
+  expect(status.closest(".block")).toBe(suggestAll.closest(".block"));
   expect(calls.filter((call) => call.name === "request_suggestions").map((call) => call.input)).toEqual([{}, {}]);
 });
 

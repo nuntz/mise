@@ -62,7 +62,16 @@ export function ResolveIngredients(props: { client: MiseClient; at?: string }) {
 
   return (
     <section>
-      <h2>{t("resolve.title")}</h2>
+      <header class="page-heading">
+        <h2>{t("resolve.title")}</h2>
+        <Show when={loaded.groups?.length}>
+          {(count) => (
+            <p class="meta">
+              {t(count() === 1 ? "resolve.unresolvedOne" : "resolve.unresolved", { count: String(count()) })}
+            </p>
+          )}
+        </Show>
+      </header>
       <Show when={failed()}>
         <p class="banner banner-warn" role="alert">
           {t("app.error")}
@@ -71,7 +80,14 @@ export function ResolveIngredients(props: { client: MiseClient; at?: string }) {
       <Show when={loaded.groups}>
         {(groups) => (
           <Show when={groups().length > 0} fallback={<Done>{t("resolve.none")}</Done>}>
+            <p class="banner banner-amber" role="status">
+              {t("resolve.unknown", { recipes: recipeTitles(groups()).join(", ") })}
+            </p>
             <SuggestAll client={props.client} />
+            <div class="section-head">
+              <h3>{t("resolve.section")}</h3>
+              <span class="chip">{groups().length}</span>
+            </div>
             <ul class="rows">
               <For each={groups()}>
                 {(group) => (
@@ -96,6 +112,11 @@ export function ResolveIngredients(props: { client: MiseClient; at?: string }) {
       </Show>
     </section>
   );
+}
+
+/** Every Recipe with an Unresolved Ingredient, each once, in the order the groups first name them. */
+function recipeTitles(groups: UnresolvedGroup[]): string[] {
+  return [...new Map(groups.flatMap((group) => group.recipes).map((recipe) => [recipe.id, recipe.title])).values()];
 }
 
 /**
@@ -131,21 +152,23 @@ function SuggestAll(props: { client: MiseClient }) {
   };
 
   return (
-    <div>
+    <div class="block">
       <p>{t("suggest.intro")}</p>
-      <button type="button" disabled={status().state === "asking"} onClick={() => void run()}>
+      <button type="button" class="button-secondary" disabled={status().state === "asking"} onClick={() => void run()}>
         {t("suggest.all")}
       </button>
       <Switch>
         <Match when={status().state === "asking"}>
-          <p role="status">
+          <p class="meta" role="status">
             {status().remaining === undefined
               ? t("suggest.asking")
               : t("suggest.left", { remaining: String(status().remaining) })}
           </p>
         </Match>
         <Match when={status().state === "done"}>
-          <p role="status">{t("suggest.done", { count: String(status().made) })}</p>
+          <p class="meta" role="status">
+            {t("suggest.done", { count: String(status().made) })}
+          </p>
         </Match>
         <Match when={status().state === "failed"}>
           <p class="banner banner-warn" role="alert">
@@ -191,12 +214,20 @@ function GroupRow(props: {
           {t(props.group.count === 1 ? "resolve.countOne" : "resolve.count", {
             count: String(props.group.count),
             recipes: props.group.recipes.map((recipe) => recipe.title).join(", "),
+            lines: props.group.lines.map((line) => t("resolve.line", { line })).join(" · "),
           })}
         </p>
-        <ul class="row-meta">
-          <For each={props.group.lines}>{(line) => <li>{line}</li>}</For>
-        </ul>
       </div>
+      <Show when={props.group.text !== "" && mode() === "idle"}>
+        <div class="row-end">
+          <button type="button" onClick={() => setMode("map")}>
+            {t("resolve.map")}
+          </button>
+          <button type="button" onClick={() => setMode("create")}>
+            {t("resolve.create")}
+          </button>
+        </div>
+      </Show>
       <Show when={props.group.text !== "" && props.suggestion}>
         {(suggestion) => (
           <SuggestionPanel
@@ -213,16 +244,6 @@ function GroupRow(props: {
         {/* A line with no name ("2 cups") can only be fixed by editing its Recipe. */}
         <Match when={props.group.text === ""}>
           <p>{t("resolve.blankHint")}</p>
-        </Match>
-        <Match when={mode() === "idle"}>
-          <div class="row-end">
-            <button type="button" onClick={() => setMode("map")}>
-              {t("resolve.map")}
-            </button>
-            <button type="button" onClick={() => setMode("create")}>
-              {t("resolve.create")}
-            </button>
-          </div>
         </Match>
         <Match when={mode() === "edit" && props.suggestion}>
           {(suggestion) => {
