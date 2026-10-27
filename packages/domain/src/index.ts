@@ -10,6 +10,7 @@ export * from "./household";
 export * from "./imports";
 export * from "./ingredients";
 export * from "./items";
+export * from "./kitchenDisplay";
 export * from "./llm";
 export * from "./members";
 export * from "./pages";

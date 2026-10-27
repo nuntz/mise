@@ -150,6 +150,14 @@ _Avoid_: Alert, nudge, reminder
 The plan's dinners as an iCalendar subscription, read without signing in by whoever has its token; read-only.
 _Avoid_: Calendar sync, export
 
+**Kitchen Display**:
+An Xteink X4 Classic running Mise Display firmware, paired to the Household with its own token, showing the Household's day read-only.
+_Avoid_: Reader, e-reader, device, screen
+
+**Day Sheet**:
+A read-only snapshot of one Household date for a Kitchen Display: that date's Slots, each Recipe scaled to what its Slot is cooked for, and the Prep-ahead notes due that day. It carries nothing private.
+_Avoid_: Menu, feed, payload, snapshot
+
 **Kitchen mode**:
 A Recipe cooked one step at a time in the high-contrast theme, with the screen kept awake and the Ingredients a tap away, scaled to what its Slot is cooked for (its Leftovers included). Also the name of that theme, which a device can use everywhere.
 _Avoid_: Cooking mode, dark mode

@@ -23,6 +23,7 @@ import { readDriveDocs } from "./drive";
 import { groceryHandlers, readGroceryBuilds, readGroceryLines, readStoreSections } from "./grocery";
 import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
+import { kitchenDisplayHandlers, readKitchenDisplays } from "./kitchenDisplays";
 import { pushHandlers, readPushSubscriptions } from "./pushDevices";
 import { readRecipes, recipeHandlers } from "./recipes";
 import { readStaples, stapleHandlers } from "./staples";
@@ -180,6 +181,7 @@ export const handlers: Handlers = {
   ...groceryHandlers,
   ...stapleHandlers,
   ...calendarHandlers,
+  ...kitchenDisplayHandlers,
   ...pushHandlers,
 
   // Called when the call is made, so that confirmations.ts, which reads through these handlers, can import them.
@@ -211,6 +213,7 @@ export function parseStoredHousehold(sql: SqlStorage): void {
   readGroceryLines(sql);
   readStaples(sql);
   readCalendarToken(sql);
+  readKitchenDisplays(sql);
   readDriveDocs(sql);
   readChatTurns(sql);
   readPushSubscriptions(sql);

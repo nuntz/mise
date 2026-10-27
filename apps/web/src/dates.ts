@@ -9,3 +9,8 @@ export function formatDate(date: LocalDate, locale: Locale, options: Intl.DateTi
 export function shortDate(date: LocalDate, locale: Locale): string {
   return formatDate(date, locale, { month: "short", day: "numeric" });
 }
+
+/** An instant on this device's clock, such as "Oct 26, 2026, 8:02 a.m.". */
+export function whenText(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}

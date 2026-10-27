@@ -33,6 +33,7 @@ import {
   RunPaprikaImportInput,
 } from "./imports";
 import { Item, NewItem, ResolveIngredientInput, ResolveIngredientOutput, StoreSection, UpdateItemInput } from "./items";
+import { AddKitchenDisplayInput, KitchenDisplay, NewKitchenDisplay, RevokeKitchenDisplayInput } from "./kitchenDisplay";
 import { Member, NewMember, RemoveMemberInput, UpdateMemberConstraintsInput, UpdateMemberInput } from "./members";
 import { PushDevice, PushDeviceInput, PushKey, SubscribePushInput } from "./push";
 import {
@@ -509,6 +510,26 @@ export const tools = {
   rotate_calendar_token: defineTool({
     input: z.object({}).strict(),
     output: CalendarToken,
+    changes: "household",
+  }),
+  /** Every Kitchen Display paired to the Household, oldest first. */
+  list_kitchen_displays: defineTool({
+    input: z.object({}).strict(),
+    output: z.array(KitchenDisplay),
+  }),
+  /**
+   * Pairs a new Kitchen Display: makes its token, which reads only the Day Sheet. Returns it with the
+   * token, shown this once; only a hash is kept.
+   */
+  add_kitchen_display: defineTool({
+    input: AddKitchenDisplayInput,
+    output: NewKitchenDisplay,
+    changes: "household",
+  }),
+  /** Revokes a Kitchen Display's token: its next request is refused. Refuses an unknown id (`not_found`). Returns it. */
+  revoke_kitchen_display: defineTool({
+    input: RevokeKitchenDisplayInput,
+    output: KitchenDisplay,
     changes: "household",
   }),
   /**

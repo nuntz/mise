@@ -444,6 +444,20 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 25,
+    statements: [
+      // Each Kitchen Display paired to the Household: what a person calls it, the SHA-256 of its
+      // token (hex; the token itself is never kept), and when it was added and last read the Day Sheet.
+      `CREATE TABLE kitchen_display (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        added_at TEXT NOT NULL,
+        last_used_at TEXT
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

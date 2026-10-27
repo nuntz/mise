@@ -65,6 +65,19 @@ export function utcOffset(instant: Date, timezone: string): number {
 }
 
 /**
+ * `instant` as RFC 3339 to the second, in the wall-clock time of `timezone` with its UTC offset
+ * then, such as 2026-10-25T01:30:00+02:00.
+ */
+export function zonedTimestamp(instant: Date, timezone: string): string {
+  const offset = Math.round(utcOffset(instant, timezone) / MINUTE_MS);
+  const local = new Date(Math.floor(instant.getTime() / 1000) * 1000 + offset * MINUTE_MS);
+  const sign = offset < 0 ? "-" : "+";
+  const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0");
+  const minutes = String(Math.abs(offset) % 60).padStart(2, "0");
+  return `${local.toISOString().slice(0, 19)}${sign}${hours}:${minutes}`;
+}
+
+/**
  * Every change of `timezone`'s offset after `from` and up to `to`, to the minute. Changes are found
  * a day apart at most, so two in one day count as one (or none, if they cancel out).
  */

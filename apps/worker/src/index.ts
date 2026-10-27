@@ -1,4 +1,4 @@
-import { calendarTokenOf, HOUSEHOLD_AGENT, HOUSEHOLD_PATH } from "@mise/domain";
+import { bearerToken, calendarTokenOf, DAY_SHEET_PATH, HOUSEHOLD_AGENT, HOUSEHOLD_PATH } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { routeAgentRequest } from "agents";
 import { resolveCaller, withCaller } from "./identity";
@@ -11,6 +11,10 @@ export default Sentry.withSentry(sentryOptions, {
     const { pathname } = new URL(request.url);
     // The calendar feed bypasses Access and carries its own token (ADR 0019).
     if (pathname.startsWith("/cal/")) return calendarFeed(request, env);
+    // So does the Day Sheet, whose token comes in the Authorization header (ADR 0027). Access may
+    // bypass the paths under it too, so the Worker answers those itself rather than serve the app.
+    if (pathname === DAY_SHEET_PATH) return daySheet(request, env);
+    if (pathname.startsWith("/kitchen-display/")) return json({ error: "not_found" }, 404);
     // One household per deployment: refuse any other agent instance.
     if (pathname !== HOUSEHOLD_PATH && !pathname.startsWith(`${HOUSEHOLD_PATH}/`)) {
       return new Response("Not found", { status: 404 });
@@ -38,5 +42,25 @@ async function calendarFeed(request: Request, env: Env): Promise<Response> {
       "Referrer-Policy": "no-referrer",
       "X-Robots-Tag": "noindex",
     },
+  });
+}
+
+/** A Kitchen Display's Day Sheet: always JSON, never a redirect, whatever the answer. */
+async function daySheet(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { Allow: "GET" });
+  const token = bearerToken(request.headers.get("Authorization"));
+  const answer = token ? await env.Household.getByName(HOUSEHOLD_AGENT.name).daySheet(token) : null;
+  if (!answer || answer.status === "unauthorized") {
+    return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+  }
+  if (answer.status === "not_set_up") return json({ error: "not_set_up" }, 409);
+  return json(answer.daySheet, 200);
+}
+
+function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    // The plan is the Household's: keep it out of shared caches.
+    headers: { "Content-Type": "application/json", "Cache-Control": "private, no-cache", ...headers },
   });
 }

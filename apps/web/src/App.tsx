@@ -23,6 +23,7 @@ import { IMPORT_METHODS, type ImportMethod, ImportPage } from "./Import";
 import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
+import { KitchenDisplaySettings } from "./KitchenDisplays";
 import { MembersSettings } from "./MembersSettings";
 import { setLocale, t } from "./messages";
 import { NotificationSettings } from "./Notifications";
@@ -54,6 +55,7 @@ type Setting =
   | "members"
   | "settings"
   | "calendar"
+  | "displays"
   | "notifications"
   | "review"
   | "import"
@@ -69,7 +71,7 @@ const settingOf = (page: HouseholdPushed): Setting => (importMethod(page) ? "imp
 /** The Household page's rows, in their groups. */
 const SETTING_GROUPS: { group: "people" | "planning" | "recipes"; settings: Setting[] }[] = [
   { group: "people", settings: ["members"] },
-  { group: "planning", settings: ["settings", "calendar", "notifications"] },
+  { group: "planning", settings: ["settings", "calendar", "displays", "notifications"] },
   { group: "recipes", settings: ["review", "import", "resolve", "items", "tag"] },
 ];
 
@@ -406,6 +408,9 @@ function HouseholdPage(props: {
             </Match>
             <Match when={open() === "calendar"}>
               <CalendarSettings client={props.client} />
+            </Match>
+            <Match when={open() === "displays"}>
+              <KitchenDisplaySettings client={props.client} />
             </Match>
             <Match when={open() === "notifications"}>
               <NotificationSettings client={props.client} />

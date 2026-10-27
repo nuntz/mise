@@ -9,6 +9,7 @@ import {
 } from "@mise/domain";
 import { createEffect, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
+import { whenText } from "./dates";
 import { errorText } from "./errors";
 import { FilePicker } from "./FilePicker";
 import { keepFresh } from "./fresh";
@@ -656,8 +657,4 @@ export function flagText(flag: ImportFlag): string {
   return flag.kind === "merge" || flag.duplicateOf === null
     ? t("import.merge", { title: flag.recipe.title })
     : t("import.duplicate", { title: flag.recipe.title, other: flag.duplicateOf.title });
-}
-
-function whenText(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }

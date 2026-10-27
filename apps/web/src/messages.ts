@@ -176,6 +176,7 @@ const en = {
   "nav.grocery": "Groceries",
   "nav.pantry": "Pantry",
   "nav.calendar": "Calendar",
+  "nav.displays": "Kitchen Displays",
   "nav.notifications": "Notifications",
   "nav.settings": "Settings",
 
@@ -203,6 +204,25 @@ const en = {
   "calendar.rotateWarning":
     "Calendars subscribed with the current link will stop updating. Everyone will need to subscribe again with the new one.",
   "calendar.rotateConfirm": "Rotate now",
+
+  "kitchenDisplays.title": "Kitchen Displays",
+  "kitchenDisplays.intro":
+    "A Kitchen Display shows today's meals on the counter. It reads only today's plan: no names, Allergens or notes.",
+  "kitchenDisplays.none": "No Kitchen Display is paired.",
+  "kitchenDisplays.lastUsed": "Last updated {when}",
+  "kitchenDisplays.unused": "Not used yet",
+  "kitchenDisplays.label": "Name",
+  "kitchenDisplays.labelPlaceholder": "Kitchen counter",
+  "kitchenDisplays.pair": "Pair a Kitchen Display",
+  "kitchenDisplays.token": "Token",
+  "kitchenDisplays.tokenOnce":
+    "Copy this token into the Kitchen Display now: it won't be shown again. Anyone with it can see today's plan.",
+  "kitchenDisplays.done": "Done",
+  "kitchenDisplays.revoke": "Revoke",
+  "kitchenDisplays.revokeLabel": "Revoke {label}",
+  "kitchenDisplays.revokeTitle": "Revoke {label}?",
+  "kitchenDisplays.revokeWarning": "It will stop showing the plan straight away. To use it again, pair it again.",
+  "kitchenDisplays.revokeConfirm": "Revoke",
 
   "notifications.title": "Notifications",
   "notifications.intro":

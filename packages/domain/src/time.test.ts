@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localDate, nextOccurrence, offsetTransitions } from "./time";
+import { localDate, nextOccurrence, offsetTransitions, zonedTimestamp } from "./time";
 
 describe("nextOccurrence", () => {
   test("a time already past today is tomorrow", () => {
@@ -82,5 +82,22 @@ describe("offsetTransitions", () => {
     expect(
       offsetTransitions("Asia/Kolkata", new Date("2026-01-01T00:00:00Z"), new Date("2027-01-01T00:00:00Z")),
     ).toEqual([]);
+  });
+});
+
+describe("zonedTimestamp", () => {
+  test("gives the wall-clock time with the offset in force, on the night the clocks go back", () => {
+    // Paris leaves CEST (UTC+2) at 03:00 on 25 October 2026: 23:30 UTC the night before is 01:30 CEST.
+    expect(zonedTimestamp(new Date("2026-10-24T23:30:00Z"), "Europe/Paris")).toBe("2026-10-25T01:30:00+02:00");
+    // And two hours later, 02:30 CET.
+    expect(zonedTimestamp(new Date("2026-10-25T01:30:00Z"), "Europe/Paris")).toBe("2026-10-25T02:30:00+01:00");
+  });
+
+  test("west of UTC, and to the second", () => {
+    expect(zonedTimestamp(new Date("2026-10-26T15:02:07.999Z"), "America/Vancouver")).toBe("2026-10-26T08:02:07-07:00");
+  });
+
+  test("an offset with minutes", () => {
+    expect(zonedTimestamp(new Date("2026-10-26T00:00:00Z"), "Asia/Kolkata")).toBe("2026-10-26T05:30:00+05:30");
   });
 });

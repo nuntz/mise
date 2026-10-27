@@ -192,7 +192,7 @@ test("Household is the fifth tab, and opens as an index of its sections", async 
     ),
   ).toEqual([
     ["Members"],
-    ["Settings", "Calendar", "Notifications"],
+    ["Settings", "Calendar", "Kitchen Displays", "Notifications"],
     ["Review", "Import", "Resolve Ingredients", "Items", "Tag Recipes"],
   ]);
 });

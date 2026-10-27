@@ -91,6 +91,7 @@ import { type Drive, DriveError, driveRevision, openDrive, recordDriveDocs } fro
 import { callerFrom } from "./identity";
 import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport } from "./imports";
 import { readCatalogue } from "./items";
+import { type DaySheetAnswer, readDaySheet } from "./kitchenDisplays";
 import { fetchPhoto, readLink } from "./links";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
@@ -856,6 +857,14 @@ class HouseholdAgent extends Agent<Env> {
    */
   async calendarFeed(token: string, origin: string): Promise<string | null> {
     return readCalendarFeed(this.ctx.storage.sql, token, origin, new Date());
+  }
+
+  /**
+   * Today's Day Sheet for the Kitchen Display holding `token`. Called by the Worker over RPC for
+   * `DAY_SHEET_PATH`, which bypasses Access; never callable over the WebSocket.
+   */
+  async daySheet(token: string): Promise<DaySheetAnswer> {
+    return readDaySheet(this.ctx.storage.sql, token, new Date());
   }
 
   /**

@@ -7,6 +7,8 @@ import * as pulumi from "@pulumi/pulumi";
 /** Must match `name` and the R2 `bucket_name` in apps/worker/wrangler.jsonc. */
 const WORKER_NAME = "mise";
 const BUCKET_NAME = "mise";
+/** Must match `DAY_SHEET_PATH` in packages/domain; apps/worker/wrangler.jsonc runs the Worker first for it. */
+const DAY_SHEET_PATH = "/kitchen-display/v1/day-sheet";
 
 const config = new pulumi.Config("mise");
 const accountId = config.require("accountId");
@@ -32,7 +34,7 @@ if (allowedEmails.length === 0 && !allowedEmailDomain) {
 
 new cloudflare.R2Bucket("photos-and-exports", { accountId, name: BUCKET_NAME });
 
-// Access: Members sign in with Google; the calendar feed carries its own token instead.
+// Access: Members sign in with Google; the calendar feed and the Day Sheet carry their own tokens instead.
 const google = new cloudflare.ZeroTrustAccessIdentityProvider("google", {
   accountId,
   name: "Google",
@@ -60,6 +62,13 @@ const calendarFeedBypass = new cloudflare.ZeroTrustAccessPolicy("calendar-feed",
   includes: [{ everyone: {} }],
 });
 
+const daySheetBypass = new cloudflare.ZeroTrustAccessPolicy("day-sheet", {
+  accountId,
+  name: "Mise: Kitchen Display Day Sheet",
+  decision: "bypass",
+  includes: [{ everyone: {} }],
+});
+
 const app = new cloudflare.ZeroTrustAccessApplication("mise", {
   accountId,
   name: "Mise",
@@ -78,6 +87,15 @@ new cloudflare.ZeroTrustAccessApplication("calendar-feed", {
   type: "self_hosted",
   domain: `${hostname}/cal/*`,
   policies: [{ id: calendarFeedBypass.id, precedence: 1 }],
+});
+
+// Only the Day Sheet's exact path, which a Kitchen Display reads with a bearer token (ADR 0027).
+new cloudflare.ZeroTrustAccessApplication("day-sheet", {
+  accountId,
+  name: "Mise Kitchen Display Day Sheet",
+  type: "self_hosted",
+  domain: `${hostname}${DAY_SHEET_PATH}`,
+  policies: [{ id: daySheetBypass.id, precedence: 1 }],
 });
 
 // The custom domain needs the Worker to exist, and `wrangler deploy` needs the bucket, so a brand-new

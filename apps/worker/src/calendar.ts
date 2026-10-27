@@ -1,4 +1,5 @@
 import { addDays, CalendarToken, calendarFeed, localDate, type RecipeId, type ToolResult } from "@mise/domain";
+import { newToken } from "./tokens";
 import { type Handlers, notSetUp, readSettings } from "./tools";
 import { readSlots } from "./weeks";
 
@@ -52,15 +53,6 @@ export function readPrepAhead(sql: SqlStorage): Map<RecipeId, string> {
       .toArray()
       .map((row) => [row.id, row.prep_ahead]),
   );
-}
-
-/** 256 random bits, URL-safe. */
-function newToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
 }
 
 /** Compares tokens in constant time, so how long a refusal takes tells nothing about the token. */
