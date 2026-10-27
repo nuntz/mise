@@ -449,7 +449,7 @@ export function FillDraft(props: { client: MiseClient; draft: { id: number; titl
       when={made()}
       fallback={
         // Not a form of its own: it may sit inside the link's form.
-        <div>
+        <div class="stack">
           <ScreenshotPicker
             label={t("fill.screenshots", { title: props.draft.title })}
             disabled={busy()}

@@ -78,8 +78,8 @@ async function seed(): Promise<Map<string, number>> {
 
 /**
  * What the screens past the Week need to show more than their empty states: a Recipe with
- * Unresolved Ingredients and, given a model, Suggestions for them, a link-only Draft to review,
- * Staples due and run low, a Grocery List and a calendar link.
+ * Unresolved Ingredients and, given a model, Suggestions for them, a Recipe to tag, a link-only
+ * Draft to review, Staples due and run low, a Grocery List and a calendar link.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -92,6 +92,15 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
     steps: ["Cook the rice.", "Fry the eggs.", "Top the rice with eggs, shiso and furikake."],
   })) as { id: number };
   ids.set("Shiso Rice Bowls", resolving.id);
+  // A Recipe with no main protein, for Tag Recipes to list.
+  await call(agent, "create_recipe", {
+    title: "Tomato Soup",
+    baseServings: 4,
+    effortMinutes: 30,
+    cuisine: "american",
+    ingredients: ["2 cans whole tomatoes", "1 onion", "2 cups vegetable stock"],
+    steps: ["Soften the onion.", "Simmer with the tomatoes and stock, then blend."],
+  });
   // A link Mise can't read becomes a link-only Draft; without a reachable model it may refuse instead.
   try {
     await call(agent, "import_url", { url: "https://recipes.example.invalid/grandmas-dumplings" });

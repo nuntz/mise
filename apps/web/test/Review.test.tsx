@@ -299,7 +299,7 @@ test("says when nothing is waiting", async () => {
   expect(await screen.findByText("Nothing is waiting on you.")).toBeTruthy();
 });
 
-test("a link-only Draft shows its link, and its recipe's text is pasted into it there", async () => {
+test("a link-only Draft shows its link as its domain, and its recipe's text is pasted into it there", async () => {
   const link = "https://recipes.example.com/sticky-toffee-pudding";
   const linkOnly: Recipe = {
     ...dal,
@@ -314,7 +314,7 @@ test("a link-only Draft shows its link, and its recipe's text is pasted into it 
   await openReview(client);
 
   const draft = await screen.findByRole("article", { name: "Sticky toffee pudding" });
-  expect(within(draft).getByRole("link", { name: link }).getAttribute("href")).toBe(link);
+  expect(within(draft).getByRole("link", { name: "recipes.example.com" }).getAttribute("href")).toBe(link);
   expect(within(draft).getByText(/could not read a recipe at its link/)).toBeTruthy();
   expect(within(draft).queryByRole("button", { name: "Accept" })).toBeNull();
 
@@ -340,7 +340,7 @@ test("a TikTok or Instagram link-only Draft shows its link, and screenshots of i
   await openReview(client);
 
   const draft = await screen.findByRole("article", { name: "Instagram reel" });
-  expect(within(draft).getByRole("link", { name: reel }).getAttribute("href")).toBe(reel);
+  expect(within(draft).getByRole("link", { name: "instagram.com" }).getAttribute("href")).toBe(reel);
   expect(within(draft).getByText(/Add screenshots or paste the recipe's text/)).toBeTruthy();
 
   await userEvent.upload(

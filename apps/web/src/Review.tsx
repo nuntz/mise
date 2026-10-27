@@ -28,6 +28,15 @@ export function flagsOutsideDrafts(drafts: readonly Draft[], flags: readonly Imp
   return flags.filter((flag) => !ids.has(flag.recipe.id));
 }
 
+/** The site a link is on, as a Draft shows its source: "recipes.example.com", not the whole URL. */
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 /** A Draft as the screen keeps it: keyed by its Recipe's id, so a refresh keeps a Draft being edited. */
 type ListedDraft = Draft & { id: number };
 
@@ -167,8 +176,8 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
           <>
             <p>{t("review.linkOnly")}</p>
             <p>
-              <a href={url()} target="_blank" rel="noopener noreferrer">
-                {url()}
+              <a href={url()} target="_blank" rel="noopener noreferrer" title={url()}>
+                {domainOf(url())}
               </a>
             </p>
           </>
@@ -192,22 +201,25 @@ function DraftCard(props: { client: MiseClient; draft: ListedDraft; items: Map<I
                 )}
               </For>
             </ul>
-            {/* A link-only Draft has nothing to plan until its recipe's text is added. */}
-            <Show when={!link()}>
-              <button
-                type="button"
-                disabled={busy()}
-                onClick={() => void act(() => props.client.call("accept_draft", { id: recipe().id }))}
-              >
-                {t("review.accept")}
+            {/* Discard sits apart from Accept and Edit, so a tap meant for them can't land on it. */}
+            <div class="draft-actions">
+              {/* A link-only Draft has nothing to plan until its recipe's text is added. */}
+              <Show when={!link()}>
+                <button
+                  type="button"
+                  disabled={busy()}
+                  onClick={() => void act(() => props.client.call("accept_draft", { id: recipe().id }))}
+                >
+                  {t("review.accept")}
+                </button>
+              </Show>
+              <button type="button" class="button-secondary" disabled={busy()} onClick={() => setEditing(true)}>
+                {t("review.edit")}
               </button>
-            </Show>
-            <button type="button" class="button-secondary" disabled={busy()} onClick={() => setEditing(true)}>
-              {t("review.edit")}
-            </button>
-            <button type="button" class="button-danger" disabled={busy()} onClick={discard}>
-              {t("review.discard")}
-            </button>
+              <button type="button" class="button-danger" disabled={busy()} onClick={discard}>
+                {t("review.discard")}
+              </button>
+            </div>
           </>
         }
       >

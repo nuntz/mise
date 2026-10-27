@@ -75,19 +75,23 @@ function TagRow(props: { client: MiseClient; recipe: RecipeSummary }) {
   };
 
   return (
-    <form aria-label={props.recipe.title} onSubmit={submit}>
-      <h4>{props.recipe.title}</h4>
-      <label>
-        {t("recipeForm.cuisine")}
-        <input value={cuisine()} onInput={(e) => setCuisine(e.currentTarget.value)} />
-      </label>
-      <label>
-        {t("recipeForm.mainProtein")}
-        <input value={mainProtein()} onInput={(e) => setMainProtein(e.currentTarget.value)} />
-      </label>
-      <button type="submit" disabled={busy()}>
-        {t("tag.save")}
-      </button>
+    <form class="row" aria-label={props.recipe.title} onSubmit={submit}>
+      <div class="row-body row-fields">
+        <h4 class="row-title">{props.recipe.title}</h4>
+        <label>
+          {t("recipeForm.cuisine")}
+          <input value={cuisine()} onInput={(e) => setCuisine(e.currentTarget.value)} />
+        </label>
+        <label>
+          {t("recipeForm.mainProtein")}
+          <input value={mainProtein()} onInput={(e) => setMainProtein(e.currentTarget.value)} />
+        </label>
+      </div>
+      <div class="row-end">
+        <button type="submit" disabled={busy()}>
+          {t("tag.save")}
+        </button>
+      </div>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
           {error()}

@@ -1927,8 +1927,9 @@ button.row-open .row-end {
   color: var(--ink-muted);
 }
 
-/* A row's controls grouped under its name, as a fieldset laid out as the row itself. */
-fieldset.row {
+/* A row's controls grouped under its name, as a fieldset or form laid out as the row itself. */
+fieldset.row,
+form.row {
   flex-direction: row;
   padding: 0;
   border: 0;
@@ -1983,6 +1984,18 @@ fieldset.row {
   content: counter(step);
   font: var(--type-numeral);
   color: var(--plum);
+}
+
+/* A Draft's actions on one line, Discard pushed to the far end, away from Accept and Edit. */
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.draft-actions > .button-danger {
+  margin-inline-start: auto;
 }
 
 /* ---------- Kitchen mode ---------- */
