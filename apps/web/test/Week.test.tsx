@@ -145,7 +145,7 @@ function proposedWeek(): Week {
   };
 }
 
-type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefined;
+type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | Promise<ToolResult<unknown>> | undefined;
 
 /**
  * A client whose current Week starts on Monday, October 26; it records every tool call made. `answers`
@@ -396,6 +396,51 @@ test("editing a dinner sends what changed in one change to the Slot, then the Lo
     },
     { name: "lock_slot", input: { date: "2026-10-27", meal: "dinner", locked: false } },
   ]);
+});
+
+test("a late save closes only its own Slot's form, leaving another's open with what was typed", async () => {
+  let finish = (_: ToolResult<unknown>) => {};
+  const { client, calls } = fakeClient({ set_slot: () => new Promise((resolve) => (finish = resolve)) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Pasta" })).getByRole("button", { name: "Edit dinner" }),
+  );
+  const pasta = within(tuesday).getByRole("form", { name: "Dinner" });
+  await user.type(within(pasta).getByRole("textbox", { name: "Note" }), ", please");
+  await user.click(within(pasta).getByRole("button", { name: "Save" }));
+  await user.click(within(pasta).getByRole("button", { name: "Cancel" }));
+  const monday = screen.getByRole("region", { name: "Monday, October 26" });
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  const note = within(within(monday).getByRole("form", { name: "Dinner" })).getByRole("textbox", {
+    name: "Note",
+  }) as HTMLInputElement;
+  await user.type(note, "Soup night");
+
+  expect(writes(calls).map((call) => call.name)).toEqual(["set_slot"]);
+  finish({ ok: true, value: null });
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(within(monday).getByRole("form", { name: "Dinner" })).toBeTruthy();
+  expect(note.value).toBe("Soup night");
+});
+
+test("a save that finishes while its own Slot is still open closes it", async () => {
+  let finish = (_: ToolResult<unknown>) => {};
+  const { client } = fakeClient({ set_slot: () => new Promise((resolve) => (finish = resolve)) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.type(within(form).getByRole("textbox", { name: "Note" }), "Soup night");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  finish({ ok: true, value: null });
+
+  await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
 });
 
 test("Guests and their Constraints are set on the Slot", async () => {

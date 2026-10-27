@@ -28,6 +28,7 @@ export function ItemsSettings(props: { client: MiseClient; sections: readonly St
   const [loaded, setLoaded] = createStore<{ items?: Item[] }>({});
   const [failed, setFailed] = createSignal(false);
   const [query, setQuery] = createSignal("");
+  // A row closes only its own form, so a save that finishes after another row was opened leaves that one open.
   const [editing, setEditing] = createSignal<ItemId>();
 
   keepFresh(
@@ -81,7 +82,7 @@ export function ItemsSettings(props: { client: MiseClient; sections: readonly St
                           client={props.client}
                           item={item}
                           editing={editing() === item.id}
-                          onEdit={(on) => setEditing(on ? item.id : undefined)}
+                          onEdit={(on) => setEditing((open) => (on ? item.id : open === item.id ? undefined : open))}
                         />
                       </li>
                     )}

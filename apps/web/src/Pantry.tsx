@@ -399,6 +399,7 @@ const STATUS_CHIP = { stocked: "chip-leaf", low: "chip-amber", out: "chip-warn" 
 function StapleList(props: { client: MiseClient; locale: string }) {
   // Reconciled by Item, so a refetch keeps each row, and a Staple being edited keeps its draft.
   const [loaded, setLoaded] = createStore<{ staples: Staple[] }>({ staples: [] });
+  // A row closes only its own form, so a save that finishes after another row was opened leaves that one open.
   const [editing, setEditing] = createSignal<ItemId>();
 
   // On failure the list stays as it was; the next change or reconnect tries again.
@@ -423,7 +424,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
                 locale={props.locale}
                 staple={staple}
                 editing={editing() === staple.item}
-                onEdit={(on) => setEditing(on ? staple.item : undefined)}
+                onEdit={(on) => setEditing((open) => (on ? staple.item : open === staple.item ? undefined : open))}
               />
             </li>
           )}

@@ -1,7 +1,7 @@
 import { DEFAULT_EFFORT_BUDGETS, type Household, ITEMS, type Item, STORE_SECTIONS } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import { createFakeClient } from "./fakeClient";
 import { primaries } from "./primaries";
@@ -28,10 +28,19 @@ const masala: Item = {
   unitFamily: "volume",
 };
 
-/** A client whose Items are the shipped ones plus mystery masala, recording every tool call made. */
+/**
+ * A client whose Items are the shipped ones plus mystery masala, recording every tool call made.
+ * After `holdUpdates()`, an update waits for the release it returns, as on a slow connection.
+ */
 function fakeClient(storeSections = household.storeSections) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
   let items: Item[] = [...ITEMS, masala];
+  let held: Promise<void> | undefined;
+  const holdUpdates = () => {
+    let release = () => {};
+    held = new Promise((resolve) => (release = resolve));
+    return release;
+  };
   const fake = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
     switch (name) {
@@ -43,6 +52,7 @@ function fakeClient(storeSections = household.storeSections) {
         // A copy, as over the wire: the screen's store takes over the objects it is given.
         return { ok: true, value: structuredClone(items) };
       case "update_item": {
+        await held;
         if (input.name === "butter") return { ok: false, error: { code: "name_in_use", message: "" } };
         const updated = { ...(items.find((item) => item.id === input.id) as Item), ...input } as Item;
         items = items.map((item) => (item.id === updated.id ? updated : item));
@@ -52,7 +62,7 @@ function fakeClient(storeSections = household.storeSections) {
         throw new Error(`Unexpected tool ${name}`);
     }
   });
-  return { ...fake, calls };
+  return { ...fake, calls, holdUpdates };
 }
 
 async function openItems(storeSections?: Household["storeSections"]) {
@@ -111,6 +121,38 @@ test("one Item opens for editing at a time, from its row, ends in one primary, a
   await user.click(within(garlic).getByRole("button", { name: "Cancel" }));
   expect(within(garlic).queryByRole("textbox", { name: "Other names" })).toBeNull();
   expect(within(garlic).getByRole("button", { name: "Edit Garlic" })).toBeTruthy();
+});
+
+test("a late save closes only its own Item's form, leaving another's open with what was typed", async () => {
+  const { user, calls, holdUpdates } = await openItems();
+  const release = holdUpdates();
+  const garlic = await screen.findByRole("article", { name: "Garlic" });
+  await user.click(within(garlic).getByRole("button", { name: "Edit Garlic" }));
+  await user.click(within(garlic).getByRole("button", { name: "Save" }));
+  await user.click(within(garlic).getByRole("button", { name: "Cancel" }));
+  const butter = screen.getByRole("article", { name: "Butter" });
+  await user.click(within(butter).getByRole("button", { name: "Edit Butter" }));
+  const aliases = within(butter).getByRole("textbox", { name: "Other names" }) as HTMLInputElement;
+  await user.type(aliases, "beurre");
+
+  release();
+  await vi.waitFor(() => expect(updates(calls)).toHaveLength(1));
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(within(butter).getByRole("textbox", { name: "Other names" })).toBe(aliases);
+  expect(aliases.value).toBe("beurre");
+});
+
+test("a save that finishes while its own Item is still open closes it", async () => {
+  const { user, holdUpdates } = await openItems();
+  const release = holdUpdates();
+  const garlic = await screen.findByRole("article", { name: "Garlic" });
+  await user.click(within(garlic).getByRole("button", { name: "Edit Garlic" }));
+  await user.click(within(garlic).getByRole("button", { name: "Save" }));
+
+  release();
+
+  await vi.waitFor(() => expect(within(garlic).queryByRole("textbox", { name: "Other names" })).toBeNull());
 });
 
 test("the list narrows to the Items a search names, by name or alias", async () => {

@@ -90,8 +90,11 @@ export function WeekPage(props: {
   const items = createItems(props.client);
   const readOnly = () => !props.online;
   const [opened, setOpened] = createSignal<OpenRecipe>();
-  // The one Slot whose form is open.
+  // The one Slot whose form is open. A Slot closes only its own form, so a save that finishes
+  // after another Slot was opened leaves that one open.
   const [editing, setEditing] = createSignal<SlotKey>();
+  const edit = (slot: SlotKey, on: boolean) =>
+    setEditing((current) => (on ? slot : current && sameSlot(current, slot) ? undefined : current));
   const open = (slot: Slot, rate = false) => {
     const recipe = slot.recipe ?? slot.leftoversOf?.recipe;
     if (!recipe) return;
@@ -222,7 +225,7 @@ export function WeekPage(props: {
                     onCook={props.onCook}
                     onOpen={open}
                     editing={editing()}
-                    onEdit={setEditing}
+                    onEdit={edit}
                     slots={shown().slots.filter((slot) => slot.date === date)}
                   />
                 )}
@@ -262,7 +265,7 @@ export function WeekPage(props: {
                       rate={open.rate}
                       onEdit={() => {
                         setOpened(undefined);
-                        setEditing(open.slot);
+                        edit(open.slot, true);
                       }}
                     />
                   </Show>
@@ -325,7 +328,7 @@ function Day(props: {
   onCook: (recipe: RecipeId, servings: number) => void;
   onOpen: (slot: Slot, rate?: boolean) => void;
   editing: SlotKey | undefined;
-  onEdit: (slot: SlotKey | undefined) => void;
+  onEdit: (slot: SlotKey, editing: boolean) => void;
   slots: Slot[];
 }) {
   const title = () => dayTitle(props.date, props.household.locale);
@@ -351,7 +354,7 @@ function Day(props: {
       onCook={props.onCook}
       onOpen={props.onOpen}
       editing={isEditing(meal)}
-      onEdit={(edit) => props.onEdit(edit ? { date: props.date, meal } : undefined)}
+      onEdit={(editing) => props.onEdit({ date: props.date, meal }, editing)}
       prominent={prominent}
     />
   );
