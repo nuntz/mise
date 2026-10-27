@@ -1,5 +1,16 @@
 import { type ChatWhere, type Household, type LocalDate, type QueuedChange, RecipeId } from "@mise/domain";
-import { createComputed, createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
+import {
+  createComputed,
+  createEffect,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  Show,
+  type Signal,
+  Switch,
+} from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CalendarSettings } from "./Calendar";
 import { Chat } from "./Chat";
@@ -7,7 +18,7 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
 import { HouseholdSettingsForm } from "./HouseholdSettings";
-import { createHouseholdStatus, type StatusChip } from "./householdStatus";
+import { createHouseholdStatus, type StatusChip, type StatusChips } from "./householdStatus";
 import { IMPORT_METHODS, type ImportMethod, ImportPage } from "./Import";
 import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
@@ -342,10 +353,9 @@ function OfflineGroceryLists(props: { client: MiseClient; household: Household }
 }
 
 /**
- * The Household: what it is, kitchen mode for this device, and a row for each of its settings. Each
- * setting opens as its own page over it, `open` at once when given (Resolve Ingredients at the group
- * `resolveAt`, the first time only), and back returns here, as does each change of `home` (the Household
- * tab tapped again).
+ * The Household: its index (see `HouseholdIndex`), and each setting as its own page over it, `open` at
+ * once when given (Resolve Ingredients at the group `resolveAt`, the first time only). Back returns to
+ * the index, as does each change of `home` (the Household tab tapped again).
  */
 function HouseholdPage(props: {
   client: MiseClient;
@@ -361,68 +371,21 @@ function HouseholdPage(props: {
   // opened `props.open` already, so the first page change is leaving it.
   const [resolveAt, setResolveAt] = createSignal(props.open === "resolve" ? props.resolveAt : undefined);
   createEffect(on(setting.page, () => setResolveAt(undefined), { defer: true }));
-  const status = createHouseholdStatus(props.client);
-  const chips = (name: Setting) => {
-    const shown: Partial<Record<Setting, StatusChip[]>> = status();
-    return shown[name] ?? [];
-  };
+  const status = createSignal<StatusChips>({ review: [], resolve: [], tag: [] });
   createEffect(on(() => props.home, setting.home, { defer: true }));
 
   return (
     <Show
       when={setting.page()}
       fallback={
-        <section class="screen">
-          <header class="page-heading">
-            <p class="overline">{t("household.overline")}</p>
-            <h1>{t("household.title", { name: props.household.name })}</h1>
-            <p class="meta">
-              {t("household.summary", {
-                weekday: t(`weekday.${props.household.weekStartsOn}`),
-                dinnerTime: props.household.dinnerTime,
-                timezone: props.household.timezone,
-                units: t(`units.${props.household.units}`),
-                locale: t(`locale.${props.household.locale}`),
-              })}
-            </p>
-          </header>
-          <SwitchRow
-            label={t("household.kitchenMode")}
-            hint={t("household.kitchenModeHint")}
-            checked={props.kitchenMode}
-            onChange={props.onKitchenMode}
-          />
-          <For each={SETTING_GROUPS}>
-            {(group) => (
-              <section>
-                <h3 id={`household-${group.group}`}>{t(`household.${group.group}`)}</h3>
-                <ul class="rows" aria-labelledby={`household-${group.group}`}>
-                  <For each={group.settings}>
-                    {(name) => (
-                      <li>
-                        <button type="button" class="row row-open" onClick={() => setting.open(name)}>
-                          <span class="row-body">
-                            <span class="row-title">{t(`nav.${name}`)}</span>
-                            <Show when={chips(name).length > 0}>
-                              <span class="chips">
-                                <For each={chips(name)}>
-                                  {(chip) => <span class={CHIP_CLASS[chip.tone ?? "plain"]}>{chip.text}</span>}
-                                </For>
-                              </span>
-                            </Show>
-                          </span>
-                          <span class="row-end">
-                            <Icon name="chevronRight" />
-                          </span>
-                        </button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </section>
-            )}
-          </For>
-        </section>
+        <HouseholdIndex
+          client={props.client}
+          household={props.household}
+          kitchenMode={props.kitchenMode}
+          onKitchenMode={props.onKitchenMode}
+          onOpen={setting.open}
+          status={status}
+        />
       }
     >
       {(open) => (
@@ -471,5 +434,79 @@ function HouseholdPage(props: {
         </section>
       )}
     </Show>
+  );
+}
+
+/**
+ * The Household's index: what it is, kitchen mode for this device, and a row for each of its settings,
+ * with a chip where something waits. The chips keep fresh only while the index shows, from what
+ * `status` last held.
+ */
+function HouseholdIndex(props: {
+  client: MiseClient;
+  household: Household;
+  kitchenMode: boolean;
+  onKitchenMode: (on: boolean) => void;
+  onOpen: (setting: Setting) => void;
+  status: Signal<StatusChips>;
+}) {
+  const status = createHouseholdStatus(props.client, props.status);
+  const chips = (name: Setting) => {
+    const shown: Partial<Record<Setting, StatusChip[]>> = status();
+    return shown[name] ?? [];
+  };
+
+  return (
+    <section class="screen">
+      <header class="page-heading">
+        <p class="overline">{t("household.overline")}</p>
+        <h1>{t("household.title", { name: props.household.name })}</h1>
+        <p class="meta">
+          {t("household.summary", {
+            weekday: t(`weekday.${props.household.weekStartsOn}`),
+            dinnerTime: props.household.dinnerTime,
+            timezone: props.household.timezone,
+            units: t(`units.${props.household.units}`),
+            locale: t(`locale.${props.household.locale}`),
+          })}
+        </p>
+      </header>
+      <SwitchRow
+        label={t("household.kitchenMode")}
+        hint={t("household.kitchenModeHint")}
+        checked={props.kitchenMode}
+        onChange={props.onKitchenMode}
+      />
+      <For each={SETTING_GROUPS}>
+        {(group) => (
+          <section>
+            <h3 id={`household-${group.group}`}>{t(`household.${group.group}`)}</h3>
+            <ul class="rows" aria-labelledby={`household-${group.group}`}>
+              <For each={group.settings}>
+                {(name) => (
+                  <li>
+                    <button type="button" class="row row-open" onClick={() => props.onOpen(name)}>
+                      <span class="row-body">
+                        <span class="row-title">{t(`nav.${name}`)}</span>
+                        <Show when={chips(name).length > 0}>
+                          <span class="chips">
+                            <For each={chips(name)}>
+                              {(chip) => <span class={CHIP_CLASS[chip.tone ?? "plain"]}>{chip.text}</span>}
+                            </For>
+                          </span>
+                        </Show>
+                      </span>
+                      <span class="row-end">
+                        <Icon name="chevronRight" />
+                      </span>
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </section>
+        )}
+      </For>
+    </section>
   );
 }

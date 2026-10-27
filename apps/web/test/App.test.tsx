@@ -35,12 +35,19 @@ const entries = (first: number, count = 0) =>
 /**
  * A client whose Household the test controls; `notify` stands in for a `household` change notice
  * whose refetch returns `next`, or fails when `next` is an Error. `wait` changes what waits on the
- * Household and sends a `recipes` change notice.
+ * Household and sends a `recipes` change notice. `calls` names each tool called, in order. `hold` keeps
+ * the Household status listings from answering until `release`.
  */
 function fakeClient(initial: Household, initialWaiting: Waiting = {}) {
   let current: Household | Error = initial;
   let waiting = initialWaiting;
-  const fake = createFakeClient((name) => {
+  const calls: string[] = [];
+  let holding = false;
+  let held = Promise.resolve();
+  let release = () => {};
+  const fake = createFakeClient(async (name) => {
+    calls.push(name);
+    if (holding && STATUS_LISTINGS.includes(name)) await held;
     if (name === "list_drafts") return { ok: true, value: entries(100, waiting.drafts) };
     if (name === "list_import_flags") return { ok: true, value: entries(200, waiting.flags) };
     if (name === "list_unresolved_ingredients") return { ok: true, value: entries(300, waiting.unresolved) };
@@ -68,8 +75,26 @@ function fakeClient(initial: Household, initialWaiting: Waiting = {}) {
     waiting = next;
     fake.notify("recipes");
   };
-  return { client: fake.client, notify, wait };
+  const hold = () => {
+    holding = true;
+    held = new Promise((resolve) => {
+      release = () => {
+        holding = false;
+        resolve();
+      };
+    });
+  };
+  return { client: fake.client, notify, wait, calls, hold, release: () => release() };
 }
+
+/** The listings the Household's status chips come from. */
+const STATUS_LISTINGS = [
+  "list_drafts",
+  "list_import_flags",
+  "list_unresolved_ingredients",
+  "list_untagged_recipes",
+  "search_recipes",
+];
 
 test("a household change notice keeps unsaved Member input and shows the new data", async () => {
   const user = userEvent.setup();
@@ -226,6 +251,27 @@ test("a Household row shows a chip where something waits, and none where nothing
   expect(within(review).queryByText("1 Draft")).toBeNull();
   expect(within(resolve).queryByText(/Unresolved/)).toBeNull();
   expect(within(tag).getByText("All tagged").classList.contains("chip-leaf")).toBe(true);
+});
+
+test("the Household's chips wait for its index to show before they refetch", async () => {
+  const user = userEvent.setup();
+  const { client, wait, calls, hold, release } = fakeClient(household(), { drafts: 1 });
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+  await within(screen.getByRole("button", { name: /^Review/ })).findByText("1 Draft");
+  await user.click(screen.getByRole("button", { name: "Members" }));
+
+  const before = calls.length;
+  wait({ drafts: 2 });
+
+  expect(calls.slice(before).filter((name) => STATUS_LISTINGS.includes(name))).toEqual([]);
+  // Back on the index, the chips that showed stay until the listings answer.
+  hold();
+  await user.click(screen.getByRole("button", { name: "Household", current: false }));
+  const review = screen.getByRole("button", { name: /^Review/ });
+  expect(within(review).getByText("1 Draft")).toBeTruthy();
+  release();
+  expect(await within(review).findByText("2 Drafts")).toBeTruthy();
 });
 
 test("Tag Recipes shows no chip for a Household with no Recipes yet", async () => {

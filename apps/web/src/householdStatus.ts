@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import type { Signal } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
@@ -14,10 +14,11 @@ export type StatusChips = { review: StatusChip[]; resolve: StatusChip[]; tag: St
  * What waits on a person in each section, kept fresh from the same listing tools the sections use:
  * Drafts and Import Flags on Review, Unresolved Ingredients on Resolve Ingredients, and untagged
  * Recipes (or "All tagged", once there are Recipes) on Tag Recipes. A section shows nothing until its
- * listing answers, and a failed refresh keeps what showed.
+ * listing answers, and a failed refresh keeps what showed. The chips live in `status`, which may
+ * outlive this owner, so whatever shows them next starts from what showed last.
  */
-export function createHouseholdStatus(client: MiseClient) {
-  const [chips, setChips] = createSignal<StatusChips>({ review: [], resolve: [], tag: [] });
+export function createHouseholdStatus(client: MiseClient, status: Signal<StatusChips>) {
+  const [chips, setChips] = status;
 
   keepFresh(
     client,
