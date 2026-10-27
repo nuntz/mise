@@ -446,7 +446,7 @@ function HouseholdPage(props: {
               <ResolveIngredients client={props.client} at={props.resolveAt} />
             </Match>
             <Match when={open() === "items"}>
-              <ItemsSettings client={props.client} />
+              <ItemsSettings client={props.client} sections={props.household.storeSections} />
             </Match>
             <Match when={open() === "tag"}>
               <TagRecipes client={props.client} />

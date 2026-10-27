@@ -2,9 +2,11 @@ import {
   ALLERGENS,
   type Allergen,
   type Item,
+  type ItemId,
   SHIPPED_ITEMS,
   STORE_SECTIONS,
   type StoreSection,
+  storeSectionOrder,
   UNIT_FAMILIES,
   type UnitFamily,
 } from "@mise/domain";
@@ -13,15 +15,20 @@ import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
+import { Icon } from "./icons";
 import { nameMatches } from "./items";
 import { nameText, t } from "./messages";
 
-/** Every Item, shipped or the Household's own, searchable, each edited in place. */
-export function ItemsSettings(props: { client: MiseClient }) {
+/**
+ * Every Item, shipped or the Household's own, as rows under their Store Section in the Household's
+ * walking order, searchable by name or alias, each edited in place, one at a time.
+ */
+export function ItemsSettings(props: { client: MiseClient; sections: readonly StoreSection[] }) {
   // Reconciled by id, so a refresh after saving one Item keeps another's form as it is being filled in.
   const [loaded, setLoaded] = createStore<{ items?: Item[] }>({});
   const [failed, setFailed] = createSignal(false);
   const [query, setQuery] = createSignal("");
+  const [editing, setEditing] = createSignal<ItemId>();
 
   keepFresh(
     props.client,
@@ -34,14 +41,20 @@ export function ItemsSettings(props: { client: MiseClient }) {
     () => setFailed(true),
   );
 
-  const shown = createMemo(() => {
-    return (loaded.items ?? []).filter((item) => nameMatches([item.name, ...item.aliases], query(), "part"));
+  const groups = createMemo(() => {
+    const shown = (loaded.items ?? []).filter((item) => nameMatches([item.name, ...item.aliases], query(), "part"));
+    return storeSectionOrder(props.sections)
+      .map((section) => ({ section, items: shown.filter((item) => item.section === section) }))
+      .filter((group) => group.items.length > 0);
   });
 
   return (
     <section>
       <h2>{t("items.title")}</h2>
-      <p>{t("items.intro")}</p>
+      <div class="ai-note" role="note">
+        <span class="chip chip-plum">{t("items.aiDrafted")}</span>
+        <p>{t("items.intro")}</p>
+      </div>
       <Show when={failed()}>
         <p class="banner banner-warn" role="alert">
           {t("app.error")}
@@ -52,53 +65,79 @@ export function ItemsSettings(props: { client: MiseClient }) {
         <input type="search" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
       </label>
       <Show when={loaded.items}>
-        <Show when={shown().length > 0} fallback={<p>{t("items.none")}</p>}>
-          <ul class="rows">
-            <For each={shown()}>
-              {(item) => (
-                <li>
-                  <ItemRow client={props.client} item={item} />
-                </li>
-              )}
-            </For>
-          </ul>
+        <Show when={groups().length > 0} fallback={<p>{t("items.none")}</p>}>
+          <For each={groups()}>
+            {(group) => (
+              <section class="item-section" aria-label={sectionName(group.section)}>
+                <div class="section-head">
+                  <h3>{sectionName(group.section)}</h3>
+                  <span class="chip">{group.items.length}</span>
+                </div>
+                <ul class="rows">
+                  <For each={group.items}>
+                    {(item) => (
+                      <li>
+                        <ItemRow
+                          client={props.client}
+                          item={item}
+                          editing={editing() === item.id}
+                          onEdit={(on) => setEditing(on ? item.id : undefined)}
+                        />
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </section>
+            )}
+          </For>
         </Show>
       </Show>
     </section>
   );
 }
 
-function ItemRow(props: { client: MiseClient; item: Item }) {
-  const [editing, setEditing] = createSignal(false);
-  const shipped = () => SHIPPED_ITEMS.item(props.item.id);
+function ItemRow(props: { client: MiseClient; item: Item; editing: boolean; onEdit: (editing: boolean) => void }) {
+  const name = () => nameText(props.item.name);
+  const body = () => (
+    <span class="row-body">
+      <span class="row-title name">{name()}</span>
+      <span class="row-meta">{itemMeta(props.item)}</span>
+    </span>
+  );
 
   return (
-    <article class="row" aria-label={nameText(props.item.name)}>
-      <div class="row-body">
-        <h4 class="row-title name">{nameText(props.item.name)}</h4>
-        <p class="row-meta">{shipped() ? t("items.shipped") : t("items.yours")}</p>
-        <p class="row-meta">
-          {t("items.summary", {
-            section: t(`section.${props.item.section}`),
-            allergens: allergenList(props.item.allergens) || t("item.noAllergens"),
-          })}
-        </p>
-        <Show when={props.item.aliases.length > 0}>
-          <p class="row-meta">{t("items.aliases", { aliases: props.item.aliases.join(", ") })}</p>
-        </Show>
-      </div>
+    <article class="row" aria-label={name()}>
       <Show
-        when={editing()}
+        when={props.editing}
         fallback={
-          <button type="button" class="button-row" onClick={() => setEditing(true)}>
-            {t("items.edit")}
+          <button
+            type="button"
+            class="row row-open"
+            aria-label={t("items.editName", { name: name() })}
+            onClick={() => props.onEdit(true)}
+          >
+            {body()}
+            <span class="row-end">
+              <Icon name="chevronRight" />
+            </span>
           </button>
         }
       >
-        <ItemForm client={props.client} item={props.item} onDone={() => setEditing(false)} />
+        {body()}
+        <ItemForm client={props.client} item={props.item} onDone={() => props.onEdit(false)} />
       </Show>
     </article>
   );
+}
+
+/** "Produce · No Allergens · also garlic clove": its Store Section, its Allergens and its other names. */
+function itemMeta(item: Item): string {
+  const params = {
+    section: sectionName(item.section),
+    allergens: allergenList(item.allergens) || t("item.noAllergens"),
+    aliases: item.aliases.join(", "),
+  };
+  return item.aliases.length > 0 ? t("items.summaryAliases", params) : t("items.summary", params);
 }
 
 /**
@@ -245,14 +284,20 @@ function ItemForm(props: { client: MiseClient; item: Item; onDone: () => void })
           </>
         )}
       </Show>
-      <button type="submit" disabled={busy()}>
-        {t("items.save")}
-      </button>
-      <button type="button" onClick={() => props.onDone()}>
-        {t("items.cancel")}
-      </button>
+      <div class="actions">
+        <button type="submit" class="button-primary" disabled={busy()}>
+          {t("items.save")}
+        </button>
+        <button type="button" class="button-quiet" onClick={() => props.onDone()}>
+          {t("items.cancel")}
+        </button>
+      </div>
     </form>
   );
+}
+
+function sectionName(section: StoreSection): string {
+  return t(`section.${section}`);
 }
 
 function allergenList(allergens: readonly Allergen[]): string {

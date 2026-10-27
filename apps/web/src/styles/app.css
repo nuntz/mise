@@ -837,6 +837,11 @@ fieldset > .toggle-chip {
   background: var(--surface-raised);
 }
 
+/* A note with no heading, such as the one on shipped Items, leads with its chip. */
+.ai-note > .chip {
+  align-self: flex-start;
+}
+
 .ai-note-head {
   display: flex;
   align-items: center;
@@ -1928,6 +1933,16 @@ fieldset.row {
   padding: 0;
   border: 0;
   border-radius: 0;
+}
+
+/* ---------- Items ---------- */
+
+/* Hundreds of Items: each Store Section's head stays in view while its rows scroll under it. */
+.item-section > .section-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
 }
 
 /* ---------- Recipes ---------- */
