@@ -126,6 +126,10 @@ A Slot whose Recipe survives a re-proposal.
 A Recipe explicitly pinned to come back every week or on a given weekday.
 _Avoid_: Favourite (when meaning pinned)
 
+**Ready-made**:
+A Recipe for a dish bought finished and only heated, whose one Ingredient is the product itself; planned, shopped, cooked and rated like any Recipe (ADR 0026).
+_Avoid_: Store-bought, convenience meal, prepared meal
+
 **Effort Budget**:
 The most cooking time the Household wants to spend on a given weekday's dinner.
 
