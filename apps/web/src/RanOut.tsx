@@ -6,6 +6,7 @@ import { Icon } from "./icons";
 import { nameMatches } from "./items";
 import { nameText, t } from "./messages";
 import { NeedsConnection } from "./NeedsConnection";
+import { StapleStatusChip } from "./Pantry";
 import { Sheet } from "./Sheet";
 
 /** How long the note saying what was recorded stays up. */
@@ -142,8 +143,9 @@ function Picker(props: {
                       <fieldset class="row" aria-label={nameText(staple.name)}>
                         <span class="row-body">
                           <span class="row-title name">{nameText(staple.name)}</span>
-                          <span class="row-meta">
-                            {t(`location.${staple.location}`)} · {t(`staple.${staple.status}`)}
+                          <span class="row-meta">{t(`location.${staple.location}`)}</span>
+                          <span class="chips">
+                            <StapleStatusChip status={staple.status} />
                           </span>
                         </span>
                         <For each={["low", "out"] as const}>

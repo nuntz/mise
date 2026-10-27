@@ -1154,7 +1154,10 @@ test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run ou
   const sheet = await screen.findByRole("dialog", { name: "Pasta" });
 
   const runOut = await within(sheet).findByRole("group", { name: "Anything run out?" });
-  await user.click(within(runOut).getByRole("button", { name: "olive oil: Out" }));
+  const oilRow = within(runOut).getByRole("listitem");
+  expect(within(oilRow).getByText("Olive oil")).toBeTruthy();
+  expect(within(oilRow).getByText("Stocked").className).toBe("chip chip-leaf");
+  await user.click(within(oilRow).getByRole("button", { name: "olive oil: Out" }));
 
   expect(writes(calls)).toEqual([
     { name: "record_staple_status", input: { item: "olive_oil", status: "out", at: expect.any(String) } },

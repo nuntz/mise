@@ -102,7 +102,9 @@ test("Ran out finds a Staple by search and records it out", async () => {
 
   await user.click(await screen.findByRole("button", { name: "Ran out" }));
   const picker = await screen.findByRole("dialog", { name: "What ran out?" });
-  expect(await within(picker).findByRole("group", { name: "Rice" })).toBeTruthy();
+  const rice = await within(picker).findByRole("group", { name: "Rice" });
+  expect(within(rice).getByText("Pantry")).toBeTruthy();
+  expect(within(rice).getByText("Stocked").className).toBe("chip chip-leaf");
   expect(within(picker).getByRole("group", { name: "Milk" })).toBeTruthy();
   await user.type(within(picker).getByRole("searchbox", { name: "Find a Staple" }), "EG");
 
@@ -157,7 +159,9 @@ test("the Pantry page and its check-in show a Staple recorded from Ran out strai
 
   expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
   const staples = screen.getByRole("region", { name: "Staples" });
-  expect(await within(staples).findByText("Fridge · every 14 days · Out")).toBeTruthy();
+  const milk = (await within(staples).findByText("Out")).closest("li");
+  expect(milk && within(milk).getByText("Milk")).toBeTruthy();
+  expect(within(staples).getByText("Out").className).toBe("chip chip-warn");
 });
 
 test("offline, Ran out says it needs a connection and can't be opened", async () => {

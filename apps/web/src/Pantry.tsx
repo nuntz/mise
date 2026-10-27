@@ -3,6 +3,7 @@ import {
   type DueStaples,
   INGREDIENT_UNITS,
   type IngredientUnit,
+  type ItemId,
   type RecipeId,
   STAPLE_LOCATIONS,
   STAPLE_STATUSES,
@@ -11,6 +12,7 @@ import {
   type StapleStatus,
 } from "@mise/domain";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { amountText } from "./Grocery";
@@ -180,7 +182,6 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
                   </div>
                 }
               >
-                <p>{shown().due === 1 ? t("pantry.dueOne") : t("pantry.due", { count: String(shown().due) })}</p>
                 <button type="button" class="button-primary" onClick={start}>
                   {t("pantry.start")}
                 </button>
@@ -384,12 +385,21 @@ function draftOf(staple: Staple): StapleDraft {
   };
 }
 
-/** Every Staple, each to change or remove, and a form to add one or change one. */
+/** A Staple's status as a chip: leaf when stocked, amber when low, warn when out. */
+export function StapleStatusChip(props: { status: StapleStatus }) {
+  return <span class={`chip ${STATUS_CHIP[props.status]}`}>{t(`staple.${props.status}`)}</span>;
+}
+
+const STATUS_CHIP = { stocked: "chip-leaf", low: "chip-amber", out: "chip-warn" } as const satisfies Record<
+  StapleStatus,
+  string
+>;
+
+/** Every Staple as a row, each opening in place to change or remove it, and a form to add one. */
 function StapleList(props: { client: MiseClient; locale: string }) {
-  const items = createItems(props.client);
-  const [staples, setStaples] = createSignal<Staple[]>([]);
-  const [draft, setDraft] = createSignal<StapleDraft>(EMPTY_DRAFT);
-  const [error, setError] = createSignal<string>();
+  // Reconciled by Item, so a refetch keeps each row, and a Staple being edited keeps its draft.
+  const [loaded, setLoaded] = createStore<{ staples: Staple[] }>({ staples: [] });
+  const [editing, setEditing] = createSignal<ItemId>();
 
   // On failure the list stays as it was; the next change or reconnect tries again.
   keepFresh(
@@ -397,13 +407,146 @@ function StapleList(props: { client: MiseClient; locale: string }) {
     ["grocery"],
     () => props.client.call("list_staples", {}),
     (result) => {
-      if (result.ok) setStaples(result.value);
+      if (result.ok) setLoaded("staples", reconcile(result.value, { key: "item" }));
     },
   );
 
+  return (
+    <section class="stack" aria-label={t("pantry.staples")}>
+      <h2>{t("pantry.staples")}</h2>
+      <ul class="rows">
+        <For each={loaded.staples} fallback={<li>{t("pantry.noStaples")}</li>}>
+          {(staple) => (
+            <li>
+              <StapleRow
+                client={props.client}
+                locale={props.locale}
+                staple={staple}
+                editing={editing() === staple.item}
+                onEdit={(on) => setEditing(on ? staple.item : undefined)}
+              />
+            </li>
+          )}
+        </For>
+      </ul>
+      <AddStaple client={props.client} />
+    </section>
+  );
+}
+
+/** One Staple: its name, how it's kept and checked, and its status; or, while edited, its fields. */
+function StapleRow(props: {
+  client: MiseClient;
+  locale: string;
+  staple: Staple;
+  editing: boolean;
+  onEdit: (on: boolean) => void;
+}) {
+  const [draft, setDraft] = createSignal<StapleDraft>(draftOf(props.staple));
+  const [error, setError] = createSignal<string>();
+  const [busy, setBusy] = createSignal(false);
+
+  const summary = () => {
+    const staple = props.staple;
+    return [
+      t(`location.${staple.location}`),
+      staple.alwaysBuy
+        ? t("pantry.alwaysBought")
+        : staple.checkEvery === "every_shop"
+          ? t("pantry.everyShop")
+          : t("pantry.everyDays", { days: String(staple.checkEvery) }),
+      ...(staple.qtyPerShop ? [t("pantry.perShop", { amount: amountText(staple.qtyPerShop, props.locale) })] : []),
+    ].join(" · ");
+  };
+
+  const run = async (change: () => Promise<{ ok: boolean }>) => {
+    setBusy(true);
+    try {
+      const result = await change();
+      setError(result.ok ? undefined : t("app.error"));
+      if (result.ok) props.onEdit(false);
+    } catch {
+      setError(t("app.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = (event: SubmitEvent) => {
+    event.preventDefault();
+    return run(() => props.client.call("upsert_staple", stapleOf(props.staple.item, draft())));
+  };
+
+  const body = () => (
+    <span class="row-body">
+      <span class="row-title name">{nameText(props.staple.name)}</span>
+      <span class="row-meta">{summary()}</span>
+      <span class="chips">
+        <StapleStatusChip status={props.staple.status} />
+      </span>
+    </span>
+  );
+
+  return (
+    <Show
+      when={props.editing}
+      fallback={
+        <div class="row">
+          {body()}
+          <div class="row-end">
+            <button
+              type="button"
+              class="button-row"
+              aria-label={t("pantry.edit", { name: props.staple.name })}
+              onClick={() => {
+                setDraft(draftOf(props.staple));
+                setError(undefined);
+                props.onEdit(true);
+              }}
+            >
+              {t("member.edit")}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <form class="stack" aria-label={t("pantry.edit", { name: props.staple.name })} onSubmit={save}>
+        {body()}
+        <StapleFields draft={draft()} onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))} />
+        <Show when={error()}>
+          <p class="banner banner-warn" role="alert">
+            {error()}
+          </p>
+        </Show>
+        <button type="submit" class="button-primary" disabled={busy()}>
+          {t("pantry.save")}
+        </button>
+        <button type="button" class="button-quiet" onClick={() => props.onEdit(false)}>
+          {t("pantry.cancel")}
+        </button>
+        <button
+          type="button"
+          class="button-danger"
+          aria-label={t("pantry.remove", { name: props.staple.name })}
+          disabled={busy()}
+          onClick={() => run(() => props.client.call("remove_staple", { item: props.staple.item }))}
+        >
+          {t("member.remove")}
+        </button>
+      </form>
+    </Show>
+  );
+}
+
+/** "Add a Staple": an Item from the catalogue, where it's kept and how often it's checked. */
+function AddStaple(props: { client: MiseClient }) {
+  const items = createItems(props.client);
+  const titleId = createUniqueId();
+  const [draft, setDraft] = createSignal<StapleDraft>(EMPTY_DRAFT);
+  const [error, setError] = createSignal<string>();
   const change = (fields: Partial<StapleDraft>) => setDraft((current) => ({ ...current, ...fields }));
 
-  const save = async (event: SubmitEvent) => {
+  const add = async (event: SubmitEvent) => {
     event.preventDefault();
     const filled = draft();
     const item = itemNamed(items().values(), filled.name);
@@ -411,19 +554,8 @@ function StapleList(props: { client: MiseClient; locale: string }) {
       setError(t("pantry.noSuchItem", { name: filled.name.trim() }));
       return;
     }
-    const quantity = Number(filled.quantity);
-    const checkEvery: CheckEvery = filled.everyShop ? "every_shop" : Number(filled.days);
     try {
-      const result = await props.client.call("upsert_staple", {
-        item: item.id,
-        location: filled.location,
-        checkEvery,
-        alwaysBuy: filled.alwaysBuy,
-        qtyPerShop:
-          filled.quantity && quantity > 0
-            ? { amount: { min: quantity, max: quantity }, unit: filled.unit === "" ? null : filled.unit }
-            : null,
-      });
+      const result = await props.client.call("upsert_staple", stapleOf(item.id, filled));
       setError(result.ok ? undefined : t("app.error"));
       if (result.ok) setDraft(EMPTY_DRAFT);
     } catch {
@@ -431,140 +563,113 @@ function StapleList(props: { client: MiseClient; locale: string }) {
     }
   };
 
-  const remove = async (staple: Staple) => {
-    try {
-      setError((await props.client.call("remove_staple", { item: staple.item })).ok ? undefined : t("app.error"));
-    } catch {
-      setError(t("app.error"));
-    }
-  };
-
-  const summary = (staple: Staple) =>
-    [
-      t(`location.${staple.location}`),
-      staple.alwaysBuy
-        ? t("pantry.alwaysBought")
-        : staple.checkEvery === "every_shop"
-          ? t("pantry.everyShop")
-          : t("pantry.everyDays", { days: String(staple.checkEvery) }),
-      t(`staple.${staple.status}`),
-      ...(staple.qtyPerShop ? [t("pantry.perShop", { amount: amountText(staple.qtyPerShop, props.locale) })] : []),
-    ].join(" · ");
-
   return (
-    <section class="stack" aria-label={t("pantry.staples")}>
-      <h2>{t("pantry.staples")}</h2>
-      <ul class="rows">
-        <For each={staples()} fallback={<li>{t("pantry.noStaples")}</li>}>
-          {(staple) => (
-            <li>
-              <span class="row-body">
-                <span class="row-title name">{nameText(staple.name)}</span>
-                <span class="row-meta">{summary(staple)}</span>
-              </span>
-              <div class="row-end">
-                <button
-                  type="button"
-                  class="button-row"
-                  aria-label={t("pantry.edit", { name: staple.name })}
-                  onClick={() => setDraft(draftOf(staple))}
-                >
-                  {t("member.edit")}
-                </button>
-                <button
-                  type="button"
-                  class="button-danger"
-                  aria-label={t("pantry.remove", { name: staple.name })}
-                  onClick={() => remove(staple)}
-                >
-                  {t("member.remove")}
-                </button>
-              </div>
-            </li>
-          )}
-        </For>
-      </ul>
-      <form class="slot-form" aria-label={t("pantry.form")} onSubmit={save}>
-        <label>
-          {t("pantry.item")}
-          <input
-            list="staple-items"
-            required
-            value={draft().name}
-            onInput={(event) => change({ name: event.currentTarget.value })}
-          />
-        </label>
-        <datalist id="staple-items">
-          <For each={[...items().values()]}>{(item) => <option value={item.name} />}</For>
-        </datalist>
-        <label>
-          {t("pantry.location")}
-          <select
-            value={draft().location}
-            onChange={(event) => change({ location: event.currentTarget.value as StapleLocation })}
-          >
-            <For each={STAPLE_LOCATIONS}>
-              {(location) => <option value={location}>{t(`location.${location}`)}</option>}
-            </For>
-          </select>
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={draft().everyShop}
-            onChange={(event) => change({ everyShop: event.currentTarget.checked })}
-          />
-          {t("pantry.checkEveryShop")}
-        </label>
-        <label>
-          {t("pantry.checkEvery")}
-          <input
-            type="number"
-            min={1}
-            max={365}
-            disabled={draft().everyShop}
-            value={draft().days}
-            onInput={(event) => change({ days: event.currentTarget.value })}
-          />
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={draft().alwaysBuy}
-            onChange={(event) => change({ alwaysBuy: event.currentTarget.checked })}
-          />
-          {t("pantry.alwaysBuy")}
-        </label>
-        <label>
-          {t("pantry.quantity")}
-          <input
-            type="number"
-            min={0}
-            step="any"
-            value={draft().quantity}
-            onInput={(event) => change({ quantity: event.currentTarget.value })}
-          />
-        </label>
-        <label>
-          {t("pantry.unit")}
-          <select
-            value={draft().unit}
-            onChange={(event) => change({ unit: event.currentTarget.value as IngredientUnit | "" })}
-          >
-            <option value="">{t("pantry.noUnit")}</option>
-            <For each={INGREDIENT_UNITS}>{(unit) => <option value={unit}>{unit.replace("_", " ")}</option>}</For>
-          </select>
-        </label>
-        <button type="submit" class="button-primary">
-          {t("pantry.save")}
-        </button>
-        <Show when={error()}>
-          <p class="banner banner-warn" role="alert">
-            {error()}
-          </p>
-        </Show>
-      </form>
-    </section>
+    <form class="slot-form" aria-labelledby={titleId} onSubmit={add}>
+      <h3 id={titleId}>{t("pantry.add")}</h3>
+      <label>
+        {t("pantry.item")}
+        <input
+          list="staple-items"
+          required
+          value={draft().name}
+          onInput={(event) => change({ name: event.currentTarget.value })}
+        />
+      </label>
+      <datalist id="staple-items">
+        <For each={[...items().values()]}>{(item) => <option value={item.name} />}</For>
+      </datalist>
+      <StapleFields draft={draft()} onChange={change} />
+      <button type="submit" class="button-secondary">
+        {t("pantry.addAction")}
+      </button>
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </form>
+  );
+}
+
+/** The upsert_staple input for an Item from a filled-in draft. */
+function stapleOf(item: ItemId, filled: StapleDraft) {
+  const quantity = Number(filled.quantity);
+  const checkEvery: CheckEvery = filled.everyShop ? "every_shop" : Number(filled.days);
+  return {
+    item,
+    location: filled.location,
+    checkEvery,
+    alwaysBuy: filled.alwaysBuy,
+    qtyPerShop:
+      filled.quantity && quantity > 0
+        ? { amount: { min: quantity, max: quantity }, unit: filled.unit === "" ? null : filled.unit }
+        : null,
+  };
+}
+
+/** Where a Staple is kept, how often it's checked, whether it's always bought, and how much. */
+function StapleFields(props: { draft: StapleDraft; onChange: (fields: Partial<StapleDraft>) => void }) {
+  return (
+    <>
+      <label>
+        {t("pantry.location")}
+        <select
+          value={props.draft.location}
+          onChange={(event) => props.onChange({ location: event.currentTarget.value as StapleLocation })}
+        >
+          <For each={STAPLE_LOCATIONS}>
+            {(location) => <option value={location}>{t(`location.${location}`)}</option>}
+          </For>
+        </select>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={props.draft.everyShop}
+          onChange={(event) => props.onChange({ everyShop: event.currentTarget.checked })}
+        />
+        {t("pantry.checkEveryShop")}
+      </label>
+      <label>
+        {t("pantry.checkEvery")}
+        <input
+          type="number"
+          min={1}
+          max={365}
+          disabled={props.draft.everyShop}
+          value={props.draft.days}
+          onInput={(event) => props.onChange({ days: event.currentTarget.value })}
+        />
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={props.draft.alwaysBuy}
+          onChange={(event) => props.onChange({ alwaysBuy: event.currentTarget.checked })}
+        />
+        {t("pantry.alwaysBuy")}
+      </label>
+      <label>
+        {t("pantry.quantity")}
+        <input
+          type="number"
+          min={0}
+          step="any"
+          value={props.draft.quantity}
+          onInput={(event) => props.onChange({ quantity: event.currentTarget.value })}
+        />
+      </label>
+      <label>
+        {t("pantry.unit")}
+        <select
+          value={props.draft.unit}
+          onChange={(event) => props.onChange({ unit: event.currentTarget.value as IngredientUnit | "" })}
+        >
+          <option value="">{t("pantry.noUnit")}</option>
+          <For each={INGREDIENT_UNITS}>{(unit) => <option value={unit}>{unit.replace("_", " ")}</option>}</For>
+        </select>
+      </label>
+    </>
   );
 }
 
@@ -600,26 +705,34 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
     <Show when={staples().length > 0}>
       <fieldset aria-label={t("pantry.runOut")}>
         <legend>{t("pantry.runOut")}</legend>
-        <For each={staples()}>
-          {(staple) => (
-            <p class="slot-actions">
-              <span class="name">{nameText(staple.name)}</span> <span class="chip">{t(`staple.${staple.status}`)}</span>
-              <For each={["low", "out"] as const}>
-                {(status) => (
-                  <button
-                    type="button"
-                    class="button-row"
-                    aria-label={t(`pantry.record.${status}`, { name: staple.name })}
-                    aria-pressed={staple.status === status}
-                    onClick={() => record(staple, status)}
-                  >
-                    {t(`staple.${status}`)}
-                  </button>
-                )}
-              </For>
-            </p>
-          )}
-        </For>
+        <ul class="rows">
+          <For each={staples()}>
+            {(staple) => (
+              <li>
+                <span class="row-body">
+                  <span class="row-title name">{nameText(staple.name)}</span>
+                  <span class="row-meta">{t(`location.${staple.location}`)}</span>
+                  <span class="chips">
+                    <StapleStatusChip status={staple.status} />
+                  </span>
+                </span>
+                <For each={["low", "out"] as const}>
+                  {(status) => (
+                    <button
+                      type="button"
+                      class="button-row"
+                      aria-label={t(`pantry.record.${status}`, { name: staple.name })}
+                      aria-pressed={staple.status === status}
+                      onClick={() => record(staple, status)}
+                    >
+                      {t(`staple.${status}`)}
+                    </button>
+                  )}
+                </For>
+              </li>
+            )}
+          </For>
+        </ul>
         <Show when={error()}>
           <p class="banner banner-warn" role="alert">
             {t("app.error")}

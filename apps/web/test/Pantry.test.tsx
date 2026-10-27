@@ -13,6 +13,7 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 const household: Household = {
   name: "The Tremblays",
@@ -56,7 +57,7 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefine
 /** A client with rice and eggs due, unless `answers` say otherwise; it records every call. */
 function fakeClient(answers: Record<string, Answer> = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
-  const { client, goOffline } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
+  const { client, goOffline, notify } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
     const answer = answers[name]?.(input);
     if (answer) return answer;
@@ -79,7 +80,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         throw new Error(`Unexpected tool ${name}`);
     }
   });
-  return { client, calls, goOffline };
+  return { client, calls, goOffline, notify };
 }
 
 const writes = (calls: { name: string; input: Record<string, unknown> }[]) =>
@@ -195,50 +196,47 @@ test("a Staple out three times in a row is suggested for always buying", async (
   expect(writes(calls).at(-1)).toEqual({ name: "upsert_staple", input: { item: "egg", alwaysBuy: true } });
 });
 
-test("lists the Staples, and adds, changes and removes them", async () => {
-  const { client, calls } = fakeClient();
-  const user = await openPantry(client);
+test("lists the Staples as rows, each with its status as a chip and Edit as its one action", async () => {
+  const { client } = fakeClient();
+  await openPantry(client);
 
   const staples = await screen.findByRole("region", { name: "Staples" });
-  const row = (name: string): HTMLElement => {
-    const found = within(staples)
-      .getAllByRole("listitem")
-      .find((item) => within(item).queryByText(name));
-    if (!found) throw new Error(`No Staple row for ${name}`);
-    return found;
-  };
-  expect(within(row("Rice")).getByText("Pantry · every 14 days · Stocked")).toBeTruthy();
-  expect(within(row("Egg")).getByText("Fridge · every shop · Low · 12 per shop")).toBeTruthy();
-  expect(within(row("Milk")).getByText("Fridge · always bought · Stocked")).toBeTruthy();
+  await within(staples).findByText("Rice");
+  const rice = stapleRow(staples, "Rice");
+  expect(within(rice).getByText("Pantry · every 14 days")).toBeTruthy();
+  expect(within(rice).getByText("Stocked").className).toBe("chip chip-leaf");
+  const egg = stapleRow(staples, "Egg");
+  expect(within(egg).getByText("Fridge · every shop · 12 per shop")).toBeTruthy();
+  expect(within(egg).getByText("Low").className).toBe("chip chip-amber");
+  expect(within(stapleRow(staples, "Milk")).getByText("Fridge · always bought")).toBeTruthy();
 
-  const form = within(staples).getByRole("form", { name: "Add or change a Staple" });
-  await user.type(within(form).getByRole("combobox", { name: "Item" }), "Butter");
-  await user.selectOptions(within(form).getByRole("combobox", { name: "Kept in" }), "fridge");
-  await user.click(within(form).getByRole("checkbox", { name: "Always buy" }));
-  await user.type(within(form).getByRole("spinbutton", { name: "Usual quantity" }), "454");
-  await user.selectOptions(within(form).getByRole("combobox", { name: "Unit" }), "g");
-  await user.click(within(form).getByRole("button", { name: "Save" }));
+  expect(
+    within(rice)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Edit"]);
+  expect(within(staples).queryByRole("button", { name: /^Remove/ })).toBeNull();
+});
+
+test("a Staple is changed and removed from its edit view", async () => {
+  const { client, calls } = fakeClient();
+  const user = await openPantry(client);
+  const staples = await screen.findByRole("region", { name: "Staples" });
+  await screen.findByText("Egg");
 
   await user.click(within(staples).getByRole("button", { name: "Edit egg" }));
-  await user.click(within(form).getByRole("checkbox", { name: "Every shop" }));
-  await user.clear(within(form).getByRole("spinbutton", { name: "Check every (days)" }));
-  await user.type(within(form).getByRole("spinbutton", { name: "Check every (days)" }), "7");
-  await user.click(within(form).getByRole("button", { name: "Save" }));
+  const editEgg = within(staples).getByRole("form", { name: "Edit egg" });
+  await user.click(within(editEgg).getByRole("checkbox", { name: "Every shop" }));
+  await user.clear(within(editEgg).getByRole("spinbutton", { name: "Check every (days)" }));
+  await user.type(within(editEgg).getByRole("spinbutton", { name: "Check every (days)" }), "7");
+  await user.click(within(editEgg).getByRole("button", { name: "Save" }));
 
-  await user.click(within(staples).getByRole("button", { name: "Remove rice" }));
+  await user.click(within(staples).getByRole("button", { name: "Edit rice" }));
+  const editRice = within(staples).getByRole("form", { name: "Edit rice" });
+  await user.click(within(editRice).getByRole("button", { name: "Remove rice" }));
 
   await vi.waitFor(() =>
     expect(writes(calls)).toEqual([
-      {
-        name: "upsert_staple",
-        input: {
-          item: "butter",
-          location: "fridge",
-          checkEvery: 14,
-          alwaysBuy: true,
-          qtyPerShop: { amount: { min: 454, max: 454 }, unit: "g" },
-        },
-      },
       {
         name: "upsert_staple",
         input: {
@@ -254,13 +252,84 @@ test("lists the Staples, and adds, changes and removes them", async () => {
   );
 });
 
+test("a change elsewhere doesn't reset a Staple being edited", async () => {
+  let eggStatus: Staple["status"] = "low";
+  const fake = fakeClient({ list_staples: () => ({ ok: true, value: [rice, { ...egg, status: eggStatus }, milk] }) });
+  const user = await openPantry(fake.client);
+  const staples = await screen.findByRole("region", { name: "Staples" });
+  await within(staples).findByText("Egg");
+  await user.click(within(staples).getByRole("button", { name: "Edit egg" }));
+  const form = () => within(within(staples).getByRole("form", { name: "Edit egg" }));
+  const days = () => form().getByRole("spinbutton", { name: "Check every (days)" }) as HTMLInputElement;
+  await user.click(form().getByRole("checkbox", { name: "Every shop" }));
+  await user.clear(days());
+  await user.type(days(), "7");
+
+  // Another device records egg out; the refetch shows it while the edit is open.
+  eggStatus = "out";
+  fake.notify("grocery");
+
+  expect(await form().findByText("Out")).toBeTruthy();
+  expect(days().value).toBe("7");
+});
+
+test("a Staple is added from a form headed Add a Staple, whose Unit starts at Count", async () => {
+  const { client, calls } = fakeClient();
+  const user = await openPantry(client);
+
+  const form = await screen.findByRole("form", { name: "Add a Staple" });
+  expect(within(form).getByRole("heading", { name: "Add a Staple" })).toBeTruthy();
+  const unit = within(form).getByRole("combobox", { name: "Unit" }) as HTMLSelectElement;
+  expect(unit.selectedOptions[0]?.textContent).toBe("Count");
+
+  await user.type(within(form).getByRole("combobox", { name: "Item" }), "Butter");
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Kept in" }), "fridge");
+  await user.click(within(form).getByRole("checkbox", { name: "Always buy" }));
+  await user.type(within(form).getByRole("spinbutton", { name: "Usual quantity" }), "454");
+  await user.selectOptions(unit, "g");
+  await user.click(within(form).getByRole("button", { name: "Add Staple" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      {
+        name: "upsert_staple",
+        input: {
+          item: "butter",
+          location: "fridge",
+          checkEvery: 14,
+          alwaysBuy: true,
+          qtyPerShop: { amount: { min: 454, max: 454 }, unit: "g" },
+        },
+      },
+    ]),
+  );
+});
+
+test("how many Staples are due is said once, in the heading", async () => {
+  const { client } = fakeClient();
+  await openPantry(client);
+
+  expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+  expect(screen.queryByText("2 Staples are due for a check.")).toBeNull();
+  expect(primaries()).toEqual(["Start the pantry check"]);
+});
+
+/** The row of the Staple shown as `name` in the list. */
+function stapleRow(staples: HTMLElement, name: string): HTMLElement {
+  const found = within(staples)
+    .getAllByRole("listitem")
+    .find((item) => within(item).queryByText(name));
+  if (!found) throw new Error(`No Staple row for ${name}`);
+  return found;
+}
+
 test("an Item that isn't in the catalogue can't be made a Staple", async () => {
   const { client, calls } = fakeClient();
   const user = await openPantry(client);
-  const form = await screen.findByRole("form", { name: "Add or change a Staple" });
+  const form = await screen.findByRole("form", { name: "Add a Staple" });
 
   await user.type(within(form).getByRole("combobox", { name: "Item" }), "unobtainium");
-  await user.click(within(form).getByRole("button", { name: "Save" }));
+  await user.click(within(form).getByRole("button", { name: "Add Staple" }));
 
   expect(within(form).getByRole("alert").textContent).toContain("No Item is called “unobtainium”");
   expect(writes(calls)).toEqual([]);
