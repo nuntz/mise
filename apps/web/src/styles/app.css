@@ -1131,14 +1131,26 @@ fieldset > .toggle-chip {
   font: var(--type-label);
 }
 
+/* The message field with its send button beside it, at the field's foot as the field grows. */
 .chat-form {
-  display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-end;
   gap: var(--space-2);
 }
 
 .chat-form textarea {
+  flex: 1;
   min-height: 0;
+}
+
+/* The composer's one action, in the primary's plum. */
+.chat-send {
+  width: var(--field);
+  height: var(--field);
+  border-color: var(--plum);
+  border-radius: var(--radius-full);
+  background: var(--plum);
+  color: var(--on-plum);
 }
 
 /* ---------- Week ---------- */
@@ -2035,6 +2047,33 @@ form.row {
 
 .step-text {
   font: var(--type-step);
+}
+
+.step-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.step-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Half an icon, so the dots grow with kitchen mode's larger icons. */
+.step-dot {
+  width: calc(var(--icon) / 2);
+  height: calc(var(--icon) / 2);
+  border: var(--hairline) solid var(--ink-muted);
+  border-radius: var(--radius-full);
+}
+
+.step-dot-current {
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .kitchen-ingredients li {

@@ -156,6 +156,8 @@ test("kitchen mode walks the Recipe one step at a time", async () => {
   expect(within(kitchen).getByText("Step 1 of 3")).toBeTruthy();
   expect(within(kitchen).getByText("Fry the garlic.")).toBeTruthy();
   expect(within(kitchen).queryByText("Add the coconut milk and simmer.")).toBeNull();
+  // The first step has nowhere to go back to.
+  expect(within(kitchen).queryByRole("button", { name: "Previous step" })).toBeNull();
 
   await user.click(within(kitchen).getByRole("button", { name: "Next step" }));
   expect(within(kitchen).getByText("Step 2 of 3")).toBeTruthy();
@@ -171,6 +173,18 @@ test("kitchen mode walks the Recipe one step at a time", async () => {
 
   expect(screen.queryByRole("region", { name: "Kitchen mode" })).toBeNull();
   expect(screen.getByRole("region", { name: "Monday, October 26" })).toBeTruthy();
+});
+
+test("step progress shows as dots as well as in words, the current one filled", async () => {
+  const { user, kitchen } = await cookMonday();
+  // The dots repeat "Step 1 of 3" for the eye; a screen reader hears it once.
+  const dots = kitchen.querySelector(".step-dots");
+  const filled = () => Array.from(dots?.children ?? []).map((dot) => dot.classList.contains("step-dot-current"));
+
+  expect(dots?.getAttribute("aria-hidden")).toBe("true");
+  expect(filled()).toEqual([true, false, false]);
+  await user.click(within(kitchen).getByRole("button", { name: "Next step" }));
+  expect(filled()).toEqual([false, true, false]);
 });
 
 test("the Ingredients are one tap away, scaled to what the dinner is cooked for, Leftovers included", async () => {

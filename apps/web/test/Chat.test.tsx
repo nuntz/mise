@@ -179,6 +179,50 @@ test("a message shows at once, then the agent's answer", async () => {
   expect(within(chat).queryByText("Mise is thinking…")).toBeNull();
 });
 
+test("in an empty conversation, the example question is a chip that sends it", async () => {
+  const { client, sent } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "Lemon chicken." } }));
+  render(() => <App client={client} />);
+  const chat = await openChat();
+
+  await userEvent.click(await within(chat).findByRole("button", { name: "What's for dinner Thursday?" }));
+
+  expect(sent).toEqual(["What's for dinner Thursday?"]);
+  expect(await within(chat).findByText("Lemon chicken.")).toBeTruthy();
+  expect(within(chat).queryByRole("button", { name: "What's for dinner Thursday?" })).toBeNull();
+});
+
+test("tapping the example keeps what someone had started typing", async () => {
+  const { client, sent } = fakeClient([], async () => ({
+    ok: false,
+    error: { code: "unanswered", message: "model_error" },
+  }));
+  render(() => <App client={client} />);
+  const chat = await openChat();
+  await userEvent.type(messageBox(chat), "Is Friday");
+
+  await userEvent.click(within(chat).getByRole("button", { name: "What's for dinner Thursday?" }));
+
+  expect(sent).toEqual(["What's for dinner Thursday?"]);
+  await within(chat).findByRole("alert");
+  expect(messageBox(chat).value).toBe("Is Friday");
+});
+
+test("the send button shows once there's a message, and the AI disclosure stays", async () => {
+  const { client } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }));
+  render(() => <App client={client} />);
+  const chat = await openChat();
+  await within(chat).findByRole("button", { name: "What's for dinner Thursday?" });
+
+  expect(within(chat).queryByRole("button", { name: "Send" })).toBeNull();
+  await userEvent.type(messageBox(chat), "What's on Friday?");
+  expect(within(chat).getByRole("button", { name: "Send" })).toBeTruthy();
+  await userEvent.clear(messageBox(chat));
+  expect(within(chat).queryByRole("button", { name: "Send" })).toBeNull();
+  expect(
+    within(chat).getByText("Mise's answers come from an AI model reading your plan. Check anything that matters."),
+  ).toBeTruthy();
+});
+
 test("a message the agent could not answer says so and stays to send again", async () => {
   const { client } = fakeClient([], async () => ({ ok: false, error: { code: "unanswered", message: "model_error" } }));
   render(() => <App client={client} />);
@@ -267,7 +311,7 @@ test("someone else's turn shows once the conversation changes", async () => {
   }));
   render(() => <App client={client} />);
   const chat = await openChat();
-  await within(chat).findByText("Ask about the Week, for example “What's for dinner Thursday?”");
+  await within(chat).findByRole("button", { name: "What's for dinner Thursday?" });
 
   conversation.push(
     { role: "member", speaker: "Alex", text: "Just the two of us Friday" },

@@ -86,13 +86,14 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
     },
   );
 
-  const send = async () => {
-    const text = draft().trim();
+  // The example, sent with a tap, leaves what's being typed in the box.
+  const send = async (example?: string) => {
+    const text = (example ?? draft()).trim();
     const before = turns();
     if (!text || waiting() || !before) return;
     setError(undefined);
     setWaiting(true);
-    setDraft("");
+    if (!example) setDraft("");
     // Shown as theirs until the conversation, which names them, is read again.
     const sent: ChatMessage[] = [...before, { role: "member", speaker: t("chat.speaker.you"), text }];
     setTurns(sent);
@@ -111,7 +112,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
     }
     // Unanswered: the message goes back in the box to send again.
     setTurns(before);
-    setDraft(text);
+    if (!example) setDraft(text);
     setError("answer");
   };
 
@@ -156,7 +157,25 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
       <div class="sheet-body chat-log" ref={log}>
         <Show when={turns()} fallback={<p>{t("app.loading")}</p>}>
           {(shown) => (
-            <Show when={shown().length > 0} fallback={<p class="body-muted">{t("chat.empty")}</p>}>
+            <Show
+              when={shown().length > 0}
+              fallback={
+                <div class="stack">
+                  <p class="body-muted">{t("chat.empty")}</p>
+                  {/* The example asks itself with a tap. */}
+                  <div class="chips">
+                    <button
+                      type="button"
+                      class="chip-button"
+                      disabled={waiting()}
+                      onClick={() => void send(t("chat.example"))}
+                    >
+                      <span class="chip">{t("chat.example")}</span>
+                    </button>
+                  </div>
+                </div>
+              }
+            >
               <ol class="chat-turns">
                 <For each={shown()}>
                   {(turn) =>
@@ -225,24 +244,30 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
             void send();
           }}
         >
-          <label>
-            {t("chat.message")}
-            <textarea
-              rows={2}
-              value={draft()}
-              onInput={(event) => setDraft(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                // Enter sends; Shift+Enter starts a new line.
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-            />
-          </label>
-          <button type="submit" disabled={waiting() || turns() === undefined || !draft().trim()}>
-            {t("chat.send")}
-          </button>
+          <textarea
+            rows={2}
+            aria-label={t("chat.message")}
+            value={draft()}
+            onInput={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Enter sends; Shift+Enter starts a new line.
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void send();
+              }
+            }}
+          />
+          {/* Send shows once there's a message to send. */}
+          <Show when={draft().trim()}>
+            <button
+              type="submit"
+              class="icon-button chat-send"
+              aria-label={t("chat.send")}
+              disabled={waiting() || turns() === undefined}
+            >
+              <Icon name="arrowUp" />
+            </button>
+          </Show>
         </form>
         <small>{t("chat.disclaimer")}</small>
       </div>

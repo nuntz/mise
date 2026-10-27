@@ -62,9 +62,19 @@ export function KitchenMode(props: {
                   fallback={
                     <div class="step" aria-live="polite">
                       <Show when={steps().length > 0} fallback={<p class="step-text">{t("kitchen.noSteps")}</p>}>
-                        <p class="overline">
-                          {t("kitchen.step", { index: String(at() + 1), count: String(steps().length) })}
-                        </p>
+                        <div class="step-progress">
+                          <p class="overline">
+                            {t("kitchen.step", { index: String(at() + 1), count: String(steps().length) })}
+                          </p>
+                          {/* Where the cook is, at arm's length; the words say it to a screen reader. */}
+                          <span class="step-dots" aria-hidden="true">
+                            <For each={steps()}>
+                              {(_, index) => (
+                                <span class={index() === at() ? "step-dot step-dot-current" : "step-dot"} />
+                              )}
+                            </For>
+                          </span>
+                        </div>
                         <p class="step-text">{steps()[at()]}</p>
                       </Show>
                     </div>
@@ -92,15 +102,13 @@ export function KitchenMode(props: {
                           {t("recipe.ingredients")}
                         </button>
                         <div class="actions">
-                          <button
-                            type="button"
-                            class="button-secondary"
-                            disabled={at() === 0}
-                            onClick={() => setStep(at() - 1)}
-                          >
-                            <Icon name="chevronLeft" />
-                            {t("kitchen.previous")}
-                          </button>
+                          {/* The first step has nothing before it, so no Previous that looks disabled. */}
+                          <Show when={at() > 0}>
+                            <button type="button" class="button-secondary" onClick={() => setStep(at() - 1)}>
+                              <Icon name="chevronLeft" />
+                              {t("kitchen.previous")}
+                            </button>
+                          </Show>
                           <Show
                             when={!last()}
                             fallback={
