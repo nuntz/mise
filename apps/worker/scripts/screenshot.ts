@@ -4,8 +4,14 @@
  * docs/screenshots/. Nothing is committed: look the images over, then commit the ones to keep.
  * With `--screens`, saves every screen instead, as a phone shows it a screenful at a time, in
  * daylight, kitchen mode and the pseudo-locale, to dist/screens/ (never committed), for a design review.
- * Usage: bun run screenshot [--screens]. Needs Playwright's Chromium once: bunx playwright install chromium.
+ * `--only week,import` takes just the screens whose names contain one of those words. Each screen
+ * records the web source it was taken from, and `--check` lists the screens taken before the source
+ * last changed, or never taken, without starting anything.
+ * Usage: bun run screenshot [--screens [--only <words>] | --check].
+ * Needs Playwright's Chromium once: bunx playwright install chromium.
  */
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +28,29 @@ const repo = join(import.meta.dir, "../../..");
 const out = join(repo, "docs/screenshots");
 const screensOut = join(repo, "dist/screens");
 const everyScreen = process.argv.includes("--screens");
+const onlyIndex = process.argv.indexOf("--only");
+const only = onlyIndex >= 0 ? (process.argv[onlyIndex + 1] ?? "").split(",").filter(Boolean) : [];
+const wanted = (name: string) => only.length === 0 || only.some((word) => name.includes(word));
+
+/** Which web source each screen was last taken from, by screen name. */
+const takenFile = join(screensOut, "taken.json");
+
+/** A hash of every file under apps/web/src, so a screen taken from older source shows as stale. */
+function webSource(): string {
+  const src = join(repo, "apps/web/src");
+  const hash = createHash("sha256");
+  for (const file of readdirSync(src, { recursive: true, encoding: "utf8" }).sort()) {
+    try {
+      hash.update(file).update(readFileSync(join(src, file)));
+    } catch {} // a directory
+  }
+  return hash.digest("hex").slice(0, 16);
+}
+
+async function readTaken(): Promise<Record<string, string>> {
+  const file = Bun.file(takenFile);
+  return (await file.exists()) ? file.json() : {};
+}
 
 async function run(command: string[], cwd: string) {
   const child = Bun.spawn(command, { cwd, stdout: "inherit", stderr: "inherit" });
@@ -262,15 +291,19 @@ async function capture(page: Page, screen: Screen, query: string, base: string) 
 }
 
 async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>) {
+  const taken = await readTaken();
+  const source = webSource();
   for (const variant of VARIANTS) {
     const dir = join(screensOut, variant.name);
     await mkdir(dir, { recursive: true });
     for (const [index, screen] of screens(ids).entries()) {
+      if (!wanted(screen.name)) continue;
       const context = await phone(browser, variant);
       const page = await context.newPage();
       const base = join(dir, `${String(index + 1).padStart(2, "0")}-${screen.name}`);
       try {
         await capture(page, screen, variant.query, base);
+        taken[`${variant.name}/${screen.name}`] = source;
       } catch (error) {
         console.warn(`${variant.name}/${screen.name} not saved: ${error}`);
       } finally {
@@ -278,11 +311,32 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
       }
     }
   }
-  console.log(`Saved every screen to ${screensOut}`);
+  await Bun.write(takenFile, JSON.stringify(taken, null, 2));
+  console.log(`Saved ${only.length > 0 ? `the screens matching ${only.join(", ")}` : "every screen"} to ${screensOut}`);
+}
+
+/** Lists the screens taken from older web source than now, or never taken, and fails if there are any. */
+async function checkScreens() {
+  const taken = await readTaken();
+  const source = webSource();
+  const names = ["setup", ...screens(new Map()).map((screen) => screen.name)];
+  const stale = VARIANTS.flatMap((variant) =>
+    names.map((name) => `${variant.name}/${name}`).filter((key) => taken[key] !== source),
+  );
+  if (stale.length === 0) {
+    console.log("Every screen in dist/screens shows the current web source.");
+    return;
+  }
+  console.error(`Taken before the web source last changed, or never taken (${stale.length}):`);
+  for (const key of stale) console.error(`  ${key}`);
+  console.error("Retake them with: bun run screenshot --screens --only <words>");
+  process.exit(1);
 }
 
 /** The first-run setup form, from a Household not set up yet. */
 async function screenshotSetup(browser: Browser) {
+  if (!wanted("setup")) return;
+  const taken = await readTaken();
   for (const variant of VARIANTS) {
     await mkdir(join(screensOut, variant.name), { recursive: true });
     const context = await phone(browser, variant);
@@ -293,7 +347,15 @@ async function screenshotSetup(browser: Browser) {
       join(screensOut, variant.name, "00-setup"),
     );
     await context.close();
+    taken[`${variant.name}/setup`] = webSource();
   }
+  await mkdir(screensOut, { recursive: true });
+  await Bun.write(takenFile, JSON.stringify(taken, null, 2));
+}
+
+if (process.argv.includes("--check")) {
+  await checkScreens();
+  process.exit(0);
 }
 
 const store = await mkdtemp(join(tmpdir(), "mise-screenshot-"));

@@ -30,7 +30,7 @@ bun run test:web     # component tests in jsdom
 bun run check:private  # no personal emails committed
 ```
 
-`bun run screenshot` retakes `docs/screenshots/` from the fictional sample Household and its Week (`fixtures/sample-week.json`) on a throwaway local deployment. Look the images over before committing them. It needs Playwright's Chromium once: `bunx playwright install chromium`.
+`bun run screenshot` retakes `docs/screenshots/` from the fictional sample Household and its Week (`fixtures/sample-week.json`) on a throwaway local deployment. Look the images over before committing them. It needs Playwright's Chromium once: `bunx playwright install chromium`. `--screens` takes every screen into `dist/screens/` for a design review instead (`--only week,import` for some of them), and `--check` lists the screens taken before the web source last changed.
 
 ## Deployment
 
