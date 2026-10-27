@@ -175,6 +175,17 @@ test("kitchen mode walks the Recipe one step at a time", async () => {
   expect(screen.getByRole("region", { name: "Monday, October 26" })).toBeTruthy();
 });
 
+test("Previous back to the first step by keyboard leaves focus on Next, not the page", async () => {
+  const { user, kitchen } = await cookMonday();
+  await user.click(within(kitchen).getByRole("button", { name: "Next step" }));
+
+  within(kitchen).getByRole("button", { name: "Previous step" }).focus();
+  await user.keyboard("{Enter}");
+
+  expect(within(kitchen).getByText("Step 1 of 3")).toBeTruthy();
+  expect(document.activeElement).toBe(within(kitchen).getByRole("button", { name: "Next step" }));
+});
+
 test("step progress shows as dots as well as in words, the current one filled", async () => {
   const { user, kitchen } = await cookMonday();
   // The dots repeat "Step 1 of 3" for the eye; a screen reader hears it once.

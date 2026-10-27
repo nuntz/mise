@@ -62,6 +62,10 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
   const [error, setError] = createSignal<"load" | "answer" | "changed" | "answered" | "unconfirmed">();
   const [tapping, setTapping] = createSignal(false);
   let log!: HTMLDivElement;
+  let box!: HTMLTextAreaElement;
+  let sendButton: HTMLButtonElement | undefined;
+  // On a touch screen a focused field brings up the keyboard, which covers the conversation.
+  const touch = window.matchMedia?.("(pointer: coarse)").matches ?? false;
 
   // The newest turn, or the note that Mise is thinking, stays in view as the conversation grows.
   createEffect(() => {
@@ -134,14 +138,8 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
   };
 
   return (
-    // On a touch screen a focused field brings up the keyboard, which covers the conversation it
-    // opened to read: the field waits for a tap there.
-    <Sheet
-      labelledBy={titleId}
-      class="sheet-chat"
-      focusField={!window.matchMedia?.("(pointer: coarse)").matches}
-      onEscape={() => props.onClose()}
-    >
+    // On a touch screen the field waits for a tap, leaving the conversation it opened to read in view.
+    <Sheet labelledBy={titleId} class="sheet-chat" focusField={!touch} onEscape={() => props.onClose()}>
       <div class="sheet-header">
         <div class="page-heading">
           <p class="overline">{t("chat.overline")}</p>
@@ -241,10 +239,14 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
           class="chat-form"
           onSubmit={(event) => {
             event.preventDefault();
+            // Send hides with the message it sent; the focus it held goes back to the box, not the page,
+            // except on a touch screen, where the keyboard would cover the answer.
+            if (document.activeElement === sendButton && !touch) box.focus();
             void send();
           }}
         >
           <textarea
+            ref={box}
             rows={2}
             aria-label={t("chat.message")}
             value={draft()}
@@ -260,6 +262,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
           {/* Send shows once there's a message to send. */}
           <Show when={draft().trim()}>
             <button
+              ref={sendButton}
               type="submit"
               class="icon-button chat-send"
               aria-label={t("chat.send")}

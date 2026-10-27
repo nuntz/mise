@@ -223,6 +223,21 @@ test("the send button shows once there's a message, and the AI disclosure stays"
   ).toBeTruthy();
 });
 
+test("sent from the Send button by keyboard, the message leaves focus in the box for the next one", async () => {
+  const { client } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "Dal." } }));
+  render(() => <App client={client} />);
+  const chat = await openChat();
+  await within(chat).findByRole("button", { name: "What's for dinner Thursday?" });
+
+  await userEvent.type(messageBox(chat), "What's on Friday?");
+  await userEvent.tab();
+  expect(document.activeElement).toBe(within(chat).getByRole("button", { name: "Send" }));
+  await userEvent.keyboard("{Enter}");
+
+  await within(chat).findByText("Dal.");
+  expect(document.activeElement).toBe(messageBox(chat));
+});
+
 test("a message the agent could not answer says so and stays to send again", async () => {
   const { client } = fakeClient([], async () => ({ ok: false, error: { code: "unanswered", message: "model_error" } }));
   render(() => <App client={client} />);
@@ -252,6 +267,23 @@ test("offline, the chat can't be opened: the agent needs the connection", async 
 function touchScreen() {
   window.matchMedia = (query: string) => ({ matches: query === "(pointer: coarse)" }) as MediaQueryList;
 }
+
+test("on a touch screen, a tap on Send that focused it doesn't bring the keyboard back over the answer", async () => {
+  touchScreen();
+  const { client } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "Dal." } }));
+  render(() => <App client={client} />);
+  const chat = await openChat();
+  await within(chat).findByRole("button", { name: "What's for dinner Thursday?" });
+
+  await userEvent.type(messageBox(chat), "What's on Friday?");
+  // Android focuses a tapped button.
+  const send = within(chat).getByRole("button", { name: "Send" });
+  send.focus();
+  await userEvent.keyboard("{Enter}");
+
+  await within(chat).findByText("Dal.");
+  expect(document.activeElement).not.toBe(messageBox(chat));
+});
 
 test("with a mouse, the chat opens ready to type", async () => {
   const { client } = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }));

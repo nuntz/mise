@@ -170,6 +170,9 @@ test("the check-in asks about each due Staple in turn, as tap-through cards", as
   await user.click(within(second).getByRole("button", { name: "Out" }));
 
   expect(await screen.findByText("All checked.")).toBeTruthy();
+  // The summary names each Staple as its card did.
+  expect(screen.getByText("Rice", { selector: ".row-meta" })).toBeTruthy();
+  expect(screen.getByText("Egg", { selector: ".row-meta" })).toBeTruthy();
   const recorded = writes(calls);
   expect(recorded.map((call) => [call.input.item, call.input.status])).toEqual([
     ["rice", "stocked"],
@@ -224,16 +227,16 @@ test("a Staple is changed and removed from its edit view", async () => {
   const staples = await screen.findByRole("region", { name: "Staples" });
   await screen.findByText("Egg");
 
-  await user.click(within(staples).getByRole("button", { name: "Edit egg" }));
-  const editEgg = within(staples).getByRole("form", { name: "Edit egg" });
+  await user.click(within(staples).getByRole("button", { name: "Edit Egg" }));
+  const editEgg = within(staples).getByRole("form", { name: "Edit Egg" });
   await user.click(within(editEgg).getByRole("checkbox", { name: "Every shop" }));
   await user.clear(within(editEgg).getByRole("spinbutton", { name: "Check every (days)" }));
   await user.type(within(editEgg).getByRole("spinbutton", { name: "Check every (days)" }), "7");
   await user.click(within(editEgg).getByRole("button", { name: "Save" }));
 
-  await user.click(within(staples).getByRole("button", { name: "Edit rice" }));
-  const editRice = within(staples).getByRole("form", { name: "Edit rice" });
-  await user.click(within(editRice).getByRole("button", { name: "Remove rice" }));
+  await user.click(within(staples).getByRole("button", { name: "Edit Rice" }));
+  const editRice = within(staples).getByRole("form", { name: "Edit Rice" });
+  await user.click(within(editRice).getByRole("button", { name: "Remove Rice" }));
 
   await vi.waitFor(() =>
     expect(writes(calls)).toEqual([
@@ -258,8 +261,8 @@ test("a change elsewhere doesn't reset a Staple being edited", async () => {
   const user = await openPantry(fake.client);
   const staples = await screen.findByRole("region", { name: "Staples" });
   await within(staples).findByText("Egg");
-  await user.click(within(staples).getByRole("button", { name: "Edit egg" }));
-  const form = () => within(within(staples).getByRole("form", { name: "Edit egg" }));
+  await user.click(within(staples).getByRole("button", { name: "Edit Egg" }));
+  const form = () => within(within(staples).getByRole("form", { name: "Edit Egg" }));
   const days = () => form().getByRole("spinbutton", { name: "Check every (days)" }) as HTMLInputElement;
   await user.click(form().getByRole("checkbox", { name: "Every shop" }));
   await user.clear(days());
@@ -280,12 +283,12 @@ test.each(["upsert_staple", "remove_staple"])(
     const fake = fakeClient({ [tool]: () => new Promise((resolve) => (finish = resolve)) });
     const user = await openPantry(fake.client);
     const staples = await screen.findByRole("region", { name: "Staples" });
-    await user.click(await within(staples).findByRole("button", { name: "Edit rice" }));
-    const riceForm = within(within(staples).getByRole("form", { name: "Edit rice" }));
-    await user.click(riceForm.getByRole("button", { name: tool === "upsert_staple" ? "Save" : "Remove rice" }));
+    await user.click(await within(staples).findByRole("button", { name: "Edit Rice" }));
+    const riceForm = within(within(staples).getByRole("form", { name: "Edit Rice" }));
+    await user.click(riceForm.getByRole("button", { name: tool === "upsert_staple" ? "Save" : "Remove Rice" }));
     await user.click(riceForm.getByRole("button", { name: "Cancel" }));
-    await user.click(within(staples).getByRole("button", { name: "Edit egg" }));
-    const egg = within(within(staples).getByRole("form", { name: "Edit egg" }));
+    await user.click(within(staples).getByRole("button", { name: "Edit Egg" }));
+    const egg = within(within(staples).getByRole("form", { name: "Edit Egg" }));
     const days = egg.getByRole("spinbutton", { name: "Check every (days)" }) as HTMLInputElement;
     await user.click(egg.getByRole("checkbox", { name: "Every shop" }));
     await user.clear(days);
@@ -295,7 +298,7 @@ test.each(["upsert_staple", "remove_staple"])(
     finish({ ok: true, value: rice });
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(within(staples).getByRole("form", { name: "Edit egg" })).toBeTruthy();
+    expect(within(staples).getByRole("form", { name: "Edit Egg" })).toBeTruthy();
     expect(days.value).toBe("7");
   },
 );
@@ -305,14 +308,14 @@ test("a save that finishes while its own Staple is still open closes it", async 
   const fake = fakeClient({ upsert_staple: () => new Promise((resolve) => (finish = resolve)) });
   const user = await openPantry(fake.client);
   const staples = await screen.findByRole("region", { name: "Staples" });
-  await user.click(await within(staples).findByRole("button", { name: "Edit rice" }));
+  await user.click(await within(staples).findByRole("button", { name: "Edit Rice" }));
   await user.click(
-    within(within(staples).getByRole("form", { name: "Edit rice" })).getByRole("button", { name: "Save" }),
+    within(within(staples).getByRole("form", { name: "Edit Rice" })).getByRole("button", { name: "Save" }),
   );
 
   finish({ ok: true, value: rice });
 
-  await vi.waitFor(() => expect(within(staples).queryByRole("form", { name: "Edit rice" })).toBeNull());
+  await vi.waitFor(() => expect(within(staples).queryByRole("form", { name: "Edit Rice" })).toBeNull());
 });
 
 test("a Staple is added from a form headed Add a Staple, whose Unit starts at Count", async () => {

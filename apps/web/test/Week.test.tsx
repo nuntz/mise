@@ -1271,7 +1271,7 @@ test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run ou
   const oilRow = within(runOut).getByRole("listitem");
   expect(within(oilRow).getByText("Olive oil")).toBeTruthy();
   expect(within(oilRow).getByText("Stocked").className).toBe("chip chip-leaf");
-  await user.click(within(oilRow).getByRole("button", { name: "olive oil: Out" }));
+  await user.click(within(oilRow).getByRole("button", { name: "Olive oil: Out" }));
 
   expect(writes(calls)).toEqual([
     { name: "record_staple_status", input: { item: "olive_oil", status: "out", at: expect.any(String) } },
@@ -1317,7 +1317,7 @@ test("marking a dinner cooked asks at once whether any Staple its Recipe uses ha
   await user.click(within(sheet).getByRole("button", { name: "Mark cooked" }));
 
   const runOut = await within(sheet).findByRole("group", { name: "Anything run out?" });
-  expect(within(runOut).getByRole("button", { name: "salt: Out" })).toBeTruthy();
+  expect(within(runOut).getByRole("button", { name: "Salt: Out" })).toBeTruthy();
 });
 
 test("offline, the Week last loaded opens read-only: it can be cooked from, not changed", async () => {

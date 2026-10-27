@@ -22,8 +22,11 @@ const household = (overrides: Partial<Household> = {}): Household => ({
   ...overrides,
 });
 
-/** What waits on the Household, by how many of each the listing tools return. */
-type Waiting = { drafts?: number; flags?: number; unresolved?: number; untagged?: number };
+/**
+ * What waits on the Household, by how many of each the listing tools return, and how many Recipes it
+ * has besides the untagged ones.
+ */
+type Waiting = { drafts?: number; flags?: number; unresolved?: number; untagged?: number; tagged?: number };
 
 /** `count` stand-ins for a listing's entries, each on its own Recipe, numbered from `first`. */
 const entries = (first: number, count = 0) =>
@@ -51,7 +54,10 @@ function fakeClient(initial: Household, initialWaiting: Waiting = {}) {
     if (name === "get_grocery_list") return { ok: true, value: null };
     if (name === "list_items") return { ok: true, value: [] };
     if (name === "list_due_staples") return { ok: true, value: { due: 0, staples: [] } };
-    if (name === "search_recipes") return { ok: true, value: [] };
+    if (name === "search_recipes") {
+      const recipes = (waiting.untagged ?? 0) + (waiting.tagged ?? 0);
+      return { ok: true, value: Array.from({ length: recipes }, (_, index) => ({ id: 500 + index })) };
+    }
     throw new Error(`Unexpected tool ${name}`);
   });
   const notify = (next: Household | Error) => {
@@ -214,10 +220,23 @@ test("a Household row shows a chip where something waits, and none where nothing
   expect(within(screen.getByRole("button", { name: /^Import/ })).queryByText(/./, { selector: ".chip" })).toBeNull();
 
   // The Household reviews the Draft, resolves the Ingredients and tags the Recipes.
-  wait({ flags: 2 });
+  wait({ flags: 2, tagged: 2 });
 
   expect(await within(review).findByText("2 Import Flags")).toBeTruthy();
   expect(within(review).queryByText("1 Draft")).toBeNull();
   expect(within(resolve).queryByText(/Unresolved/)).toBeNull();
   expect(within(tag).getByText("All tagged").classList.contains("chip-leaf")).toBe(true);
+});
+
+test("Tag Recipes shows no chip for a Household with no Recipes yet", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient(household(), { drafts: 1 });
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+
+  // The Review chip shows once the listings have answered.
+  await within(screen.getByRole("button", { name: /^Review/ })).findByText("1 Draft");
+  expect(
+    within(screen.getByRole("button", { name: /^Tag Recipes/ })).queryByText(/./, { selector: ".chip" }),
+  ).toBeNull();
 });

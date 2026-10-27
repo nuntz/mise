@@ -322,7 +322,7 @@ function CheckInDone(props: { answers: { staple: Staple; status: StapleStatus }[
                 <strong class="row-title">{t(`pantry.summary.${status}`, { count: String(of(status).length) })}</strong>
                 <span class="row-meta">
                   {of(status)
-                    .map((answer) => answer.staple.name)
+                    .map((answer) => nameText(answer.staple.name))
                     .join(", ")}
                 </span>
               </span>
@@ -498,7 +498,7 @@ function StapleRow(props: {
             <button
               type="button"
               class="button-row"
-              aria-label={t("pantry.edit", { name: props.staple.name })}
+              aria-label={t("pantry.edit", { name: nameText(props.staple.name) })}
               onClick={() => {
                 setDraft(draftOf(props.staple));
                 setError(undefined);
@@ -511,7 +511,7 @@ function StapleRow(props: {
         </div>
       }
     >
-      <form class="stack" aria-label={t("pantry.edit", { name: props.staple.name })} onSubmit={save}>
+      <form class="stack" aria-label={t("pantry.edit", { name: nameText(props.staple.name) })} onSubmit={save}>
         {body()}
         <StapleFields draft={draft()} onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))} />
         <Show when={error()}>
@@ -528,7 +528,7 @@ function StapleRow(props: {
         <button
           type="button"
           class="button-danger"
-          aria-label={t("pantry.remove", { name: props.staple.name })}
+          aria-label={t("pantry.remove", { name: nameText(props.staple.name) })}
           disabled={busy()}
           onClick={() => run(() => props.client.call("remove_staple", { item: props.staple.item }))}
         >
@@ -722,7 +722,7 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
                     <button
                       type="button"
                       class="button-row"
-                      aria-label={t(`pantry.record.${status}`, { name: staple.name })}
+                      aria-label={t(`pantry.record.${status}`, { name: nameText(staple.name) })}
                       aria-pressed={staple.status === status}
                       onClick={() => record(staple, status)}
                     >

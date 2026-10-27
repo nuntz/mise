@@ -13,8 +13,8 @@ export type StatusChips = { review: StatusChip[]; resolve: StatusChip[]; tag: St
 /**
  * What waits on a person in each section, kept fresh from the same listing tools the sections use:
  * Drafts and Import Flags on Review, Unresolved Ingredients on Resolve Ingredients, and untagged
- * Recipes (or "All tagged") on Tag Recipes. A section shows nothing until its listing answers, and a
- * failed refresh keeps what showed.
+ * Recipes (or "All tagged", once there are Recipes) on Tag Recipes. A section shows nothing until its
+ * listing answers, and a failed refresh keeps what showed.
  */
 export function createHouseholdStatus(client: MiseClient) {
   const [chips, setChips] = createSignal<StatusChips>({ review: [], resolve: [], tag: [] });
@@ -28,8 +28,9 @@ export function createHouseholdStatus(client: MiseClient) {
         client.call("list_import_flags", {}),
         client.call("list_unresolved_ingredients", {}),
         client.call("list_untagged_recipes", {}),
+        client.call("search_recipes", {}),
       ]),
-    ([drafts, flags, unresolved, untagged]) =>
+    ([drafts, flags, unresolved, untagged, recipes]) =>
       setChips((shown) => ({
         review:
           drafts.ok && flags.ok
@@ -39,16 +40,17 @@ export function createHouseholdStatus(client: MiseClient) {
               ]
             : shown.review,
         resolve: unresolved.ok ? countChip(unresolved.value.length, "unresolved", "amber") : shown.resolve,
-        tag: untagged.ok ? tagChips(untagged.value.length) : shown.tag,
+        tag: untagged.ok && recipes.ok ? tagChips(untagged.value.length, recipes.value.length) : shown.tag,
       })),
   );
 
   return chips;
 }
 
-/** How many Recipes wait on tags, or a leaf "All tagged" when none do. */
-function tagChips(untagged: number): StatusChip[] {
-  return untagged > 0 ? countChip(untagged, "untagged") : [{ text: t("household.allTagged"), tone: "leaf" }];
+/** How many Recipes wait on tags, or a leaf "All tagged" when none do; nothing before the first Recipe. */
+function tagChips(untagged: number, recipes: number): StatusChip[] {
+  if (untagged > 0) return countChip(untagged, "untagged");
+  return recipes > 0 ? [{ text: t("household.allTagged"), tone: "leaf" }] : [];
 }
 
 /** "1 Draft", "3 Drafts", or no chip at all for none. */

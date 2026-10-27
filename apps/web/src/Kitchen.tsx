@@ -55,6 +55,13 @@ export function KitchenMode(props: {
             // A change notice may bring the Recipe back with fewer steps.
             const at = () => Math.min(step(), Math.max(steps().length - 1, 0));
             const last = () => at() >= steps().length - 1;
+            let next: HTMLButtonElement | undefined;
+            // Back on the first step, Previous hides with the focus it held; Next takes it, not the page.
+            const previous = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => {
+              const focused = document.activeElement === event.currentTarget;
+              setStep(at() - 1);
+              if (focused && at() === 0) next?.focus();
+            };
             return (
               <>
                 <Show
@@ -104,7 +111,7 @@ export function KitchenMode(props: {
                         <div class="actions">
                           {/* The first step has nothing before it, so no Previous that looks disabled. */}
                           <Show when={at() > 0}>
-                            <button type="button" class="button-secondary" onClick={() => setStep(at() - 1)}>
+                            <button type="button" class="button-secondary" onClick={previous}>
                               <Icon name="chevronLeft" />
                               {t("kitchen.previous")}
                             </button>
@@ -118,7 +125,7 @@ export function KitchenMode(props: {
                               </button>
                             }
                           >
-                            <button type="button" class="button-primary" onClick={() => setStep(at() + 1)}>
+                            <button ref={next} type="button" class="button-primary" onClick={() => setStep(at() + 1)}>
                               {t("kitchen.next")}
                               <Icon name="chevronRight" />
                             </button>

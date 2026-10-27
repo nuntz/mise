@@ -852,7 +852,8 @@ export function setLocale(next: string): void {
 
 /**
  * A name standing alone, as a row title, chip or tag, with its first letter upper-cased for the
- * Household's locale: "cumin" reads "Cumin". Never used inside a sentence; stored names don't change.
+ * Household's locale: "cumin" reads "Cumin". A control's label naming that row says it the same way
+ * ("Edit Cumin"), so it matches what's on screen. Never used inside a sentence; stored names don't change.
  */
 export function nameText(name: string): string {
   const [first = "", ...rest] = name;
