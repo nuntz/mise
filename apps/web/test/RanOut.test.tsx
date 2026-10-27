@@ -6,9 +6,9 @@ import {
   type Staple,
   type StapleStatus,
 } from "@mise/domain";
-import { render, screen, within } from "@solidjs/testing-library";
+import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import { createFakeClient } from "./fakeClient";
 
@@ -190,4 +190,19 @@ test("losing the connection with the picker open stops Staples being recorded", 
 
   expect(await within(picker).findByText("Recording a Staple needs a connection.")).toBeTruthy();
   expect((within(rice).getByRole("button", { name: "Out" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+test("on a touch screen, Ran out opens on the Staples, not the keyboard", async () => {
+  // A finger's screen, where focusing the search brings up the keyboard over the sheet.
+  window.matchMedia = (query: string) => ({ matches: query === "(pointer: coarse)" }) as MediaQueryList;
+  onTestFinished(() => {
+    Reflect.deleteProperty(window, "matchMedia");
+  });
+  const { client } = fakeClient();
+  render(() => <App client={client} />);
+
+  await userEvent.click(await screen.findByRole("button", { name: "Ran out" }));
+  const picker = await screen.findByRole("dialog", { name: "What ran out?" });
+
+  await waitFor(() => expect(document.activeElement).toBe(picker));
 });
