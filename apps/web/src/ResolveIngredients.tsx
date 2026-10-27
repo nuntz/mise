@@ -323,31 +323,73 @@ function SuggestionPanel(props: {
   // "None" must be said by a person (ADR 0009): a new Item without Allergens is accepted from Edit.
   const acceptable = () =>
     props.suggestion.suggested.kind === "existing" || props.suggestion.suggested.allergens.length > 0;
-  const summary = () => suggestionSummary(props.suggestion.suggested, props.items);
+  const suggested = () => suggestedItem(props.suggestion.suggested, props.items);
 
   return (
-    <section aria-labelledby={heading}>
-      <h4 id={heading}>{t("suggestion.label")}</h4>
+    <section class="ai-note" aria-labelledby={heading}>
+      <div class="ai-note-head">
+        <h4 id={heading}>{t("suggestion.label")}</h4>
+        <span class="chip chip-plum">{t("suggestion.aiDrafted")}</span>
+      </div>
       <p>{t("suggestion.disclosure")}</p>
-      <p>{summary()}</p>
+      <div class="row-body">
+        <p class="row-title name">{nameText(suggested().name)}</p>
+        <p class="row-meta">{suggested().meta}</p>
+        <div class="chips">
+          <Switch>
+            <Match when={suggested().allergens === undefined}>
+              <span class="chip chip-amber">{t("suggestion.allergensUnknown")}</span>
+            </Match>
+            <Match when={suggested().allergens?.length === 0}>
+              <span class="chip chip-amber">{t("suggestion.noneSuggested")}</span>
+            </Match>
+            <Match when={suggested().allergens}>
+              {(allergens) => (
+                <For each={allergens()}>{(allergen) => <span class="chip">{t(`allergen.${allergen}`)}</span>}</For>
+              )}
+            </Match>
+          </Switch>
+        </div>
+      </div>
       <Show when={!acceptable()}>
         <p>{t("suggestion.stateNone")}</p>
       </Show>
       <Show when={props.actions}>
-        <Show when={acceptable()}>
-          <button type="button" onClick={() => props.onAccept()}>
-            {t("suggestion.accept")}
+        <div class="ai-note-actions">
+          <Show when={acceptable()}>
+            <button type="button" class="button-primary" onClick={() => props.onAccept()}>
+              {t("suggestion.accept")}
+            </button>
+          </Show>
+          <button type="button" onClick={() => props.onEdit()}>
+            {t("suggestion.edit")}
           </button>
-        </Show>
-        <button type="button" onClick={() => props.onEdit()}>
-          {t("suggestion.edit")}
-        </button>
-        <button type="button" onClick={() => props.onDismiss()}>
-          {t("suggestion.dismiss")}
-        </button>
+          <button type="button" class="button-quiet" onClick={() => props.onDismiss()}>
+            {t("suggestion.dismiss")}
+          </button>
+        </div>
       </Show>
     </section>
   );
+}
+
+/**
+ * The Item a Suggestion names, what it would be, and its Allergens, which are undefined when it names
+ * an Item no longer known.
+ */
+function suggestedItem(
+  suggested: SuggestedItem,
+  items: Map<ItemId, Item>,
+): { name: string; meta: string; allergens?: Allergen[] } {
+  if (suggested.kind === "new") {
+    return {
+      name: suggested.name,
+      meta: t("suggestion.newMeta", { section: t(`section.${suggested.section}`) }),
+      allergens: suggested.allergens,
+    };
+  }
+  const item = items.get(suggested.item);
+  return { name: item?.name ?? suggested.item, meta: t("suggestion.existingMeta"), allergens: item?.allergens };
 }
 
 /** What a Suggestion says the text is, with the Allergens that would come with it. */
@@ -401,10 +443,10 @@ function MapForm(props: {
           {(item) => <option value={item.name}>{allergenSummary(item.allergens)}</option>}
         </For>
       </datalist>
-      <button type="submit" disabled={props.busy}>
+      <button type="submit" class="button-primary" disabled={props.busy}>
         {props.submitLabel ?? t("resolve.mapSubmit")}
       </button>
-      <button type="button" onClick={() => props.onCancel()}>
+      <button type="button" class="button-quiet" onClick={() => props.onCancel()}>
         {t("resolve.cancel")}
       </button>
     </form>
@@ -459,41 +501,52 @@ function CreateForm(props: {
     });
   };
 
+  const hint = createUniqueId();
+
   return (
     <form onSubmit={submit}>
       <label>
         {t("item.name")}
-        <input value={name()} onInput={(e) => setName(e.currentTarget.value)} required />
+        <input value={name()} onInput={(e) => setName(e.currentTarget.value)} aria-describedby={hint} required />
       </label>
+      <small id={hint}>{t("item.aliasHint", { text: props.text })}</small>
       <label>
         {t("item.section")}
         <select value={section()} onChange={(e) => setSection(e.currentTarget.value as StoreSection)}>
           <For each={STORE_SECTIONS}>{(value) => <option value={value}>{t(`section.${value}`)}</option>}</For>
         </select>
       </label>
-      <label>
-        {t("item.unitFamily")}
-        <select value={unitFamily()} onChange={(e) => setUnitFamily(e.currentTarget.value as UnitFamily)}>
-          <For each={UNIT_FAMILIES}>{(value) => <option value={value}>{t(`unitFamily.${value}`)}</option>}</For>
-        </select>
-      </label>
+      <fieldset class="field">
+        <legend>{t("item.unitFamily")}</legend>
+        <div class="segmented">
+          <For each={UNIT_FAMILIES}>
+            {(value) => (
+              <button type="button" aria-pressed={unitFamily() === value} onClick={() => setUnitFamily(value)}>
+                {t(`unitFamily.${value}`)}
+              </button>
+            )}
+          </For>
+        </div>
+      </fieldset>
       <fieldset>
         <legend>{t("item.allergens")}</legend>
         <p>{t("item.allergensHint")}</p>
-        <For each={ALLERGENS}>
-          {(allergen) => (
-            <label>
-              <input
-                type="checkbox"
-                checked={allergens().includes(allergen)}
-                disabled={none()}
-                onChange={(e) => toggle(allergen, e.currentTarget.checked)}
-              />
-              {t(`allergen.${allergen}`)}
-            </label>
-          )}
-        </For>
-        <label>
+        <div class="chips">
+          <For each={ALLERGENS}>
+            {(allergen) => (
+              <label class="toggle-chip">
+                <input
+                  type="checkbox"
+                  checked={allergens().includes(allergen)}
+                  disabled={none()}
+                  onChange={(e) => toggle(allergen, e.currentTarget.checked)}
+                />
+                {t(`allergen.${allergen}`)}
+              </label>
+            )}
+          </For>
+        </div>
+        <label class="toggle-chip">
           <input
             type="checkbox"
             checked={none()}
@@ -503,10 +556,10 @@ function CreateForm(props: {
           {t("item.allergensNone")}
         </label>
       </fieldset>
-      <button type="submit" disabled={props.busy}>
+      <button type="submit" class="button-primary" disabled={props.busy}>
         {props.submitLabel ?? t("resolve.createSubmit")}
       </button>
-      <button type="button" onClick={() => props.onCancel()}>
+      <button type="button" class="button-quiet" onClick={() => props.onCancel()}>
         {t("resolve.cancel")}
       </button>
     </form>

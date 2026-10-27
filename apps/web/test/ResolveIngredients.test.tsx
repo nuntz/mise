@@ -187,7 +187,7 @@ test("a new Item is created from a group with its Allergens and Store Section, t
   await user.clear(name);
   await user.type(name, "Korean chili paste");
   await user.selectOptions(within(gochujang).getByRole("combobox", { name: "Store Section" }), "international");
-  await user.selectOptions(within(gochujang).getByRole("combobox", { name: "Measured by" }), "volume");
+  await user.click(within(gochujang).getByRole("button", { name: "Volume" }));
   await user.click(within(gochujang).getByRole("checkbox", { name: "Soy" }));
   await user.click(within(gochujang).getByRole("checkbox", { name: "Wheat" }));
   await user.click(within(gochujang).getByRole("button", { name: "Create Item" }));
@@ -199,6 +199,28 @@ test("a new Item is created from a group with its Allergens and Store Section, t
     allergens: ["soy", "wheat"],
     aliases: ["gochujang"],
   });
+});
+
+test("creating an Item opens inline: the alias hint, how it's measured as segments, Allergens as toggle chips", async () => {
+  const { user } = await openPage("Resolve Ingredients");
+
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
+  await user.click(within(gochujang).getByRole("button", { name: "Create an Item" }));
+  expect(within(gochujang).getByText("If you rename it, “gochujang” is kept as another name for it.")).toBeTruthy();
+  const measured = within(gochujang).getByRole("group", { name: "Measured by" });
+  expect(measured.querySelector(".segmented")).toBeTruthy();
+  expect(within(measured).getByRole("button", { name: "Count" }).getAttribute("aria-pressed")).toBe("true");
+  await user.click(within(measured).getByRole("button", { name: "Weight" }));
+  expect(within(measured).getByRole("button", { name: "Weight" }).getAttribute("aria-pressed")).toBe("true");
+  expect(within(measured).getByRole("button", { name: "Count" }).getAttribute("aria-pressed")).toBe("false");
+  const soy = within(gochujang).getByRole("checkbox", { name: "Soy" });
+  expect(soy.closest("label")?.classList.contains("toggle-chip")).toBe(true);
+  const none = within(gochujang).getByRole("checkbox", { name: "Contains none of these" });
+  expect(none.closest("label")?.classList.contains("toggle-chip")).toBe(true);
+  expect(within(gochujang).getByRole("button", { name: "Create Item" }).className).toBe("button-primary");
+  expect(within(gochujang).getByRole("button", { name: "Cancel" }).className).toBe("button-quiet");
+  // Gochujang's own Accept goes while it is being created; Beurre's stays.
+  expect(primaries()).toEqual(["Create Item", "Accept"]);
 });
 
 test("a new Item needs its Allergens ticked, or none of them ticked on purpose", async () => {
@@ -241,12 +263,40 @@ test("a Suggestion shows on its group, marked as AI-drafted and not guaranteed c
   const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
   expect(suggestion.textContent).toContain("AI-drafted, not guaranteed complete");
-  expect(suggestion.textContent).toContain("A new Item: gochujang, in International, with Soy");
-  const beurre = screen.getByRole("article", { name: "Beurre" });
-  expect(within(beurre).getByRole("region", { name: "Suggestion" }).textContent).toContain(
-    "Another name for butter (Milk)",
-  );
   expect(within(screen.getByRole("article", { name: "(no name)" })).queryByRole("region")).toBeNull();
+});
+
+test("a Suggestion is a raised AI note: its disclosure, an AI-drafted chip, the Item and its Allergens as chips", async () => {
+  await openPage("Resolve Ingredients");
+
+  const gochujang = await screen.findByRole("article", { name: "Gochujang" });
+  const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
+  expect(suggestion.classList.contains("ai-note")).toBe(true);
+  // Word for word, as its own sentence.
+  expect(
+    within(suggestion).getByText(
+      "AI-drafted, not guaranteed complete. Check it, Allergens above all, before accepting.",
+    ),
+  ).toBeTruthy();
+  expect(within(suggestion).getByText("AI-drafted").classList.contains("chip")).toBe(true);
+  expect(within(suggestion).getByText("Gochujang").classList.contains("name")).toBe(true);
+  expect(within(suggestion).getByText("A new Item, in International")).toBeTruthy();
+  expect(within(suggestion).getByText("Soy").classList.contains("chip")).toBe(true);
+
+  const beurre = screen.getByRole("article", { name: "Beurre" });
+  const existing = within(beurre).getByRole("region", { name: "Suggestion" });
+  expect(within(existing).getByText("Butter").classList.contains("name")).toBe(true);
+  expect(within(existing).getByText("Milk").classList.contains("chip")).toBe(true);
+});
+
+test("a Suggestion's Accept is its primary, Edit a row button and Dismiss quiet", async () => {
+  await openPage("Resolve Ingredients");
+
+  const beurre = await screen.findByRole("article", { name: "Beurre" });
+  const suggestion = await within(beurre).findByRole("region", { name: "Suggestion" });
+  expect(within(suggestion).getByRole("button", { name: "Accept" }).className).toBe("button-primary");
+  expect(within(suggestion).getByRole("button", { name: "Edit" }).className).toBe("");
+  expect(within(suggestion).getByRole("button", { name: "Dismiss" }).className).toBe("button-quiet");
 });
 
 test("a Suggestion is accepted, or dismissed, in one tap", async () => {
@@ -293,7 +343,8 @@ test("a Suggestion of a new Item with no Allergens is accepted only once a perso
 
   const gochujang = await screen.findByRole("article", { name: "Gochujang" });
   const suggestion = await within(gochujang).findByRole("region", { name: "Suggestion" });
-  expect(suggestion.textContent).toContain("with no Allergens");
+  // The model's "none" isn't a person's: amber, never the plain chip of an Item known to have none.
+  expect(within(suggestion).getByText("No Allergens suggested").classList.contains("chip-amber")).toBe(true);
   expect(suggestion.textContent).toContain(
     'To accept it, choose Edit and tick "Contains none of these" if that is right.',
   );
@@ -344,9 +395,9 @@ test("Suggest for all asks in batches until no text is left", async () => {
   });
 
   const suggestAll = await screen.findByRole("button", { name: "Suggest for all" });
-  // A secondary in one bordered block with its status line, so the page has no primary of its own.
+  // A secondary in one bordered block with its status line: the only primaries are each Suggestion's Accept.
   expect(suggestAll.classList.contains("button-secondary")).toBe(true);
-  expect(primaries()).toEqual([]);
+  expect(primaries()).toEqual(["Accept", "Accept"]);
   await user.click(suggestAll);
 
   const status = await screen.findByText("Suggestions made: 1. Every Ingredient has been asked about.");

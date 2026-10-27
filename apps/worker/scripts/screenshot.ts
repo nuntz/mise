@@ -78,8 +78,8 @@ async function seed(): Promise<Map<string, number>> {
 
 /**
  * What the screens past the Week need to show more than their empty states: a Recipe with
- * Unresolved Ingredients, a link-only Draft to review, Staples due and run low, a Grocery List and a
- * calendar link.
+ * Unresolved Ingredients and, given a model, Suggestions for them, a link-only Draft to review,
+ * Staples due and run low, a Grocery List and a calendar link.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -97,6 +97,12 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
     await call(agent, "import_url", { url: "https://recipes.example.invalid/grandmas-dumplings" });
   } catch (error) {
     console.warn(`No Draft to review: ${error}`);
+  }
+  // Suggestions for the Unresolved Ingredients need a model; without one, Resolve shows none.
+  try {
+    await call(agent, "request_suggestions", {});
+  } catch (error) {
+    console.warn(`No Suggestions to review: ${error}`);
   }
   for (const [item, location] of [
     ["cumin", "pantry"],
@@ -172,6 +178,15 @@ function screens(ids: Map<string, number>): Screen[] {
         await page.locator("button.row-open").nth(index).click();
       },
     })),
+    {
+      name: "household-resolve-create",
+      open: async (page: Page) => {
+        await nav(4)(page);
+        await page.locator("button.row-open").nth(SETTINGS.indexOf("resolve")).click();
+        // The first group with a name: a blank one has no buttons. Its second is Create an Item.
+        await page.locator(".rows .row-end").first().locator("button").nth(1).click();
+      },
+    },
     {
       name: "household-member-edit",
       open: async (page: Page) => {

@@ -384,6 +384,23 @@ legend {
   color: var(--plum);
 }
 
+/* A field that isn't one input, such as a segmented control: a fieldset with no box, its legend
+   labelling it as a label does. */
+fieldset.field {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+fieldset.field > legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font: var(--type-strip);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink-muted);
+}
+
 form {
   display: flex;
   flex-direction: column;
@@ -721,6 +738,42 @@ article:not([class]) {
   border: 0;
 }
 
+/* A large chip that toggles, such as an Allergen on a new Item: a checkbox underneath, drawn as a
+   hairline pill that fills ink when ticked. */
+label.toggle-chip:has(> input) {
+  position: relative;
+  min-height: var(--touch-min);
+  padding-inline: var(--space-4);
+  border: 2px solid var(--line-control);
+  border-radius: var(--radius-full);
+  font: var(--type-button);
+}
+
+.toggle-chip input {
+  position: absolute;
+  opacity: 0;
+}
+
+.toggle-chip:has(input:checked) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.toggle-chip:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+.toggle-chip:has(input:disabled) {
+  cursor: not-allowed;
+  border-style: dashed;
+  color: var(--ink-muted);
+}
+
+fieldset > .toggle-chip {
+  align-self: flex-start;
+}
+
 /* ---------- Segmented control ---------- */
 
 .segmented {
@@ -771,6 +824,42 @@ article:not([class]) {
 
 .block > .banner {
   align-self: stretch;
+}
+
+/* What Mise's AI model drafted, such as a Suggestion, raised off the page with its disclosure and
+   marked in plum as Mise's own: nothing in it changes the Household until a person accepts it. */
+.ai-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-inline-start: 4px solid var(--plum);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.ai-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* The Item it suggests sits in the column, not stretched as a row's body is. */
+.ai-note > .row-body {
+  flex: none;
+}
+
+/* Allergen chips on the raised surface take the page's, so they still stand off it. */
+.ai-note .chips .chip {
+  background: var(--surface);
+}
+
+.ai-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 /* ---------- States: empty and loading ---------- */
