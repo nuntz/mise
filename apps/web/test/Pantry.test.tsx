@@ -112,7 +112,7 @@ test("offline, the banner's Check now says it needs a connection: answering isn'
   expect(check.nextElementSibling).toBe(reason);
 });
 
-test("the banner shows on Week and Pantry, where it can be acted on, and on no other page", async () => {
+test("the banner shows on Week only: Pantry says how many are due in its heading", async () => {
   const { client } = fakeClient({
     search_recipes: () => ({ ok: true, value: [] }),
     get_grocery_list: () => ({ ok: true, value: null }),
@@ -123,11 +123,11 @@ test("the banner shows on Week and Pantry, where it can be acted on, and on no o
   const banner = () => screen.queryByText("Pantry check: 2 Staples");
 
   expect(await screen.findByText("Pantry check: 2 Staples")).toBeTruthy();
-  for (const page of ["Recipes", "Groceries", "Household"]) {
+  for (const page of ["Recipes", "Groceries", "Pantry", "Household"]) {
     await user.click(screen.getByRole("button", { name: page }));
     expect(banner(), page).toBeNull();
   }
-  await user.click(screen.getByRole("button", { name: "Pantry" }));
+  await user.click(screen.getByRole("button", { name: "Week" }));
   expect(await screen.findByText("Pantry check: 2 Staples")).toBeTruthy();
 });
 
@@ -311,6 +311,7 @@ test("how many Staples are due is said once, in the heading", async () => {
 
   expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
   expect(screen.queryByText("2 Staples are due for a check.")).toBeNull();
+  expect(screen.queryByText("Pantry check: 2 Staples")).toBeNull();
   expect(primaries()).toEqual(["Start the pantry check"]);
 });
 

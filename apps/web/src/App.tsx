@@ -245,8 +245,8 @@ export function App(props: { client: MiseClient }) {
                     </button>
                   </div>
                 </Show>
-                {/* The nudge shows only where it can be acted on. */}
-                <Show when={page() === "week" || page() === "pantry"}>
+                {/* The nudge shows on the Week, which leads to the check; Pantry says it in its heading. */}
+                <Show when={page() === "week"}>
                   <PantryBanner client={props.client} online={online()} onOpen={() => go("pantry")} />
                 </Show>
                 <Switch>
