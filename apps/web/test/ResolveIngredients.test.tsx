@@ -369,6 +369,21 @@ test("a Suggestion of a new Item with no Allergens is accepted only once a perso
   });
 });
 
+test("a Suggestion of an existing Item with no Allergens says so plainly: they're the Item's, not the model's", async () => {
+  const oil: Suggestion = {
+    id: 8,
+    text: "beurre",
+    suggested: { kind: "existing", item: "olive_oil" },
+    suggestedAt: "2026-10-23T12:00:00.000Z",
+  };
+  await openPage("Resolve Ingredients", { listed: [oil] });
+
+  const beurre = await screen.findByRole("article", { name: "Beurre" });
+  const suggestion = await within(beurre).findByRole("region", { name: "Suggestion" });
+  expect(within(suggestion).getByText("No Allergens").className).toBe("chip");
+  expect(within(suggestion).queryByText("No Allergens suggested")).toBeNull();
+});
+
 test("a Suggestion of an existing Item is accepted with another Item a person picked", async () => {
   const { user, calls } = await openPage("Resolve Ingredients");
 

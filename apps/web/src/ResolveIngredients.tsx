@@ -340,8 +340,12 @@ function SuggestionPanel(props: {
             <Match when={suggested().allergens === undefined}>
               <span class="chip chip-amber">{t("suggestion.allergensUnknown")}</span>
             </Match>
-            <Match when={suggested().allergens?.length === 0}>
+            {/* The model's "none" for a new Item is a guess; an Item in Mise has its Allergens already. */}
+            <Match when={suggested().allergens?.length === 0 && props.suggestion.suggested.kind === "new"}>
               <span class="chip chip-amber">{t("suggestion.noneSuggested")}</span>
+            </Match>
+            <Match when={suggested().allergens?.length === 0}>
+              <span class="chip">{t("item.noAllergens")}</span>
             </Match>
             <Match when={suggested().allergens}>
               {(allergens) => (

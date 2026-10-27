@@ -826,14 +826,13 @@ fieldset > .toggle-chip {
   align-self: stretch;
 }
 
-/* What Mise's AI model drafted, such as a Suggestion, raised off the page with its disclosure and
-   marked in plum as Mise's own: nothing in it changes the Household until a person accepts it. */
+/* What Mise's AI model drafted, such as a Suggestion, raised off the page with its disclosure and a
+   plum chip as Mise's own mark: nothing in it changes the Household until a person accepts it. */
 .ai-note {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  border-inline-start: 4px solid var(--plum);
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
 }
