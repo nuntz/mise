@@ -133,6 +133,9 @@ async function screenshot(browser: Browser) {
   console.log(`Saved ${join(out, "week-phone.png")}`);
 }
 
+/** The Import page's ways to import, in the order of its rows (Import.tsx's IMPORT_METHODS). */
+const IMPORT_METHODS = ["link", "paste", "screenshots", "paprika", "drive"];
+
 /** The Household page's settings, in the order of its rows (App.tsx's SETTING_GROUPS). */
 const SETTINGS = ["members", "settings", "calendar", "notifications", "review", "import", "resolve", "items", "tag"];
 
@@ -175,6 +178,14 @@ function screens(ids: Map<string, number>): Screen[] {
       name: `household-${setting}`,
       open: async (page: Page) => {
         await nav(4)(page);
+        await page.locator("button.row-open").nth(index).click();
+      },
+    })),
+    ...IMPORT_METHODS.map((method, index) => ({
+      name: `household-import-${method}`,
+      open: async (page: Page) => {
+        await nav(4)(page);
+        await page.locator("button.row-open").nth(SETTINGS.indexOf("import")).click();
         await page.locator("button.row-open").nth(index).click();
       },
     })),

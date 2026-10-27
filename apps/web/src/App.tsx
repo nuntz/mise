@@ -8,7 +8,7 @@ import { keepFresh } from "./fresh";
 import { GroceryPage } from "./Grocery";
 import { HouseholdSettingsForm } from "./HouseholdSettings";
 import { createHouseholdStatus, type StatusChip } from "./householdStatus";
-import { ImportPage } from "./Import";
+import { IMPORT_METHODS, type ImportMethod, ImportPage } from "./Import";
 import { ItemsSettings } from "./Items";
 import { Icon, type IconName } from "./icons";
 import { KitchenMode } from "./Kitchen";
@@ -49,6 +49,12 @@ type Setting =
   | "resolve"
   | "items"
   | "tag";
+/** A page the Household page pushes: a setting, or a way to import pushed over Import. */
+type HouseholdPushed = Setting | `import-${ImportMethod}`;
+/** The way to import a pushed page opens, if it's one. */
+const importMethod = (page: HouseholdPushed) => IMPORT_METHODS.find((method) => page === `import-${method}`);
+/** The setting a pushed page belongs to. */
+const settingOf = (page: HouseholdPushed): Setting => (importMethod(page) ? "import" : (page as Setting));
 /** The Household page's rows, in their groups. */
 const SETTING_GROUPS: { group: "people" | "planning" | "recipes"; settings: Setting[] }[] = [
   { group: "people", settings: ["members"] },
@@ -349,7 +355,7 @@ function HouseholdPage(props: {
   kitchenMode: boolean;
   onKitchenMode: (on: boolean) => void;
 }) {
-  const setting = createPushedPages<Setting>("household", props.open);
+  const setting = createPushedPages<HouseholdPushed>("household", props.open);
   const status = createHouseholdStatus(props.client);
   const chips = (name: Setting) => {
     const shown: Partial<Record<Setting, StatusChip[]>> = status();
@@ -419,9 +425,9 @@ function HouseholdPage(props: {
           <header class="page-heading">
             <button type="button" class="button-link back" onClick={() => setting.back()}>
               <Icon name="chevronLeft" />
-              {t("household.back")}
+              {importMethod(open()) ? t("nav.import") : t("household.back")}
             </button>
-            <p class="overline">{t("household.sectionOverline", { section: t(`nav.${open()}`) })}</p>
+            <p class="overline">{t("household.sectionOverline", { section: t(`nav.${settingOf(open())}`) })}</p>
           </header>
           <Switch>
             <Match when={open() === "members"}>
@@ -439,8 +445,13 @@ function HouseholdPage(props: {
             <Match when={open() === "review"}>
               <ReviewPage client={props.client} onResolve={() => setting.open("resolve")} />
             </Match>
-            <Match when={open() === "import"}>
-              <ImportPage client={props.client} onReview={() => setting.open("review")} />
+            <Match when={settingOf(open()) === "import"}>
+              <ImportPage
+                client={props.client}
+                method={importMethod(open())}
+                onMethod={(method) => setting.open(`import-${method}`)}
+                onReview={() => setting.open("review")}
+              />
             </Match>
             <Match when={open() === "resolve"}>
               <ResolveIngredients client={props.client} at={props.resolveAt} />

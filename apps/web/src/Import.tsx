@@ -7,22 +7,40 @@ import {
   type ToolError,
   type ToolOutput,
 } from "@mise/domain";
-import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { FilePicker } from "./FilePicker";
 import { keepFresh } from "./fresh";
+import { Icon } from "./icons";
 import { t } from "./messages";
 
+/** Each way to import, a page of its own opened from the Import index, in the index's order. */
+export const IMPORT_METHODS = ["link", "paste", "screenshots", "paprika", "drive"] as const;
+export type ImportMethod = (typeof IMPORT_METHODS)[number];
+
+const METHOD_TITLE = {
+  link: "link.title",
+  paste: "paste.title",
+  screenshots: "shots.title",
+  paprika: "import.title",
+  drive: "drive.title",
+} as const satisfies Record<ImportMethod, string>;
+
 /**
- * Paste a link or a recipe's text, import screenshots, sync the Drive folder or import a Paprika export, and see
- * past imports and the Recipes they flagged. `onReview` opens the Review screen, where what the model read waits as a Draft.
+ * Import: an index of the ways to import, and below it the past imports and the Recipes they
+ * flagged. `method` is the way open, if any, shown alone: `onMethod` opens one (pushed over the
+ * index by the Household page, so back returns here). `onReview` opens the Review screen, where
+ * what the model read waits as a Draft.
  */
-export function ImportPage(props: { client: MiseClient; onReview: () => void }) {
+export function ImportPage(props: {
+  client: MiseClient;
+  method?: ImportMethod;
+  onMethod: (method: ImportMethod) => void;
+  onReview: () => void;
+}) {
   const [runs, setRuns] = createSignal<ImportRun[]>();
   const [flags, setFlags] = createSignal<ImportFlag[]>([]);
-  const [latest, setLatest] = createSignal<ImportRun>();
-  const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
 
   // A run changes Recipes, and is announced as such.
@@ -37,6 +55,125 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
     },
     () => setError(t("app.error")),
   );
+
+  return (
+    <section>
+      {/* Each way's page waits on these too: the Drive folder's for its run. */}
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
+      </Show>
+      <Switch>
+        <Match when={props.method === "link"}>
+          <PasteLink client={props.client} onReview={props.onReview} />
+        </Match>
+        <Match when={props.method === "paste"}>
+          <PasteRecipe client={props.client} onReview={props.onReview} />
+        </Match>
+        <Match when={props.method === "screenshots"}>
+          <ImportScreenshots client={props.client} onReview={props.onReview} />
+        </Match>
+        <Match when={props.method === "paprika"}>
+          <PaprikaImport client={props.client} flags={flags()} />
+        </Match>
+        <Match when={props.method === "drive"}>
+          <DriveSync client={props.client} runs={runs()} />
+        </Match>
+        <Match when={props.method === undefined}>
+          <h3 id="import-methods">{t("import.methods")}</h3>
+          <ul class="rows" aria-labelledby="import-methods">
+            <For each={IMPORT_METHODS}>
+              {(method) => (
+                <li>
+                  <button type="button" class="row row-open" onClick={() => props.onMethod(method)}>
+                    <span class="row-body">
+                      <span class="row-title">{t(METHOD_TITLE[method])}</span>
+                    </span>
+                    <span class="row-end">
+                      <Icon name="chevronRight" />
+                    </span>
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+          {/* Every source's runs, pasted text's too. */}
+          <h2 id="import-runs">{t("import.runs")}</h2>
+          <Show when={runs()}>
+            {(listed) => (
+              <Show when={listed().length > 0} fallback={<p>{t("import.noRuns")}</p>}>
+                <ul class="rows" aria-labelledby="import-runs">
+                  <For each={listed()}>{(run) => <RunRow run={run} />}</For>
+                </ul>
+              </Show>
+            )}
+          </Show>
+          <Show when={flags().length > 0}>
+            <FlagRows id="import-flags" flags={flags()} />
+          </Show>
+        </Match>
+      </Switch>
+    </section>
+  );
+}
+
+/** A past import: when it ran as the title, where from as meta, what it did as chips, and what it could not read behind a disclosure. */
+function RunRow(props: { run: ImportRun }) {
+  const counts = () => (["created", "updated", "skipped", "flagged"] as const).filter((count) => props.run[count] > 0);
+  return (
+    <li>
+      <span class="row-body">
+        <span class="row-title">{whenText(props.run.startedAt)}</span>
+        <span class="row-meta">{t(`import.source.${props.run.source}`)}</span>
+        <Show when={counts().length > 0}>
+          <span class="chips">
+            <For each={counts()}>
+              {(count) => (
+                <span class={count === "flagged" ? "chip chip-amber" : "chip"}>
+                  {t(`import.${count}`, { count: String(props.run[count]) })}
+                </span>
+              )}
+            </For>
+          </span>
+        </Show>
+      </span>
+      <Show when={props.run.errors.length > 0}>
+        <details>
+          <summary>{t("import.runErrors", { count: String(props.run.errors.length) })}</summary>
+          <ul class="row-meta">
+            <For each={props.run.errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
+          </ul>
+        </details>
+      </Show>
+    </li>
+  );
+}
+
+/** Recipes an import flagged, headed "Flagged Recipes". */
+function FlagRows(props: { id: string; flags: ImportFlag[] }) {
+  return (
+    <>
+      <h3 id={props.id}>{t("import.flags")}</h3>
+      <ul class="rows" aria-labelledby={props.id}>
+        <For each={props.flags}>
+          {(flag) => (
+            <li>
+              <span class="row-body">{flagText(flag)}</span>
+            </li>
+          )}
+        </For>
+      </ul>
+    </>
+  );
+}
+
+/** A Paprika export, uploaded and imported, and what the import did and flagged (`flags`, every run's, kept fresh). */
+function PaprikaImport(props: { client: MiseClient; flags: ImportFlag[] }) {
+  const [latest, setLatest] = createSignal<ImportRun>();
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const flagged = () => props.flags.filter((flag) => flag.runId === latest()?.id);
 
   const importFile = async (file: File) => {
     setBusy(true);
@@ -60,10 +197,6 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
 
   return (
     <section>
-      <PasteLink client={props.client} onReview={props.onReview} />
-      <PasteRecipe client={props.client} onReview={props.onReview} />
-      <ImportScreenshots client={props.client} onReview={props.onReview} />
-      <DriveSync client={props.client} runs={runs()} />
       <h2>{t("import.title")}</h2>
       <p>{t("import.intro")}</p>
       <FilePicker
@@ -98,52 +231,11 @@ export function ImportPage(props: { client: MiseClient; onReview: () => void }) 
                 </For>
               </ul>
             </Show>
+            <Show when={flagged().length > 0}>
+              <FlagRows id="import-latest-flags" flags={flagged()} />
+            </Show>
           </>
         )}
-      </Show>
-
-      {/* Every source's runs, pasted text's too: not only Paprika's, whose section ends here. */}
-      <h2 id="import-runs">{t("import.runs")}</h2>
-      <Show when={runs()}>
-        {(listed) => (
-          <Show when={listed().length > 0} fallback={<p>{t("import.noRuns")}</p>}>
-            <ul class="rows" aria-labelledby="import-runs">
-              <For each={listed()}>
-                {(run) => (
-                  <li>
-                    <span class="row-body">
-                      {t("import.run", {
-                        when: whenText(run.startedAt),
-                        source: t(`import.source.${run.source}`),
-                        counts: countsText(run),
-                      })}
-                    </span>
-                    <Show when={run.errors.length > 0}>
-                      <details>
-                        <summary>{t("import.runErrors", { count: String(run.errors.length) })}</summary>
-                        <ul class="row-meta">
-                          <For each={run.errors}>{(problem) => <li>{errorLine(problem)}</li>}</For>
-                        </ul>
-                      </details>
-                    </Show>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
-        )}
-      </Show>
-      <Show when={flags().length > 0}>
-        <h3 id="import-flags">{t("import.flags")}</h3>
-        <ul class="rows" aria-labelledby="import-flags">
-          <For each={flags()}>
-            {(flag) => (
-              <li>
-                <span class="row-body">{flagText(flag)}</span>
-              </li>
-            )}
-          </For>
-        </ul>
       </Show>
     </section>
   );
@@ -183,10 +275,10 @@ function DriveSync(props: { client: MiseClient; runs: ImportRun[] | undefined })
   };
 
   return (
-    <div>
+    <section>
       <h2>{t("drive.title")}</h2>
       <p>{t("drive.intro")}</p>
-      <button type="button" disabled={busy()} onClick={() => void sync()}>
+      <button type="button" class="button-primary" disabled={busy()} onClick={() => void sync()}>
         {busy() ? t("drive.syncing") : t("drive.sync")}
       </button>
       <Show when={error()}>
@@ -213,7 +305,7 @@ function DriveSync(props: { client: MiseClient; runs: ImportRun[] | undefined })
           </>
         )}
       </Show>
-    </div>
+    </section>
   );
 }
 
@@ -252,7 +344,7 @@ function PasteLink(props: { client: MiseClient; onReview: () => void }) {
         {t("link.url")}
         <input type="url" required maxLength={2000} value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
       </label>
-      <button type="submit" disabled={busy()}>
+      <button type="submit" class="button-primary" disabled={busy()}>
         {busy() ? t("link.importing") : t("link.import")}
       </button>
       <Show when={error()}>
@@ -513,7 +605,7 @@ function PasteRecipe(props: { client: MiseClient; onReview: () => void }) {
         {t("paste.text")}
         <textarea rows={8} required maxLength={20_000} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
       </label>
-      <button type="submit" disabled={busy()}>
+      <button type="submit" class="button-primary" disabled={busy()}>
         {busy() ? t("paste.reading") : t("paste.read")}
       </button>
       <Show when={error()}>

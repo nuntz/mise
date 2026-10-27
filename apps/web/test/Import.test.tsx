@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 const household: Household = {
   name: "The Tremblays",
@@ -156,51 +157,81 @@ const screenshotFiles = () => [
 
 const screenshotRun: ImportRun = { ...pastedRun, id: 5, source: "screenshot" };
 
-async function openImport(client: MiseClient) {
+/** Opens Import, and then the way to import named `method` when given. */
+async function openImport(client: MiseClient, method?: string) {
   render(() => <App client={client} />);
   await userEvent.click(await screen.findByRole("button", { name: "Household" }));
   await userEvent.click(await screen.findByRole("button", { name: "Import" }));
+  if (method) await userEvent.click(await screen.findByRole("button", { name: method }));
 }
 
 const exportFile = () => new File([new Uint8Array([0x50, 0x4b, 5, 6])], "My Recipes.paprikarecipes");
 
-test("lists past imports and what they flagged", async () => {
-  const { client } = fakeClient();
+/** The rows of Past imports, each as its title, its meta and its chips. */
+async function pastImports() {
+  const runs = await screen.findByRole("list", { name: "Past imports" });
+  return within(runs)
+    .getAllByRole("listitem")
+    .filter((row) => row.parentElement === runs)
+    .map((row) => ({
+      title: row.querySelector(".row-title")?.textContent,
+      meta: row.querySelector(".row-meta")?.textContent,
+      chips: [...row.querySelectorAll(".chip")].map((chip) => chip.textContent),
+    }));
+}
+
+test("past imports are rows, the date as the title, where from as meta and the counts as chips", async () => {
+  const { client } = fakeClient({ runs: [today, lastWeek] });
 
   await openImport(client);
 
-  const runs = await screen.findByRole("list", { name: "Past imports" });
-  expect(within(runs).getByText(/120 created, 0 updated, 2 skipped, 1 flagged/)).toBeTruthy();
+  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  expect(await pastImports()).toEqual([
+    { title: when(today.startedAt), meta: "Paprika", chips: ["1 created", "3 updated", "118 skipped", "1 flagged"] },
+    { title: when(lastWeek.startedAt), meta: "Paprika", chips: ["120 created", "2 skipped", "1 flagged"] },
+  ]);
+  expect(
+    screen.getAllByText("1 flagged", { selector: ".chip" }).every((chip) => chip.classList.contains("chip-amber")),
+  ).toBe(true);
+  expect(screen.getByRole("heading", { name: "Past imports" }).tagName).toBe("H2");
   const flagged = screen.getByRole("list", { name: "Flagged Recipes" });
   expect(within(flagged).getByText("Weeknight Dal may be the same as Weeknight dal!. Both are kept.")).toBeTruthy();
 });
 
-test("past imports say what each read, apart from the Paprika import", async () => {
-  const { client } = fakeClient({
-    importText: { ok: true, value: { run: pastedRun, recipe: { id: 9, title: "Grandma's dal" } } },
-  });
+test("what a past import could not read waits behind a disclosure", async () => {
+  const { client } = fakeClient({ runs: [today] });
   await openImport(client);
 
   const runs = await screen.findByRole("list", { name: "Past imports" });
-  expect(within(runs).getByText(/Paprika: 120 created/)).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Past imports" }).tagName).toBe("H2");
+  const disclosure = within(runs).getByText("1 not imported").closest("details");
+  expect(disclosure?.open).toBe(false);
+  expect(within(disclosure as HTMLElement).getByText("Broken.paprikarecipe: The file is not JSON")).toBeTruthy();
 });
 
-test("a pasted recipe's run says it came from pasted text, not Paprika", async () => {
+test("past imports name where each came from", async () => {
   const { client } = fakeClient({
-    importText: { ok: true, value: { run: pastedRun, recipe: { id: 9, title: "Grandma's dal" } } },
-    runs: [pastedRun],
+    runs: [
+      pastedRun,
+      linkRun,
+      screenshotRun,
+      { ...linkRun, id: 6, source: "tiktok" },
+      { ...linkRun, id: 7, source: "instagram" },
+    ],
   });
   await openImport(client);
 
-  const runs = await screen.findByRole("list", { name: "Past imports" });
-  expect(within(runs).getByText(/pasted text: 1 created/)).toBeTruthy();
-  expect(within(runs).queryByText(/Paprika/)).toBeNull();
+  expect((await pastImports()).map((run) => run.meta)).toEqual([
+    "Pasted text",
+    "Link",
+    "Screenshots",
+    "TikTok",
+    "Instagram",
+  ]);
 });
 
 test("importing a Paprika export uploads it, runs the import and shows what it did", async () => {
   const { client, calls, uploads } = fakeClient();
-  await openImport(client);
+  await openImport(client, "Import from Paprika");
 
   await userEvent.upload(await screen.findByLabelText("Choose a Paprika export (.paprikarecipes)"), exportFile());
 
@@ -226,7 +257,7 @@ test("importing a Paprika export uploads it, runs the import and shows what it d
 
 test("an upload that fails says so and runs nothing", async () => {
   const { client, calls } = fakeClient({ upload: null });
-  await openImport(client);
+  await openImport(client, "Import from Paprika");
 
   await userEvent.upload(await screen.findByLabelText("Choose a Paprika export (.paprikarecipes)"), exportFile());
 
@@ -238,7 +269,7 @@ test("pasting a recipe's text reads it into a Draft, and goes to the Review scre
   const { client, calls } = fakeClient({
     importText: { ok: true, value: { run: pastedRun, recipe: { id: 9, title: "Grandma's dal" } } },
   });
-  await openImport(client);
+  await openImport(client, "Paste a recipe");
 
   await userEvent.type(await screen.findByLabelText("Recipe text"), "Grandma's dal{enter}1 cup red lentils");
   await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
@@ -262,7 +293,7 @@ test("pasted text with no recipe in it says so, and keeps the text", async () =>
       },
     },
   });
-  await openImport(client);
+  await openImport(client, "Paste a recipe");
 
   await userEvent.type(await screen.findByLabelText("Recipe text"), "Recipe in bio!");
   await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
@@ -273,7 +304,7 @@ test("pasted text with no recipe in it says so, and keeps the text", async () =>
 
 test("pasted text the model could not read says to try again", async () => {
   const { client } = fakeClient({ importText: { ok: false, error: { code: "model_failed", message: "" } } });
-  await openImport(client);
+  await openImport(client, "Paste a recipe");
 
   await userEvent.type(await screen.findByLabelText("Recipe text"), "Grandma's dal");
   await userEvent.click(screen.getByRole("button", { name: "Read the recipe" }));
@@ -295,7 +326,7 @@ test("a pasted link with a recipe Mise can read lands in the Recipes", async () 
       value: { run: linkRun, recipe: { id: 11, title: "Red Lentil Dal", draft: false, linkOnly: false } },
     },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
 
   await pasteLink();
 
@@ -311,7 +342,7 @@ test("a pasted link the model read waits on the Review screen as a Draft", async
       value: { run: linkRun, recipe: { id: 12, title: "Shepherd's Pie", draft: true, linkOnly: false } },
     },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
 
   await pasteLink();
 
@@ -333,7 +364,7 @@ test("a link Mise could not read is kept, and its recipe's text can be pasted in
     },
     importText: { ok: true, value: { run: pastedRun, recipe: { id: 13, title: "Red Lentil Dal" } } },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
 
   await pasteLink();
 
@@ -358,7 +389,7 @@ test("a link imported before, and unchanged, says nothing changed", async () => 
       },
     },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
 
   await pasteLink();
 
@@ -375,7 +406,7 @@ test("a link whose Recipe was edited in Mise since says it was left alone", asyn
       },
     },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
 
   await pasteLink();
 
@@ -399,7 +430,7 @@ test("a link imported before that can't be read now says it kept the Recipe, and
       },
     },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
 
   await pasteLink();
 
@@ -412,7 +443,7 @@ test("screenshots of a recipe are uploaded and read together into a Draft, to ch
   const { client, calls, screenshots } = fakeClient({
     importScreenshots: { ok: true, value: { run: screenshotRun, recipe: { id: 21, title: "Cabbage Salad" } } },
   });
-  await openImport(client);
+  await openImport(client, "Import screenshots");
 
   await userEvent.upload(await screen.findByLabelText("Choose screenshots"), screenshotFiles());
 
@@ -426,7 +457,7 @@ test("screenshots of a recipe are uploaded and read together into a Draft, to ch
 
 test("screenshots that can't be uploaded say so, and nothing is read", async () => {
   const { client, calls } = fakeClient({ screenshotUploads: false });
-  await openImport(client);
+  await openImport(client, "Import screenshots");
 
   await userEvent.upload(await screen.findByLabelText("Choose screenshots"), screenshotFiles());
 
@@ -438,7 +469,7 @@ test("screenshots with no recipe in them say so", async () => {
   const { client } = fakeClient({
     importScreenshots: { ok: true, value: { run: { ...screenshotRun, created: 0 }, recipe: null } },
   });
-  await openImport(client);
+  await openImport(client, "Import screenshots");
 
   await userEvent.upload(await screen.findByLabelText("Choose screenshots"), screenshotFiles());
 
@@ -456,7 +487,7 @@ test("a link Mise could not read takes screenshots of its recipe, too", async ()
     },
     importScreenshots: { ok: true, value: { run: screenshotRun, recipe: { id: 14, title: "Cabbage Salad" } } },
   });
-  await openImport(client);
+  await openImport(client, "Import a link");
   await pasteLink();
 
   await userEvent.upload(await screen.findByLabelText("Choose screenshots of Instagram reel"), screenshotFiles());
@@ -468,18 +499,6 @@ test("a link Mise could not read takes screenshots of its recipe, too", async ()
   expect(
     await screen.findByText("Cabbage Salad is waiting on the Review screen as a Draft, until someone checks it."),
   ).toBeTruthy();
-});
-
-test("past imports name TikTok, Instagram and screenshots", async () => {
-  const { client } = fakeClient({
-    runs: [screenshotRun, { ...linkRun, id: 6, source: "tiktok" }, { ...linkRun, id: 7, source: "instagram" }],
-  });
-  await openImport(client);
-
-  const runs = await screen.findByRole("list", { name: "Past imports" });
-  expect(within(runs).getByText(/screenshots: 1 created/)).toBeTruthy();
-  expect(within(runs).getByText(/TikTok: 1 created/)).toBeTruthy();
-  expect(within(runs).getByText(/Instagram: 1 created/)).toBeTruthy();
 });
 
 const NOTES_DOC = "https://docs.google.com/document/d/1NotesDocId/edit";
@@ -497,7 +516,7 @@ const driveRun: ImportRun = {
 
 test("syncing the Drive folder waits for its run, then shows what it did, with a link to each Doc it did not import", async () => {
   const { client, calls, logRun } = fakeClient({ syncDrive: { ok: true, value: { alreadyRunning: false } } });
-  await openImport(client);
+  await openImport(client, "Google Drive folder");
 
   await userEvent.click(await screen.findByRole("button", { name: "Sync Drive now" }));
 
@@ -519,7 +538,7 @@ test("syncing says so when the deployment has no Drive folder", async () => {
   const { client } = fakeClient({
     syncDrive: { ok: false, error: { code: "not_configured", message: "No Drive folder is set up for Mise" } },
   });
-  await openImport(client);
+  await openImport(client, "Google Drive folder");
 
   await userEvent.click(await screen.findByRole("button", { name: "Sync Drive now" }));
 
@@ -533,7 +552,57 @@ test("a past Drive sync lists the Docs it did not import, with their links", asy
   await openImport(client);
 
   const runs = await screen.findByRole("list", { name: "Past imports" });
-  expect(within(runs).getByText(/Google Drive: 1 created/)).toBeTruthy();
+  expect(within(runs).getByText("Google Drive")).toBeTruthy();
   await userEvent.click(within(runs).getByText("1 not imported"));
   expect(within(runs).getByRole("link", { name: NOTES_DOC })).toHaveProperty("href", NOTES_DOC);
+});
+
+test("Import is an index of methods, each opening its own page, and back returns to the index", async () => {
+  const { client } = fakeClient();
+  await openImport(client);
+
+  const methods = await screen.findByRole("list", { name: "Ways to import" });
+  expect(
+    within(methods)
+      .getAllByRole("button")
+      .map((row) => row.querySelector(".row-title")?.textContent),
+  ).toEqual(["Import a link", "Paste a recipe", "Import screenshots", "Import from Paprika", "Google Drive folder"]);
+  expect(screen.queryByLabelText("Link to a recipe")).toBeNull();
+
+  await userEvent.click(within(methods).getByRole("button", { name: /^Import a link/ }));
+  expect(await screen.findByLabelText("Link to a recipe")).toBeTruthy();
+  expect(screen.queryByRole("list", { name: "Ways to import" })).toBeNull();
+  expect(screen.queryByRole("list", { name: "Past imports" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Import" }));
+  expect(await screen.findByRole("list", { name: "Ways to import" })).toBeTruthy();
+
+  await userEvent.click(screen.getByRole("button", { name: /^Paste a recipe/ }));
+  expect(await screen.findByLabelText("Recipe text")).toBeTruthy();
+  history.back();
+  expect(await screen.findByRole("list", { name: "Ways to import" })).toBeTruthy();
+  expect(screen.queryByLabelText("Recipe text")).toBeNull();
+});
+
+test("the Household tab, tapped from an import method, returns to the Household index", async () => {
+  const { client } = fakeClient();
+  await openImport(client);
+  await userEvent.click(await screen.findByRole("button", { name: /^Import a link/ }));
+
+  await userEvent.click(screen.getByRole("button", { name: "Household", current: "page" }));
+
+  expect(await screen.findByRole("heading", { name: "The Tremblays" })).toBeTruthy();
+});
+
+test("each way to import that ends in a button has it as the page's one primary", async () => {
+  const { client } = fakeClient();
+  await openImport(client, "Import a link");
+  expect(primaries()).toEqual(["Import the link"]);
+
+  history.back();
+  await userEvent.click(await screen.findByRole("button", { name: "Paste a recipe" }));
+  expect(primaries()).toEqual(["Read the recipe"]);
+
+  history.back();
+  await userEvent.click(await screen.findByRole("button", { name: "Google Drive folder" }));
+  expect(primaries()).toEqual(["Sync Drive now"]);
 });
