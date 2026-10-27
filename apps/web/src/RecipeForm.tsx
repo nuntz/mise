@@ -1,7 +1,8 @@
 import { COURSES, type Course, type Recipe, type ToolInput, WEEKDAYS, type Weekday } from "@mise/domain";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
+import { createItems } from "./items";
 import { t } from "./messages";
 
 /** A Recipe as the form holds it: text as typed, lists one entry per line. */
@@ -78,7 +79,10 @@ function recipeOf(draft: RecipeDraft): Required<ToolInput<"create_recipe">> {
   };
 }
 
-/** Creates a Recipe, or edits `recipe` when given. Calls `onSaved` with the Recipe as saved. */
+/**
+ * Creates a Recipe, or edits `recipe` when given, showing the Item each of its lines maps to as saved.
+ * Calls `onSaved` with the Recipe as saved.
+ */
 export function RecipeForm(props: {
   client: MiseClient;
   recipe?: Recipe;
@@ -130,6 +134,7 @@ export function RecipeForm(props: {
         <textarea rows={8} value={draft().ingredients} onInput={(e) => update("ingredients", e.currentTarget.value)} />
       </label>
       <small>{t("recipeForm.ingredientsHint")}</small>
+      <Show when={props.recipe}>{(recipe) => <LineItems client={props.client} recipe={recipe()} />}</Show>
       <label>
         {t("recipeForm.steps")}
         <textarea rows={8} value={draft().steps} onInput={(e) => update("steps", e.currentTarget.value)} />
@@ -221,5 +226,38 @@ export function RecipeForm(props: {
         {t("recipeForm.cancel")}
       </button>
     </form>
+  );
+}
+
+/** The Item each of the Recipe's lines maps to, as last saved, so a wrong mapping can be caught. */
+function LineItems(props: { client: MiseClient; recipe: Recipe }) {
+  const heading = createUniqueId();
+  const items = createItems(props.client);
+
+  return (
+    <section class="stack" aria-labelledby={heading}>
+      <h3 id={heading}>{t("recipeForm.items")}</h3>
+      <small>{t("recipeForm.itemsHint")}</small>
+      <ul class="rows" aria-labelledby={heading}>
+        <For each={props.recipe.ingredients}>
+          {(ingredient) => (
+            <li>
+              <span class="row-body">
+                <span class="row-title">{ingredient.raw}</span>
+                <Switch>
+                  <Match when={ingredient.item === null}>
+                    <span class="chip chip-amber">{t("recipe.unresolved")}</span>
+                  </Match>
+                  {/* Named once the Items load. */}
+                  <Match when={ingredient.item !== null && items().get(ingredient.item)}>
+                    {(item) => <span class="row-meta">{t("recipeForm.item", { item: item().name })}</span>}
+                  </Match>
+                </Switch>
+              </span>
+            </li>
+          )}
+        </For>
+      </ul>
+    </section>
   );
 }

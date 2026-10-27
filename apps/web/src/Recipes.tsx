@@ -1,23 +1,23 @@
-import type {
-  Allergen,
-  Course,
-  Ingredient,
-  Item,
-  ItemId,
-  Recipe,
-  RecipeAllergens,
-  RecipeId,
-  RecipeSummary,
-  Recurrence,
+import {
+  type Allergen,
+  type Course,
+  type Ingredient,
+  type Item,
+  type ItemId,
+  normaliseItemName,
+  type Recipe,
+  type RecipeAllergens,
+  type RecipeId,
+  type RecipeSummary,
+  type Recurrence,
 } from "@mise/domain";
-import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Match, on, Show, Switch } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { FilePicker } from "./FilePicker";
 import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
-import { createItems } from "./items";
 import { nameText, t } from "./messages";
 import { lastRecipe, savedRecipe, saveRecipe } from "./offline";
 import { RecipeForm } from "./RecipeForm";
@@ -30,6 +30,8 @@ export function RecipesPage(props: {
   online: boolean;
   open?: RecipeId;
   onCook: (recipe: RecipeId) => void;
+  /** Opens Resolve Ingredients, at the Unresolved group `text` when given. */
+  onResolve: (text?: string) => void;
 }) {
   const [view, setView] = createSignal<View>(props.open ? { kind: "recipe", id: props.open } : { kind: "list" });
   const list = () => setView({ kind: "list" });
@@ -51,17 +53,7 @@ export function RecipesPage(props: {
           <RecipeForm client={props.client} onSaved={show} onCancel={list} />
         </Match>
         <Match when={narrow(view(), "edit")}>
-          {(edit) => (
-            <>
-              <h1>{edit().recipe.title}</h1>
-              <RecipeForm
-                client={props.client}
-                recipe={edit().recipe}
-                onSaved={show}
-                onCancel={() => show(edit().recipe)}
-              />
-            </>
-          )}
+          {(edit) => <RecipeEdit client={props.client} recipe={edit().recipe} onSaved={show} onDeleted={list} />}
         </Match>
         <Match when={narrow(view(), "recipe")}>
           {(open) => (
@@ -70,6 +62,7 @@ export function RecipesPage(props: {
               id={open().id}
               onBack={list}
               onCook={props.onCook}
+              onResolve={props.onResolve}
               onEdit={(recipe) => setView({ kind: "edit", recipe })}
             />
           )}
@@ -191,18 +184,71 @@ function RecipeList(props: {
   );
 }
 
+/** A Recipe's edit view: its form, and Delete Recipe, which asks first in Mise's confirm sheet. */
+function RecipeEdit(props: {
+  client: MiseClient;
+  recipe: Recipe;
+  onSaved: (recipe: Recipe) => void;
+  onDeleted: () => void;
+}) {
+  const [error, setError] = createSignal<string>();
+  const [busy, setBusy] = createSignal(false);
+
+  const confirm = createConfirm();
+  const remove = async () => {
+    const { id, title } = props.recipe;
+    const confirmed = await confirm.ask({
+      title: t("recipe.deleteTitle", { title }),
+      lost: t("recipe.deleteLost", { title }),
+      action: t("recipe.delete"),
+    });
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const result = await props.client.call("delete_recipe", { id, confirm: true });
+      if (result.ok) props.onDeleted();
+      else setError(errorText(result.error, "recipe"));
+    } catch {
+      setError(t("app.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <h1>{props.recipe.title}</h1>
+      <RecipeForm
+        client={props.client}
+        recipe={props.recipe}
+        onSaved={props.onSaved}
+        onCancel={() => props.onSaved(props.recipe)}
+      />
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
+      </Show>
+      <button type="button" class="button-danger" disabled={busy()} onClick={() => void remove()}>
+        {t("recipe.delete")}
+      </button>
+      <confirm.ConfirmSheet />
+    </>
+  );
+}
+
 function RecipeDetail(props: {
   client: MiseClient;
   id: RecipeId;
   onBack: () => void;
   onCook: (recipe: RecipeId) => void;
+  onResolve: (text?: string) => void;
   onEdit: (recipe: Recipe) => void;
 }) {
   // The last Recipe viewed is kept on this device, so it stays readable if the connection drops mid-cook.
   const [recipe, setRecipe] = createSignal<Recipe | undefined>(savedRecipe(props.id));
   const [error, setError] = createSignal<string>();
   const [busy, setBusy] = createSignal(false);
-  const items = createItems(props.client);
 
   keepFresh(
     props.client,
@@ -217,26 +263,6 @@ function RecipeDetail(props: {
     },
     () => setError(t("app.error")),
   );
-
-  const confirm = createConfirm();
-  const remove = async (current: Recipe) => {
-    const confirmed = await confirm.ask({
-      title: t("recipe.deleteTitle", { title: current.title }),
-      lost: t("recipe.deleteLost", { title: current.title }),
-      action: t("recipe.delete"),
-    });
-    if (!confirmed) return;
-    setBusy(true);
-    try {
-      const result = await props.client.call("delete_recipe", { id: current.id, confirm: true });
-      if (result.ok) props.onBack();
-      else setError(errorText(result.error, "recipe"));
-    } catch {
-      setError(t("app.error"));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const changePhoto = async (change: () => Promise<boolean>) => {
     setBusy(true);
@@ -300,9 +326,17 @@ function RecipeDetail(props: {
             <Show when={current().prepAhead}>
               {(note) => <p class="banner banner-plum">{t("recipe.prepAhead", { note: note() })}</p>}
             </Show>
-            <p class={current().allergens.kind === "unknown" ? "banner banner-amber" : "meta"}>
-              {allergensText(current().allergens)}
-            </p>
+            <Show
+              when={current().allergens.kind === "unknown"}
+              fallback={<p class="meta">{allergensText(current().allergens)}</p>}
+            >
+              <div class="banner banner-amber">
+                <p>{allergensText(current().allergens)}</p>
+                <button type="button" onClick={() => props.onResolve()}>
+                  {t("recipe.resolveThem")}
+                </button>
+              </div>
+            </Show>
             <Show when={current().steps.length > 0}>
               <button type="button" class="button-primary" onClick={() => props.onCook(current().id)}>
                 <Icon name="pot" />
@@ -314,11 +348,25 @@ function RecipeDetail(props: {
               <h2 id="ingredients">{t("recipe.ingredients")}</h2>
               <ul class="ingredients" aria-labelledby="ingredients">
                 <For each={current().ingredients}>
-                  {(ingredient) => (
-                    <li>
-                      <span>{ingredient.raw}</span> <span class="meta">— {resolutionText(ingredient, items())}</span>
-                    </li>
-                  )}
+                  {(ingredient) => {
+                    const line = createUniqueId();
+                    return (
+                      <li>
+                        <span id={line}>{ingredient.raw}</span>
+                        {/* An Unresolved line leads to where it's resolved; its Item shows only in edit. */}
+                        <Show when={ingredient.item === null}>
+                          <button
+                            type="button"
+                            class="chip-button"
+                            aria-describedby={line}
+                            onClick={() => props.onResolve(normaliseItemName(ingredient.name))}
+                          >
+                            <span class="chip chip-amber">{t("recipe.unresolved")}</span>
+                          </button>
+                        </Show>
+                      </li>
+                    );
+                  }}
                 </For>
               </ul>
             </section>
@@ -344,9 +392,6 @@ function RecipeDetail(props: {
               <button type="button" class="button-row" onClick={() => props.onEdit(current())}>
                 {t("recipe.edit")}
               </button>
-              <button type="button" class="button-danger" disabled={busy()} onClick={() => remove(current())}>
-                {t("recipe.delete")}
-              </button>
               <Show when={current().photoKey}>
                 <button
                   type="button"
@@ -369,7 +414,6 @@ function RecipeDetail(props: {
           </article>
         )}
       </Show>
-      <confirm.ConfirmSheet />
     </>
   );
 }

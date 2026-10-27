@@ -68,13 +68,14 @@ type KitchenRecipe = { id: RecipeId; servings?: number };
 
 /**
  * What a link opens: a Recipe, next Week, the pantry check, or one of the Household's settings.
- * Calendar events and notifications link here.
+ * Calendar events and notifications link here, and a Recipe's Unresolved lines link to Resolve
+ * Ingredients at their group (`at`).
  */
 type Opening =
   | { page: "recipes"; recipe: RecipeId }
   | { page: "week"; next: true }
   | { page: "pantry" }
-  | { page: "household"; setting: Setting };
+  | { page: "household"; setting: Setting; at?: string };
 
 /** The query each link is made of. */
 const LINK_PARAMS = ["recipe", "review", "week", "pantry"];
@@ -121,9 +122,9 @@ export function App(props: { client: MiseClient }) {
     const opened = opening();
     return opened?.page === "week" && opened.next;
   };
-  const openedSetting = () => {
+  const openedHousehold = () => {
     const opened = opening();
-    return opened?.page === "household" ? opened.setting : undefined;
+    return opened?.page === "household" ? opened : undefined;
   };
   // The Week the Week or Grocery page last showed, for the chat to say where it was opened.
   const [weekShown, setWeekShown] = createSignal<LocalDate>();
@@ -174,6 +175,11 @@ export function App(props: { client: MiseClient }) {
     window.scrollTo?.({ top: 0 });
   };
   const cook = (id: RecipeId, servings?: number) => setInKitchen({ id, servings });
+  const resolve = (at?: string) => {
+    setOpening({ page: "household", setting: "resolve", at });
+    setPage("household");
+    window.scrollTo?.({ top: 0 });
+  };
 
   return (
     <Switch>
@@ -264,12 +270,19 @@ export function App(props: { client: MiseClient }) {
                     <PantryPage client={props.client} locale={household().locale} onWeek={() => go("week")} />
                   </Match>
                   <Match when={page() === "recipes"}>
-                    <RecipesPage client={props.client} online={online()} open={openedRecipe()} onCook={cook} />
+                    <RecipesPage
+                      client={props.client}
+                      online={online()}
+                      open={openedRecipe()}
+                      onCook={cook}
+                      onResolve={resolve}
+                    />
                   </Match>
                   <Match when={page() === "household"}>
                     <HouseholdPage
                       client={props.client}
-                      open={openedSetting()}
+                      open={openedHousehold()?.setting}
+                      resolveAt={openedHousehold()?.at}
                       home={householdAgain()}
                       household={household()}
                       kitchenMode={kitchenMode()}
@@ -324,12 +337,13 @@ function OfflineGroceryLists(props: { client: MiseClient; household: Household }
 
 /**
  * The Household: what it is, kitchen mode for this device, and a row for each of its settings. Each
- * setting opens as its own page over it, `open` at once when given, and back returns here, as does
- * each change of `home` (the Household tab tapped again).
+ * setting opens as its own page over it, `open` at once when given (Resolve Ingredients at the group
+ * `resolveAt`), and back returns here, as does each change of `home` (the Household tab tapped again).
  */
 function HouseholdPage(props: {
   client: MiseClient;
   open?: Setting;
+  resolveAt?: string;
   home: number;
   household: Household;
   kitchenMode: boolean;
@@ -429,7 +443,7 @@ function HouseholdPage(props: {
               <ImportPage client={props.client} onReview={() => setting.open("review")} />
             </Match>
             <Match when={open() === "resolve"}>
-              <ResolveIngredients client={props.client} />
+              <ResolveIngredients client={props.client} at={props.resolveAt} />
             </Match>
             <Match when={open() === "items"}>
               <ItemsSettings client={props.client} />

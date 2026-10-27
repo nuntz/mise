@@ -23,14 +23,21 @@ import { nameText, t } from "./messages";
 
 /**
  * Unresolved Ingredients grouped by text, most frequent first; each group resolves in one go, by hand
- * or by accepting the model's Suggestion for it.
+ * or by accepting the model's Suggestion for it. Opens at the group `at` when given: once it has
+ * loaded, it's scrolled into view and focused.
  */
-export function ResolveIngredients(props: { client: MiseClient }) {
+export function ResolveIngredients(props: { client: MiseClient; at?: string }) {
   // Reconciled by text, so a refresh after resolving one group keeps what is typed into the others.
   const [loaded, setLoaded] = createStore<{ groups?: UnresolvedGroup[] }>({});
   const [failed, setFailed] = createSignal(false);
   const [suggestions, setSuggestions] = createSignal(new Map<string, Suggestion>());
   const items = createItems(props.client);
+  // Only the first load opens at the group; later refreshes leave the page where it is.
+  let opened = props.at === undefined;
+  const openAt = (group: HTMLElement) => {
+    group.scrollIntoView?.({ block: "start" });
+    group.focus({ preventScroll: true });
+  };
 
   // Without Suggestions the screen still resolves by hand; the next change or reconnect tries again.
   keepFresh(
@@ -70,6 +77,11 @@ export function ResolveIngredients(props: { client: MiseClient }) {
                 {(group) => (
                   <li>
                     <GroupRow
+                      ref={(row) => {
+                        if (opened || group.text !== props.at) return;
+                        opened = true;
+                        queueMicrotask(() => openAt(row));
+                      }}
                       client={props.client}
                       group={group}
                       items={items()}
@@ -146,6 +158,7 @@ function SuggestAll(props: { client: MiseClient }) {
 }
 
 function GroupRow(props: {
+  ref?: (row: HTMLElement) => void;
   client: MiseClient;
   group: UnresolvedGroup;
   items: Map<ItemId, Item>;
@@ -171,7 +184,7 @@ function GroupRow(props: {
   const title = () => (props.group.text ? nameText(props.group.text) : t("resolve.blank"));
 
   return (
-    <article class="row" aria-label={title()}>
+    <article ref={props.ref} class="row" tabIndex={-1} aria-label={title()}>
       <div class="row-body">
         <h4 class="row-title name">{title()}</h4>
         <p class="row-meta">

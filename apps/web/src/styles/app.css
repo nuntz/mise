@@ -714,6 +714,13 @@ article:not([class]) {
   color: var(--amber);
 }
 
+/* A chip that leads somewhere, such as an Unresolved line to Resolve Ingredients: the chip as drawn,
+   inside a full-size tap target. */
+.chip-button {
+  padding: 0;
+  border: 0;
+}
+
 /* ---------- Segmented control ---------- */
 
 .segmented {

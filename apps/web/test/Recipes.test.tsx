@@ -2,13 +2,15 @@ import {
   DEFAULT_EFFORT_BUDGETS,
   type Household,
   ITEMS,
+  normaliseItemName,
   type Recipe,
   type RecipeSummary,
   STORE_SECTIONS,
+  type UnresolvedGroup,
 } from "@mise/domain";
-import { cleanup, render, screen, within } from "@solidjs/testing-library";
+import { cleanup, render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { expect, onTestFinished, test } from "vitest";
+import { afterEach, expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
@@ -76,6 +78,22 @@ const rice: Recipe = {
 const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }: Recipe) =>
   ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }) satisfies RecipeSummary;
 
+/** The Recipes' Unresolved lines grouped by name, most frequent first, as `list_unresolved_ingredients` gives them. */
+function unresolvedGroups(recipes: Recipe[]): UnresolvedGroup[] {
+  const groups = new Map<string, UnresolvedGroup>();
+  for (const recipe of recipes) {
+    for (const ingredient of recipe.ingredients.filter((line) => line.item === null)) {
+      const text = normaliseItemName(ingredient.name);
+      const group = groups.get(text) ?? { text, count: 0, lines: [], recipes: [] };
+      group.count += 1;
+      group.lines.push(ingredient.raw);
+      if (!group.recipes.some((r) => r.id === recipe.id)) group.recipes.push({ id: recipe.id, title: recipe.title });
+      groups.set(text, group);
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
+}
+
 /**
  * A client over a fixed set of Recipes that records every tool call made and every photo uploaded;
  * offline, every call fails.
@@ -105,6 +123,13 @@ function fakeClient(stored: Recipe[], { online = true } = {}) {
         }
         case "list_items":
           return { ok: true, value: ITEMS };
+        case "list_unresolved_ingredients":
+          return { ok: true, value: unresolvedGroups(recipes) };
+        case "list_suggestions":
+        case "list_drafts":
+        case "list_import_flags":
+        case "list_untagged_recipes":
+          return { ok: true, value: [] };
         case "create_recipe":
           return { ok: true, value: { ...rice, id: 3, title: String(input.title) } };
         case "update_recipe":
@@ -168,7 +193,7 @@ test("a Recipe row with Unresolved Ingredients shows an amber Allergens unknown 
   expect(within(known).getByText("No Allergens.")).toBeTruthy();
 });
 
-test("a Recipe shows how each line resolved, and Allergens unknown while one is Unresolved", async () => {
+test("a Recipe marks its Unresolved lines, not the Items the others map to, and its Allergens unknown banner leads to resolving them", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient([toast, rice]);
   await openRecipes(client);
@@ -177,12 +202,61 @@ test("a Recipe shows how each line resolved, and Allergens unknown while one is 
 
   await screen.findByRole("heading", { name: "Toast" });
   const lines = within(screen.getByRole("list", { name: "Ingredients" })).getAllByRole("listitem");
-  expect(lines.map((line) => line.textContent)).toEqual([
-    "2 slices bread — Unresolved",
-    "1 tbsp butter, softened — butter",
-  ]);
-  expect(screen.getByText("Allergens unknown: 1 Ingredient is Unresolved. Contains at least: Milk.")).toBeTruthy();
+  expect(lines.map((line) => line.textContent)).toEqual(["2 slices bread" + "Unresolved", "1 tbsp butter, softened"]);
   expect(screen.getByText("Every week")).toBeTruthy();
+  const banner = screen
+    .getByText("Allergens unknown: 1 Ingredient is Unresolved. Contains at least: Milk.")
+    .closest(".banner") as HTMLElement;
+  expect(banner.classList.contains("banner-amber")).toBe(true);
+  await user.click(within(banner).getByRole("button", { name: "Resolve them" }));
+
+  expect(await screen.findByText("Household · Resolve Ingredients")).toBeTruthy();
+  expect(await screen.findByRole("article", { name: "Bread" })).toBeTruthy();
+});
+
+test("tapping an Unresolved chip opens Resolve Ingredients with that Ingredient in view", async () => {
+  const user = userEvent.setup();
+  const scrolled = watchScrolling();
+  const flour: Recipe = {
+    ...rice,
+    id: 3,
+    title: "Pancakes",
+    ingredients: [
+      { raw: "2 cups flour", amount: { min: 2, max: 2 }, unit: "cup", name: "flour", note: null, item: null },
+    ],
+  };
+  const { client } = fakeClient([flour, toast]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+  const list = await screen.findByRole("list", { name: "Ingredients" });
+  const line = (raw: string) => within(list).getByText(raw).closest("li") as HTMLElement;
+  expect(within(line("1 tbsp butter, softened")).queryByRole("button", { name: "Unresolved" })).toBeNull();
+  const chip = within(line("2 slices bread")).getByRole("button", { name: "Unresolved" });
+  expect(within(chip).getByText("Unresolved").classList.contains("chip-amber")).toBe(true);
+  expect(chip.getAttribute("aria-describedby")).toBe(within(list).getByText("2 slices bread").id);
+  await user.click(chip);
+
+  expect(await screen.findByText("Household · Resolve Ingredients")).toBeTruthy();
+  const nav = screen.getByRole("navigation");
+  expect(within(nav).getByRole("button", { name: "Household" }).getAttribute("aria-current")).toBe("page");
+  const group = await screen.findByRole("article", { name: "Bread" });
+  await waitFor(() => expect(document.activeElement).toBe(group));
+  expect(scrolled).toContain(group);
+  expect(scrolled).not.toContain(screen.getByRole("article", { name: "Flour" }));
+});
+
+/** The elements scrolled into view; jsdom has no scrolling of its own. */
+function watchScrolling() {
+  const scrolled: Element[] = [];
+  Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this);
+  };
+  return scrolled;
+}
+
+afterEach(() => {
+  delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
 test("a Recipe's tags, cuisine and main protein are sentence-cased, and its lines are not", async () => {
@@ -362,13 +436,32 @@ test("editing a Recipe starts from what it has and saves the changes", async () 
   });
 });
 
-test("deleting a Recipe asks in Mise's own sheet, and Cancel keeps it", async () => {
+test("editing a Recipe shows the Item each line maps to, and marks the Unresolved ones", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient([toast]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+  await user.click(await screen.findByRole("button", { name: "Edit Recipe" }));
+
+  const list = screen.getByRole("list", { name: "Each line's Item" });
+  const line = (raw: string) => within(list).getByText(raw).closest("li") as HTMLElement;
+  expect(within(line("2 slices bread")).getByText("Unresolved").classList.contains("chip-amber")).toBe(true);
+  expect(await within(line("1 tbsp butter, softened")).findByText("Item: butter")).toBeTruthy();
+});
+
+test("deleting a Recipe is a danger action in its edit view, asked in Mise's own sheet, and Cancel keeps it", async () => {
   const user = userEvent.setup();
   const { client, calls } = fakeClient([toast]);
   await openRecipes(client);
   await user.click(await screen.findByRole("button", { name: "Toast" }));
+  await screen.findByRole("heading", { name: "Toast" });
+  expect(screen.queryByRole("button", { name: "Delete Recipe" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Edit Recipe" }));
 
-  await user.click(await screen.findByRole("button", { name: "Delete Recipe" }));
+  const remove = screen.getByRole("button", { name: "Delete Recipe" });
+  expect(remove.classList.contains("button-danger")).toBe(true);
+  await user.click(remove);
   const sheet = screen.getByRole("dialog", { name: "Delete Toast?" });
   expect(
     within(sheet).getByText(
