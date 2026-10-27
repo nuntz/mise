@@ -3,8 +3,9 @@ import type { JSX } from "solid-js";
 /**
  * A sheet over the page that holds the focus until it closes: a modal dialog, labelled by the
  * element with id `labelledBy`, that focuses its first field on opening, or itself when `focusField`
- * is false. Escape calls `onEscape`; Tab and Shift+Tab go round its controls, not out to the page
- * under it.
+ * is false or the screen is touched by a finger, where a focused field brings up a keyboard over
+ * what the sheet opened to show. Escape calls `onEscape`; Tab and Shift+Tab go round its controls,
+ * not out to the page under it.
  */
 export function Sheet(props: {
   labelledBy: string;
@@ -15,7 +16,7 @@ export function Sheet(props: {
 }) {
   const focusFirst = (sheet: HTMLElement) =>
     queueMicrotask(() =>
-      (props.focusField === false ? sheet : sheet.querySelector<HTMLElement>("input, textarea"))?.focus(),
+      (props.focusField === false || touch() ? sheet : sheet.querySelector<HTMLElement>("input, textarea"))?.focus(),
     );
 
   return (
@@ -36,6 +37,11 @@ export function Sheet(props: {
       </div>
     </div>
   );
+}
+
+/** Whether the screen is touched by a finger, where focusing a field brings up the keyboard. */
+export function touch() {
+  return window.matchMedia?.("(pointer: coarse)").matches ?? false;
 }
 
 function keepFocusIn(sheet: HTMLElement, event: KeyboardEvent) {

@@ -5,7 +5,7 @@ import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { NeedsConnection } from "./NeedsConnection";
-import { Sheet } from "./Sheet";
+import { Sheet, touch } from "./Sheet";
 
 /**
  * "Ask Mise", in the app header: a chat with the agent from whatever screen is open, which each
@@ -64,8 +64,6 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
   let log!: HTMLDivElement;
   let box!: HTMLTextAreaElement;
   let sendButton: HTMLButtonElement | undefined;
-  // On a touch screen a focused field brings up the keyboard, which covers the conversation.
-  const touch = window.matchMedia?.("(pointer: coarse)").matches ?? false;
 
   // The newest turn, or the note that Mise is thinking, stays in view as the conversation grows.
   createEffect(() => {
@@ -138,8 +136,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
   };
 
   return (
-    // On a touch screen the field waits for a tap, leaving the conversation it opened to read in view.
-    <Sheet labelledBy={titleId} class="sheet-chat" focusField={!touch} onEscape={() => props.onClose()}>
+    <Sheet labelledBy={titleId} class="sheet-chat" onEscape={() => props.onClose()}>
       <div class="sheet-header">
         <div class="page-heading">
           <p class="overline">{t("chat.overline")}</p>
@@ -241,7 +238,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
             event.preventDefault();
             // Send hides with the message it sent; the focus it held goes back to the box, not the page,
             // except on a touch screen, where the keyboard would cover the answer.
-            if (document.activeElement === sendButton && !touch) box.focus();
+            if (document.activeElement === sendButton && !touch()) box.focus();
             void send();
           }}
         >

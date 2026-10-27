@@ -106,13 +106,7 @@ function Picker(props: {
   };
 
   return (
-    // On a touch screen a focused search brings up the keyboard, which covers the Staples it opened
-    // to show: the search waits for a tap.
-    <Sheet
-      labelledBy={titleId}
-      focusField={!window.matchMedia?.("(pointer: coarse)").matches}
-      onEscape={() => props.onClose()}
-    >
+    <Sheet labelledBy={titleId} onEscape={() => props.onClose()}>
       <div class="sheet-header">
         <div class="page-heading">
           <p class="overline">{t("ranOut.overline")}</p>
