@@ -4,7 +4,7 @@ import { Amount, type Ingredient } from "./ingredients";
 import { ItemId, STORE_SECTIONS, StoreSection } from "./items";
 import { Recipe, RecipeId } from "./recipes";
 import type { StapleStatus } from "./staples";
-import { baseSize, householdUnit, IngredientUnit, isHouseholdUnit, unitFamily } from "./units";
+import { baseSize, householdUnit, IngredientUnit, isHouseholdUnit, isPackagedUnit, unitFamily } from "./units";
 import { LocalDate } from "./weeks";
 
 /** How much of an Item a line needs, in one unit; null is a bare count ("2 eggs"). */
@@ -63,7 +63,8 @@ export type GroceryDemand = {
  * What the Week's Recipes need, Ingredient by Ingredient scaled from the Recipe's base Servings to
  * the Slot's, merged by Item: one line per Item. Mass and volume are added up and given in the
  * Household's units; they never convert into each other, and counts add up only when they count
- * the same thing (cloves with cloves). What can't be combined stays on the line as its own amount.
+ * the same thing (cloves with cloves). Packages, cans and jars are rounded up to whole ones once
+ * added up (ADR 0026). What can't be combined stays on the line as its own amount.
  * Unresolved Ingredients can't be merged or scaled, so each is a line as written. A Draft Recipe
  * adds nothing: it is not shopped until a person accepts it.
  *
@@ -151,7 +152,9 @@ export function inHouseholdUnits(amount: GroceryAmount, units: Units): GroceryAm
 
 function totalInHouseholdUnits(units: Units, measure: string, total: Total): GroceryAmount {
   if (measure !== "mass" && measure !== "volume") {
-    return { amount: { min: rounded(total.min), max: rounded(total.max) }, unit: total.unit };
+    // Rounded first, so a sum a hair over a whole pack doesn't buy one more.
+    const round = isPackagedUnit(total.unit) ? (value: number) => Math.ceil(rounded(value)) : rounded;
+    return { amount: { min: round(total.min), max: round(total.max) }, unit: total.unit };
   }
   const unit = householdUnit(units, measure, total.max);
   const size = baseSize(unit) as number;

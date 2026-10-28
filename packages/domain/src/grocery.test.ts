@@ -145,6 +145,37 @@ describe("buildGroceryList", () => {
       chickpeas: [exactly(3, "can")],
     });
   });
+
+  test("rounds packages, cans and jars up to whole ones once merged: nobody buys half a lasagna", () => {
+    // A Ready-made dish: its one Ingredient is the product, a Household Item (ADR 0026).
+    const lasagna = {
+      ...recipe(1, 8, []),
+      ingredients: [{ ...parseIngredient("1 package Kirkland lasagna"), item: "household:7" as ItemId }],
+    };
+    const fourOfEight = (slots: number[]) =>
+      buildGroceryList(
+        demand({ recipes: [lasagna], slots: slots.map((servings) => ({ recipeId: 1, servings })) }),
+      )[0]?.amounts;
+
+    expect(fourOfEight([4])).toEqual([exactly(1, "package")]);
+    expect(fourOfEight([4, 4])).toEqual([exactly(1, "package")]);
+    expect(fourOfEight([5, 5])).toEqual([exactly(2, "package")]);
+  });
+
+  test("rounds half a can or jar up too, but keeps other counts as they scale", () => {
+    const halved = buildGroceryList(
+      demand({
+        recipes: [recipe(1, 4, ["1 can tomatoes", "1 jar honey", "3 eggs"])],
+        slots: [{ recipeId: 1, servings: 2 }],
+      }),
+    );
+
+    expect(halved.map((need) => need.amounts)).toEqual([
+      [exactly(1, "can")],
+      [exactly(1, "jar")],
+      [exactly(1.5, null)],
+    ]);
+  });
 });
 
 describe("buildGroceryList with Staples", () => {

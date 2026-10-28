@@ -123,6 +123,13 @@ export function baseSize(unit: IngredientUnit | null): number | null {
   return unit === null ? null : (BASE_SIZES[unit] ?? null);
 }
 
+/** Units bought only whole: nobody buys half a package, can or jar (ADR 0026). */
+const PACKAGED_UNITS: readonly IngredientUnit[] = ["package", "can", "jar"];
+
+export function isPackagedUnit(unit: IngredientUnit | null): boolean {
+  return unit !== null && PACKAGED_UNITS.includes(unit);
+}
+
 /**
  * The units a Household shops in, smallest first, each used from its size up: grams to the kilo,
  * millilitres to the litre; ounces to the pound, teaspoons and tablespoons to the quarter cup.
