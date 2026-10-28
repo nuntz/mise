@@ -34,14 +34,36 @@ const SavedHousehold = z.preprocess(
   Household,
 );
 
-/** Saved before Weeks could run on past seven days: it is seven days long. */
-const SavedWeek = z.preprocess(
-  (saved) =>
-    isObject(saved) && !("endDate" in saved) && typeof saved.startDate === "string"
-      ? { ...saved, endDate: addDays(saved.startDate, 6) }
-      : saved,
-  Week,
-);
+/** Saved before a Recipe could be Ready-made (ADR 0026): it isn't. */
+const notReadyMade = (recipe: unknown) =>
+  isObject(recipe) && !("readyMade" in recipe) ? { ...recipe, readyMade: false } : recipe;
+
+/** A saved Slot's Recipes, and its Leftovers' Recipe, as they are now. */
+const slotUpToDate = (slot: unknown) =>
+  isObject(slot)
+    ? {
+        ...slot,
+        recipe: notReadyMade(slot.recipe),
+        leftoversOf: isObject(slot.leftoversOf)
+          ? { ...slot.leftoversOf, recipe: notReadyMade(slot.leftoversOf.recipe) }
+          : slot.leftoversOf,
+      }
+    : slot;
+
+/**
+ * Saved before Weeks could run on past seven days: it is seven days long. Saved before Ready-made
+ * dishes: none of its Recipes is one.
+ */
+const SavedWeek = z.preprocess((saved) => {
+  if (!isObject(saved)) return saved;
+  const slots = Array.isArray(saved.slots) ? saved.slots.map(slotUpToDate) : saved.slots;
+  return !("endDate" in saved) && typeof saved.startDate === "string"
+    ? { ...saved, slots, endDate: addDays(saved.startDate, 6) }
+    : { ...saved, slots };
+}, Week);
+
+/** Saved before a Recipe could be Ready-made: it isn't. */
+const SavedRecipe = z.preprocess(notReadyMade, Recipe);
 
 const GroceryLists = z.record(z.string(), GroceryList.nullable());
 
@@ -83,7 +105,7 @@ export const saveWeek = (week: Week) => write(KEYS.week, week);
 export const savedGroceryList = (date: LocalDate) => read(KEYS.groceryLists, GroceryLists)?.[date];
 
 /** The last Recipe viewed, if it is the one asked for. */
-export const lastRecipe = () => read(KEYS.recipe, Recipe);
+export const lastRecipe = () => read(KEYS.recipe, SavedRecipe);
 export function savedRecipe(id: RecipeId): Recipe | undefined {
   const recipe = lastRecipe();
   return recipe?.id === id ? recipe : undefined;

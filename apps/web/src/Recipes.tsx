@@ -20,9 +20,15 @@ import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { nameText, t } from "./messages";
 import { lastRecipe, savedRecipe, saveRecipe } from "./offline";
+import { ReadyMadeForm } from "./ReadyMadeForm";
 import { RecipeForm } from "./RecipeForm";
 
-type View = { kind: "list" } | { kind: "recipe"; id: RecipeId } | { kind: "new" } | { kind: "edit"; recipe: Recipe };
+type View =
+  | { kind: "list" }
+  | { kind: "recipe"; id: RecipeId }
+  | { kind: "new" }
+  | { kind: "readyMade" }
+  | { kind: "edit"; recipe: Recipe };
 
 /** Recipes: list and search them, view one, create and edit them. Opens on the list, or on the Recipe `open`. */
 export function RecipesPage(props: {
@@ -46,7 +52,12 @@ export function RecipesPage(props: {
             online={props.online}
             onOpen={show}
             onNew={() => setView({ kind: "new" })}
+            onNewReadyMade={() => setView({ kind: "readyMade" })}
           />
+        </Match>
+        <Match when={view().kind === "readyMade"}>
+          <h1>{t("recipes.newReadyMade")}</h1>
+          <ReadyMadeForm client={props.client} onSaved={show} onCancel={list} />
         </Match>
         <Match when={view().kind === "new"}>
           <h1>{t("recipes.new")}</h1>
@@ -81,6 +92,7 @@ function RecipeList(props: {
   online: boolean;
   onOpen: (recipe: { id: RecipeId }) => void;
   onNew: () => void;
+  onNewReadyMade: () => void;
 }) {
   const [query, setQuery] = createSignal("");
   const [recipes, setRecipes] = createSignal<RecipeSummary[]>();
@@ -118,6 +130,10 @@ function RecipeList(props: {
       <button type="button" class="button-secondary" onClick={() => props.onNew()}>
         <Icon name="plus" />
         {t("recipes.new")}
+      </button>
+      <button type="button" class="button-secondary" onClick={() => props.onNewReadyMade()}>
+        <Icon name="plus" />
+        {t("recipes.newReadyMade")}
       </button>
       <Show when={failed()}>
         <p class="banner banner-warn" role="alert">
@@ -164,6 +180,9 @@ function RecipeList(props: {
                           <span class="row-meta" id={`${id}-meta`}>
                             {[...recipe.tags.map(nameText), effortText(recipe.effortMinutes)].join(" · ")}
                           </span>
+                          <Show when={recipe.readyMade}>
+                            <span class="chip">{t("recipe.readyMade")}</span>
+                          </Show>
                           <Show when={recipe.allergens.kind === "unknown"}>
                             <span class="chip chip-amber">{t("recipe.allergensUnknownChip")}</span>
                           </Show>
@@ -315,6 +334,9 @@ function RecipeDetail(props: {
               </p>
             </div>
             <div class="chips">
+              <Show when={current().readyMade}>
+                <span class="chip">{t("recipe.readyMade")}</span>
+              </Show>
               <Show when={current().recurring}>
                 {(recurring) => <span class="chip">{recurrenceText(recurring())}</span>}
               </Show>

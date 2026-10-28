@@ -551,6 +551,11 @@ function SlotView(props: {
               </div>
               <div class="dish">
                 <DishTitle slot={props.slot} onOpen={props.onOpen} />
+                <Show when={recipe().readyMade}>
+                  <p class="chips">
+                    <span class="chip">{t("recipe.readyMade")}</span>
+                  </p>
+                </Show>
                 {meta()}
               </div>
             </div>

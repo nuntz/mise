@@ -150,7 +150,7 @@ export const SlotRating = z.object({
 export type SlotRating = z.infer<typeof SlotRating>;
 
 /** What a Slot shows of its Recipe. */
-export const SlotRecipe = Recipe.pick({ id: true, title: true, baseServings: true, photoKey: true });
+export const SlotRecipe = Recipe.pick({ id: true, title: true, baseServings: true, photoKey: true, readyMade: true });
 export type SlotRecipe = z.infer<typeof SlotRecipe>;
 
 export const Slot = z.object({

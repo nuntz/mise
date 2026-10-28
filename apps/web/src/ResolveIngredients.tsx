@@ -1,5 +1,4 @@
 import {
-  ALLERGENS,
   type Allergen,
   type Item,
   type ItemId,
@@ -14,6 +13,7 @@ import {
 } from "@mise/domain";
 import { createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { AllergenPicker } from "./AllergenPicker";
 import type { MiseClient } from "./client";
 import { Done } from "./Done";
 import { errorText } from "./errors";
@@ -486,9 +486,6 @@ function CreateForm(props: {
   // from a Suggestion of none (ADR 0009).
   const [none, setNone] = createSignal(false);
 
-  const toggle = (allergen: Allergen, on: boolean) =>
-    setAllergens((chosen) => (on ? [...chosen, allergen] : chosen.filter((a) => a !== allergen)));
-
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (allergens().length === 0 && !none()) {
@@ -532,34 +529,7 @@ function CreateForm(props: {
           </For>
         </div>
       </fieldset>
-      <fieldset>
-        <legend>{t("item.allergens")}</legend>
-        <p>{t("item.allergensHint")}</p>
-        <div class="chips">
-          <For each={ALLERGENS}>
-            {(allergen) => (
-              <label class="toggle-chip">
-                <input
-                  type="checkbox"
-                  checked={allergens().includes(allergen)}
-                  disabled={none()}
-                  onChange={(e) => toggle(allergen, e.currentTarget.checked)}
-                />
-                {t(`allergen.${allergen}`)}
-              </label>
-            )}
-          </For>
-        </div>
-        <label class="toggle-chip">
-          <input
-            type="checkbox"
-            checked={none()}
-            disabled={allergens().length > 0}
-            onChange={(e) => setNone(e.currentTarget.checked)}
-          />
-          {t("item.allergensNone")}
-        </label>
-      </fieldset>
+      <AllergenPicker allergens={allergens()} none={none()} onAllergens={setAllergens} onNone={setNone} />
       <button type="submit" class="button-primary" disabled={props.busy}>
         {props.submitLabel ?? t("resolve.createSubmit")}
       </button>

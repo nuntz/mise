@@ -131,6 +131,9 @@ describe("a Ready-made dish", () => {
       leftovers: [dinner(TUESDAY)],
     });
     expect(slotOf(proposed, TUESDAY)).toMatchObject({ kind: "leftovers", leftoversOf: dinner(MONDAY) });
+    // The Week says so, for the Slot and for its Leftovers.
+    expect(slotOf(proposed, MONDAY).recipe).toMatchObject({ readyMade: true });
+    expect(slotOf(proposed, TUESDAY).leftoversOf?.recipe).toMatchObject({ readyMade: true });
     // Half the pack for Monday's 2 and Tuesday's 2, so one pack.
     expect(await lasagnaBought(household)).toEqual({ frozen: ["1 package"] });
   });

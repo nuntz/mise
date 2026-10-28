@@ -7,7 +7,7 @@ function dinner(date: string, title: string, fields: Partial<Slot> = {}): Slot {
     date,
     meal: "dinner",
     kind: "recipe",
-    recipe: { id: 7, title, baseServings: 4, photoKey: null },
+    recipe: { id: 7, title, baseServings: 4, photoKey: null, readyMade: false },
     note: null,
     diners: [1],
     dinersAreDefault: true,

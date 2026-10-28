@@ -62,11 +62,13 @@ type SlotRow = {
   title: string | null;
   base_servings: number | null;
   photo_key: string | null;
+  ready_made: number | null;
   /** The Recipe of the Slot it is Leftovers of, if any. */
   of_recipe_id: number | null;
   of_title: string | null;
   of_base_servings: number | null;
   of_photo_key: string | null;
+  of_ready_made: number | null;
 };
 
 type SlotKey = { date: string; meal: string };
@@ -733,8 +735,9 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
   const range = [from ?? "", to ?? "9999-12-31"];
   const rows = sql
     .exec<SlotRow>(
-      `SELECT s.*, r.title, r.base_servings, r.photo_key, o.recipe_id AS of_recipe_id, of_recipe.title AS of_title,
-         of_recipe.base_servings AS of_base_servings, of_recipe.photo_key AS of_photo_key
+      `SELECT s.*, r.title, r.base_servings, r.photo_key, r.ready_made, o.recipe_id AS of_recipe_id,
+         of_recipe.title AS of_title, of_recipe.base_servings AS of_base_servings, of_recipe.photo_key AS of_photo_key,
+         of_recipe.ready_made AS of_ready_made
        FROM slot AS s LEFT JOIN recipe AS r ON r.id = s.recipe_id
        LEFT JOIN slot AS o ON o.date = s.leftovers_of_date AND o.meal = s.leftovers_of_meal
        LEFT JOIN recipe AS of_recipe ON of_recipe.id = o.recipe_id
@@ -839,6 +842,7 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
                 title: row.title,
                 baseServings: row.base_servings,
                 photoKey: row.photo_key,
+                readyMade: row.ready_made === 1,
               },
         note: row.note,
         diners: eating,
@@ -861,6 +865,7 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
                         title: row.of_title,
                         baseServings: row.of_base_servings,
                         photoKey: row.of_photo_key,
+                        readyMade: row.of_ready_made === 1,
                       },
               },
         leftovers: leftovers.map((other) => ({ date: other.date, meal: other.meal })),

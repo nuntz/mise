@@ -589,6 +589,7 @@ const en = {
   "recipes.none": "No Recipes yet.",
   "recipes.noMatch": "No Recipes match.",
   "recipes.new": "New Recipe",
+  "recipes.newReadyMade": "Add a ready-made dish",
   "recipe.back": "All Recipes",
   "recipe.overline": "Recipe",
   "recipeSheet.close": "Close the Recipe",
@@ -616,6 +617,7 @@ const en = {
   "recipe.recurringWeekly": "Every week",
   "recipe.recurringWeekday": "Every {weekday}",
   "recipe.yieldsLeftovers": "Yields Leftovers",
+  "recipe.readyMade": "Ready-made",
   "recipe.prepAhead": "Prep ahead: {note}",
   "course.main": "Main dish",
   "course.side": "Side",
@@ -663,6 +665,21 @@ const en = {
   "recipeForm.save": "Save Recipe",
   "recipeForm.saving": "Saving…",
   "recipeForm.cancel": "Cancel",
+
+  "readyMade.intro":
+    "A dish bought finished and only heated, such as a lasagna from Costco. Mise plans, shops and checks it like any Recipe.",
+  "readyMade.titlePlaceholder": "Costco lasagna",
+  "readyMade.product": "Product",
+  "readyMade.productHint":
+    "As it is sold, such as “Kirkland lasagna”. The Grocery List buys it by this name, in whole packs.",
+  "readyMade.serves": "Serves",
+  "readyMade.knownItem": "{item} is already one of your Items, so the dish contains its Allergens: {allergens}.",
+  "readyMade.heating": "How to heat it",
+  "readyMade.heatingHint": "One step per line. Leave empty if it is eaten as it is.",
+  "readyMade.effortMinutes": "Hands-on time (minutes)",
+  "readyMade.effortHint": "The minutes someone spends on it, not the oven's. Leave empty if unknown.",
+  "readyMade.save": "Add dish",
+  "readyMade.saving": "Adding…",
 
   "week.this": "This Week",
   "week.next": "Next Week",

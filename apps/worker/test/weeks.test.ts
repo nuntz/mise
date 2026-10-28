@@ -89,7 +89,7 @@ describe("setting a Slot", () => {
       date: TUESDAY,
       meal: "dinner",
       kind: "recipe",
-      recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+      recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null, readyMade: false },
       note: "Use the fresh basil",
       diners: [1, 2, 3],
       dinersAreDefault: true,
