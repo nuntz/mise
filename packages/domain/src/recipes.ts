@@ -82,6 +82,8 @@ export const RecipeFields = {
   course: Course.nullable(),
   recurring: Recurrence.nullable(),
   yieldsLeftovers: z.boolean(),
+  /** A dish bought finished and only heated, whose one Ingredient is the product (ADR 0026). */
+  readyMade: z.boolean(),
   /** What to do the day before, such as "soak the beans". */
   prepAhead: z.string().trim().min(1).max(500).nullable(),
   /** Anything else worth keeping: a description, tips, where it came from. */
@@ -180,6 +182,7 @@ export const RecipeSummary = Recipe.pick({
   cuisine: true,
   mainProtein: true,
   course: true,
+  readyMade: true,
   allergens: true,
   photoKey: true,
 });
@@ -199,6 +202,7 @@ export const NewRecipe = z
     course: RecipeFields.course.default(null),
     recurring: RecipeFields.recurring.default(null),
     yieldsLeftovers: RecipeFields.yieldsLeftovers.default(false),
+    readyMade: RecipeFields.readyMade.default(false),
     prepAhead: RecipeFields.prepAhead.default(null),
     notes: RecipeFields.notes.default(null),
   })
@@ -220,6 +224,7 @@ export const UpdateRecipeInput = z
     course: RecipeFields.course.optional(),
     recurring: RecipeFields.recurring.optional(),
     yieldsLeftovers: RecipeFields.yieldsLeftovers.optional(),
+    readyMade: RecipeFields.readyMade.optional(),
     prepAhead: RecipeFields.prepAhead.optional(),
     notes: RecipeFields.notes.optional(),
   })

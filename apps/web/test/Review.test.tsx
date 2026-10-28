@@ -57,6 +57,7 @@ const dal: Recipe = {
   cuisine: null,
   mainProtein: null,
   course: "main",
+  readyMade: false,
   recurring: null,
   yieldsLeftovers: false,
   prepAhead: null,

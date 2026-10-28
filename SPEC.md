@@ -57,7 +57,7 @@ Constraint  { kind: allergy|intolerance|diet|dislike, allergen?: Allergen, term?
 Allergen    = peanut|tree_nut|milk|egg|wheat|soy|fish|shellfish|sesame|mustard|sulphite|… (canonical list, extensible)
 Ingredient  { raw, item, qty?, unit?, note?, section, allergens: Allergen[] }   // allergens tagged at import; see §4.2
 Recipe      { id, title, lang, baseServings, ingredients[], steps[], tags[], effortMinutes, photoKey?,
-              yieldsLeftovers: bool, prepAhead?: string, recurring?: "weekly"|{weekday},
+              yieldsLeftovers: bool, readyMade: bool, prepAhead?: string, recurring?: "weekly"|{weekday},
               lastCookedAt?, cookCount, source, createdAt, updatedAt, editedInAppAt?,
               draft: bool }   // a Draft Recipe is never proposed, planned or shopped until accepted
 Suggestion  { ingredient, item? | newItem?: { name, allergens: Allergen[] }, at }   // LLM-made; changes nothing until accepted (ADR 0023)
@@ -86,6 +86,7 @@ Notes
 - CRUD, search (title, tag, ingredient), photo (R2), kitchen mode view (large type, wake-lock, step-by-step, timers).
 - Tags: cuisine, protein, effort/time, season (optional), diet flags.
 - Course: what the dish is served as (`main | side | dessert | drink | breakfast | snack`, or unknown). Worked out at import from categories, corrected by hand on the Recipe (ADR 0022).
+- Ready-made: a dish bought finished and only heated (a Costco lasagna) is a Recipe marked `readyMade`, whose one Ingredient is the product, a Household Item carrying its Allergens and Store Section. "Add a ready-made dish" asks only for the title, product, Servings, Allergens and how to heat it. The Grocery List rounds packages, cans and jars up to whole ones (ADR 0026).
 - Rating after cooking: `again | meh | never` + note; feeds the proposer.
 
 ### 4.2 Imports (one pipeline, several parsers)

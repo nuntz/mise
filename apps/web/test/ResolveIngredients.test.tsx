@@ -60,6 +60,7 @@ const untagged: RecipeSummary[] = [
     cuisine: "korean",
     mainProtein: null,
     course: null,
+    readyMade: false,
     allergens: { kind: "known", allergens: [] },
     photoKey: null,
   },

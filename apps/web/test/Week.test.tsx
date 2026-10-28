@@ -54,6 +54,7 @@ const pasta: RecipeSummary = {
   cuisine: null,
   mainProtein: null,
   course: null,
+  readyMade: false,
   allergens: { kind: "known", allergens: ["wheat"] },
   photoKey: "photos/pasta",
 };

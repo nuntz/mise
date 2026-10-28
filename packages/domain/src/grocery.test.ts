@@ -153,9 +153,8 @@ describe("buildGroceryList", () => {
       ingredients: [{ ...parseIngredient("1 package Kirkland lasagna"), item: "household:7" as ItemId }],
     };
     const fourOfEight = (slots: number[]) =>
-      buildGroceryList(
-        demand({ recipes: [lasagna], slots: slots.map((servings) => ({ recipeId: 1, servings })) }),
-      )[0]?.amounts;
+      buildGroceryList(demand({ recipes: [lasagna], slots: slots.map((servings) => ({ recipeId: 1, servings })) }))[0]
+        ?.amounts;
 
     expect(fourOfEight([4])).toEqual([exactly(1, "package")]);
     expect(fourOfEight([4, 4])).toEqual([exactly(1, "package")]);

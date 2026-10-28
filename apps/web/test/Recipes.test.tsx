@@ -49,6 +49,7 @@ const toast: Recipe = {
   cuisine: null,
   mainProtein: null,
   course: null,
+  readyMade: false,
   recurring: "weekly",
   yieldsLeftovers: false,
   prepAhead: null,
@@ -75,8 +76,30 @@ const rice: Recipe = {
   allergens: { kind: "known", allergens: [] },
 };
 
-const summaryOf = ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }: Recipe) =>
-  ({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }) satisfies RecipeSummary;
+const summaryOf = ({
+  id,
+  title,
+  tags,
+  effortMinutes,
+  cuisine,
+  mainProtein,
+  course,
+  readyMade,
+  allergens,
+  photoKey,
+}: Recipe) =>
+  ({
+    id,
+    title,
+    tags,
+    effortMinutes,
+    cuisine,
+    mainProtein,
+    course,
+    readyMade,
+    allergens,
+    photoKey,
+  }) satisfies RecipeSummary;
 
 /** The Recipes' Unresolved lines grouped by name, most frequent first, as `list_unresolved_ingredients` gives them. */
 function unresolvedGroups(recipes: Recipe[]): UnresolvedGroup[] {
@@ -348,6 +371,7 @@ test("a new Recipe is created from its lines and fields", async () => {
     course: "main",
     recurring: { weekday: "monday" },
     yieldsLeftovers: true,
+    readyMade: false,
     prepAhead: null,
     notes: "From a friend.",
   });

@@ -43,6 +43,7 @@ const curry: Recipe = {
   cuisine: null,
   mainProtein: null,
   course: null,
+  readyMade: false,
   recurring: null,
   yieldsLeftovers: true,
   prepAhead: null,

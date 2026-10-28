@@ -65,6 +65,7 @@ describe("hand-entered Recipes", () => {
       course: null,
       recurring: null,
       yieldsLeftovers: false,
+      readyMade: false,
       prepAhead: null,
       notes: null,
       photoKey: null,
@@ -125,6 +126,28 @@ describe("hand-entered Recipes", () => {
     await household.callTool("create_recipe", { ...pancakes, ...fields });
 
     expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true, value: fields });
+  });
+
+  test("a Recipe can be marked Ready-made, a dish bought finished, and unmarked", async () => {
+    const household = await setUpHousehold();
+    const lasagna = recipeOf(
+      await household.callTool("create_recipe", {
+        title: "Costco lasagna",
+        baseServings: 8,
+        ingredients: ["1 package Kirkland lasagna"],
+        steps: ["Bake covered at 375°F for 90 minutes."],
+        readyMade: true,
+      }),
+    );
+
+    const unmarked = recipeOf(await household.callTool("update_recipe", { id: lasagna.id, readyMade: false }));
+
+    expect([lasagna.readyMade, unmarked.readyMade]).toEqual([true, false]);
+    await household.callTool("update_recipe", { id: lasagna.id, readyMade: true });
+    expect(await household.callTool("search_recipes", { query: "lasagna" })).toMatchObject({
+      ok: true,
+      value: [{ title: "Costco lasagna", readyMade: true }],
+    });
   });
 
   test("a Recipe's Course is unknown until someone sets it, and can be changed or cleared", async () => {

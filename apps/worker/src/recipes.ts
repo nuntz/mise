@@ -23,6 +23,7 @@ type RecipeRow = {
   course: string | null;
   recurring: string | null;
   yields_leftovers: number;
+  ready_made: number;
   prep_ahead: string | null;
   photo_key: string | null;
   notes: string | null;
@@ -66,8 +67,8 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     const { id } = sql
       .exec<{ id: number }>(
         `INSERT INTO recipe (title, base_servings, effort_minutes, cuisine, main_protein, course, recurring,
-           yields_leftovers, prep_ahead, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+           yields_leftovers, ready_made, prep_ahead, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         input.title,
         input.baseServings,
         input.effortMinutes,
@@ -76,6 +77,7 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
         input.course,
         recurrenceColumn(input.recurring),
         Number(input.yieldsLeftovers),
+        Number(input.readyMade),
         input.prepAhead,
         input.notes,
         now,
@@ -99,8 +101,8 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
     const fields = { ...recipe, ...changes };
     sql.exec(
       `UPDATE recipe SET title = ?, base_servings = ?, effort_minutes = ?, cuisine = ?, main_protein = ?,
-         course = ?, recurring = ?, yields_leftovers = ?, prep_ahead = ?, notes = ?, updated_at = ?,
-         edited_in_app_at = ?
+         course = ?, recurring = ?, yields_leftovers = ?, ready_made = ?, prep_ahead = ?, notes = ?,
+         updated_at = ?, edited_in_app_at = ?
        WHERE id = ?`,
       fields.title,
       fields.baseServings,
@@ -110,6 +112,7 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
       fields.course,
       recurrenceColumn(fields.recurring),
       Number(fields.yieldsLeftovers),
+      Number(fields.readyMade),
       fields.prepAhead,
       fields.notes,
       now,
@@ -192,7 +195,7 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
 function summaries(recipes: Recipe[]): RecipeSummary[] {
   return recipes
     .sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id)
-    .map(({ id, title, tags, effortMinutes, cuisine, mainProtein, course, allergens, photoKey }) => ({
+    .map(({ id, title, tags, effortMinutes, cuisine, mainProtein, course, readyMade, allergens, photoKey }) => ({
       id,
       title,
       tags,
@@ -200,6 +203,7 @@ function summaries(recipes: Recipe[]): RecipeSummary[] {
       cuisine,
       mainProtein,
       course,
+      readyMade,
       allergens,
       photoKey,
     }));
@@ -309,6 +313,7 @@ export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
       course: row.course,
       recurring: recurrenceOf(row.recurring),
       yieldsLeftovers: row.yields_leftovers === 1,
+      readyMade: row.ready_made === 1,
       prepAhead: row.prep_ahead,
       notes: row.notes,
       photoKey: row.photo_key,

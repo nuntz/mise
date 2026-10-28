@@ -458,6 +458,13 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 26,
+    statements: [
+      // A dish bought finished and only heated (ADR 0026); imports never set it.
+      "ALTER TABLE recipe ADD COLUMN ready_made INTEGER NOT NULL DEFAULT 0",
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

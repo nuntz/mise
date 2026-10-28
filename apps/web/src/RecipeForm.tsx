@@ -18,6 +18,8 @@ type RecipeDraft = {
   course: "" | Course;
   recurring: "" | "weekly" | Weekday;
   yieldsLeftovers: boolean;
+  /** Not on the form: set by the ready-made path, and kept when the Recipe is edited (ADR 0026). */
+  readyMade: boolean;
   prepAhead: string;
   notes: string;
 };
@@ -34,6 +36,7 @@ const emptyRecipe = (): RecipeDraft => ({
   course: "",
   recurring: "",
   yieldsLeftovers: false,
+  readyMade: false,
   prepAhead: "",
   notes: "",
 });
@@ -51,6 +54,7 @@ function draftOf(recipe: Recipe): RecipeDraft {
     course: recipe.course ?? "",
     recurring: recipe.recurring === null ? "" : recipe.recurring === "weekly" ? "weekly" : recipe.recurring.weekday,
     yieldsLeftovers: recipe.yieldsLeftovers,
+    readyMade: recipe.readyMade,
     prepAhead: recipe.prepAhead ?? "",
     notes: recipe.notes ?? "",
   };
@@ -74,6 +78,7 @@ function recipeOf(draft: RecipeDraft): Required<ToolInput<"create_recipe">> {
     course: draft.course === "" ? null : draft.course,
     recurring: draft.recurring === "" ? null : draft.recurring === "weekly" ? "weekly" : { weekday: draft.recurring },
     yieldsLeftovers: draft.yieldsLeftovers,
+    readyMade: draft.readyMade,
     prepAhead: text(draft.prepAhead),
     notes: text(draft.notes),
   };
