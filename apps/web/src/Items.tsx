@@ -12,6 +12,7 @@ import {
 } from "@mise/domain";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { allergenSummary } from "./AllergenPicker";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
@@ -135,7 +136,7 @@ function ItemRow(props: { client: MiseClient; item: Item; editing: boolean; onEd
 function itemMeta(item: Item): string {
   const params = {
     section: sectionName(item.section),
-    allergens: allergenList(item.allergens) || t("item.noAllergens"),
+    allergens: allergenSummary(item.allergens),
     aliases: item.aliases.join(", "),
   };
   return item.aliases.length > 0 ? t("items.summaryAliases", params) : t("items.summary", params);

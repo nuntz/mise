@@ -13,7 +13,7 @@ import {
 } from "@mise/domain";
 import { createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { AllergenPicker } from "./AllergenPicker";
+import { AllergenPicker, allergenSummary } from "./AllergenPicker";
 import type { MiseClient } from "./client";
 import { Done } from "./Done";
 import { errorText } from "./errors";
@@ -538,10 +538,4 @@ function CreateForm(props: {
       </button>
     </form>
   );
-}
-
-function allergenSummary(allergens: Allergen[]): string {
-  return allergens.length > 0
-    ? allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ")
-    : t("item.noAllergens");
 }

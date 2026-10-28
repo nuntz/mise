@@ -46,3 +46,10 @@ export function AllergenPicker(props: {
     </fieldset>
   );
 }
+
+/** An Item's Allergens as a list, or "No Allergens". */
+export function allergenSummary(allergens: readonly Allergen[]): string {
+  return allergens.length > 0
+    ? allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ")
+    : t("item.noAllergens");
+}

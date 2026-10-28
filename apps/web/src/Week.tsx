@@ -45,6 +45,7 @@ import {
   whoName,
 } from "./Proposal";
 import { RecipeSheet } from "./RecipeSheet";
+import { ReadyMadeChip } from "./Recipes";
 import { Sheet } from "./Sheet";
 
 /** Which Slot of the Week: its day and meal. */
@@ -553,7 +554,7 @@ function SlotView(props: {
                 <DishTitle slot={props.slot} onOpen={props.onOpen} />
                 <Show when={recipe().readyMade}>
                   <p class="chips">
-                    <span class="chip">{t("recipe.readyMade")}</span>
+                    <ReadyMadeChip />
                   </p>
                 </Show>
                 {meta()}

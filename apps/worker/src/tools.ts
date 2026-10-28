@@ -25,6 +25,7 @@ import { importHandlers, readImportFlags, readImportRuns } from "./imports";
 import { itemHandlers, readCatalogue } from "./items";
 import { kitchenDisplayHandlers, readKitchenDisplays } from "./kitchenDisplays";
 import { pushHandlers, readPushSubscriptions } from "./pushDevices";
+import { readyMadeHandlers } from "./readyMade";
 import { readRecipes, recipeHandlers } from "./recipes";
 import { readStaples, stapleHandlers } from "./staples";
 import { readSuggestions, suggestionHandlers } from "./suggestions";
@@ -173,6 +174,7 @@ export const handlers: Handlers = {
   },
 
   ...recipeHandlers,
+  ...readyMadeHandlers,
   ...itemHandlers,
   ...suggestionHandlers,
   ...importHandlers,

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Weekday } from "./household";
 import { Ingredient } from "./ingredients";
-import { type ItemCatalogue, SHIPPED_ITEMS } from "./items";
+import { type ItemCatalogue, ItemName, SHIPPED_ITEMS, StoreSection } from "./items";
 import { ALLERGENS, Allergen } from "./members";
 
 export const RecipeId = z.number().int().positive();
@@ -229,6 +229,30 @@ export const UpdateRecipeInput = z
     notes: RecipeFields.notes.optional(),
   })
   .strict();
+
+/**
+ * A dish bought finished and only heated (ADR 0026): a Ready-made main whose one Ingredient is one
+ * package of the product. The product is a Household Item named as the line reads it, so
+ * "Kirkland lasagna (family size)" is the Item "Kirkland lasagna"; one it already names is used,
+ * Allergens and all. A new one needs its Allergens from the label, an empty list if it has none.
+ */
+export const NewReadyMadeRecipe = z
+  .object({
+    title: RecipeFields.title,
+    product: ItemName,
+    baseServings: RecipeFields.baseServings,
+    allergens: z
+      .array(Allergen)
+      .transform((chosen) => ALLERGENS.filter((allergen) => chosen.includes(allergen)))
+      .optional(),
+    section: StoreSection.default("frozen"),
+    /** How to heat it, if anything. */
+    steps: RecipeFields.steps.default([]),
+    /** The hands-on minutes, not the oven's. */
+    effortMinutes: RecipeFields.effortMinutes.default(null),
+  })
+  .strict();
+export type NewReadyMadeRecipe = z.output<typeof NewReadyMadeRecipe>;
 
 export const GetRecipeInput = z.object({ id: RecipeId }).strict();
 

@@ -589,7 +589,7 @@ const en = {
   "recipes.none": "No Recipes yet.",
   "recipes.noMatch": "No Recipes match.",
   "recipes.new": "New Recipe",
-  "recipes.newReadyMade": "Add a ready-made dish",
+  "recipes.newReadyMade": "Add a Ready-made dish",
   "recipe.back": "All Recipes",
   "recipe.overline": "Recipe",
   "recipeSheet.close": "Close the Recipe",
@@ -667,7 +667,7 @@ const en = {
   "recipeForm.cancel": "Cancel",
 
   "readyMade.intro":
-    "A dish bought finished and only heated, such as a lasagna from Costco. Mise plans, shops and checks it like any Recipe.",
+    "A Ready-made dish is bought finished and only heated, such as a lasagna from Costco. Mise plans, shops and checks it like any Recipe.",
   "readyMade.titlePlaceholder": "Costco lasagna",
   "readyMade.product": "Product",
   "readyMade.productHint":
@@ -678,6 +678,8 @@ const en = {
   "readyMade.heatingHint": "One step per line. Leave empty if it is eaten as it is.",
   "readyMade.effortMinutes": "Hands-on time (minutes)",
   "readyMade.effortHint": "The minutes someone spends on it, not the oven's. Leave empty if unknown.",
+  "readyMade.measuredItem":
+    "That product names an Item that is weighed or measured, not bought whole. Name it as it is sold, such as “Costco rotisserie chicken”.",
   "readyMade.save": "Add dish",
   "readyMade.saving": "Adding…",
 

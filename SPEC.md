@@ -86,7 +86,7 @@ Notes
 - CRUD, search (title, tag, ingredient), photo (R2), kitchen mode view (large type, wake-lock, step-by-step, timers).
 - Tags: cuisine, protein, effort/time, season (optional), diet flags.
 - Course: what the dish is served as (`main | side | dessert | drink | breakfast | snack`, or unknown). Worked out at import from categories, corrected by hand on the Recipe (ADR 0022).
-- Ready-made: a dish bought finished and only heated (a Costco lasagna) is a Recipe marked `readyMade`, whose one Ingredient is the product, a Household Item carrying its Allergens and Store Section. "Add a ready-made dish" asks only for the title, product, Servings, Allergens and how to heat it. The Grocery List rounds packages, cans and jars up to whole ones (ADR 0026).
+- Ready-made: a dish bought finished and only heated (a Costco lasagna) is a Recipe marked `readyMade`, whose one Ingredient is the product, a Household Item carrying its Allergens and Store Section. "Add a Ready-made dish" asks only for the title, product, Servings, Allergens and how to heat it, and `create_ready_made_recipe` makes the Item and the Recipe in one call; a product that already names an Item uses it. The Grocery List rounds packages, cans and jars up to whole ones (ADR 0026).
 - Rating after cooking: `again | meh | never` + note; feeds the proposer.
 
 ### 4.2 Imports (one pipeline, several parsers)
@@ -173,7 +173,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 ## 5. Tool catalogue (shared by PWA, agent, and future integrations)
 
 ```
-recipes:   search_recipes, get_recipe, create_recipe, update_recipe, delete_recipe*, rate_recipe, list_drafts, accept_draft
+recipes:   search_recipes, get_recipe, create_recipe, create_ready_made_recipe, update_recipe, delete_recipe*, rate_recipe, list_drafts, accept_draft
 plan:      get_week, propose_week, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart

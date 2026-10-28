@@ -1,6 +1,6 @@
-import { type Allergen, type Recipe, STORE_SECTIONS, type StoreSection } from "@mise/domain";
+import { type Allergen, parseIngredient, type Recipe, STORE_SECTIONS, type StoreSection } from "@mise/domain";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
-import { AllergenPicker } from "./AllergenPicker";
+import { AllergenPicker, allergenSummary } from "./AllergenPicker";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
 import { createItems, itemNamed } from "./items";
@@ -23,7 +23,11 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
   const [effortMinutes, setEffortMinutes] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
-  const known = () => (product().trim() ? itemNamed(items().values(), product()) : undefined);
+  // The Item the server will use, if any: named as the line reads the product, as it names a new one.
+  const known = () => {
+    const name = parseIngredient(`1 package ${product()}`).name;
+    return name.trim() ? itemNamed(items().values(), name) : undefined;
+  };
   const productHint = createUniqueId();
 
   const save = async (event: SubmitEvent) => {
@@ -35,29 +39,17 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
     setBusy(true);
     setError(undefined);
     try {
-      if (!known()) {
-        const item = await props.client.call("create_item", {
-          name: product().trim(),
-          section: section(),
-          allergens: allergens(),
-          unitFamily: "count",
-        });
-        if (!item.ok) {
-          setError(errorText(item.error, "item"));
-          return;
-        }
-      }
-      const recipe = await props.client.call("create_recipe", {
+      // One call, so a refusal leaves no Item behind; the server decides which Item the product is.
+      const result = await props.client.call("create_ready_made_recipe", {
         title: title(),
+        product: product(),
         baseServings: Number(servings()),
-        ingredients: [`1 package ${product().trim()}`],
+        ...(known() ? {} : { allergens: allergens(), section: section() }),
         steps: heating().split("\n"),
         effortMinutes: effortMinutes().trim() === "" ? null : Number(effortMinutes()),
-        course: "main",
-        readyMade: true,
       });
-      if (recipe.ok) props.onSaved(recipe.value);
-      else setError(errorText(recipe.error, "recipe"));
+      if (result.ok) props.onSaved(result.value);
+      else setError(errorText(result.error, "recipe"));
     } catch {
       setError(t("app.error"));
     } finally {
@@ -115,17 +107,14 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
         }
       >
         {(item) => (
-          <p class="banner banner-plum">
-            {t("readyMade.knownItem", {
-              item: item().name,
-              allergens:
-                item().allergens.length > 0
-                  ? item()
-                      .allergens.map((allergen) => t(`allergen.${allergen}`))
-                      .join(", ")
-                  : t("item.noAllergens"),
-            })}
-          </p>
+          <Show
+            when={item().unitFamily === "count"}
+            fallback={<p class="banner banner-warn">{t("readyMade.measuredItem")}</p>}
+          >
+            <p class="banner banner-plum">
+              {t("readyMade.knownItem", { item: item().name, allergens: allergenSummary(item().allergens) })}
+            </p>
+          </Show>
         )}
       </Show>
       <label>

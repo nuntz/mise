@@ -39,6 +39,7 @@ import { PushDevice, PushDeviceInput, PushKey, SubscribePushInput } from "./push
 import {
   DeleteRecipeInput,
   GetRecipeInput,
+  NewReadyMadeRecipe,
   NewRecipe,
   Recipe,
   RecipeSummary,
@@ -172,6 +173,16 @@ export const tools = {
   }),
   create_recipe: defineTool({
     input: NewRecipe,
+    output: Recipe,
+    changes: "recipes",
+  }),
+  /**
+   * Creates the product's Household Item, unless the product already names one, and the Ready-made
+   * Recipe. Refuses a new product without its Allergens stated (`invalid_input`), and one naming an
+   * Item that is weighed or measured rather than bought whole (`measured_item`).
+   */
+  create_ready_made_recipe: defineTool({
+    input: NewReadyMadeRecipe,
     output: Recipe,
     changes: "recipes",
   }),
@@ -593,6 +604,7 @@ export type ToolErrorCode =
   | "email_in_use"
   | "name_in_use"
   | "shipped_item"
+  | "measured_item"
   | "constraint_conflict"
   | "no_recipe"
   | "not_yet"

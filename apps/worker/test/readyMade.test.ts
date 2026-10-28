@@ -12,26 +12,8 @@ type Member = { name: string; constraints?: { kind: "allergy"; allergen: string 
 async function setUpHousehold(members: Member[], lasagna: Record<string, unknown> = {}) {
   const household = env.Household.getByName(crypto.randomUUID());
   await household.callTool("setup_household", { name: "The Example Family", members });
-  succeeded<Item>(
-    await household.callTool("create_item", {
-      name: "Kirkland lasagna",
-      section: "frozen",
-      allergens: ["milk", "egg", "wheat"],
-      unitFamily: "count",
-    }),
-  );
-  succeeded<Recipe>(
-    await household.callTool("create_recipe", {
-      title: "Costco lasagna",
-      baseServings: 8,
-      ingredients: ["1 package Kirkland lasagna"],
-      steps: ["Bake covered at 375°F for 90 minutes."],
-      effortMinutes: 5,
-      course: "main",
-      readyMade: true,
-      ...lasagna,
-    }),
-  );
+  const { id } = succeeded<Recipe>(await household.callTool("create_ready_made_recipe", KIRKLAND));
+  if (Object.keys(lasagna).length > 0) succeeded(await household.callTool("update_recipe", { id, ...lasagna }));
   for (let index = 2; index <= 13; index++) {
     await household.callTool("create_recipe", {
       title: `Rice bowl ${index}`,
@@ -44,6 +26,16 @@ async function setUpHousehold(members: Member[], lasagna: Record<string, unknown
 }
 
 type TestHousehold = Awaited<ReturnType<typeof setUpHousehold>>;
+
+const KIRKLAND = {
+  title: "Costco lasagna",
+  product: "Kirkland lasagna",
+  baseServings: 8,
+  allergens: ["wheat", "milk", "egg"],
+  section: "frozen",
+  steps: ["Bake covered at 375°F for 90 minutes."],
+  effortMinutes: 5,
+};
 
 const LASAGNA = 1;
 const FOUR = [{ name: "Robin" }, { name: "Alex" }, { name: "Sam" }, { name: "Jo" }];
@@ -136,5 +128,107 @@ describe("a Ready-made dish", () => {
     expect(slotOf(proposed, TUESDAY).leftoversOf?.recipe).toMatchObject({ readyMade: true });
     // Half the pack for Monday's 2 and Tuesday's 2, so one pack.
     expect(await lasagnaBought(household)).toEqual({ frozen: ["1 package"] });
+  });
+});
+
+describe("adding a Ready-made dish", () => {
+  async function household() {
+    const fresh = env.Household.getByName(crypto.randomUUID());
+    await fresh.callTool("setup_household", { name: "The Example Family", members: [{ name: "Robin" }] });
+    return fresh;
+  }
+
+  async function householdItems(household: TestHousehold): Promise<Item[]> {
+    const items = succeeded<Item[]>(await household.callTool("list_items", {}));
+    return items.filter((item) => item.id.startsWith("household:"));
+  }
+
+  test("creates the product's Household Item and a Ready-made main whose one Ingredient it is", async () => {
+    const fresh = await household();
+
+    const lasagna = succeeded<Recipe>(await fresh.callTool("create_ready_made_recipe", KIRKLAND));
+
+    const [item] = await householdItems(fresh);
+    expect(item).toMatchObject({
+      name: "Kirkland lasagna",
+      section: "frozen",
+      allergens: ["milk", "egg", "wheat"],
+      unitFamily: "count",
+    });
+    expect(lasagna).toMatchObject({
+      title: "Costco lasagna",
+      baseServings: 8,
+      readyMade: true,
+      course: "main",
+      effortMinutes: 5,
+      steps: ["Bake covered at 375°F for 90 minutes."],
+      ingredients: [{ raw: "1 package Kirkland lasagna", amount: { min: 1, max: 1 }, unit: "package", item: item?.id }],
+      allergens: { kind: "known", allergens: ["milk", "egg", "wheat"] },
+    });
+  });
+
+  test("names the Item as the line reads it, so a product written with a note still resolves", async () => {
+    const fresh = await household();
+
+    const lasagna = succeeded<Recipe>(
+      await fresh.callTool("create_ready_made_recipe", { ...KIRKLAND, product: "Kirkland lasagna (family size)" }),
+    );
+
+    expect((await householdItems(fresh)).map((item) => item.name)).toEqual(["Kirkland lasagna"]);
+    expect(lasagna.ingredients).toMatchObject([
+      { raw: "1 package Kirkland lasagna (family size)", note: "family size", item: expect.any(String) },
+    ]);
+    expect(lasagna.allergens).toEqual({ kind: "known", allergens: ["milk", "egg", "wheat"] });
+  });
+
+  test("uses an Item the product already names, with its Allergens, without asking for them", async () => {
+    const fresh = await household();
+    await fresh.callTool("create_ready_made_recipe", KIRKLAND);
+
+    const again = succeeded<Recipe>(
+      await fresh.callTool("create_ready_made_recipe", {
+        title: "Lasagna night",
+        product: "kirkland lasagnas",
+        baseServings: 8,
+      }),
+    );
+
+    expect(await householdItems(fresh)).toHaveLength(1);
+    expect(again.allergens).toEqual({ kind: "known", allergens: ["milk", "egg", "wheat"] });
+  });
+
+  test("a new product's Allergens must be stated, even when it has none", async () => {
+    const fresh = await household();
+    const { allergens: _, ...unstated } = KIRKLAND;
+
+    expect(await fresh.callTool("create_ready_made_recipe", unstated)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input", issues: [{ path: "allergens" }] },
+    });
+    expect(succeeded(await fresh.callTool("create_ready_made_recipe", { ...KIRKLAND, allergens: [] }))).toMatchObject({
+      allergens: { kind: "known", allergens: [] },
+    });
+  });
+
+  test("a refused Recipe leaves no Item behind", async () => {
+    const fresh = await household();
+
+    expect(await fresh.callTool("create_ready_made_recipe", { ...KIRKLAND, effortMinutes: -1 })).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" },
+    });
+    expect(await fresh.callTool("create_ready_made_recipe", { ...KIRKLAND, title: "   " })).toMatchObject({
+      ok: false,
+    });
+    expect(await householdItems(fresh)).toEqual([]);
+  });
+
+  test("refuses a product that names an Item weighed or measured, not bought whole", async () => {
+    const fresh = await household();
+
+    expect(await fresh.callTool("create_ready_made_recipe", { ...KIRKLAND, product: "chicken breasts" })).toMatchObject(
+      { ok: false, error: { code: "measured_item" } },
+    );
+    expect(await householdItems(fresh)).toEqual([]);
   });
 });

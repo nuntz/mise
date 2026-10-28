@@ -181,7 +181,7 @@ function RecipeList(props: {
                             {[...recipe.tags.map(nameText), effortText(recipe.effortMinutes)].join(" · ")}
                           </span>
                           <Show when={recipe.readyMade}>
-                            <span class="chip">{t("recipe.readyMade")}</span>
+                            <ReadyMadeChip />
                           </Show>
                           <Show when={recipe.allergens.kind === "unknown"}>
                             <span class="chip chip-amber">{t("recipe.allergensUnknownChip")}</span>
@@ -335,7 +335,7 @@ function RecipeDetail(props: {
             </div>
             <div class="chips">
               <Show when={current().readyMade}>
-                <span class="chip">{t("recipe.readyMade")}</span>
+                <ReadyMadeChip />
               </Show>
               <Show when={current().recurring}>
                 {(recurring) => <span class="chip">{recurrenceText(recurring())}</span>}
@@ -463,6 +463,11 @@ function allergensText(allergens: RecipeAllergens): string {
 
 function allergenNames(allergens: Allergen[]): string {
   return allergens.map((allergen) => t(`allergen.${allergen}`)).join(", ");
+}
+
+/** Says a dish was bought finished and is only heated (ADR 0026). */
+export function ReadyMadeChip() {
+  return <span class="chip">{t("recipe.readyMade")}</span>;
 }
 
 export function courseText(course: Course | null): string | null {

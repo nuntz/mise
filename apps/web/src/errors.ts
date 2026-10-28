@@ -31,6 +31,9 @@ const recipeFields: Record<string, MessageKey> = {
   course: "recipeForm.course",
   recurring: "recipeForm.recurring",
   prepAhead: "recipeForm.prepAhead",
+  product: "readyMade.product",
+  allergens: "item.allergens",
+  section: "item.section",
 };
 
 const itemFields: Record<string, MessageKey> = {
@@ -69,6 +72,8 @@ export function errorText(error: ToolError, form: Form): string {
       return t("item.nameInUse");
     case "shipped_item":
       return t("item.shippedItem");
+    case "measured_item":
+      return t("readyMade.measuredItem");
     case "draft_recipe":
       return t("recipe.draft");
     case "not_found":
