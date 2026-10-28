@@ -134,7 +134,7 @@ _Avoid_: Store-bought, convenience meal, prepared meal
 The most cooking time the Household wants to spend on a given weekday's dinner.
 
 **Leftovers**:
-A Slot filled by food cooked for an earlier Slot; the earlier Slot is cooked for both.
+A Slot filled by food already cooked. When it names the earlier Slot it comes from, that Slot is cooked for both; otherwise it comes from food not planned in Mise, such as a batch in the freezer.
 
 **Proposal**:
 A suggested set of Recipes for a Week's dinners, with a reason for each choice.
