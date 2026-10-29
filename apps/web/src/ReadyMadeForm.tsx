@@ -146,10 +146,10 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
           {error()}
         </p>
       </Show>
-      <button type="submit" disabled={busy()}>
+      <button type="submit" class="button-primary" disabled={busy()}>
         {busy() ? t("readyMade.saving") : t("readyMade.save")}
       </button>
-      <button type="button" onClick={() => props.onCancel()}>
+      <button type="button" class="button-secondary" onClick={() => props.onCancel()}>
         {t("recipeForm.cancel")}
       </button>
     </form>

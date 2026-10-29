@@ -14,6 +14,7 @@ import { afterEach, expect, onTestFinished, test } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 const household: Household = {
   name: "The Tremblays",
@@ -400,6 +401,27 @@ test("a Ready-made dish is added in one call, saying whether it yields Leftovers
     effortMinutes: null,
     yieldsLeftovers: true,
   });
+});
+
+test("the Recipe form and the Ready-made form each save with their one primary, and Cancel is secondary", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient([toast]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByRole("button", { name: "New Recipe" }));
+  expect(primaries()).toEqual(["Save Recipe"]);
+  expect(screen.getByRole("button", { name: "Cancel" }).className).toBe("button-secondary");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  await user.click(await screen.findByRole("button", { name: "Add a Ready-made dish" }));
+  expect(primaries()).toEqual(["Add dish"]);
+  expect(screen.getByRole("button", { name: "Cancel" }).className).toBe("button-secondary");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  await user.click(await screen.findByRole("button", { name: "Toast" }));
+  await user.click(await screen.findByRole("button", { name: "Edit Recipe" }));
+  expect(primaries()).toEqual(["Save Recipe"]);
+  expect(screen.getByRole("button", { name: "Cancel" }).className).toBe("button-secondary");
 });
 
 test("a Ready-made product naming a weighed Item is a caution, in amber, not warn", async () => {

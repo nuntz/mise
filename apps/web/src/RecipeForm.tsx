@@ -224,10 +224,10 @@ export function RecipeForm(props: {
           {error()}
         </p>
       </Show>
-      <button type="submit" disabled={busy()}>
+      <button type="submit" class="button-primary" disabled={busy()}>
         {busy() ? t("recipeForm.saving") : t("recipeForm.save")}
       </button>
-      <button type="button" onClick={() => props.onCancel()}>
+      <button type="button" class="button-secondary" onClick={() => props.onCancel()}>
         {t("recipeForm.cancel")}
       </button>
     </form>
