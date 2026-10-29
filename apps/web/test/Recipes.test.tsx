@@ -437,6 +437,18 @@ test("a Ready-made product naming a weighed Item is a caution, in amber, not war
   expect(banner.classList.contains("banner-amber")).toBe(true);
 });
 
+test("a Ready-made product that is already an Item names its Allergens, in a sentence the Item doesn't open", async () => {
+  const user = userEvent.setup();
+  await openRecipes(fakeClient([]).client);
+
+  await user.click(await screen.findByRole("button", { name: "Add a Ready-made dish" }));
+  await user.type(screen.getByRole("textbox", { name: "Product" }), "evaporated milk");
+
+  expect(
+    await screen.findByText("This is your Item evaporated milk, so the dish contains its Allergens: Milk."),
+  ).toBeTruthy();
+});
+
 test("an imported Recipe shows its notes and where it came from", async () => {
   const imported: Recipe = {
     ...toast,

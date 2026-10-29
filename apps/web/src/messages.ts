@@ -673,7 +673,7 @@ const en = {
   "readyMade.productHint":
     "As it is sold, such as “Kirkland lasagna”. The Grocery List buys it by this name, in whole packs.",
   "readyMade.serves": "Serves",
-  "readyMade.knownItem": "{item} is already one of your Items, so the dish contains its Allergens: {allergens}.",
+  "readyMade.knownItem": "This is your Item {item}, so the dish contains its Allergens: {allergens}.",
   "readyMade.heating": "How to heat it",
   "readyMade.heatingHint": "One step per line. Leave empty if it is eaten as it is.",
   "readyMade.effortMinutes": "Hands-on time (minutes)",
