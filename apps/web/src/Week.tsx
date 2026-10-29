@@ -1,10 +1,12 @@
 import {
+  addDays,
   type Conflict,
   type Item,
   type ItemId,
   type LocalDate,
   type Locale,
   localDate,
+  MEALS,
   type Meal,
   type Member,
   type MemberId,
@@ -227,6 +229,7 @@ export function WeekPage(props: {
                     onOpen={open}
                     editing={editing()}
                     onEdit={edit}
+                    week={shown()}
                     slots={shown().slots.filter((slot) => slot.date === date)}
                   />
                 )}
@@ -347,6 +350,8 @@ function Day(props: {
   onOpen: (slot: Slot, rate?: boolean) => void;
   editing: SlotKey | undefined;
   onEdit: (slot: SlotKey, editing: boolean) => void;
+  /** The Week the day is in. */
+  week: Week;
   slots: Slot[];
 }) {
   const title = () => dayTitle(props.date, props.household.locale);
@@ -373,6 +378,7 @@ function Day(props: {
       onOpen={props.onOpen}
       editing={isEditing(meal)}
       onEdit={(editing) => props.onEdit({ date: props.date, meal }, editing)}
+      week={props.week}
       prominent={prominent}
     />
   );
@@ -460,6 +466,8 @@ function SlotView(props: {
   onOpen: (slot: Slot, rate?: boolean) => void;
   editing: boolean;
   onEdit: (editing: boolean) => void;
+  /** The Week the Slot is in. */
+  week: Week;
   prominent?: boolean;
 }) {
   const meal = () => t(`meal.${props.slot.meal}`);
@@ -612,6 +620,7 @@ function SlotView(props: {
           client={props.client}
           household={props.household}
           slot={props.slot}
+          week={props.week}
           onDone={() => props.onEdit(false)}
         />
       </Show>
@@ -842,10 +851,18 @@ function Cooking(props: {
 /** Who is eating, as a form holds it: the Household's default, or the Members ticked. */
 type DinersDraft = { everyone: boolean; diners: MemberId[] };
 
-function SlotForm(props: { client: MiseClient; household: Household; slot: Slot; onDone: () => void }) {
+/** A Slot that Leftovers can be of: its day and meal, and the Recipe it holds. */
+type LeftoversChoice = SlotKey & { recipe: Slot["recipe"] };
+
+function SlotForm(props: { client: MiseClient; household: Household; slot: Slot; week: Week; onDone: () => void }) {
   const { slot } = props;
   const [kind, setKind] = createSignal<SlotKind>(slot.kind);
   const [recipeId, setRecipeId] = createSignal(slot.recipe ? String(slot.recipe.id) : "");
+  // Which Slot its Leftovers are of, as `choiceValue` names it; "" for nothing planned in Mise.
+  const linkedAtOpen = slot.leftoversOf ? choiceValue(slot.leftoversOf) : "";
+  const [leftoversOf, setLeftoversOf] = createSignal(linkedAtOpen);
+  // The Week before, once Leftovers are chosen, when the seven days before this meal reach into it.
+  const [weekBefore, setWeekBefore] = createSignal<Slot[]>([]);
   const [note, setNote] = createSignal(slot.note ?? "");
   const [diners, setDiners] = createSignal<DinersDraft>({ everyone: slot.dinersAreDefault, diners: slot.diners });
   const [guests, setGuests] = createSignal(String(slot.guests));
@@ -871,6 +888,32 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
     (result) => result.ok && setRecipes(result.value),
     () => setError(t("app.error")),
   );
+  // The same meal a week back: the seven days before this meal are the meals after it. A dinner's
+  // start the day after; any other meal's, on that day.
+  const weekAgo = { date: addDays(slot.date, -7), meal: slot.meal };
+  const firstDay = slot.meal === "dinner" ? addDays(slot.date, -6) : weekAgo.date;
+  let askedWeekBefore = false;
+  createEffect(() => {
+    if (kind() !== "leftovers" || askedWeekBefore || firstDay >= props.week.startDate) return;
+    askedWeekBefore = true;
+    void props.client.call("get_week", { date: firstDay }).then(
+      (result) => result.ok && setWeekBefore(result.value.slots),
+      () => setError(t("app.error")),
+    );
+  });
+
+  // Every Slot with a Recipe in the seven days before this meal, cooked or not, newest first: Drafts,
+  // which no search finds, can't be linked. The Slot linked already is offered however far back.
+  const choices = createMemo((): LeftoversChoice[] => {
+    const planned = new Set(recipes().map((recipe) => recipe.id));
+    const offered: LeftoversChoice[] = [...weekBefore(), ...props.week.slots].filter(
+      (other) => other.recipe && planned.has(other.recipe.id) && isBefore(weekAgo, other) && isBefore(other, slot),
+    );
+    const current = slot.leftoversOf;
+    if (current && !offered.some((other) => sameSlot(other, current))) offered.push(current);
+    return offered.sort((a, b) => (isBefore(a, b) ? 1 : -1));
+  });
+  const chosenLink = () => choices().find((choice) => choiceValue(choice) === leftoversOf());
 
   const save = async (event: SubmitEvent) => {
     event.preventDefault();
@@ -904,6 +947,14 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         chosen === "recipe" ? { ...change, kind: chosen, recipeId: Number(recipeId()) } : { ...change, kind: chosen };
       writes.push(() => props.client.call("set_slot", input));
     }
+    // After the rest of the change, so that its Conflicts are checked against the Slot as it ends up.
+    if (kind() === "leftovers" && leftoversOf() !== linkedAtOpen) {
+      const link = chosenLink();
+      const of = link ? { date: link.date, meal: link.meal } : null;
+      writes.push(() =>
+        props.client.call("link_leftovers", { ...where, of, ...(overrides.length > 0 && { overrides }) }),
+      );
+    }
     if (locked() !== slot.locked) writes.push(() => props.client.call("lock_slot", { ...where, locked: locked() }));
 
     setBusy(true);
@@ -922,7 +973,14 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
   };
 
   const recipeTitle = () =>
-    recipes().find((recipe) => String(recipe.id) === recipeId())?.title ?? slot.recipe?.title ?? "";
+    kind() === "leftovers"
+      ? (chosenLink()?.recipe?.title ?? "")
+      : (recipes().find((recipe) => String(recipe.id) === recipeId())?.title ?? slot.recipe?.title ?? "");
+  const choiceText = (choice: LeftoversChoice) =>
+    t(`slot.leftoversOfOption.${choice.meal}`, {
+      day: formatDate(choice.date, props.household.locale, { weekday: "long" }),
+      title: choice.recipe?.title ?? t("slotKind.unplanned"),
+    });
 
   return (
     <form class="slot-form" aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
@@ -943,6 +1001,24 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
           <select value={recipeId()} onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
             <option value="">{t("slot.chooseRecipe")}</option>
             <For each={recipes()}>{(recipe) => <option value={String(recipe.id)}>{recipe.title}</option>}</For>
+          </select>
+        </label>
+      </Show>
+      <Show when={kind() === "leftovers"}>
+        <label>
+          {t("slot.leftoversOfMeal")}
+          <select onChange={(e) => changing(setLeftoversOf)(e.currentTarget.value)}>
+            <option value="" selected={leftoversOf() === ""}>
+              {t("slot.leftoversOfNothing")}
+            </option>
+            {/* Selected option by option: the Week before may arrive after the list is drawn. */}
+            <For each={choices()}>
+              {(choice) => (
+                <option value={choiceValue(choice)} selected={leftoversOf() === choiceValue(choice)}>
+                  {choiceText(choice)}
+                </option>
+              )}
+            </For>
           </select>
         </label>
       </Show>
@@ -1254,6 +1330,16 @@ function servingsText(slot: Slot, household: Household): string {
 
 function sameSlot(slot: SlotKey, other: SlotKey): boolean {
   return slot.date === other.date && slot.meal === other.meal;
+}
+
+/** Whether `slot` is an earlier meal than `other`. */
+function isBefore(slot: SlotKey, other: SlotKey): boolean {
+  return slot.date < other.date || (slot.date === other.date && MEALS.indexOf(slot.meal) < MEALS.indexOf(other.meal));
+}
+
+/** A Slot as a "Leftovers of" option's value names it. */
+function choiceValue(slot: SlotKey): string {
+  return `${slot.date}/${slot.meal}`;
 }
 
 /** Where the day rail jumps to. */

@@ -948,6 +948,210 @@ test("Leftovers open the Recipe they're of, scaled as it's cooked, with nothing 
   expect(within(sheet).queryByRole("button", { name: "Cook" })).toBeNull();
 });
 
+const roastChicken: RecipeSummary = { ...pasta, id: 3, title: "Roast chicken", photoKey: null };
+const slotRecipe = ({ id, title }: RecipeSummary) => ({ id, title, baseServings: 4, photoKey: null, readyMade: false });
+
+/**
+ * The Week before this one: Monday's dinner a Curry, Saturday's lunch a Draft no search finds, and
+ * Sunday's dinner a Roast chicken, cooked.
+ */
+function weekBefore(): Week {
+  const week = emptyWeek("2026-10-19");
+  Object.assign(week.slots[2] as Slot, { kind: "recipe", recipe: slotRecipe(curry) });
+  Object.assign(week.slots[16] as Slot, {
+    kind: "recipe",
+    recipe: { ...slotRecipe(pasta), id: 9, title: "Imported stew" },
+  });
+  Object.assign(week.slots[20] as Slot, {
+    kind: "recipe",
+    recipe: slotRecipe(roastChicken),
+    cookedAt: "2026-10-26T02:00:00.000Z",
+  });
+  return week;
+}
+
+/** This Week with Monday's breakfast a Curry, and Tuesday's dinner the Pasta. */
+function curryAndPasta(): Week {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[0] as Slot, { kind: "recipe", recipe: slotRecipe(curry) });
+  Object.assign(week.slots[5] as Slot, { kind: "recipe", recipe: slotRecipe(pasta) });
+  return week;
+}
+
+/** A client whose Week is `thisWeek`, and whose Week before is `weekBefore()`. */
+function fakeClientWithWeekBefore(answers: Record<string, Answer> = {}, thisWeek = curryAndPasta()) {
+  return fakeClient({
+    get_week: (input) => ({
+      ok: true,
+      value: typeof input.date === "string" && input.date < "2026-10-26" ? weekBefore() : thisWeek,
+    }),
+    search_recipes: () => ({ ok: true, value: [curry, pasta, roastChicken] }),
+    ...answers,
+  });
+}
+
+const optionNames = (select: HTMLElement) =>
+  within(select)
+    .getAllByRole("option")
+    .map((option) => option.textContent);
+const selectedName = (select: HTMLElement) =>
+  within(select)
+    .getAllByRole("option")
+    .find((option) => (option as HTMLOptionElement).selected)?.textContent;
+
+test("Leftovers offer the meals with a Recipe in the seven days before, newest first, into the Week before", async () => {
+  const { client } = fakeClientWithWeekBefore();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  expect(within(form).queryByRole("combobox", { name: "Leftovers of" })).toBeNull();
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Leftovers");
+
+  const of = within(form).getByRole("combobox", { name: "Leftovers of" });
+  // Last Monday's dinner is a week back, Saturday's lunch a Draft, and Tuesday's dinner comes later.
+  await vi.waitFor(() =>
+    expect(optionNames(of)).toEqual([
+      "Nothing planned here",
+      "Monday's breakfast, Curry",
+      "Sunday's dinner, Roast chicken",
+    ]),
+  );
+  expect(selectedName(of)).toBe("Nothing planned here");
+});
+
+test("a lunch's Leftovers reach back to last week's dinner on the same day, less than seven days before", async () => {
+  const { client } = fakeClientWithWeekBefore();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(monday).getByRole("button", { expanded: false }));
+  await user.click(within(monday).getByRole("button", { name: "Choose a lunch" }));
+  const form = within(monday).getByRole("form", { name: "Lunch" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Leftovers");
+
+  const of = within(form).getByRole("combobox", { name: "Leftovers of" });
+  await vi.waitFor(() =>
+    expect(optionNames(of)).toEqual([
+      "Nothing planned here",
+      "Monday's breakfast, Curry",
+      "Sunday's dinner, Roast chicken",
+      "Monday's dinner, Curry",
+    ]),
+  );
+});
+
+test("Leftovers of a meal picked are linked to it after the rest of the change, and of nothing unless one is", async () => {
+  const { client, calls } = fakeClientWithWeekBefore({
+    link_leftovers: () => ({ ok: true, value: emptyWeek("2026-10-26").slots[2] }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  let form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Leftovers");
+  const of = within(form).getByRole("combobox", { name: "Leftovers of" });
+  await within(of).findByRole("option", { name: "Sunday's dinner, Roast chicken" });
+  await user.selectOptions(of, "Sunday's dinner, Roast chicken");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
+  expect(writes(calls)).toEqual([
+    { name: "set_slot", input: { date: "2026-10-26", meal: "dinner", kind: "leftovers", note: null } },
+    {
+      name: "link_leftovers",
+      input: { date: "2026-10-26", meal: "dinner", of: { date: "2026-10-25", meal: "dinner" } },
+    },
+  ]);
+
+  calls.length = 0;
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Leftovers");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
+  expect(writes(calls)).toEqual([
+    { name: "set_slot", input: { date: "2026-10-26", meal: "dinner", kind: "leftovers", note: null } },
+  ]);
+});
+
+test("linked Leftovers open with their meal chosen, even one further back; unchanged, they send nothing", async () => {
+  const thisWeek = emptyWeek("2026-10-26");
+  Object.assign(thisWeek.slots[8] as Slot, {
+    kind: "leftovers",
+    leftoversOf: { date: "2026-10-19", meal: "dinner", recipe: slotRecipe(curry) },
+  });
+  const { client, calls } = fakeClientWithWeekBefore(
+    { link_leftovers: () => ({ ok: true, value: thisWeek.slots[8] }) },
+    thisWeek,
+  );
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const wednesday = await screen.findByRole("region", { name: "Wednesday, October 28" });
+
+  await user.click(within(wednesday).getByRole("button", { name: "Change dinner" }));
+  let form = within(wednesday).getByRole("form", { name: "Dinner" });
+  expect(selectedName(within(form).getByRole("combobox", { name: "Leftovers of" }))).toBe("Monday's dinner, Curry");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+  await vi.waitFor(() => expect(within(wednesday).queryByRole("form")).toBeNull());
+  expect(writes(calls)).toEqual([]);
+
+  await user.click(within(wednesday).getByRole("button", { name: "Change dinner" }));
+  form = within(wednesday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Leftovers of" }), "Nothing planned here");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() => expect(within(wednesday).queryByRole("form")).toBeNull());
+  expect(writes(calls)).toEqual([{ name: "link_leftovers", input: { date: "2026-10-28", meal: "dinner", of: null } }]);
+});
+
+test("Leftovers linked to a meal that isn't safe are refused, and linked anyway with a reason", async () => {
+  const { client, calls } = fakeClientWithWeekBefore({
+    link_leftovers: (input) =>
+      input.overrides
+        ? { ok: true, value: emptyWeek("2026-10-26").slots[2] }
+        : {
+            ok: false,
+            error: {
+              code: "constraint_conflict",
+              message: "Refused",
+              conflicts: [{ date: "2026-10-26", meal: "dinner", ...robinsPeanut }],
+            },
+          },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "Leftovers");
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Leftovers of" }), "Monday's breakfast, Curry");
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  const warning = await within(form).findByRole("alert");
+  expect(warning.textContent).toContain("Not safe for Robin (Peanut, Allergy): Curry contains it.");
+  await user.type(within(form).getByRole("textbox", { name: "Why it's safe for Robin (Peanut)" }), "Hers on the side");
+  await user.click(within(form).getByRole("button", { name: "Save anyway" }));
+
+  await vi.waitFor(() => expect(within(monday).queryByRole("form")).toBeNull());
+  expect(writes(calls).at(-1)).toEqual({
+    name: "link_leftovers",
+    input: {
+      date: "2026-10-26",
+      meal: "dinner",
+      of: { date: "2026-10-26", meal: "breakfast" },
+      overrides: [{ who: 1, allergen: "peanut", reason: "Hers on the side" }],
+    },
+  });
+});
+
 test("a proposed Week shows why each dinner was chosen, and asks to be reviewed", async () => {
   const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   const user = userEvent.setup();

@@ -60,6 +60,7 @@ export const readyMadeHandlers: Pick<Handlers, "create_ready_made_recipe"> = {
         ingredients: [line],
         steps: input.steps,
         effortMinutes: input.effortMinutes,
+        yieldsLeftovers: input.yieldsLeftovers,
         course: "main",
         readyMade: true,
       }),

@@ -154,6 +154,7 @@ function fakeClient(stored: Recipe[], { online = true } = {}) {
         case "list_untagged_recipes":
           return { ok: true, value: [] };
         case "create_recipe":
+        case "create_ready_made_recipe":
           return { ok: true, value: { ...rice, id: 3, title: String(input.title) } };
         case "update_recipe":
           return { ok: true, value: { ...toast, ...input } };
@@ -374,6 +375,30 @@ test("a new Recipe is created from its lines and fields", async () => {
     readyMade: false,
     prepAhead: null,
     notes: "From a friend.",
+  });
+});
+
+test("a Ready-made dish is added in one call, saying whether it yields Leftovers", async () => {
+  const user = userEvent.setup();
+  const { client, calls } = fakeClient([]);
+  await openRecipes(client);
+
+  await user.click(await screen.findByRole("button", { name: "Add a Ready-made dish" }));
+  await user.type(screen.getByRole("textbox", { name: "Title" }), "Costco lasagna");
+  await user.type(screen.getByRole("textbox", { name: "Product" }), "Kirkland lasagna");
+  await user.click(screen.getByRole("checkbox", { name: "Contains none of these" }));
+  await user.click(screen.getByRole("checkbox", { name: "Yields Leftovers" }));
+  await user.click(screen.getByRole("button", { name: "Add dish" }));
+
+  expect(calls.find((call) => call.name === "create_ready_made_recipe")?.input).toEqual({
+    title: "Costco lasagna",
+    product: "Kirkland lasagna",
+    baseServings: 4,
+    allergens: [],
+    section: "frozen",
+    steps: [""],
+    effortMinutes: null,
+    yieldsLeftovers: true,
   });
 });
 

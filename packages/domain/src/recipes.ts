@@ -250,6 +250,7 @@ export const NewReadyMadeRecipe = z
     steps: RecipeFields.steps.default([]),
     /** The hands-on minutes, not the oven's. */
     effortMinutes: RecipeFields.effortMinutes.default(null),
+    yieldsLeftovers: RecipeFields.yieldsLeftovers.default(false),
   })
   .strict();
 export type NewReadyMadeRecipe = z.output<typeof NewReadyMadeRecipe>;

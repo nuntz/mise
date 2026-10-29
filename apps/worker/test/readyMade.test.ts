@@ -167,6 +167,25 @@ describe("adding a Ready-made dish", () => {
     });
   });
 
+  test("yields Leftovers when it says so, and none unless it does", async () => {
+    const fresh = await household();
+
+    const lasagna = succeeded<Recipe>(
+      await fresh.callTool("create_ready_made_recipe", { ...KIRKLAND, yieldsLeftovers: true }),
+    );
+    const pie = succeeded<Recipe>(
+      await fresh.callTool("create_ready_made_recipe", {
+        title: "Tourtière",
+        product: "Frozen tourtière",
+        baseServings: 6,
+        allergens: ["wheat"],
+      }),
+    );
+
+    expect(lasagna.yieldsLeftovers).toBe(true);
+    expect(pie.yieldsLeftovers).toBe(false);
+  });
+
   test("names the Item as the line reads it, so a product written with a note still resolves", async () => {
     const fresh = await household();
 

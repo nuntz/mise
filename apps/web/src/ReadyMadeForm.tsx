@@ -21,6 +21,7 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
   const [none, setNone] = createSignal(false);
   const [heating, setHeating] = createSignal("");
   const [effortMinutes, setEffortMinutes] = createSignal("");
+  const [yieldsLeftovers, setYieldsLeftovers] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   // The Item the server will use, if any: named as the line reads the product, as it names a new one.
@@ -47,6 +48,7 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
         ...(known() ? {} : { allergens: allergens(), section: section() }),
         steps: heating().split("\n"),
         effortMinutes: effortMinutes().trim() === "" ? null : Number(effortMinutes()),
+        yieldsLeftovers: yieldsLeftovers(),
       });
       if (result.ok) props.onSaved(result.value);
       else setError(errorText(result.error, "recipe"));
@@ -127,6 +129,14 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
         <input type="number" min={0} value={effortMinutes()} onInput={(e) => setEffortMinutes(e.currentTarget.value)} />
       </label>
       <small>{t("readyMade.effortHint")}</small>
+      <label>
+        <input
+          type="checkbox"
+          checked={yieldsLeftovers()}
+          onChange={(e) => setYieldsLeftovers(e.currentTarget.checked)}
+        />
+        {t("recipe.yieldsLeftovers")}
+      </label>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
           {error()}
