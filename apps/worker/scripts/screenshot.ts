@@ -15,9 +15,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HOUSEHOLD_AGENT, type Week } from "@mise/domain";
+import { addDays, HOUSEHOLD_AGENT, type Week } from "@mise/domain";
 import { AgentClient } from "agents/client";
-import { type Browser, chromium, devices, type Page } from "playwright";
+import { type Browser, chromium, devices, type Locator, type Page } from "playwright";
 import sampleHousehold from "../../../fixtures/sample-household.json";
 import sampleWeek from "../../../fixtures/sample-week.json";
 
@@ -108,7 +108,8 @@ async function seed(): Promise<Map<string, number>> {
 /**
  * What the screens past the Week need to show more than their empty states: a Recipe with
  * Unresolved Ingredients and, given a model, Suggestions for them, a Recipe to tag, a link-only
- * Draft to review, Staples due and run low, a Grocery List, a calendar link and a Kitchen Display.
+ * Draft to review, Staples due and run low, a Grocery List, a calendar link and a Kitchen Display;
+ * and next Week, a Ready-made dish after a Monday of Leftovers whose form reaches back into this Week.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -155,7 +156,31 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   await call(agent, "build_grocery_list", {});
   await call(agent, "rotate_calendar_token", {});
   await call(agent, "add_kitchen_display", { label: "Kitchen counter" });
+  // Its Allergens are none the sample Members avoid, so its Slot has no Conflict to override.
+  const readyMade = (await call(agent, "create_ready_made_recipe", READY_MADE)) as { id: number };
+  ids.set(READY_MADE.title, readyMade.id);
+  const thisWeek = (await call(agent, "get_week", {})) as Week;
+  const next = addDays(thisWeek.startDate, 7);
+  await call(agent, "set_slot", { date: next, meal: "dinner", kind: "leftovers" });
+  await call(agent, "set_slot", {
+    date: addDays(next, 1),
+    meal: "dinner",
+    kind: "recipe",
+    recipeId: readyMade.id,
+  });
 }
+
+/** The Ready-made dish seeded, whose product the add-dish form then finds already an Item. */
+const READY_MADE = {
+  title: "Frozen Dumplings",
+  product: "frozen vegetable dumplings",
+  baseServings: 4,
+  allergens: ["wheat", "soy", "sesame"],
+  section: "frozen",
+  steps: ["Steam from frozen for 12 minutes."],
+  effortMinutes: 5,
+  yieldsLeftovers: true,
+};
 
 async function screenshot(browser: Browser) {
   const context = await browser.newContext({ ...devices["iPhone 15"], colorScheme: "light" });
@@ -199,12 +224,26 @@ type Screen = {
   open?: (page: Page) => Promise<void>;
   /** A sheet or kitchen mode over the page: one screenful, as scrolling moves what's underneath. */
   overlay?: boolean;
+  /** The part of a long page to show: one screenful, from its top. */
+  focus?: (page: Page) => Locator;
 };
 
 function screens(ids: Map<string, number>): Screen[] {
   const recipe = ids.get(sampleWeek.dinners[0]?.recipe ?? "");
   const nav = (index: number) => (page: Page) => page.locator("nav.nav button").nth(index).click();
   const header = (index: number) => (page: Page) => page.locator(".app-header .button-row").nth(index).click();
+  // The add-dish form, its title and product filled in.
+  const readyMadeForm = (title: string, product: string) => async (page: Page) => {
+    await nav(1)(page);
+    // The list's second button: the first adds a Recipe.
+    await page.locator("main button.button-secondary").nth(1).click();
+    await page.locator("form input").nth(0).fill(title);
+    await page.locator("form input").nth(1).fill(product);
+  };
+  // From the product's field, so the banner under it shows with what it's about.
+  const productField = (page: Page) => page.locator("form label").nth(1);
+  // Next Week's Monday, of Leftovers, and its Slot form.
+  const nextMonday = (page: Page) => page.locator("section.day").first().locator("section.slot").first();
   return [
     { name: "week" },
     { name: "week-dinner", open: (page) => page.locator(".dish-open").first().click(), overlay: true },
@@ -220,6 +259,63 @@ function screens(ids: Map<string, number>): Screen[] {
       path: `/?recipe=${recipe}`,
       open: (page) => page.locator(".page button.button-primary").first().click(),
       overlay: true,
+    },
+    { name: "recipes-ready-made-new", open: readyMadeForm("Frozen Pierogi", "frozen potato pierogi") },
+    {
+      name: "recipes-ready-made-known",
+      open: readyMadeForm("Dumpling Night", READY_MADE.product),
+      focus: productField,
+    },
+    {
+      name: "recipes-ready-made-weighed",
+      open: readyMadeForm("Grilled Chicken", "chicken breasts"),
+      focus: productField,
+    },
+    {
+      name: "recipes-ready-made-leftovers",
+      open: async (page) => {
+        await readyMadeForm("Frozen Pierogi", "frozen potato pierogi")(page);
+        await page.locator('form input[type="checkbox"]').last().check();
+      },
+      // From the field above it, so the box shows with the buttons under it.
+      focus: (page) => page.locator('form input[type="number"]').last(),
+    },
+    {
+      name: "recipes-ready-made-chip",
+      open: nav(1),
+      focus: (page) => page.locator(".recipe-row:has(.chip:not(.chip-amber))").first(),
+    },
+    { name: "recipe-ready-made", path: `/?recipe=${ids.get(READY_MADE.title)}` },
+    {
+      name: "week-cook-for-leftovers",
+      // From the title of the Wednesday cooked for Thursday's Leftovers, so the two show together.
+      focus: (page) => page.locator("section.slot", { hasText: sampleWeek.dinners[2]?.recipe ?? "" }).locator(".dish"),
+    },
+    {
+      name: "week-next-ready-made",
+      path: "/?week=next",
+      focus: (page) => page.locator(".dish-card:has(.chips)").first(),
+    },
+    {
+      name: "week-next-ready-made-sheet",
+      path: "/?week=next",
+      open: (page) => page.locator(".dish-card .dish-open").first().click(),
+      overlay: true,
+    },
+    {
+      name: "week-next-leftovers-of",
+      path: "/?week=next",
+      open: async (page) => {
+        await nextMonday(page).locator("button.button-row").click();
+        // Its meals from the Week before arrive a moment after the form opens.
+        const list = page.locator(".slot-form select").filter({ has: page.locator('option[value*="/"]') });
+        await list.waitFor();
+        // A select's list is drawn by the system, which a screenshot leaves out: shown in the page instead.
+        await list.evaluate((select: HTMLSelectElement) => {
+          select.size = select.options.length;
+        });
+      },
+      focus: (page) => page.locator(".slot-form label:has(select option[value*='/'])"),
     },
     { name: "grocery", open: nav(2) },
     { name: "pantry", path: "/?pantry" },
@@ -294,6 +390,18 @@ async function capture(page: Page, screen: Screen, query: string, base: string) 
     scroll: document.documentElement.scrollHeight,
     view: window.innerHeight,
   }));
+  if (screen.focus) {
+    await screen
+      .focus(page)
+      .first()
+      .evaluate((element) => {
+        element.scrollIntoView({ block: "start" });
+        window.scrollBy(0, -24);
+      });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${base}-1.png` });
+    return;
+  }
   const screenfuls = screen.overlay ? 1 : Math.min(MAX_SCREENFULS, Math.ceil(scroll / view));
   for (let index = 0; index < screenfuls; index++) {
     await page.evaluate((y) => window.scrollTo(0, y), index * view);
