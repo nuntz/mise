@@ -316,6 +316,43 @@ test("a Recipe opened over the Week shows how it's made, can't be changed there,
   expect(screen.getByRole("region", { name: "Tuesday, October 27" })).toBeTruthy();
 });
 
+test("a Recipe opened over the Week shows its chips as its page does, but not its tags", async () => {
+  const user = userEvent.setup();
+  const everyChip = {
+    ...pastaRecipe,
+    readyMade: true,
+    recurring: { weekday: "friday" },
+    yieldsLeftovers: true,
+    tags: ["quick"],
+  };
+  const { client } = fakeClient({ get_recipe: () => ({ ok: true, value: everyChip }) });
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const chips = await within(sheet).findByText("Ready-made");
+  expect([...(chips.closest(".chips")?.querySelectorAll(".chip") ?? [])].map((chip) => chip.textContent)).toEqual([
+    "Ready-made",
+    "Every Friday",
+    "Yields Leftovers",
+  ]);
+});
+
+test("a Recipe opened over the Week without chips shows none", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient();
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  await within(sheet).findByRole("list", { name: "Steps" });
+  expect(sheet.querySelector(".chips")).toBeNull();
+});
+
 test("breakfast's Recipe opens over the Week from the folded strip too", async () => {
   const user = userEvent.setup();
   const week = emptyWeek("2026-10-26");

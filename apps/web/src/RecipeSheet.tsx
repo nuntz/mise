@@ -6,6 +6,7 @@ import { Icon } from "./icons";
 import { scaledForText } from "./Kitchen";
 import { t } from "./messages";
 import { savedRecipe, saveRecipe } from "./offline";
+import { RecipeChips, recipeChips } from "./Recipes";
 import { Sheet } from "./Sheet";
 
 /**
@@ -49,6 +50,15 @@ export function RecipeSheet(props: {
           <h2 id={titleId} class="dish-title">
             {recipe()?.title ?? t("app.loading")}
           </h2>
+          <Show when={recipe()}>
+            {(open) => (
+              <Show when={recipeChips(open()).length > 0}>
+                <div class="chips">
+                  <RecipeChips recipe={open()} />
+                </div>
+              </Show>
+            )}
+          </Show>
         </div>
         <button type="button" class="icon-button" aria-label={t("recipeSheet.close")} onClick={() => props.onClose()}>
           <Icon name="close" />

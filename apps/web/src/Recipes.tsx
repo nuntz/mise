@@ -334,15 +334,7 @@ function RecipeDetail(props: {
               </p>
             </div>
             <div class="chips">
-              <Show when={current().readyMade}>
-                <ReadyMadeChip />
-              </Show>
-              <Show when={current().recurring}>
-                {(recurring) => <span class="chip">{recurrenceText(recurring())}</span>}
-              </Show>
-              <Show when={current().yieldsLeftovers}>
-                <span class="chip">{t("recipe.yieldsLeftovers")}</span>
-              </Show>
+              <RecipeChips recipe={current()} />
               <For each={current().tags}>{(tag) => <span class="chip">{nameText(tag)}</span>}</For>
             </div>
             <Show when={current().prepAhead}>
@@ -468,6 +460,20 @@ function allergenNames(allergens: Allergen[]): string {
 /** Says a dish was bought finished and is only heated (ADR 0026). */
 export function ReadyMadeChip() {
   return <span class="chip">{t("recipe.readyMade")}</span>;
+}
+
+/** How a Recipe is had, wherever it's shown whole: Ready-made, its recurrence, Yields Leftovers. */
+export function RecipeChips(props: { recipe: Recipe }) {
+  return <For each={recipeChips(props.recipe)}>{(chip) => <span class="chip">{chip}</span>}</For>;
+}
+
+/** The text of each of a Recipe's `RecipeChips`, none when it has none. */
+export function recipeChips(recipe: Recipe): string[] {
+  return [
+    recipe.readyMade && t("recipe.readyMade"),
+    recipe.recurring && recurrenceText(recipe.recurring),
+    recipe.yieldsLeftovers && t("recipe.yieldsLeftovers"),
+  ].filter((chip) => typeof chip === "string");
 }
 
 export function courseText(course: Course | null): string | null {
