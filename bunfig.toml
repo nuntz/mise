@@ -1,0 +1,3 @@
+[test]
+# As `bun run test`: the Worker and web suites run on Vitest, through their own scripts.
+root = "packages"

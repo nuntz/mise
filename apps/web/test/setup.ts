@@ -5,3 +5,5 @@ import { afterEach } from "vitest";
 afterEach(cleanup);
 // What one test leaves for offline use mustn't show up in the next.
 afterEach(() => localStorage.clear());
+// jsdom has no scrolling; without this, every scroll prints "Not implemented".
+window.scrollTo = () => {};

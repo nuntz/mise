@@ -43,3 +43,10 @@ or page it started from, and only if that is still the one in view. Shared "whic
 edited" state closed on completion closes whatever is open by then and throws away its input (#78);
 a one-off target kept after its opening sends a later visit to a stale place (#77). Each change looks
 right alone; check what else can be current when the promise or the history entry resolves.
+
+## Writes that stand or fall together are one tool call
+
+A tool call runs in one transaction, the only all-or-nothing unit there is. When one write means
+nothing without another (an Item created for the Recipe that names it), one tool does both, its
+handler calling the others' handlers, and the server decides what the browser would otherwise guess
+(#76). Writes that each stand alone, like a Slot's note and its Lock, may be chained from a screen.
