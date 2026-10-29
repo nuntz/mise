@@ -30,6 +30,7 @@ function fakeHousehold(refuse?: { path: string }, start: Partial<Household> = {}
   let current = { ...tremblays, ...start };
   const updates: Record<string, unknown>[] = [];
   const removed: MemberId[] = [];
+  const memberChanges: { name: string; input: Record<string, unknown> }[] = [];
   const fake = createFakeClient((name, input) => {
     // A copy, as the real client's JSON is: the App's store updates what it's given in place.
     if (name === "get_household") return { ok: true, value: structuredClone(current) };
@@ -38,6 +39,14 @@ function fakeHousehold(refuse?: { path: string }, start: Partial<Household> = {}
       if (!member) return { ok: false, error: { code: "not_found", message: "" } };
       removed.push(member.id);
       current = { ...current, members: current.members.filter((listed) => listed !== member) };
+      queueMicrotask(() => fake.notify("household"));
+      return { ok: true, value: member };
+    }
+    if (name === "add_member" || name === "update_member") {
+      memberChanges.push({ name, input });
+      const { id = current.members.length + 1, ...fields } = input as Partial<Member>;
+      const member = { id, ...fields } as Member;
+      current = { ...current, members: [...current.members.filter((listed) => listed.id !== id), member] };
       queueMicrotask(() => fake.notify("household"));
       return { ok: true, value: member };
     }
@@ -63,7 +72,7 @@ function fakeHousehold(refuse?: { path: string }, start: Partial<Household> = {}
     current = { ...current, ...change };
     fake.notify("household");
   };
-  return { client: fake.client, updates, removed, changeElsewhere };
+  return { client: fake.client, updates, removed, memberChanges, changeElsewhere };
 }
 
 async function openSettings(user: ReturnType<typeof userEvent.setup>) {
@@ -174,6 +183,29 @@ test("a Member is removed from their edit view, after Mise's own sheet asks, and
 
   expect(removed).toEqual([1]);
   expect(await screen.findByText("No Members yet.")).toBeTruthy();
+});
+
+test("a Member is added with their sign-in email, and edited from their row", async () => {
+  const user = userEvent.setup();
+  const { client, memberChanges } = fakeHousehold();
+  render(() => <App client={client} />);
+  await user.click(await screen.findByRole("button", { name: "Household" }));
+  await user.click(screen.getByRole("button", { name: "Members" }));
+
+  await user.click(screen.getByRole("button", { name: "Add a Member" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), "Alex");
+  await user.type(screen.getByRole("textbox", { name: "Sign-in email" }), "alex@example.com");
+  const form = screen.getByRole("textbox", { name: "Name" }).closest("form") as HTMLElement;
+  await user.click(within(form).getByRole("button", { name: "Add a Member" }));
+  await user.click(await screen.findByRole("button", { name: "Edit Alex" }));
+  await user.type(screen.getByDisplayValue("Alex"), "andra");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(await screen.findByRole("button", { name: "Edit Alexandra" })).toBeTruthy();
+  expect(memberChanges).toEqual([
+    { name: "add_member", input: { name: "Alex", email: "alex@example.com", constraints: [] } },
+    { name: "update_member", input: { id: 2, name: "Alexandra", email: "alex@example.com", constraints: [] } },
+  ]);
 });
 
 test("a Member's Constraints are chips, each one sentence, a Hard Constraint's in warn", async () => {
