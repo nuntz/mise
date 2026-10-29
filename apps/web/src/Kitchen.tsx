@@ -1,4 +1,4 @@
-import { type Recipe, type RecipeId, scaledLine } from "@mise/domain";
+import { type Recipe, type RecipeId, scaledLines } from "@mise/domain";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
@@ -91,11 +91,7 @@ export function KitchenMode(props: {
                     <h2>{t("recipe.ingredients")}</h2>
                     <p class="meta">{scaledForText(servings(), open().baseServings)}</p>
                     <ul class="ingredients kitchen-ingredients" aria-label={t("recipe.ingredients")}>
-                      <For each={open().ingredients}>
-                        {(ingredient) => (
-                          <li>{scaledLine(ingredient, servings() / open().baseServings, props.locale)}</li>
-                        )}
-                      </For>
+                      <For each={scaledLines(open(), servings(), props.locale)}>{(line) => <li>{line}</li>}</For>
                     </ul>
                   </div>
                 </Show>

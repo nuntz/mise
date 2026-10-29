@@ -316,6 +316,37 @@ describe("the Day Sheet", () => {
     expect(dinner?.recipe?.ingredients).toEqual(curry.ingredients.map((line) => scaledLine(line, 6 / 4, "en-CA")));
   });
 
+  test("a Ready-made dish is heated whole, never part of its package", async () => {
+    const { token } = await pair();
+    await clearDays();
+    const dumplings = succeeded<Recipe>(
+      await household.callTool("create_ready_made_recipe", {
+        title: "Dumplings",
+        product: "frozen vegetable dumplings",
+        baseServings: 4,
+        allergens: [],
+        section: "frozen",
+        steps: [],
+        effortMinutes: 5,
+      }),
+    );
+    // Robin, Alex and a Guest: 3 from a pack for 4.
+    succeeded(
+      await household.callTool("set_slot", {
+        date: today(),
+        meal: "dinner",
+        kind: "recipe",
+        recipeId: dumplings.id,
+        guests: 1,
+      }),
+    );
+
+    const dinner = (await daySheet(token)).slots[2];
+
+    expect(dinner?.servingsText).toBe("For 3. The Recipe makes 4.");
+    expect(dinner?.recipe?.ingredients).toEqual(["1 package frozen vegetable dumplings"]);
+  });
+
   test("a Recipe cooked for what it makes says so, and one nobody eats is as written", async () => {
     const { token } = await pair();
     await clearDays();

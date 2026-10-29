@@ -78,12 +78,14 @@ export function parseIngredient(raw: string, catalogue: ItemCatalogue = SHIPPED_
  * The Ingredient with its amount scaled `by` (cooked for 6 from a Recipe for 4 is 1.5), rounded the
  * way a cook measures: metric weights and volumes to whole numbers (fives from 100; one decimal for
  * kilos and litres), whole things (eggs, cloves, cans) to halves, everything else to quarters or
- * thirds. Scaled by 1 it is unchanged.
+ * thirds. Scaled by 1 it is unchanged. `whole` rounds up to whole things instead, for something only
+ * used whole, such as a Ready-made dish's product.
  */
-export function scaleIngredient(ingredient: Ingredient, by: number): Ingredient {
+export function scaleIngredient(ingredient: Ingredient, by: number, whole = false): Ingredient {
   const { amount, unit } = ingredient;
   if (!amount || by === 1) return ingredient;
-  const round = (value: number) => kitchenRound(value, unit);
+  // Less a hair, so a float a hair past whole (3 × 1/3) isn't taken as the next one up.
+  const round = (value: number) => (whole ? Math.ceil(value - 1e-9) : kitchenRound(value, unit));
   return { ...ingredient, amount: { min: round(amount.min * by), max: round(amount.max * by) } };
 }
 
@@ -103,14 +105,26 @@ export function leadingAmount(raw: string): { amount: string; rest: string } | n
  * An Ingredient line with its amount scaled `by`, the rest as written; unscaled, the line as written.
  * Kitchen mode and the Day Sheet both write lines this way, so the phone and the counter agree.
  */
-export function scaledLine(ingredient: Ingredient, by: number, locale: string): string {
-  const { amount, unit, name, note } = scaleIngredient(ingredient, by);
+export function scaledLine(ingredient: Ingredient, by: number, locale: string, whole = false): string {
+  const { amount, unit, name, note } = scaleIngredient(ingredient, by, whole);
   if (by === 1 || !amount) return ingredient.raw;
   const number = (value: number) => kitchenNumber(value, locale);
   const scaled = amount.min === amount.max ? number(amount.min) : `${number(amount.min)}–${number(amount.max)}`;
   const written = leadingAmount(ingredient.raw);
   if (written) return `${scaled} ${written.rest}`;
   return [scaled, unit?.replace("_", " "), name].filter(Boolean).join(" ") + (note ? `, ${note}` : "");
+}
+
+/**
+ * A Recipe's Ingredient lines for `servings` eating, as `scaledLine` writes them. A Ready-made dish's
+ * round up to whole, since it is bought and heated whole (ADR 0026): never "½ package".
+ */
+export function scaledLines(
+  recipe: { ingredients: Ingredient[]; baseServings: number; readyMade: boolean },
+  servings: number,
+  locale: string,
+): string[] {
+  return recipe.ingredients.map((line) => scaledLine(line, servings / recipe.baseServings, locale, recipe.readyMade));
 }
 
 const FRACTIONS: [number, string][] = [

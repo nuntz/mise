@@ -14,6 +14,7 @@ Nothing stops a Household from recording a bought dish as a plain Recipe today, 
 - A Ready-made Recipe's Allergens are only as good as its Household Item's. The form asks for them from the label, and an Item with none stated keeps the Recipe failing closed, as any Unresolved Ingredient does.
 - Its Course is `main` unless the form is told otherwise, so the Proposer can choose it (ADR 0022).
 - Kitchen mode works unchanged: its steps are how to heat the dish, one step or none.
+- Where a Ready-made Recipe's lines are scaled for those eating (the Recipe sheet, kitchen mode, the Day Sheet), they round up to whole, whatever their unit: 3 from a pack for 4 read "1 package", 6 read "2". It is heated whole, as the list buys it; an ordinary Recipe still says "½ can", since a cook uses part of one (#90).
 - A side dish on the same night (a salad with the lasagna) is not this decision. One Slot still holds one Recipe, and cooking, Ratings, Overrides and Leftovers belong to it. Sides, if ever wanted, are a separate decision.
 
 ## Considered Options

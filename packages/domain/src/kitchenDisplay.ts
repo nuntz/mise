@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prepAheadDue } from "./calendar";
 import { Locale } from "./household";
-import { scaledLine } from "./ingredients";
+import { scaledLines } from "./ingredients";
 import type { Recipe, RecipeId } from "./recipes";
 import { localDate, nextOccurrence, zonedTimestamp } from "./time";
 import { addDays, MEALS, Meal, type Slot, SlotKind } from "./weeks";
@@ -118,7 +118,7 @@ export type DaySheetInput = {
   now: Date;
 };
 
-type SheetRecipe = Pick<Recipe, "baseServings" | "ingredients" | "steps">;
+type SheetRecipe = Pick<Recipe, "baseServings" | "ingredients" | "steps" | "readyMade">;
 
 /**
  * The Day Sheet for the Household's date at `now`, at most `DAY_SHEET_MAX_BYTES` as JSON: past that,
@@ -180,7 +180,7 @@ function sheetSlot(
         .replace("{count}", String(cookFor))
         .replace("{base}", String(recipe.baseServings)),
       recipe: {
-        ingredients: recipe.ingredients.map((line) => scaledLine(line, cookFor / recipe.baseServings, locale)),
+        ingredients: scaledLines(recipe, cookFor, locale),
         steps: recipe.steps,
       },
     };

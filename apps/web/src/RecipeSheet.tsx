@@ -1,4 +1,4 @@
-import { type Recipe, type RecipeId, scaledLine } from "@mise/domain";
+import { type Recipe, type RecipeId, scaledLines } from "@mise/domain";
 import { createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
@@ -85,11 +85,7 @@ export function RecipeSheet(props: {
                 <h3 id={`${titleId}-ingredients`}>{t("recipe.ingredients")}</h3>
                 <p class="meta">{scaledForText(props.servings, open().baseServings)}</p>
                 <ul class="ingredients" aria-labelledby={`${titleId}-ingredients`}>
-                  <For each={open().ingredients}>
-                    {(ingredient) => (
-                      <li>{scaledLine(ingredient, props.servings / open().baseServings, props.locale)}</li>
-                    )}
-                  </For>
+                  <For each={scaledLines(open(), props.servings, props.locale)}>{(line) => <li>{line}</li>}</For>
                 </ul>
               </section>
               <section class="stack" aria-labelledby={`${titleId}-steps`}>

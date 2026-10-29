@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseIngredient, scaleIngredient } from "./ingredients";
+import { parseIngredient, scaledLines, scaleIngredient } from "./ingredients";
 
 /** raw line → [amount (a number or [min, max]), unit, name, note, item]. */
 type Row = [string, number | [number, number] | null, string | null, string, string | null, string | null];
@@ -177,5 +177,27 @@ describe("scaling for the amount cooked", () => {
   test("a line with no amount is left as it is", () => {
     const ingredient = parseIngredient("salt to taste");
     expect(scaleIngredient(ingredient, 2)).toEqual(ingredient);
+  });
+});
+
+describe("a Recipe's lines for the number eating", () => {
+  const recipe = (lines: string[], readyMade: boolean) => ({
+    ingredients: lines.map((line) => parseIngredient(line)),
+    baseServings: 4,
+    readyMade,
+  });
+
+  test("a Ready-made dish is heated whole: never part of a package", () => {
+    const dumplings = recipe(["1 package frozen vegetable dumplings"], true);
+    expect(scaledLines(dumplings, 3, "en-CA")).toEqual(["1 package frozen vegetable dumplings"]);
+    expect(scaledLines(dumplings, 6, "en-CA")).toEqual(["2 package frozen vegetable dumplings"]);
+  });
+
+  test("a Ready-made dish's range rounds up at both ends, whatever its unit", () => {
+    expect(scaledLines(recipe(["1-2 rotisserie chickens"], true), 3, "en-CA")).toEqual(["1–2 rotisserie chickens"]);
+  });
+
+  test("an ordinary Recipe still uses part of a can", () => {
+    expect(scaledLines(recipe(["1 can tomatoes"], false), 3, "en-CA")).toEqual(["½ can tomatoes"]);
   });
 });
