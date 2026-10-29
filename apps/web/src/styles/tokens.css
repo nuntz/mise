@@ -125,6 +125,8 @@
   --on-leaf: #0f0d0b;
   --badge: #000000;
   --badge-ink: #ffffff;
+  /* Opaque and lighter than daylight's, as line-control: a black scrim vanishes into the near-black page. */
+  --scrim: #6b645c;
   --photo-placeholder: #4a3b2e;
   --backdrop: #000000b3;
   --link: var(--plum);

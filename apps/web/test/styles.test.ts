@@ -86,3 +86,67 @@ test("a file input is only ever Mise's file picker, never the browser's", () => 
 test("a checkbox is drawn from the tokens, never the browser's", () => {
   expect(declarations('input[type="checkbox"]')).toMatch(/appearance:\s*none/);
 });
+
+const tokensCss = readFileSync(join(import.meta.dirname, "../src/styles/tokens.css"), "utf8");
+
+/** The hex colour tokens set in the first rule for `selector` in tokens.css, by name. */
+function colours(selector: string): Record<string, string> {
+  const block = tokensCss.match(new RegExp(`${selector.replace(/[[\]]/g, "\\$&")}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+  return Object.fromEntries(
+    [...block.matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6,8})\s*;/g)].map(([, name, hex]) => [name, hex]),
+  );
+}
+
+/** The colour tokens in daylight and in the kitchen theme, which overrides daylight's. */
+const daylight = colours(":root");
+const themes = { daylight, kitchen: { ...daylight, ...colours('[data-theme="kitchen"]') } };
+
+type Rgb = [number, number, number];
+
+/** A hex colour token as sRGB channels 0–255 and its alpha 0–1; fails the test if the token isn't a hex. */
+function parseHex(hex: string | undefined): { rgb: Rgb; alpha: number } {
+  expect(hex).toMatch(/^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/);
+  const [r, g, b, a] = [1, 3, 5, 7].map((i) => Number.parseInt(hex?.slice(i, i + 2) || "ff", 16));
+  return { rgb: [r ?? 0, g ?? 0, b ?? 0], alpha: (a ?? 255) / 255 };
+}
+
+/** WCAG relative luminance. */
+function luminance(rgb: Rgb): number {
+  const [r, g, b] = rgb.map((c) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  }) as Rgb;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio, 1 to 21. */
+function contrast(a: Rgb, b: Rgb): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** `hex` laid over an opaque `under`, as a browser blends them. */
+function over(hex: string | undefined, under: Rgb): Rgb {
+  const { rgb, alpha } = parseHex(hex);
+  const [r, g, b] = rgb.map((c, i) => alpha * c + (1 - alpha) * under[i as 0 | 1 | 2]);
+  return [r ?? 0, g ?? 0, b ?? 0];
+}
+
+/** The two extremes a photo under a translucent scrim can be. */
+const photos: Rgb[] = [
+  [255, 255, 255],
+  [0, 0, 0],
+];
+
+test.each(Object.entries(themes))("on-photo text reads at 4.5:1 on the scrim over any photo, %s", (_, theme) => {
+  for (const photo of photos) {
+    expect(contrast(parseHex(theme["on-photo"]).rgb, over(theme.scrim, photo))).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+test("in kitchen mode the scrim stands off the page at 3:1 over any photo, so a Leftovers band shows", () => {
+  const surface = parseHex(themes.kitchen.surface).rgb;
+  for (const photo of photos) {
+    expect(contrast(over(themes.kitchen.scrim, photo), surface)).toBeGreaterThanOrEqual(3);
+  }
+});
