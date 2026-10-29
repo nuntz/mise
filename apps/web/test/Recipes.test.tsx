@@ -402,6 +402,19 @@ test("a Ready-made dish is added in one call, saying whether it yields Leftovers
   });
 });
 
+test("a Ready-made product naming a weighed Item is a caution, in amber, not warn", async () => {
+  const user = userEvent.setup();
+  await openRecipes(fakeClient([]).client);
+
+  await user.click(await screen.findByRole("button", { name: "Add a Ready-made dish" }));
+  await user.type(screen.getByRole("textbox", { name: "Product" }), "chicken breasts");
+
+  const banner = (await screen.findByText(/names an Item that is weighed or measured/)).closest(
+    ".banner",
+  ) as HTMLElement;
+  expect(banner.classList.contains("banner-amber")).toBe(true);
+});
+
 test("an imported Recipe shows its notes and where it came from", async () => {
   const imported: Recipe = {
     ...toast,

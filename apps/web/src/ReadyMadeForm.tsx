@@ -111,7 +111,11 @@ export function ReadyMadeForm(props: { client: MiseClient; onSaved: (recipe: Rec
         {(item) => (
           <Show
             when={item().unitFamily === "count"}
-            fallback={<p class="banner banner-warn">{t("readyMade.measuredItem")}</p>}
+            fallback={
+              <p class="banner banner-amber" role="status">
+                {t("readyMade.measuredItem")}
+              </p>
+            }
           >
             <p class="banner banner-plum">
               {t("readyMade.knownItem", { item: item().name, allergens: allergenSummary(item().allergens) })}
