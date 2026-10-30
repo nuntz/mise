@@ -37,7 +37,7 @@ import { Icon, PlateGlyph } from "./icons";
 import { createItems } from "./items";
 import { type ConstraintDraft, ConstraintFields, constraintDraftsOf, constraintsOf } from "./MemberFields";
 import { nameText, t } from "./messages";
-import { savedWeek, saveWeek } from "./offline";
+import { savedWeeks, saveWeek } from "./offline";
 import { RunOut } from "./Pantry";
 import {
   EffortBudgetsEditor,
@@ -75,23 +75,29 @@ export function WeekPage(props: {
   openNext?: boolean;
 }) {
   const [next, setNext] = createSignal(false);
+  const readOnly = () => !props.online;
   // The current Week kept on this device shows at once, and for as long as the household can't be
-  // reached; not once it has ended, when it no longer is the current Week.
-  const kept = () => {
-    const saved = savedWeek();
+  // reached; not once it has ended, when it no longer is the current Week. One kept as next is the
+  // current one once it has begun.
+  const keptCurrent = () => {
     const today = localDate(new Date(), props.household.timezone);
-    return saved && saved.endDate >= today ? saved : undefined;
+    return savedWeeks().find((saved) => saved.endDate >= today);
   };
-  const [week, setWeek] = createSignal<Week | undefined>(kept());
+  const [week, setWeek] = createSignal<Week | undefined>(keptCurrent());
+  // The Week after the current one starts the day after it ends: as loaded, or offline as kept.
+  const [loadedNextStart, setNextStart] = createSignal<LocalDate>();
+  const nextStart = () => {
+    const current = readOnly() ? keptCurrent() : undefined;
+    return loadedNextStart() ?? (current && nextWeekStart(current));
+  };
+  // Next Week as kept on this device shows only while the household can't be reached.
+  const keptNext = () => savedWeeks().find((saved) => saved.startDate === nextStart());
   createEffect(() => props.onWeekShown?.(week()?.startDate));
-  // The Week after the current one starts the day after it ends.
-  const [nextStart, setNextStart] = createSignal<LocalDate>();
   // Whether a link has opened next Week already: it does so only once.
   let openedNext = false;
   const [error, setError] = createSignal<string>();
   // Names the "use it up" Items a Proposal gives as reasons.
   const items = createItems(props.client);
-  const readOnly = () => !props.online;
   const [opened, setOpened] = createSignal<OpenRecipe>();
   // The one Slot whose form is open. A Slot closes only its own form, so a save that finishes
   // after another Slot was opened leaves that one open.
@@ -144,7 +150,9 @@ export function WeekPage(props: {
 
   const show = (showNext: boolean) => {
     setNext(showNext);
-    setWeek(showNext ? undefined : kept());
+    // Next Week shown as kept is the one loaded again on reconnecting.
+    if (showNext) setNextStart(nextStart());
+    setWeek(showNext ? (readOnly() ? keptNext() : undefined) : keptCurrent());
     void refetch();
   };
 
@@ -212,7 +220,14 @@ export function WeekPage(props: {
           {error()}
         </p>
       </Show>
-      <Show when={week()} fallback={<WeekLoading />}>
+      <Show
+        when={week()}
+        fallback={
+          <Show when={!readOnly()} fallback={<p class="control-reason">{t("app.needsConnection")}</p>}>
+            <WeekLoading />
+          </Show>
+        }
+      >
         {(shown) => (
           <>
             <div class="days">

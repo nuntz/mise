@@ -13,7 +13,7 @@ import {
 } from "@mise/domain";
 import { createRoot } from "solid-js";
 import { afterEach, expect, test } from "vitest";
-import { keepPlannedRecipes, savedRecipe, saveRecipe } from "../src/offline";
+import { keepPlannedRecipes, savedRecipe, savedWeeks, saveRecipe, saveWeek } from "../src/offline";
 import { createFakeClient } from "./fakeClient";
 
 const household: HouseholdClock = {
@@ -266,4 +266,55 @@ test("a kept Recipe that no longer fits is ignored without losing the others", a
 
   expect(savedRecipe(dal.id)).toBeUndefined();
   expect(savedRecipe(tacos.id)).toMatchObject({ title: "Tacos", readyMade: false });
+});
+
+test("this Week and next are kept on this device, earliest first, as last loaded", async () => {
+  const answers: Answers = {
+    weeks: { [thisWeek]: week(thisWeek, [cooking(dal)]), [nextWeek]: week(nextWeek) },
+    recipes: [dal, curry],
+  };
+  const { notify } = keep(answers);
+  await settled();
+  answers.weeks[nextWeek] = week(nextWeek, [cooking(curry)]);
+  notify("plan");
+  await settled();
+
+  expect(savedWeeks().map((kept) => [kept.startDate, kept.slots.flatMap((slot) => slot.recipe?.title ?? [])])).toEqual([
+    [thisWeek, ["Dal"]],
+    [nextWeek, ["Curry"]],
+  ]);
+});
+
+test("a Week that fails to load leaves the kept Weeks as they were", async () => {
+  const answers: Answers = {
+    weeks: { [thisWeek]: week(thisWeek, [cooking(dal)]), [nextWeek]: week(nextWeek) },
+    recipes: [dal],
+  };
+  const { notify } = keep(answers);
+  await settled();
+
+  answers.weeks[thisWeek] = week(thisWeek);
+  answers.weeks[nextWeek] = "fails";
+  notify("plan");
+  await settled();
+
+  expect(savedWeeks().map((kept) => kept.startDate)).toEqual([thisWeek, nextWeek]);
+  expect(savedWeeks()[0]?.slots.some((slot) => slot.recipe?.title === "Dal")).toBe(true);
+});
+
+test("the current Week saved again keeps next Week, and lets go of those ended", () => {
+  localStorage.setItem("mise.weeks", JSON.stringify([week(addDays(thisWeek, -7)), week(thisWeek), week(nextWeek)]));
+
+  saveWeek(week(thisWeek, [cooking(dal)]));
+
+  expect(savedWeeks().map((kept) => kept.startDate)).toEqual([thisWeek, nextWeek]);
+  expect(savedWeeks()[0]?.slots.some((slot) => slot.recipe?.title === "Dal")).toBe(true);
+});
+
+test("a kept Week that no longer fits is ignored without losing the other", () => {
+  // As an older Mise kept them: next Week from before Weeks could run past seven days, this one broken.
+  const { endDate: _, ...oldNext } = week(nextWeek);
+  localStorage.setItem("mise.weeks", JSON.stringify([{ startDate: thisWeek }, oldNext]));
+
+  expect(savedWeeks().map((kept) => [kept.startDate, kept.endDate])).toEqual([[nextWeek, addDays(nextWeek, 6)]]);
 });

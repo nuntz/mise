@@ -164,43 +164,45 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     servings: 4,
     locked: true,
   });
-  const { client, notify, goOffline } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
-    calls.push({ name, input });
-    const answer = answers[name]?.(input);
-    if (answer) return answer;
-    switch (name) {
-      case "get_household":
-        return { ok: true, value: household };
-      case "get_week":
-        return { ok: true, value: input.date === "2026-11-02" ? emptyWeek("2026-11-02") : thisWeek };
-      case "search_recipes":
-        return { ok: true, value: [curry, pasta] };
-      case "get_recipe":
-        return { ok: true, value: pastaRecipe };
-      case "set_slot":
-      case "set_guests":
-      case "lock_slot":
-        return { ok: true, value: tuesdayDinner };
-      case "set_diners":
-        return { ok: true, value: [tuesdayDinner] };
-      case "mark_cooked":
-      case "rate_recipe":
-        return { ok: true, value: tuesdayDinner };
-      case "list_items":
-        return { ok: true, value: ITEMS };
-      case "propose_week":
-      case "review_week":
-      case "set_week_effort_budgets":
-        return { ok: true, value: thisWeek };
-      case "set_effort_budgets":
-        return { ok: true, value: DEFAULT_EFFORT_BUDGETS };
-      case "clear_week":
-        return { ok: true, value: emptyWeek("2026-10-26") };
-      default:
-        throw new Error(`Unexpected tool ${name}`);
-    }
-  });
-  return { client, calls, notify, goOffline };
+  const { client, notify, goOnline, goOffline } = createFakeClient(
+    async (name: string, input: Record<string, unknown>) => {
+      calls.push({ name, input });
+      const answer = answers[name]?.(input);
+      if (answer) return answer;
+      switch (name) {
+        case "get_household":
+          return { ok: true, value: household };
+        case "get_week":
+          return { ok: true, value: input.date === "2026-11-02" ? emptyWeek("2026-11-02") : thisWeek };
+        case "search_recipes":
+          return { ok: true, value: [curry, pasta] };
+        case "get_recipe":
+          return { ok: true, value: pastaRecipe };
+        case "set_slot":
+        case "set_guests":
+        case "lock_slot":
+          return { ok: true, value: tuesdayDinner };
+        case "set_diners":
+          return { ok: true, value: [tuesdayDinner] };
+        case "mark_cooked":
+        case "rate_recipe":
+          return { ok: true, value: tuesdayDinner };
+        case "list_items":
+          return { ok: true, value: ITEMS };
+        case "propose_week":
+        case "review_week":
+        case "set_week_effort_budgets":
+          return { ok: true, value: thisWeek };
+        case "set_effort_budgets":
+          return { ok: true, value: DEFAULT_EFFORT_BUDGETS };
+        case "clear_week":
+          return { ok: true, value: emptyWeek("2026-10-26") };
+        default:
+          throw new Error(`Unexpected tool ${name}`);
+      }
+    },
+  );
+  return { client, calls, notify, goOnline, goOffline };
 }
 
 /** The text of what `control` names as its accessible description. */
@@ -1718,4 +1720,151 @@ test("offline, a Week kept from before that has ended isn't shown as this one", 
 
   await screen.findByRole("button", { name: "Household" });
   expect(screen.queryByRole("region", { name: "Monday, January 6" })).toBeNull();
+});
+
+/** Next Week with Curry for Tuesday's dinner. */
+function nextWeekWithCurry(): Week {
+  const week = emptyWeek("2026-11-02");
+  Object.assign(week.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 2, title: "Curry", baseServings: 4, photoKey: null },
+    servings: 3,
+    cookFor: 3,
+  });
+  return week;
+}
+
+const curryRecipe: Recipe = { ...pastaRecipe, ...curry, steps: ["Simmer the curry."] };
+
+/** Answers next Week as having Curry on Tuesday. */
+const withCurryNextWeek: Record<string, Answer> = {
+  get_week: (input) => (input.date === "2026-11-02" ? { ok: true, value: nextWeekWithCurry() } : undefined),
+  get_recipe: (input) => (input.id === 2 ? { ok: true, value: curryRecipe } : undefined),
+};
+
+/**
+ * Opens the app online on Monday, October 26, until both Weeks and every planned Recipe are kept,
+ * then closes it.
+ */
+async function loadOnce(answers: Record<string, Answer> = {}) {
+  vi.setSystemTime(new Date("2026-10-26T12:00:00-07:00"));
+  const online = fakeClient(answers);
+  render(() => <App client={online.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await vi.waitFor(() => expect(online.calls.filter((call) => call.name === "get_recipe").length).toBeGreaterThan(0));
+  // Let the answers arrive before the app closes.
+  await new Promise((resolve) => setTimeout(resolve));
+  cleanup();
+}
+
+test("offline, next Week opens read-only as last loaded, and its Recipes open from this device", async () => {
+  const user = userEvent.setup();
+  await loadOnce(withCurryNextWeek);
+
+  const offline = fakeClient();
+  offline.goOffline();
+  render(() => <App client={offline.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, November 3" });
+  expect(within(tuesday).getByRole("heading", { name: "Curry" })).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Propose dinners" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("alert")).toBeNull();
+  const monday = screen.getByRole("region", { name: "Monday, November 2" });
+  expect(within(monday).queryByRole("button", { name: "Choose a dinner" })).toBeNull();
+
+  await user.click(within(tuesday).getByRole("button", { name: "Curry" }));
+  const sheet = await screen.findByRole("dialog", { name: "Curry" });
+  expect(within(sheet).getByRole("list", { name: "Ingredients" })).toBeTruthy();
+  expect(within(sheet).queryByText("Loading…")).toBeNull();
+  expect(within(sheet).queryByRole("button", { name: "Edit dinner" })).toBeNull();
+  await user.click(within(sheet).getByRole("button", { name: "Close the Recipe" }));
+
+  await user.click(within(tuesday).getByRole("button", { name: "Cook" }));
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+  expect(within(kitchen).getByText("Simmer the curry.")).toBeTruthy();
+});
+
+test("offline, with no next Week kept, next Week says it needs a connection", async () => {
+  const user = userEvent.setup();
+  const online = fakeClient({
+    get_week: (input) =>
+      input.date === "2026-11-02" ? { ok: false, error: { code: "not_found", message: "No" } } : undefined,
+  });
+  render(() => <App client={online.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  cleanup();
+
+  const offline = fakeClient();
+  offline.goOffline();
+  render(() => <App client={offline.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+
+  const next = await screen.findByRole("region", { name: "The Week" });
+  expect(within(next).getByText("Needs a connection.")).toBeTruthy();
+  expect(within(next).queryByText("Loading the Week…")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("offline into a new Week, the Week kept as next shows as this one, and the one ended isn't shown", async () => {
+  const user = userEvent.setup();
+  await loadOnce(withCurryNextWeek);
+  vi.setSystemTime(new Date("2026-11-03T12:00:00-08:00"));
+
+  const offline = fakeClient();
+  offline.goOffline();
+  render(() => <App client={offline.client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, November 3" });
+  expect(within(tuesday).getByRole("heading", { name: "Curry" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "This Week" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.queryByRole("region", { name: "Tuesday, October 27" })).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  expect(within(await screen.findByRole("region", { name: "The Week" })).getByText("Needs a connection.")).toBeTruthy();
+});
+
+test("online, next Week waits for this Week to answer, even with one kept", async () => {
+  await loadOnce(withCurryNextWeek);
+
+  let answer: (result: ToolResult<unknown>) => void = () => {};
+  const { client } = fakeClient({
+    get_week: (input) => (input.date ? undefined : new Promise((resolve) => (answer = resolve))),
+  });
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  expect((screen.getByRole("button", { name: "Next Week" }) as HTMLButtonElement).disabled).toBe(true);
+
+  answer({ ok: true, value: emptyWeek("2026-10-26") });
+  await vi.waitFor(() =>
+    expect((screen.getByRole("button", { name: "Next Week" }) as HTMLButtonElement).disabled).toBe(false),
+  );
+});
+
+test("back online on next Week as kept, it stays shown until it has loaded again", async () => {
+  const user = userEvent.setup();
+  await loadOnce(withCurryNextWeek);
+
+  let answer: (result: ToolResult<unknown>) => void = () => {};
+  const fake = fakeClient({
+    get_week: (input) => (input.date === "2026-11-02" ? new Promise((resolve) => (answer = resolve)) : undefined),
+  });
+  fake.goOffline();
+  render(() => <App client={fake.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByRole("region", { name: "Tuesday, November 3" });
+
+  fake.goOnline();
+  await vi.waitFor(() => expect(fake.calls.some((call) => call.input.date === "2026-11-02")).toBe(true));
+  expect(screen.getByRole("region", { name: "Tuesday, November 3" })).toBeTruthy();
+
+  answer({ ok: true, value: emptyWeek("2026-11-02") });
+  await vi.waitFor(() =>
+    expect(
+      within(screen.getByRole("region", { name: "Tuesday, November 3" })).queryByRole("heading", { name: "Curry" }),
+    ).toBeNull(),
+  );
 });
