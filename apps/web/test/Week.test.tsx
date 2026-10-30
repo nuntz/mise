@@ -1662,6 +1662,39 @@ test("offline, a Recipe opened over the Week before opens again from this device
   ).toEqual(["200 g spaghetti", "2 cloves garlic, minced", "salt to taste"]);
 });
 
+test("offline, a Recipe planned this Week opens from this device though it was never opened", async () => {
+  const user = userEvent.setup();
+  const online = fakeClient();
+  render(() => <App client={online.client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await vi.waitFor(() => expect(online.calls.some((call) => call.name === "get_recipe")).toBe(true));
+  // Let the answer arrive before the app closes.
+  await new Promise((resolve) => setTimeout(resolve));
+  cleanup();
+
+  const offline = fakeClient();
+  offline.goOffline();
+  render(() => <App client={offline.client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  expect(within(sheet).getByRole("list", { name: "Ingredients" })).toBeTruthy();
+  expect(within(sheet).queryByText("Loading…")).toBeNull();
+  await user.click(within(sheet).getByRole("button", { name: "Close the Recipe" }));
+
+  await user.click(within(tuesday).getByRole("button", { name: "Cook" }));
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+  expect(within(kitchen).getByText("Boil the spaghetti.")).toBeTruthy();
+  await user.click(within(kitchen).getByRole("button", { name: "Leave kitchen mode" }));
+  cleanup();
+
+  window.history.replaceState(null, "", "/?recipe=1");
+  onTestFinished(() => window.history.replaceState(null, "", "/"));
+  render(() => <App client={offline.client} />);
+  expect(await screen.findByRole("heading", { name: "Pasta" })).toBeTruthy();
+  expect(screen.getByText("Boil the spaghetti.")).toBeTruthy();
+});
+
 test("offline, a Week kept from before that has ended isn't shown as this one", async () => {
   const online = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2025-01-06") }) });
   render(() => <App client={online.client} />);

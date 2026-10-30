@@ -114,8 +114,8 @@ function title(slot: Slot): string | null {
   return null;
 }
 
-/** The Recipe a Slot's event links to: its own, or for Leftovers the one they were cooked from. */
-function linkedRecipe(slot: Slot): RecipeId[] {
+/** The Recipe a Slot cooks or serves: its own, or for Leftovers the one they were cooked from. */
+export function linkedRecipe(slot: Slot): RecipeId[] {
   const recipe = slot.kind === "leftovers" ? slot.leftoversOf?.recipe : slot.recipe;
   return recipe ? [recipe.id] : [];
 }

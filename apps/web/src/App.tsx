@@ -27,7 +27,7 @@ import { KitchenDisplaySettings } from "./KitchenDisplays";
 import { MembersSettings } from "./MembersSettings";
 import { setLocale, t } from "./messages";
 import { NotificationSettings } from "./Notifications";
-import { createGroceryQueue, keepGroceryLists, savedHousehold, saveHousehold } from "./offline";
+import { createGroceryQueue, keepGroceryLists, keepPlannedRecipes, savedHousehold, saveHousehold } from "./offline";
 import { PantryBanner, PantryPage } from "./Pantry";
 import { createPushedPages } from "./pushed";
 import { RanOut } from "./RanOut";
@@ -213,7 +213,7 @@ export function App(props: { client: MiseClient }) {
       <Match when={loaded.household}>
         {(household) => (
           <>
-            <OfflineGroceryLists client={props.client} household={household()} />
+            <KeepForOffline client={props.client} household={household()} />
             {/* Kitchen mode covers the app, which stays as it was underneath for when it's left. */}
             <Show when={inKitchen()}>
               {(recipe) => (
@@ -353,9 +353,10 @@ export function App(props: { client: MiseClient }) {
   );
 }
 
-/** Keeps both Weeks' Grocery Lists on this device; shows nothing. */
-function OfflineGroceryLists(props: { client: MiseClient; household: Household }) {
+/** Keeps both Weeks' Grocery Lists and planned Recipes on this device; shows nothing. */
+function KeepForOffline(props: { client: MiseClient; household: Household }) {
   keepGroceryLists(props.client, () => props.household);
+  keepPlannedRecipes(props.client, () => props.household);
   return null;
 }
 

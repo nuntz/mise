@@ -6,6 +6,7 @@ import {
   Household,
   type HouseholdClock,
   type LocalDate,
+  linkedRecipe,
   nextWeekStart,
   QueuedChange,
   Recipe,
@@ -20,10 +21,11 @@ import { keepFresh } from "./fresh";
 
 /*
  * What Mise keeps on this device for when the household can't be reached: the Household, the
- * current Week, the current and next Week's Grocery Lists, the last Recipe viewed, and the Grocery
- * List changes not yet sent. The service worker caches the app itself; the data comes over the WebSocket, which it
- * can't see, so the page keeps it here. Each is checked against its schema when read, so one saved
- * by an older version of Mise is ignored rather than shown wrong, unless it can be brought up to date.
+ * current Week, the current and next Week's Grocery Lists, the Recipes planned in those two Weeks,
+ * the last Recipe viewed, and the Grocery List changes not yet sent. The service worker caches the
+ * app itself; the data comes over the WebSocket, which it can't see, so the page keeps it here.
+ * Each is checked against its schema when read, so one saved by an older version of Mise is ignored
+ * rather than shown wrong, unless it can be brought up to date.
  */
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
@@ -67,11 +69,15 @@ const SavedRecipe = z.preprocess(notReadyMade, Recipe);
 
 const GroceryLists = z.record(z.string(), GroceryList.nullable());
 
+/** Each checked on its own when read, so one that no longer fits leaves the others. */
+const PlannedRecipes = z.record(z.string(), z.unknown());
+
 const KEYS = {
   household: "mise.household",
   week: "mise.week",
   groceryLists: "mise.groceryLists",
   recipe: "mise.recipe",
+  plannedRecipes: "mise.plannedRecipes",
   changes: "mise.changes",
 } as const;
 
@@ -104,13 +110,27 @@ export const saveWeek = (week: Week) => write(KEYS.week, week);
 /** The Grocery List last loaded for the Week starting `date`: null if it had none, undefined if unknown. */
 export const savedGroceryList = (date: LocalDate) => read(KEYS.groceryLists, GroceryLists)?.[date];
 
-/** The last Recipe viewed, if it is the one asked for. */
+/** The last Recipe viewed. */
 export const lastRecipe = () => read(KEYS.recipe, SavedRecipe);
+
+function plannedRecipe(id: RecipeId): Recipe | undefined {
+  const saved = read(KEYS.plannedRecipes, PlannedRecipes)?.[id];
+  const parsed = SavedRecipe.safeParse(saved);
+  return parsed.success && parsed.data.id === id ? parsed.data : undefined;
+}
+
+/** The Recipe `id` as last loaded, if it's planned in the current or next Week or was the last viewed. */
 export function savedRecipe(id: RecipeId): Recipe | undefined {
   const recipe = lastRecipe();
-  return recipe?.id === id ? recipe : undefined;
+  return recipe?.id === id ? recipe : plannedRecipe(id);
 }
 export const saveRecipe = (recipe: Recipe) => write(KEYS.recipe, recipe);
+
+/** The current and next Week's first days: the Weeks whose Grocery Lists and Recipes are kept. */
+function keptWeeks(household: HouseholdClock): LocalDate[] {
+  const current = currentWeek(new Date(), household);
+  return [current.startDate, nextWeekStart(current)];
+}
 
 /**
  * Keeps the current and next Week's Grocery Lists on this device, loaded again on every connect and
@@ -121,18 +141,53 @@ export function keepGroceryLists(client: MiseClient, household: () => HouseholdC
   keepFresh(
     client,
     ["grocery", "plan", "recipes", "household"],
-    async () => {
-      const current = currentWeek(new Date(), household());
-      return Promise.all(
-        [current.startDate, nextWeekStart(current)].map(
-          async (date) => [date, await client.call("get_grocery_list", { date })] as const,
-        ),
-      );
-    },
+    async () =>
+      Promise.all(
+        keptWeeks(household()).map(async (date) => [date, await client.call("get_grocery_list", { date })] as const),
+      ),
     (results) => {
       const lists: Record<string, GroceryList | null> = {};
       for (const [date, result] of results) if (result.ok) lists[date] = result.value;
       write(KEYS.groceryLists, lists);
+    },
+  );
+}
+
+/**
+ * Keeps every Recipe planned in the current and next Week on this device, so any of them opens
+ * offline, loaded again on every connect and whenever the plan or a Recipe changes. Each load
+ * replaces what was kept, so a Recipe no longer planned goes; one that fails to load keeps its
+ * earlier copy.
+ */
+export function keepPlannedRecipes(client: MiseClient, household: () => HouseholdClock): void {
+  // Offline, or with either Week failing to load, what was saved is kept.
+  keepFresh(
+    client,
+    ["plan", "recipes", "household"],
+    async () => {
+      const weeks = await Promise.all(
+        keptWeeks(household()).map(async (date) => {
+          const result = await client.call("get_week", { date });
+          if (!result.ok) throw new Error(result.error.message);
+          return result.value;
+        }),
+      );
+      const ids = [...new Set(weeks.flatMap((week) => week.slots.flatMap(linkedRecipe)))];
+      return Promise.all(
+        ids.map(async (id) => {
+          // One that times out is as one that fails: its earlier copy stands in.
+          const result = await client.call("get_recipe", { id }).catch(() => undefined);
+          return [id, result?.ok ? result.value : undefined] as const;
+        }),
+      );
+    },
+    (results) => {
+      const recipes: Record<string, Recipe> = {};
+      for (const [id, loaded] of results) {
+        const recipe = loaded ?? plannedRecipe(id);
+        if (recipe) recipes[id] = recipe;
+      }
+      write(KEYS.plannedRecipes, recipes);
     },
   );
 }
