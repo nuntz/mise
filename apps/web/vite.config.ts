@@ -1,12 +1,16 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import agents from "agents/vite";
 import { defineConfig, type Plugin } from "vite";
 import solid from "vite-plugin-solid";
+import { buildId } from "./buildId";
 
 export default defineConfig({
   plugins: [agents(), solid(), serviceWorker()],
+  // Settings shows which build is running. The tests leave it out, and show `dev`.
+  define: { "import.meta.env.MISE_BUILD": JSON.stringify(buildId(process.env.GITHUB_SHA, git)) },
   server: {
     // `bun run dev` in apps/web talks to a `wrangler dev` running on its default port.
     proxy: { "/agents": { target: "http://localhost:8787", ws: true } },
@@ -42,4 +46,13 @@ function serviceWorker(): Plugin {
       this.emitFile({ type: "asset", fileName: "sw.js", source });
     },
   };
+}
+
+/** What git printed for `args`, or undefined when there's no git or no repository. */
+function git(args: string[]): string | undefined {
+  try {
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return undefined;
+  }
 }

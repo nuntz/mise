@@ -255,6 +255,8 @@ const en = {
   "offline.refused": "A change made offline couldn't be saved. Its line may have gone when the list was rebuilt.",
   "offline.dismiss": "Dismiss",
   "offline.waiting": "Waiting to sync",
+  "update.ready": "A newer Mise is ready.",
+  "update.reload": "Reload",
   "recipes.lastViewed": "Last viewed: {title}",
   "grocery.title": "Grocery List",
   "grocery.notSaved": "This Week's list wasn't loaded on this device before going offline.",
@@ -859,6 +861,7 @@ const en = {
   "household.allTagged": "All tagged",
   "settings.save": "Save settings",
   "settings.saving": "Saving…",
+  "settings.build": "Mise build {build}",
   "settings.weekStartHint":
     "A new week start applies from the next Week: this Week, and any planned after it, keep their dates, and the last runs on until the first {weekday}.",
 

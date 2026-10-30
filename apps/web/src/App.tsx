@@ -38,6 +38,7 @@ import { SetupForm } from "./SetupForm";
 import { SwitchRow } from "./SwitchRow";
 import { TagRecipes } from "./TagRecipes";
 import { createKitchenMode } from "./theme";
+import { UpdateBanner } from "./Update";
 import { WeekPage } from "./Week";
 
 /** The pages the bottom nav goes to, in its order. */
@@ -226,6 +227,10 @@ export function App(props: { client: MiseClient }) {
               )}
             </Show>
             <div class="app" inert={inKitchen() !== undefined}>
+              <UpdateBanner
+                container={"serviceWorker" in navigator ? navigator.serviceWorker : undefined}
+                reload={() => window.location.reload()}
+              />
               <Show when={!online()}>
                 <div class="banner banner-amber banner-top" role="status">
                   <Icon name="wifiOff" />
@@ -359,6 +364,9 @@ function OfflineGroceryLists(props: { client: MiseClient; household: Household }
  * once when given (Resolve Ingredients at the group `resolveAt`, the first time only). Back returns to
  * the index, as does each change of `home` (the Household tab tapped again).
  */
+/** The commit this bundle was built from, shown at the foot of Settings; `dev` where none was built in. */
+const BUILD = import.meta.env.MISE_BUILD ?? "dev";
+
 function HouseholdPage(props: {
   client: MiseClient;
   open?: Setting;
@@ -405,6 +413,7 @@ function HouseholdPage(props: {
             </Match>
             <Match when={open() === "settings"}>
               <HouseholdSettingsForm client={props.client} household={props.household} />
+              <p class="meta">{t("settings.build", { build: BUILD })}</p>
             </Match>
             <Match when={open() === "calendar"}>
               <CalendarSettings client={props.client} />

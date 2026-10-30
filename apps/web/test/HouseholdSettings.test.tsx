@@ -117,6 +117,20 @@ test("every setting chosen at setup can be changed from the Household page", asy
   ).toBeTruthy();
 });
 
+test("Settings ends with which build of Mise is running, dev when none was built in", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeHousehold();
+  render(() => <App client={client} />);
+  await openSettings(user);
+
+  const build = screen.getByText("Mise build dev");
+  expect(build.classList.contains("meta")).toBe(true);
+  // At the foot, below the form and its save.
+  expect(build.compareDocumentPosition(screen.getByRole("button", { name: "Save settings" }))).toBe(
+    Node.DOCUMENT_POSITION_PRECEDING,
+  );
+});
+
 test("a new week start says it applies from the next Week", async () => {
   const user = userEvent.setup();
   const { client } = fakeHousehold();
