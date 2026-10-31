@@ -52,6 +52,10 @@ An iOS Shortcut puts "Mise" in the iPhone share sheet: it opens `/share?url=…`
 
 "Ask Mise" in the header opens a chat with an agent on Claude (Anthropic). It reads and changes the Household only through the same tools the screens use. It needs the `mise:anthropicApiKey` setting, which becomes the `ANTHROPIC_API_KEY` Worker secret; without it the chat answers nothing. **Set a monthly spend limit in the Anthropic console** (Settings → Limits): Mise has no cap of its own. For `wrangler dev`, put the key in `apps/worker/.dev.vars`.
 
+## Voice
+
+The mic in the chat sheet starts a Voice Session: you speak, and Mise answers aloud. GPT-Live-1 (OpenAI) is only the voice; every question and change goes to the same agent as the chat (ADR 0028), so the Anthropic key is needed too. Voice needs the `mise:openaiApiKey` setting, which becomes the `OPENAI_API_KEY` Worker secret; without it there is no voice. `bun run wizard` asks for it. **Set a monthly budget in the OpenAI dashboard** (Settings → Limits). For `wrangler dev`, put the key in `apps/worker/.dev.vars`.
+
 ## Google Drive folder
 
 A shared Google Drive folder can be Mise's inbox: anyone drops a Google Doc in it, and by the next morning the Doc is a Draft Recipe waiting on the review screen. "Sync Drive now" on the Import screen reads it straight away. Subfolders become tags, read as Paprika categories are ("Desserts", "Indian"); a flat folder works too. The first image in a Doc becomes the Recipe's photo. A Doc that holds no recipe is listed in the run log, with its link, and skipped until it changes. An edited Doc updates its Draft, or raises an Import Flag if its Recipe was edited or accepted in Mise. A Doc removed from the folder leaves its Recipe in Mise. Mise never writes to the folder. Only Google Docs are read: a shortcut, a PDF or a Word file in the folder is ignored, so convert or copy it into a Doc.

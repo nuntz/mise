@@ -19,6 +19,8 @@ const allowedEmails = config.getObject<string[]>("allowedEmails") ?? [];
 const allowedEmailDomain = config.get("allowedEmailDomain");
 const sentryDsn = config.getSecret("sentryDsn");
 const anthropicApiKey = config.getSecret("anthropicApiKey");
+// Voice (ADR 0028): GPT-Live-1 sessions are created with it. Without it, there is no voice.
+const openaiApiKey = config.getSecret("openaiApiKey");
 // The Drive folder sync: both or neither.
 const googleServiceAccountKey = config.getSecret("googleServiceAccountKey");
 const driveFolderId = config.get("driveFolderId");
@@ -109,12 +111,13 @@ const domain = (await workerExists())
 export const cloudflareAccountId = pulumi.secret(accountId);
 export const workerSecrets = pulumi.secret(
   pulumi
-    .all([app.aud, sentryDsn, anthropicApiKey, googleServiceAccountKey, vapidPrivateKey])
-    .apply(([aud, dsn, anthropic, driveKey, vapid]) => ({
+    .all([app.aud, sentryDsn, anthropicApiKey, openaiApiKey, googleServiceAccountKey, vapidPrivateKey])
+    .apply(([aud, dsn, anthropic, openai, driveKey, vapid]) => ({
       ACCESS_TEAM_DOMAIN: accessTeamDomain,
       ACCESS_AUD: aud,
       ...(dsn ? { SENTRY_DSN: dsn } : {}),
       ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
+      ...(openai ? { OPENAI_API_KEY: openai } : {}),
       ...(driveKey && driveFolderId ? { GOOGLE_SERVICE_ACCOUNT_KEY: driveKey, DRIVE_FOLDER_ID: driveFolderId } : {}),
       // Push services may contact the deployment at its own address.
       ...(vapid ? { VAPID_PRIVATE_KEY: vapid, VAPID_SUBJECT: `https://${hostname}` } : {}),

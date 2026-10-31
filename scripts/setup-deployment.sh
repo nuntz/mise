@@ -299,6 +299,10 @@ say "An Anthropic API key for the chat's agent (console.anthropic.com → API ke
 say "Set a monthly spend limit there too (Settings → Limits): Mise has no cap of its own."
 ask_secret ANTHROPIC_API_KEY "Anthropic API key (blank to skip; the chat then answers nothing):" || true
 write_env ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}"
+say "Optional: an OpenAI API key for voice (platform.openai.com → API keys)."
+say "Set a monthly budget there too (Settings → Limits)."
+ask_secret OPENAI_API_KEY "OpenAI API key (blank to skip; there is then no voice):" || true
+write_env OPENAI_API_KEY "${OPENAI_API_KEY:-}"
 say "Optional: a Google Drive folder whose Docs become Drafts (README → Google Drive folder has the steps)."
 ask DRIVE_KEY_FILE "Path to the service account's JSON key file (blank to skip):" || true
 DRIVE_KEY_FILE="${DRIVE_KEY_FILE/#\~/$HOME}"
@@ -343,6 +347,7 @@ definition=$(mktemp); trap 'rm -f "$definition"' EXIT
   printf '    mise:googleClientId: %s\n' "$(yaml_str "$GOOGLE_CLIENT_ID")"
   printf '    mise:googleClientSecret:\n      fn::secret: %s\n' "$(yaml_str "$GOOGLE_CLIENT_SECRET")"
   [[ -n "${ANTHROPIC_API_KEY:-}" ]] && printf '    mise:anthropicApiKey:\n      fn::secret: %s\n' "$(yaml_str "$ANTHROPIC_API_KEY")"
+  [[ -n "${OPENAI_API_KEY:-}" ]] && printf '    mise:openaiApiKey:\n      fn::secret: %s\n' "$(yaml_str "$OPENAI_API_KEY")"
   if [[ -n "${DRIVE_KEY_FILE:-}" && -n "${DRIVE_FOLDER_ID:-}" ]]; then
     printf '    mise:driveFolderId: %s\n' "$(yaml_str "$DRIVE_FOLDER_ID")"
     # The key's JSON on one line: its private key's line breaks are escaped inside the JSON.

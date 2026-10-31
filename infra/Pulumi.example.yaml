@@ -25,6 +25,11 @@
 #        # Without a key the chat answers nothing.
 #        mise:anthropicApiKey:
 #          fn::secret: sk-ant-api03-example
+#        # Optional: voice (README → Voice). The OpenAI key GPT-Live-1 sessions are created with
+#        # (platform.openai.com → API keys). Set a monthly budget there too (Settings → Limits).
+#        # Without a key there is no voice.
+#        # mise:openaiApiKey:
+#        #   fn::secret: sk-proj-example
 #        # Optional: a Google Drive folder whose Docs become Drafts every night (README → Google Drive
 #        # folder). The id is the end of the folder's URL; the key is the service account's JSON key,
 #        # on one line, and the folder must be shared with the service account's email.
