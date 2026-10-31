@@ -557,6 +557,29 @@ test("the chat's mic starts a Voice Session, shows its turns as they're answered
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
 });
 
+test("while a Voice Session runs, a change waiting for a tap shows as a large button, to tap from across the kitchen", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  fake.conversation.push(
+    { role: "member", speaker: "Robin", text: "Delete the Satay." },
+    { role: "confirmation", id: 7, summary: "Delete “Satay”", status: "pending" },
+    { role: "agent", text: "It's waiting for you." },
+  );
+  fake.notify("chat");
+  const button = await within(chat).findByRole("button", { name: "Delete “Satay”" });
+
+  expect([...button.classList]).toEqual(expect.arrayContaining(["button-secondary", "button-block"]));
+  await userEvent.click(within(chat).getByRole("button", { name: "End voice" }));
+  await waitFor(() =>
+    expect(within(chat).getByRole("button", { name: "Delete “Satay”" }).classList.contains("button-block")).toBe(false),
+  );
+});
+
 test("a Voice Session follows the screen and Week the person moves to, until it ends", async () => {
   const fake = talkingClient();
   const voice = fakeVoice();

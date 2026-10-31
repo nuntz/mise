@@ -78,10 +78,11 @@ const TAP_ERRORS: Partial<Record<string, "changed" | "answered">> = { expired: "
 /**
  * The Household's shared conversation with the agent, and a message to add to it; a sheet over the
  * page. Turns others send show as the conversation changes, and a turn Mise couldn't answer says so.
- * A call the agent asked to make that waits for a person shows as a button saying what it will do. A
- * Voice Session's turns show as they are answered; it ends with a tap, when the sheet closes, or when
- * the page is hidden (a locked phone turns the mic off). The mic shows only where voice is available, and says before a tap why it
- * can't start: offline, someone else talking, the day's minutes spent, or voice turned off.
+ * A call the agent asked to make that waits for a person shows as a button saying what it will do,
+ * large while a Voice Session runs, since only a tap runs it (ADR 0024). A Voice Session's turns show
+ * as they are answered; it ends with a tap, when the sheet closes, or when the page is hidden (a
+ * locked phone turns the mic off). The mic shows only where voice is available, and says before a
+ * tap why it can't start: offline, someone else talking, the day's minutes spent, or voice turned off.
  */
 function ChatSheet(props: {
   client: MiseClient;
@@ -176,6 +177,8 @@ function ChatSheet(props: {
   };
 
   const [voice, setVoice] = createSignal<"off" | "starting" | "on">("off");
+  /** Whether a Voice Session runs, or is starting. */
+  const talking = () => voice() !== "off";
   /** When the day's voice minutes come back, or who is talking to Mise, after a start refused for it. */
   const [voiceBack, setVoiceBack] = createSignal("");
   const [voiceSpeaker, setVoiceSpeaker] = createSignal<string | null>(null);
@@ -235,7 +238,7 @@ function ChatSheet(props: {
 
   const startVoice = async () => {
     const dial = props.voice;
-    if (!dial || voice() !== "off") return;
+    if (!dial || talking()) return;
     const mine = ++attempt;
     const current = () => mine === attempt;
     setError(undefined);
@@ -294,7 +297,7 @@ function ChatSheet(props: {
     on(
       props.where,
       (where) => {
-        if (voice() !== "off") void props.client.moveVoice(where).catch(() => {});
+        if (talking()) void props.client.moveVoice(where).catch(() => {});
       },
       { defer: true },
     ),
@@ -349,7 +352,10 @@ function ChatSheet(props: {
                 <For each={shown()}>
                   {(turn) =>
                     turn.role === "confirmation" ? (
-                      <li class={`chat-turn chat-turn-confirmation chat-confirmation-${turn.status}`}>
+                      <li
+                        class={`chat-turn chat-turn-confirmation chat-confirmation-${turn.status}`}
+                        classList={{ "chat-confirmation-voice": talking() }}
+                      >
                         <span class="chat-speaker">
                           {t(`chat.confirmation.${turn.status}`)}
                           <span class="visually-hidden">: </span>
@@ -358,6 +364,7 @@ function ChatSheet(props: {
                           <div class="chat-confirmation-actions">
                             <button
                               type="button"
+                              classList={{ "button-secondary button-block": talking() }}
                               disabled={tapping()}
                               onClick={() => void tap(() => props.client.confirm(turn.id))}
                             >
@@ -415,7 +422,7 @@ function ChatSheet(props: {
         </Show>
       </div>
       <div class="chat-composer">
-        <Show when={voice() !== "off"}>
+        <Show when={talking()}>
           <div class="chat-voice">
             <p class="meta" role="status">
               {t(voice() === "on" ? "chat.voice.listening" : "chat.voice.starting")}

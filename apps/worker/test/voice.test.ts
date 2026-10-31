@@ -1,4 +1,5 @@
-import { type FauxResponseFactory, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { type FauxResponseFactory, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import type { JsonObject } from "@earendil-works/pi-durable";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
@@ -6,7 +7,7 @@ import { openAiLive, useLive } from "../src/live";
 import { VOICE_TIME_WARNING, VoiceSession } from "../src/voice";
 import { connectAs } from "./connect";
 import { type PretendSession, pretendLive } from "./liveService";
-import { familyHousehold, lastText, scriptModel } from "./scripted";
+import { familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
 
 const ON_THE_WEEK: ChatWhere = { screen: "week", week: "2026-10-26" };
 const OFFER = "v=0 offer";
@@ -295,6 +296,150 @@ describe("a Voice Session", () => {
   });
 });
 
+/**
+ * A model that answers each spoken turn by what was said: it makes that turn's `calls` one after the
+ * other, then says its `answer`.
+ */
+function byWhatWasSaid(turns: Record<string, { calls?: [string, JsonObject][]; answer: string }>): FauxResponseFactory {
+  return (context) => {
+    const fromLast = [...context.messages].reverse().findIndex((message) => message.role === "user");
+    const asked =
+      textOf(context.messages.at(-fromLast - 1))
+        .split("\n")
+        .at(-1) ?? "";
+    const turn = turns[asked];
+    if (!turn) throw new Error(`Nothing scripted for “${asked}”`);
+    const made = context.messages.slice(-fromLast - 1).filter((message) => message.role === "toolResult").length;
+    const next = turn.calls?.[made];
+    if (next) return fauxAssistantMessage(fauxToolCall(...next), { stopReason: "toolUse" });
+    return fauxAssistantMessage(turn.answer);
+  };
+}
+
+/** Says `text` in the session, and waits for its answer's commentary. */
+async function say(session: PretendSession, text: string): Promise<string> {
+  const before = session.sent.length;
+  session.serverSends({ type: "session.input_transcript.delta", delta: text });
+  session.serverSends({ type: "session.delegation.created", delegation: { id: `item_${before + 1}` } });
+  await vi.waitFor(() => expect(session.sent).toHaveLength(before + 1));
+  const commentary = session.sent[before];
+  return commentary?.type === "session.commentary.append" ? commentary.content : "";
+}
+
+const DELETE_SATAY: [string, JsonObject] = ["delete_recipe", { id: 1, confirm: true }];
+
+async function confirmations(household: HouseholdStub) {
+  return (await household.conversation()).filter((message) => message.role === "confirmation");
+}
+
+describe("a held change during a Voice Session (ADR 0024)", () => {
+  test("waits for a tap, and the commentary names the button to tap", async () => {
+    const { household, session } = await robinTalking(
+      byWhatWasSaid({ "Delete the Satay.": { calls: [DELETE_SATAY], answer: "Okay, it's waiting for you." } }),
+    );
+
+    const spoken = await say(session, "Delete the Satay.");
+
+    expect(spoken).toBe("Okay, it's waiting for you. Tap Delete “Satay” on the screen.");
+    expect(await confirmations(household)).toEqual([
+      { role: "confirmation", id: 1, summary: "Delete “Satay”", status: "pending" },
+    ]);
+    expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true });
+    // Only the commentary names it: the conversation keeps the agent's own answer.
+    expect((await household.conversation()).at(-1)).toEqual({ role: "agent", text: "Okay, it's waiting for you." });
+  });
+
+  test("is named once when the agent's answer already names its button", async () => {
+    const { session } = await robinTalking(
+      byWhatWasSaid({
+        "Delete the Satay.": { calls: [DELETE_SATAY], answer: "Tap delete Satay on the screen to delete it." },
+      }),
+    );
+
+    expect(await say(session, "Delete the Satay.")).toBe("Tap delete Satay on the screen to delete it.");
+  });
+
+  test("is not named again by a later turn that held nothing", async () => {
+    const { session } = await robinTalking(
+      byWhatWasSaid({
+        "Delete the Satay.": { calls: [DELETE_SATAY], answer: "It's waiting for you." },
+        "What's for dinner Thursday?": { answer: "Rice bowl 2." },
+      }),
+    );
+    await say(session, "Delete the Satay.");
+
+    expect(await say(session, "What's for dinner Thursday?")).toBe("Rice bowl 2.");
+  });
+
+  test("is not run by a spoken “yes”, only by a tap's confirm", async () => {
+    const { household, robin, session } = await robinTalking(
+      byWhatWasSaid({
+        "Delete the Satay.": { calls: [DELETE_SATAY], answer: "It's waiting for you." },
+        // The most the agent can do with a “yes” is to ask again.
+        "Yes.": { calls: [DELETE_SATAY], answer: "Deleted." },
+      }),
+    );
+    await say(session, "Delete the Satay.");
+
+    await say(session, "Yes.");
+
+    expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true });
+    expect((await confirmations(household)).map((shown) => shown.status)).toEqual(["pending", "pending"]);
+
+    expect(await robin.rpc("confirm", [1])).toMatchObject({ ok: true });
+    expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({
+      ok: false,
+      error: { code: "not_found" },
+    });
+  });
+
+  test("keeps a long answer and its buttons within commentary's limit, the buttons first to keep", async () => {
+    const { live, sessions } = pretendLive();
+    const override = "Plan “Satay” for Friday dinner although Sam is allergic to peanut";
+    const answers = [
+      { text: "Dal is on Thursday. ".repeat(100), held: [override] },
+      { text: "Okay.", held: Array.from({ length: 30 }, (_, index) => `${override} (${index})`) },
+    ];
+    const { session: voice } = await VoiceSession.start(
+      live,
+      OFFER,
+      ON_THE_WEEK,
+      { answer: async () => answers.shift() ?? null, usage: () => {}, end: () => {} },
+      600,
+    );
+    const session = sessions[0];
+    if (!session) throw new Error("No session was created");
+
+    const first = await say(session, "Read me the week.");
+    const second = await say(session, "Plan Satay every day.");
+    voice.end();
+
+    expect(first.length).toBeLessThanOrEqual(1200);
+    expect(first).toMatch(
+      /^Dal is on Thursday\. .*Dal is on Thursday\. Tap Plan “Satay” for Friday .* peanut on the screen\.$/,
+    );
+    expect(second.length).toBeLessThanOrEqual(1200);
+    expect(second).toMatch(/^Okay\. Tap Plan “Satay”/);
+  });
+  test("is withdrawn by a spoken “never mind”, and a tap then runs nothing", async () => {
+    const { household, robin, session } = await robinTalking(
+      byWhatWasSaid({
+        "Delete the Satay.": { calls: [DELETE_SATAY], answer: "It's waiting for you." },
+        "Never mind.": { calls: [["cancel_confirmation", { id: 1 }]], answer: "Okay, I won't delete it." },
+      }),
+    );
+    await say(session, "Delete the Satay.");
+
+    expect(await say(session, "Never mind.")).toBe("Okay, I won't delete it.");
+
+    expect(await confirmations(household)).toEqual([
+      { role: "confirmation", id: 1, summary: "Delete “Satay”", status: "cancelled" },
+    ]);
+    expect(await robin.rpc("confirm", [1])).toMatchObject({ ok: false, error: { code: "not_found" } });
+    expect(await household.callTool("get_recipe", { id: 1 })).toMatchObject({ ok: true });
+  });
+});
+
 /** Robin, signed in, in a Household with `minutes` of voice a day, on a pretend Live. */
 async function robinWithCap(minutes: number) {
   scriptModel(() => fauxAssistantMessage("Noted."));
@@ -477,7 +622,7 @@ async function sessionWithAllowance(allowance: number) {
     live,
     OFFER,
     ON_THE_WEEK,
-    { answer: async () => "Noted.", usage: () => {}, end: () => ended.push("ended") },
+    { answer: async () => ({ text: "Noted.", held: [] }), usage: () => {}, end: () => ended.push("ended") },
     allowance,
   );
   const session = sessions[0];

@@ -399,6 +399,23 @@ export async function lastTurnUnanswered(conversation: Conversation): Promise<bo
   return false;
 }
 
+/**
+ * The confirmations held since `turn` was said, oldest first: the calls the run answering it made
+ * that wait for a tap, and any a later run has made since.
+ */
+export async function confirmationsSince(conversation: Conversation, turn: number): Promise<number[]> {
+  const ids: number[] = [];
+  for await (const entry of newestFirst(conversation)) {
+    if (entry.kind === TURN_ENTRY && (entry.data as TurnData).turn === turn) break;
+    if (entry.kind !== "pi.assistant" && entry.kind !== "pi.tool-result") continue;
+    for (const message of [...(entry.model ?? [])].reverse()) {
+      const id = message.role === "toolResult" ? confirmationIn(message.details) : null;
+      if (id !== null) ids.push(id);
+    }
+  }
+  return ids.reverse();
+}
+
 /** The conversation's entries, newest first, read a page at a time as they are asked for. */
 async function* newestFirst(conversation: Conversation): AsyncGenerator<EntryRecord> {
   let cursor: Cursor | undefined;

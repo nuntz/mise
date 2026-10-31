@@ -83,6 +83,7 @@ import {
   type AgentCallResult,
   agentCompaction,
   agentModels,
+  confirmationsSince,
   lastTurnUnanswered,
   miseExtension,
   recentChat,
@@ -245,11 +246,25 @@ class HouseholdAgent extends Agent<Env> {
     if (!message.success || !from.success) {
       return { ok: false, error: { code: "invalid_input", message: "Send a message to the agent" } };
     }
-    return this.answerTurn(this.callerOf(getCurrentAgent().connection), message.data, from.data, false);
+    const { reply } = await this.answerTurn(
+      this.callerOf(getCurrentAgent().connection),
+      message.data,
+      from.data,
+      false,
+    );
+    return reply;
   }
 
-  /** A turn of the shared conversation from `who`, typed in the chat or `spoken` in a Voice Session. */
-  private async answerTurn(who: Caller | null, text: string, where: ChatWhere, spoken: boolean): Promise<ChatReply> {
+  /**
+   * A turn of the shared conversation from `who`, typed in the chat or `spoken` in a Voice Session:
+   * the agent's answer, and the turn as recorded.
+   */
+  private async answerTurn(
+    who: Caller | null,
+    text: string,
+    where: ChatWhere,
+    spoken: boolean,
+  ): Promise<{ reply: ChatReply; turn: number }> {
     const { sql } = this.ctx.storage;
     const speaker = this.resolvedCaller(who);
     const now = new Date();
@@ -267,9 +282,20 @@ class HouseholdAgent extends Agent<Env> {
     });
     this.notify("chat", this.bumpRevision());
     if (answer.status !== "done") {
-      return { ok: false, error: { code: "unanswered", message: answer.reason ?? "The agent did not answer" } };
+      const message = answer.reason ?? "The agent did not answer";
+      return { reply: { ok: false, error: { code: "unanswered", message } }, turn };
     }
-    return { ok: true, value: { role: "agent", text: answer.text ?? "" } };
+    return { reply: { ok: true, value: { role: "agent", text: answer.text ?? "" } }, turn };
+  }
+
+  /** What the buttons say of the confirmations held since `turn` that still wait for a tap. */
+  private async heldButtonsSince(turn: number): Promise<string[]> {
+    const { sql } = this.ctx.storage;
+    const ids = await confirmationsSince(await (await this.harness.pi()).root(BACKGROUND_CONTEXT), turn);
+    return ids.flatMap((id) => {
+      const shown = confirmationShown(sql, id);
+      return shown?.status === "pending" ? [shown.summary] : [];
+    });
   }
 
   /**
@@ -371,8 +397,8 @@ class HouseholdAgent extends Agent<Env> {
         {
           answer: async (text, where) =>
             Sentry.startSpan({ name: "voice turn", op: "mise.voice" }, async () => {
-              const reply = await this.answerTurn(caller, text, where, true);
-              return reply.ok ? reply.value.text : null;
+              const { reply, turn } = await this.answerTurn(caller, text, where, true);
+              return reply.ok ? { text: reply.value.text, held: await this.heldButtonsSince(turn) } : null;
             }),
           usage: (usage) => recordVoiceUsage(sql, day, usage),
           end: (ended) => {

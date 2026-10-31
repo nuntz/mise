@@ -1122,6 +1122,17 @@ fieldset > .toggle-chip {
   gap: var(--space-2);
 }
 
+/* During a Voice Session a confirmation spans the log, its button full width: tapped from across the
+ * kitchen, by the only way it runs. */
+.chat-confirmation-voice {
+  align-self: stretch;
+}
+
+.chat-confirmation-voice .chat-confirmation-actions {
+  flex-direction: column;
+  align-self: stretch;
+}
+
 .chat-confirmation-expired,
 .chat-confirmation-cancelled {
   color: var(--ink-muted);

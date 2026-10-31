@@ -85,8 +85,11 @@ export type VoiceUsage = { id: string; seconds: number; confirmed: boolean };
 
 /** What a Voice Session asks of the household that holds it. */
 export type VoiceHooks = {
-  /** Answers a turn heard from `where` through the shared conversation; null when the agent couldn't. */
-  answer(text: string, where: ChatWhere): Promise<string | null>;
+  /**
+   * Answers a turn heard from `where` through the shared conversation, with what the buttons say of
+   * the changes it held for a tap (ADR 0024); null when the agent couldn't.
+   */
+  answer(text: string, where: ChatWhere): Promise<{ text: string; held: string[] } | null>;
   /** Records the session's usage, each time it changes: from its creation to its end. */
   usage(usage: VoiceUsage): void;
   /** Called once, when the session has ended. */
@@ -96,8 +99,8 @@ export type VoiceHooks = {
 /**
  * One Voice Session the household holds the sideband of. Every delegation becomes a turn of what
  * was heard since the last one, from where the person was when it was cut, answered by `answer` (the
- * shared conversation's path) and spoken back as commentary. Only the person's words leave here, as
- * turn text; no audio is kept.
+ * shared conversation's path) and spoken back as commentary, which names the button of each change
+ * it held for a tap. Only the person's words leave here, as turn text; no audio is kept.
  */
 export class VoiceSession {
   /** The input transcript heard since the last turn was cut. */
@@ -207,7 +210,7 @@ export class VoiceSession {
         Sentry.captureException(error);
         return null;
       });
-      content = reply ? commentaryOf(reply) : FAILURE_LINE;
+      content = reply ? commentaryOf(reply.text, reply.held) : FAILURE_LINE;
     }
     if (!this.ended) this.sideband.send({ type: "session.commentary.append", delegation_id: id, content });
   }
@@ -252,10 +255,37 @@ export class VoiceSession {
   }
 }
 
-/** The agent's answer cut to fit commentary, at the end of a sentence where there is one to cut at. */
-function commentaryOf(answer: string): string {
-  if (answer.length <= MAX_COMMENTARY_CHARS) return answer;
-  const cut = answer.slice(0, MAX_COMMENTARY_CHARS);
+/**
+ * The agent's answer as commentary: followed by which button to tap for each change it `held` and
+ * didn't name (the person may be across the kitchen, and must not take the change as done), and cut
+ * to fit, at the end of a sentence where there is one to cut at.
+ */
+function commentaryOf(answer: string, held: readonly string[]): string {
+  const said = plain(answer);
+  // The buttons come first, whole, leaving the answer room to begin.
+  const room = MAX_COMMENTARY_CHARS - Math.min(answer.length, ANSWER_KEPT_CHARS) - 1;
+  let taps = "";
+  for (const summary of held) {
+    if (said.includes(plain(summary))) continue;
+    const more = [taps, `Tap ${summary} on the screen.`].filter(Boolean).join(" ");
+    if (more.length > room) break;
+    taps = more;
+  }
+  return [cutAt(answer, MAX_COMMENTARY_CHARS - (taps ? taps.length + 1 : 0)), taps].filter(Boolean).join(" ");
+}
+
+/** How much of the agent's answer commentary keeps, at least, however many buttons it names. */
+const ANSWER_KEPT_CHARS = 200;
+
+/** Text as it is heard: lower case, with no quotes. */
+function plain(text: string): string {
+  return text.toLowerCase().replace(/[“”‘’"']/g, "");
+}
+
+/** `answer` within `limit` characters, cut at the end of a sentence where there is one to cut at. */
+function cutAt(answer: string, limit: number): string {
+  if (answer.length <= limit) return answer;
+  const cut = answer.slice(0, limit);
   const sentenceEnd = Math.max(
     cut.lastIndexOf(". "),
     cut.lastIndexOf("! "),
