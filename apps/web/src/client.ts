@@ -49,6 +49,11 @@ export type MiseClient = {
    * names: the SDP answer, or why there is none (ADR 0028).
    */
   startVoice(offer: string, where: ChatWhere): Promise<VoiceStartReply>;
+  /**
+   * Tells the Household's Voice Session the person is now on the screen and Week `where` names, so
+   * that the next turn is heard from there. Resolves with whether a session took it.
+   */
+  moveVoice(where: ChatWhere): Promise<boolean>;
   /** Ends the Household's Voice Session, if one runs. */
   endVoice(): Promise<void>;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
@@ -95,6 +100,8 @@ export function createMiseClient(host = window.location.host): MiseClient {
     confirm: (id) => agent.call<ToolResult<unknown>>("confirm", [id]),
 
     startVoice: (offer, where) => agent.call("startVoice", [offer, where], { timeout: VOICE_START_TIMEOUT_MS }),
+
+    moveVoice: (where) => agent.call("moveVoice", [where]),
 
     endVoice: () => agent.call("endVoice", []),
 

@@ -16,6 +16,7 @@ export function createFakeClient(
     conversation,
     confirm,
     startVoice,
+    moveVoice,
     endVoice,
     ...rest
   }: { online?: boolean } & Partial<
@@ -29,6 +30,7 @@ export function createFakeClient(
       | "conversation"
       | "confirm"
       | "startVoice"
+      | "moveVoice"
       | "endVoice"
       | "signedIn"
     >
@@ -77,6 +79,11 @@ export function createFakeClient(
       if (!connection.online) throw new Error("Connection closed");
       if (!startVoice) throw new Error("Unexpected startVoice");
       return startVoice(offer, where);
+    },
+    async moveVoice(where) {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!moveVoice) throw new Error("Unexpected moveVoice");
+      return moveVoice(where);
     },
     async endVoice() {
       if (!connection.online) throw new Error("Connection closed");

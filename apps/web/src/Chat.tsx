@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatWhere, ToolResult } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
@@ -199,6 +199,17 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
     setVoice("off");
     if (ending) hangUp(ending);
   };
+
+  // Each turn is heard from where the person is when they say it, so a session follows them.
+  createEffect(
+    on(
+      props.where,
+      (where) => {
+        if (voice() !== "off") void props.client.moveVoice(where).catch(() => {});
+      },
+      { defer: true },
+    ),
+  );
 
   const onHidden = () => {
     if (document.visibilityState === "hidden") endVoice();

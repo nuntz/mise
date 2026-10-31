@@ -138,6 +138,25 @@ describe("what the agent is told", () => {
     expect(system).toContain("Sam (Member 3)");
   });
 
+  test("the system prompt says how to answer a spoken turn", async () => {
+    const seen: string[] = [];
+    scriptModel((context) => {
+      seen.push(systemOf(context).sections);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    const system = seen[0] ?? "";
+    expect(system).toMatch(/spoken turns/i);
+    expect(system).toMatch(/one or two plain sentences/i);
+    expect(system).toMatch(/weekday/i);
+    expect(system).toMatch(/offer to go on/i);
+    expect(system).toMatch(/already passed/i);
+    expect(system).toMatch(/anyone in the room/i);
+  });
+
   test("is offered the tool catalogue, except setup, uploads and what only a person may do", async () => {
     const offered: string[][] = [];
     scriptModel((context) => {

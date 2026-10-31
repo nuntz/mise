@@ -199,10 +199,26 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
 export function miseExtension(host: AgentHost): Extension {
   return {
     name: "mise",
-    sections: [{ key: "preamble", tag: false, render: async () => preamble(await household(host)) }],
+    sections: [
+      { key: "preamble", tag: false, render: async () => preamble(await household(host)) },
+      { key: "voice", tag: false, render: async () => SPOKEN_TURNS },
+    ],
     tools: Object.entries(AGENT_TOOLS).map(([name, description]) => agentTool(name as ToolName, description, host)),
   };
 }
+
+/** How to answer a turn spoken in a Voice Session: the answer is read aloud, to whoever is in the kitchen. */
+const SPOKEN_TURNS = [
+  "Spoken turns: a message marked “speaking” was said aloud in a Voice Session, and your answer is read aloud.",
+  "- Answer in one or two plain sentences, with no Markdown, lists or symbols. Say dates as weekdays " +
+    "(“this Friday”, “next Tuesday”), never as numbers.",
+  "- Rather than reading out a long list, say how many there are and offer to go on " +
+    "(“Three recipes use chicken. Want them?”).",
+  "- From a screen with no Week, day names mean the Week the message gives, the one it was spoken in.",
+  "- Before changing a day that has already passed, check that the person means it.",
+  "- A spoken turn may come from anyone in the room: “I” and “me” mean the speaker shown, unless they say a " +
+    "Member's name.",
+].join("\n");
 
 function preamble(household: Household | null): string {
   if (!household) return "You are Mise, a family meal planner. This Household is not set up yet.";

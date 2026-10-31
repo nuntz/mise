@@ -11,8 +11,10 @@ import {
 } from "@mise/domain";
 import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
+import { createSignal } from "solid-js";
 import { afterEach, expect, test } from "vitest";
 import { App } from "../src/App";
+import { Chat } from "../src/Chat";
 import type { MiseClient } from "../src/client";
 import type { OpenVoice, VoiceCall } from "../src/voice";
 import { createFakeClient } from "./fakeClient";
@@ -41,7 +43,7 @@ function fakeClient(
   confirm: (id: number) => ToolResult<unknown> = () => {
     throw new Error("Unexpected confirm");
   },
-  voice: Partial<Pick<MiseClient, "startVoice" | "endVoice">> = {},
+  voice: Partial<Pick<MiseClient, "startVoice" | "moveVoice" | "endVoice">> = {},
 ) {
   const conversation = [...earlier];
   const confirmed: number[] = [];
@@ -467,17 +469,22 @@ function talkingClient(
   }),
 ) {
   const started: { offer: string; where: ChatWhere }[] = [];
+  const moved: ChatWhere[] = [];
   let ended = 0;
   const fake = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }), undefined, {
     startVoice: async (offer, where) => {
       started.push({ offer, where });
       return start(offer, where);
     },
+    moveVoice: async (where) => {
+      moved.push(where);
+      return true;
+    },
     endVoice: async () => {
       ended++;
     },
   });
-  return { ...fake, started, ended: () => ended };
+  return { ...fake, started, moved, ended: () => ended };
 }
 
 test("the chat's mic starts a Voice Session, shows its turns as they're answered, and ends it with a tap", async () => {
@@ -507,6 +514,24 @@ test("the chat's mic starts a Voice Session, shows its turns as they're answered
   await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
   expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("a Voice Session follows the screen and Week the person moves to, until it ends", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  const [where, setWhere] = createSignal<ChatWhere>({ screen: "week" });
+  render(() => <Chat client={fake.client} online={true} where={where} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  setWhere({ screen: "week", week: "2026-10-26" });
+  setWhere({ screen: "pantry" });
+  await waitFor(() => expect(fake.moved).toEqual([{ screen: "week", week: "2026-10-26" }, { screen: "pantry" }]));
+
+  await userEvent.click(within(chat).getByRole("button", { name: "End voice" }));
+  setWhere({ screen: "recipes" });
+  expect(fake.moved).toHaveLength(2);
 });
 
 test("closing the chat ends its Voice Session", async () => {

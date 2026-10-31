@@ -76,6 +76,35 @@ describe("a Voice Session", () => {
     expect(said).toEqual(["We're out of rice.", "And cumin."]);
   });
 
+  test("presents each turn as spoken, from where the person was when it was cut", async () => {
+    const { robin, session, prompts } = await robinTalking(() => fauxAssistantMessage("Noted."));
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "What's for dinner Tuesday?" });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+    session.serverSends({ type: "session.input_transcript.delta", delta: "We're out of cumin." });
+    await robin.rpc("moveVoice", [{ screen: "pantry" }]);
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+
+    expect(prompts[0]).toMatch(
+      /^\[Robin, speaking on .*, on the Week screen, showing the Week of Monday 2026-10-26\]\n/,
+    );
+    expect(prompts[1]).toMatch(/^\[Robin, speaking on .*, on the Pantry screen, in the Week of .*\]\n/);
+  });
+
+  test("refuses a move to nowhere, and keeps where the session was", async () => {
+    const { robin, session, prompts } = await robinTalking(() => fauxAssistantMessage("Noted."));
+
+    const moved = await robin.rpc("moveVoice", [{ screen: "attic" }]);
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Hello." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+
+    expect(moved).toBe(false);
+    expect(prompts[0]).toMatch(/on the Week screen/);
+  });
+
   test("drops reflected audio: nothing of it reaches the agent or the conversation", async () => {
     const { household, session, prompts } = await robinTalking();
 

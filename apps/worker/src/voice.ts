@@ -1,3 +1,4 @@
+import type { ChatWhere } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { z } from "zod";
 import type { Live, LiveSessionConfig, Sideband } from "./live";
@@ -66,8 +67,9 @@ const ServerEvent = z.discriminatedUnion("type", [
 
 /**
  * One Voice Session the household holds the sideband of. Every delegation becomes a turn of what
- * was heard since the last one, answered by `answer` (the shared conversation's path) and spoken
- * back as commentary. Only the person's words leave here, as turn text; no audio is kept.
+ * was heard since the last one, from where the person was when it was cut, answered by `answer` (the
+ * shared conversation's path) and spoken back as commentary. Only the person's words leave here, as
+ * turn text; no audio is kept.
  */
 export class VoiceSession {
   /** The input transcript heard since the last turn was cut. */
@@ -77,7 +79,8 @@ export class VoiceSession {
 
   private constructor(
     private readonly sideband: Sideband,
-    private readonly answer: (text: string) => Promise<string | null>,
+    private where: ChatWhere,
+    private readonly answer: (text: string, where: ChatWhere) => Promise<string | null>,
     private readonly onEnd: (session: VoiceSession) => void,
   ) {}
 
@@ -89,14 +92,15 @@ export class VoiceSession {
   static async start(
     live: Live,
     offer: string,
-    answer: (text: string) => Promise<string | null>,
+    where: ChatWhere,
+    answer: (text: string, where: ChatWhere) => Promise<string | null>,
     onEnd: (session: VoiceSession) => void,
   ): Promise<{ session: VoiceSession; sdp: string }> {
     const created = await Sentry.startSpan({ name: "voice create", op: "mise.voice" }, () =>
       live.create(offer, VOICE_SESSION),
     );
     const sideband = await Sentry.startSpan({ name: "voice attach", op: "mise.voice" }, () => live.attach(created.id));
-    const session = new VoiceSession(sideband, answer, onEnd);
+    const session = new VoiceSession(sideband, where, answer, onEnd);
     sideband.listen({ message: (data) => session.onMessage(data), close: () => session.finish("sideband_closed") });
     return { session, sdp: created.sdp };
   }
@@ -104,6 +108,11 @@ export class VoiceSession {
   /** Whether the session still runs: not yet closed by Live, by the household or by the sideband dropping. */
   get running(): boolean {
     return !this.ended;
+  }
+
+  /** Where the person is now: the screen and Week the next turn cut is sent from. */
+  moveTo(where: ChatWhere): void {
+    this.where = where;
   }
 
   /** Asks Live to close the session; the sideband is closed either way once it has, or soon after. */
@@ -132,7 +141,7 @@ export class VoiceSession {
         // The delegation carries no utterance: the turn is what was heard since the last one.
         const text = this.heard.trim();
         this.heard = "";
-        void this.delegate(event.data.delegation.id, text);
+        void this.delegate(event.data.delegation.id, text, this.where);
         return;
       }
       case "session.closed":
@@ -141,11 +150,11 @@ export class VoiceSession {
     }
   }
 
-  private async delegate(id: string, text: string): Promise<void> {
+  private async delegate(id: string, text: string, where: ChatWhere): Promise<void> {
     let content = NOTHING_HEARD;
     if (text) {
       // A turn that throws is answered like one the agent failed, and reported.
-      const reply = await this.answer(text).catch((error: unknown) => {
+      const reply = await this.answer(text, where).catch((error: unknown) => {
         Sentry.captureException(error);
         return null;
       });
