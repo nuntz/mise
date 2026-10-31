@@ -152,7 +152,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "with its Recipe, Diners, Guests, Conflicts, whether it is Locked, and the Proposer's `reason` for a proposed one.",
   set_slot:
     "Sets what a Slot is, at breakfast, lunch or dinner: a Recipe (not a Draft, `recipeId` with kind `recipe`), " +
-    "leftovers, eating out, unplanned or skipped. Refused with " +
+    "leftovers, eating out, unplanned or skipped. To move a dinner, set the new day to it and the old day to " +
+    "unplanned; to swap two, set each to the other's. Refused with " +
     "`constraint_conflict` if it would bring a Conflict, unless `overrides` gives the person's reason for each, " +
     "which waits for their tap.",
   set_diners:
@@ -215,7 +216,8 @@ const SPOKEN_TURNS = [
   "- Rather than reading out a long list, say how many there are and offer to go on " +
     "(“Three recipes use chicken. Want them?”).",
   "- From a screen with no Week, day names mean the Week the message gives: this Week, never next Week.",
-  "- Before changing a day that has already passed, check that the person means it.",
+  "- Before changing a day that has already passed, ask first (“Tuesday has passed. Change it anyway?”), " +
+    "and change it only once they say yes.",
   "- When a change waits for a tap, name the button by what it says (“tap Delete Lemon chicken on the " +
     "screen”), never “the button above”: the person may be across the kitchen.",
   "- A spoken turn may come from anyone in the room: “I” and “me” mean the speaker shown, unless they say a " +
