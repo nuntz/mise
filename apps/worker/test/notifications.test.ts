@@ -53,13 +53,17 @@ async function schedules(household: HouseholdStub): Promise<{ callback: string; 
   return (await household.listSchedules()) as { callback: string; time: number }[];
 }
 
-/** Runs the household's morning as its scheduler does, at 08:00 Vancouver time on `date`. */
+/**
+ * Runs the household's morning as its scheduler does, at 08:00 Vancouver time on `date`, and leaves
+ * the clock there until the test ends. The run schedules the next morning from `date`, which may have
+ * passed in real time: on the real clock it would run at once, on the real day, and propose that
+ * day's Week, as it did on Saturday 31 October 2026.
+ */
 async function morningOf(household: HouseholdStub, date: string): Promise<void> {
   vi.useFakeTimers({ toFake: ["Date"] });
   // Vancouver is on PDT (UTC-7) until 1 November 2026, then PST (UTC-8).
   vi.setSystemTime(new Date(`${date}T08:00:00${date < "2026-11-01" ? "-07:00" : "-08:00"}`));
   await household.morningPushes();
-  vi.useRealTimers();
 }
 
 const dinners = (week: Week): Slot[] => week.slots.filter((slot) => slot.meal === "dinner");
