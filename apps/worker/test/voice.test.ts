@@ -93,6 +93,19 @@ describe("a Voice Session", () => {
     expect(prompts[1]).toMatch(/^\[Robin, speaking on .*, on the Pantry screen, in the Week of .*\]\n/);
   });
 
+  test("is moved only by the connection that started it", async () => {
+    const { household, session, prompts } = await robinTalking(() => fauxAssistantMessage("Noted."));
+    const alex = await connectAs(household, "alex@example.com");
+
+    const moved = await alex.rpc("moveVoice", [{ screen: "pantry" }]);
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Hello." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+
+    expect(moved).toBe(false);
+    expect(prompts[0]).toMatch(/on the Week screen/);
+  });
+
   test("refuses a move to nowhere, and keeps where the session was", async () => {
     const { robin, session, prompts } = await robinTalking(() => fauxAssistantMessage("Noted."));
 

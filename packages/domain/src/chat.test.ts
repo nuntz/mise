@@ -7,6 +7,7 @@ describe("presentTurn", () => {
       speaker: "Robin",
       today: "2026-10-27",
       where: { screen: "week", week: "2026-11-02" },
+      spoken: false,
       thisWeek: "2026-10-26",
       text: "I won't be eating dinner tomorrow",
     });
@@ -22,6 +23,7 @@ describe("presentTurn", () => {
       speaker: "Robin",
       today: "2026-10-26",
       where: { screen: "week", week: "2026-10-26" },
+      spoken: false,
       thisWeek: "2026-10-26",
       text: "re-propose the week but keep Tuesday",
     });
@@ -36,6 +38,7 @@ describe("presentTurn", () => {
       speaker: "Sam",
       today: "2026-10-26",
       where: { screen: "pantry" },
+      spoken: false,
       thisWeek: "2026-10-26",
       text: "we're out of cumin",
     });
@@ -48,6 +51,7 @@ describe("presentTurn", () => {
       speaker: null,
       today: "2026-10-26",
       where: { screen: "recipes" },
+      spoken: false,
       thisWeek: "2026-10-26",
       text: "hello",
     });
@@ -59,7 +63,8 @@ describe("presentTurn", () => {
     const presented = presentTurn({
       speaker: "Robin",
       today: "2026-10-30",
-      where: { screen: "week", week: "2026-11-02", voice: true },
+      where: { screen: "week", week: "2026-11-02" },
+      spoken: true,
       thisWeek: "2026-10-26",
       text: "just the two of us Tuesday",
     });
@@ -74,7 +79,8 @@ describe("presentTurn", () => {
     const presented = presentTurn({
       speaker: "Robin",
       today: "2026-10-30",
-      where: { screen: "pantry", voice: true },
+      where: { screen: "pantry" },
+      spoken: true,
       thisWeek: "2026-10-26",
       text: "move Tuesday's dinner to Wednesday",
     });
@@ -87,12 +93,8 @@ describe("presentTurn", () => {
 });
 
 describe("ChatWhere", () => {
-  test("takes a typed chat's where unchanged, and a voice flag", () => {
-    expect(ChatWhere.safeParse({ screen: "pantry" }).success).toBe(true);
-    expect(ChatWhere.safeParse({ screen: "week", week: "2026-10-26", voice: true }).success).toBe(true);
-  });
-
-  test("stays strict", () => {
-    expect(ChatWhere.safeParse({ screen: "pantry", step: 2 }).success).toBe(false);
+  test("stays strict: the browser can't mark a turn as spoken", () => {
+    expect(ChatWhere.safeParse({ screen: "week", week: "2026-10-26" }).success).toBe(true);
+    expect(ChatWhere.safeParse({ screen: "pantry", voice: true }).success).toBe(false);
   });
 });

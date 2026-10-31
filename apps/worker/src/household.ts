@@ -243,11 +243,11 @@ class HouseholdAgent extends Agent<Env> {
     if (!message.success || !from.success) {
       return { ok: false, error: { code: "invalid_input", message: "Send a message to the agent" } };
     }
-    return this.answerTurn(this.callerOf(getCurrentAgent().connection), message.data, from.data);
+    return this.answerTurn(this.callerOf(getCurrentAgent().connection), message.data, from.data, false);
   }
 
-  /** A turn of the shared conversation from `who`, typed in the chat or spoken in a Voice Session. */
-  private async answerTurn(who: Caller | null, text: string, where: ChatWhere): Promise<ChatReply> {
+  /** A turn of the shared conversation from `who`, typed in the chat or `spoken` in a Voice Session. */
+  private async answerTurn(who: Caller | null, text: string, where: ChatWhere, spoken: boolean): Promise<ChatReply> {
     const { sql } = this.ctx.storage;
     const caller = handlers.get_caller(sql, {}, { caller: who });
     const speaker = caller.ok ? caller.value : null;
@@ -259,7 +259,7 @@ class HouseholdAgent extends Agent<Env> {
     const thisWeek = household
       ? weekOf(today, household).startDate
       : weekStartOf(today, HOUSEHOLD_DEFAULTS.weekStartsOn);
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, thisWeek, text });
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, spoken, thisWeek, text });
     const entry: TurnData = { turn, text };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {
@@ -278,16 +278,19 @@ class HouseholdAgent extends Agent<Env> {
    * 0028). A start asked to end while it waits on OpenAI ends the session once it has one.
    */
   private voice: VoiceSession | { starting: true; cancelled: boolean; where: ChatWhere } | null = null;
+  /** The connection that started the Voice Session: the device the person talks through. */
+  private voiceConnection: string | undefined;
 
   /**
    * Starts a Voice Session from the browser's WebRTC offer, sent from the screen and Week `where`
    * names, and resolves with the SDP answer. Each turn heard is the starting Caller's, through the
-   * same path as `chat`, spoken from where `moveVoice` last said the person was. Refused to a request with no Caller, while another session runs, and on a
-   * deployment without an OpenAI key.
+   * same path as `chat`, spoken from where `moveVoice` last said the person was. Refused to a
+   * request with no Caller, while another session runs, and on a deployment without an OpenAI key.
    */
   @callable()
   async startVoice(offer: unknown, where: unknown): Promise<VoiceStartReply> {
-    const caller = this.callerOf(getCurrentAgent().connection);
+    const { connection } = getCurrentAgent();
+    const caller = this.callerOf(connection);
     const from = ChatWhere.safeParse(where);
     if (typeof offer !== "string" || !offer.trim() || !from.success) {
       return { ok: false, error: { code: "invalid_input", message: "Send a WebRTC offer and where it was sent from" } };
@@ -299,6 +302,7 @@ class HouseholdAgent extends Agent<Env> {
     // Claimed before the first await, so that a second start finds it taken.
     const starting = { starting: true as const, cancelled: false, where: from.data };
     this.voice = starting;
+    this.voiceConnection = connection?.id;
     try {
       const { session, sdp } = await VoiceSession.start(
         live,
@@ -306,7 +310,7 @@ class HouseholdAgent extends Agent<Env> {
         from.data,
         async (text, where) =>
           Sentry.startSpan({ name: "voice turn", op: "mise.voice" }, async () => {
-            const reply = await this.answerTurn(caller, text, { ...where, voice: true });
+            const reply = await this.answerTurn(caller, text, where, true);
             return reply.ok ? reply.value.text : null;
           }),
         (ended) => {
@@ -331,12 +335,14 @@ class HouseholdAgent extends Agent<Env> {
 
   /**
    * Tells the Household's Voice Session, if one runs or is starting, that the person is now on the
-   * screen and Week `where` names, as the browser sees each change. Resolves with whether it was taken.
+   * screen and Week `where` names, as the browser sees each change. Only the connection that started
+   * it may move it. Resolves with whether it was taken.
    */
   @callable()
   async moveVoice(where: unknown): Promise<boolean> {
     const to = ChatWhere.safeParse(where);
-    if (!to.success || !this.voice) return false;
+    const mover = getCurrentAgent().connection?.id;
+    if (!to.success || !this.voice || !mover || mover !== this.voiceConnection) return false;
     if (this.voice instanceof VoiceSession) this.voice.moveTo(to.data);
     else this.voice.where = to.data;
     return true;

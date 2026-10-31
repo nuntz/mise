@@ -214,8 +214,10 @@ const SPOKEN_TURNS = [
     "(“this Friday”, “next Tuesday”), never as numbers.",
   "- Rather than reading out a long list, say how many there are and offer to go on " +
     "(“Three recipes use chicken. Want them?”).",
-  "- From a screen with no Week, day names mean the Week the message gives, the one it was spoken in.",
+  "- From a screen with no Week, day names mean the Week the message gives: this Week, never next Week.",
   "- Before changing a day that has already passed, check that the person means it.",
+  "- When a change waits for a tap, name the button by what it says (“tap Delete Lemon chicken on the " +
+    "screen”), never “the button above”: the person may be across the kitchen.",
   "- A spoken turn may come from anyone in the room: “I” and “me” mean the speaker shown, unless they say a " +
     "Member's name.",
 ].join("\n");

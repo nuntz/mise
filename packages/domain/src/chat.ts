@@ -14,12 +14,9 @@ export type ChatScreen = z.infer<typeof ChatScreen>;
 
 /**
  * Where the chat was opened from, sent with each message so that "this week" and "Thursday" mean
- * what the person sees: the screen, and the Week it shows, if it shows one. `voice` marks a turn
- * spoken in a Voice Session rather than typed.
+ * what the person sees: the screen, and the Week it shows, if it shows one.
  */
-export const ChatWhere = z
-  .object({ screen: ChatScreen, week: LocalDate.optional(), voice: z.boolean().optional() })
-  .strict();
+export const ChatWhere = z.object({ screen: ChatScreen, week: LocalDate.optional() }).strict();
 export type ChatWhere = z.infer<typeof ChatWhere>;
 
 /**
@@ -47,25 +44,27 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
 };
 
 /**
- * A turn as the model is shown it: who is speaking, whether they wrote or spoke, on which day in the
- * Household's timezone (the conversation spans days, so "tomorrow" in an earlier turn meant another
- * day), and from where, then what they said. A spoken turn from a screen with no Week is given
- * `thisWeek`, the start of the Week `today` is in, so that "Tuesday" never means next Week's.
+ * A turn as the model is shown it: who is speaking, whether they wrote or spoke (`spoken`, a turn
+ * of a Voice Session, which only the household marks), on which day in the Household's timezone
+ * (the conversation spans days, so "tomorrow" in an earlier turn meant another day), and from where,
+ * then what they said. A spoken turn from a screen with no Week is given `thisWeek`, the start of
+ * the Week `today` is in, so that "Tuesday" never means next Week's.
  */
 export function presentTurn(turn: {
   speaker: string | null;
   today: LocalDate;
   where: ChatWhere;
+  spoken: boolean;
   thisWeek: LocalDate;
   text: string;
 }): string {
   const parts = [
     turn.speaker ?? "Someone not signed in",
-    `${turn.where.voice ? "speaking" : "writing"} on ${dayOf(turn.today)}`,
+    `${turn.spoken ? "speaking" : "writing"} on ${dayOf(turn.today)}`,
     `on the ${SCREEN_NAMES[turn.where.screen]} screen`,
   ];
   if (turn.where.week) parts.push(`showing the Week of ${dayOf(turn.where.week)}`);
-  else if (turn.where.voice) parts.push(`in the Week of ${dayOf(turn.thisWeek)}`);
+  else if (turn.spoken) parts.push(`in the Week of ${dayOf(turn.thisWeek)}`);
   return `[${parts.join(", ")}]\n${turn.text}`;
 }
 
