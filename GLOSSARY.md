@@ -20,6 +20,10 @@ _Avoid_: User, current user
 A call the agent made that only a person's tap runs (a delete, a cleared Week, an Override, a Member's new name or sign-in email, or loosening a Member's or the Guests' Hard Constraint), shown in the chat as a button saying what will happen; it can be cancelled, and expires once what it describes changes.
 _Avoid_: Approval, consent
 
+**Voice Session**:
+A spoken conversation with the agent, started from the chat or from Kitchen mode by one Caller; its turns join the Household's one conversation, and it counts against the Household's daily voice minutes.
+_Avoid_: Call, voice chat
+
 **Diner**:
 A Member eating a particular Slot.
 _Avoid_: Eater, attendee

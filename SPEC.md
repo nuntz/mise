@@ -28,7 +28,7 @@ A household meal planner. The household — its members, default number of diner
 | Runtime | Cloudflare Workers + Durable Objects | One DO per household (keyed by Workspace domain). DO SQLite is the only datastore. |
 | Agent harness | `@earendil-works/pi-durable` via Cloudflare Agents SDK `PiHarness` | PiHarness is beta, Pi Durable experimental: pin versions, keep the agent layer thin. |
 | Text model | Claude Haiku 5.5 (agent default); Claude Sonnet 5.5 for `parse_recipe` (import parser) and Suggestions, whose Allergens are worth the stronger model | Routed per tool via Pi's provider config. Promote the agent to Sonnet only if multi-constraint requests drop clauses. |
-| Voice | GPT-Live-1 (later drop) | Full-duplex voice layer, $0.05/min (OpenAI key). Delegates reasoning/tools to the Mise agent; it is a front end, not a second brain. **Spike before Drop 3:** confirm a non-OpenAI backend agent can be attached. |
+| Voice | GPT-Live-1 (later drop) | Full-duplex voice layer, $0.05/min (OpenAI key). Delegates reasoning/tools to the Mise agent; it is a front end, not a second brain. Client delegation answered by the household over a sideband (ADR 0028). |
 | Client | SolidJS + TypeScript, PWA, installable on desktop and mobile | Built by Vite. Bun for packages/scripts, workerd/Node for execution (see Tooling). Biome. Dedicated design system for Mise, defined in Drop 0. |
 | Tooling | Bun as package manager, script runner and test runner — **not** as a runtime | `bun install`, `bun run`, `bun test`; one `bun.lock`, committed. Production code never runs on Bun: the Worker runs on workerd (Wrangler bundles with esbuild), the client is built by Vite, Pulumi runs on Node. So no Bun-specific APIs (`Bun.file`, `Bun.serve`, …) in the Worker or any code shared with it, no `bun --bun`, and local dev is `wrangler dev`, never `bun run src/worker.ts`. Node must be installed regardless (Pulumi). |
 | Transport | DO WebSocket/RPC (Agents SDK) | Live updates to all connected clients; UI and agent call the same tools. |
@@ -161,7 +161,19 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 - Typical turns: "re-propose the week but keep Tuesday", "swap Thursday for something with the chicken we have", "just the two of us Friday", "we're out of cumin", "put this week on Instacart".
 
 ### 4.8 Voice — drop 3
-- GPT-Live-1 over WebRTC from the PWA, backend = the Mise agent (same tools). Per-day minute cap per household.
+- GPT-Live-1 over WebRTC from the PWA. The household answers its delegations over a sideband with turns of the one shared conversation, so the agent and tools are the same (ADR 0028).
+- A Voice Session starts from a mic in the chat sheet, which stays open and shows the transcript and any Pending Confirmation, or from Kitchen mode's own mic, which runs over the step. One Voice Session per Household at a time: a second start is refused with the name of the person talking.
+- Every turn is the starting Caller's. The prompt says anyone in the room may speak, and "I" means the Caller unless a name is said.
+- A turn is everything said since the last cut. A backchannel GPT-Live answered itself carries into the next turn. A delegation arriving while a turn runs waits as its own turn.
+- Each turn carries the `where` of its moment, plus a voice flag. With no Week on screen it means this Week, never next Week. Kitchen mode's `where` names the Slot (or the Recipe) and the step on screen, so "how much garlic" gets the Slot's scaled amount.
+- Spoken answers: one or two plain sentences, dates as weekdays, an offer to go on instead of a list. Same conversation, same prompt.
+- Confirmations are tapped, never spoken (ADR 0024).
+- Kitchen mode: the agent reads the next step aloud, and the household tells the session's connection to show it. This is the one message to a device that is not a tool.
+- Pantry Check-in: the agent leads through the due Staples in card order, accepts free-form answers ("we're out of rice and cumin"), and the cards follow live.
+- A failed turn, in chat or voice, stays shown as unanswered. The next run answers only the newest turn. Voice speaks a fixed line that claims neither that nothing changed nor that it misheard.
+- Minute cap: 30 minutes per Household per local day by default, set on the Household screen. The 15-second initialization charge counts toward it. A session closes after 2 minutes of silence, and when the cap runs out GPT-Live says so before it closes.
+- The mic is hidden with no OpenAI key, and disabled offline or once the day's minutes are spent, each with its reason.
+- A deploy or restart mid-session ends the session, with no reattach. The last usage seen is counted, marked unconfirmed.
 - Best cases: pantry walkthrough, kitchen mode ("next step", "how much garlic"), quick plan edits.
 - Telephony path (if ever) authenticates with its own shared secret, outside Access.
 
@@ -192,7 +204,7 @@ notify:    get_push_key, subscribe_push, get_push_device, unsubscribe_push   (a 
 - Access in front of everything except `/cal/*` and the external job runner's poll endpoint (bearer secret; the runner polls outbound, nothing calls into it).
 - Service account key, Anthropic key, OpenAI key, Instacart key, Sentry DSN, web push VAPID key as Worker secrets.
 - Household data is personal: no third-party analytics; Sentry scrubs prompts by default.
-- Instacart and GPT-Live-1 receive only what the tool call sends (list lines, voice audio); recipes and history stay in the DO.
+- Instacart and GPT-Live-1 receive only what Mise sends them: list lines for Instacart; for GPT-Live, voice audio and the agent's answers to speak. Recipes and history stay in the DO. Voice audio is never stored: the household drops the reflected audio unread, and keeps the person's words only as the turn's text. The Live session is created with `store: false`.
 - Dependency install scripts don't run by default (Bun's `trustedDependencies`); allow-list a package only when it needs one. This matters for a project pinning beta/experimental harness packages.
 
 ## 7. Open questions
@@ -232,7 +244,8 @@ notify:    get_push_key, subscribe_push, get_push_device, unsubscribe_push   (a 
 **Exit: "re-propose but keep Tuesday" works in chat; a TikTok shared from an iPhone lands as a Draft Recipe and, once accepted, can be planned and shopped; a Doc dropped in the Drive folder appears by morning.**
 
 ### Drop 3 — Voice (2–3 weeks)
-- GPT-Live-1 over WebRTC in the PWA; same agent backend; minute cap.
+- First: phone spike. The `prototype/voice-backend` branch on an iPhone and an Android phone, installed as the PWA, in a kitchen, without headphones (mic and WebRTC, locked screen in Kitchen mode, echo). It decides whether Kitchen mode needs push-to-talk instead of open mic.
+- GPT-Live-1 over WebRTC in the PWA, answered by the household over a sideband (ADR 0028); same agent backend; minute cap.
 - Voice-first pantry walkthrough and kitchen mode.
 **Exit: pantry check done by voice in under two minutes.**
 
