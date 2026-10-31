@@ -152,7 +152,8 @@ describe("what the agent is told", () => {
     expect(system).toMatch(/spoken turns/i);
     expect(system).toMatch(/one or two plain sentences/i);
     expect(system).toMatch(/weekday/i);
-    expect(system).toMatch(/offer to go on/i);
+    expect(system).toMatch(/never name more than three/i);
+    expect(system).toMatch(/ask whether to go on/i);
     expect(system).toMatch(/already passed/i);
     expect(system).toMatch(/anyone in the room/i);
   });

@@ -65,7 +65,8 @@ describe("presentTurn", () => {
     });
 
     expect(presented).toBe(
-      "[Robin, speaking on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-11-02]\n" +
+      "[Robin, speaking on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-11-02; " +
+        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on]\n" +
         "just the two of us Tuesday",
     );
   });
@@ -82,7 +83,8 @@ describe("presentTurn", () => {
     expect(presented).toBe(
       "[Robin, speaking on Friday 2026-10-30, on the Pantry screen, so day names mean the coming days: " +
         "Friday 2026-10-30, Saturday 2026-10-31, Sunday 2026-11-01, Monday 2026-11-02, Tuesday 2026-11-03, " +
-        "Wednesday 2026-11-04, Thursday 2026-11-05]\n" +
+        "Wednesday 2026-11-04, Thursday 2026-11-05; " +
+        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on]\n" +
         "move Tuesday's dinner to Wednesday",
     );
   });

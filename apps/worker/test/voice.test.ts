@@ -88,7 +88,7 @@ describe("a Voice Session", () => {
     await vi.waitFor(() => expect(session.sent).toHaveLength(2));
 
     expect(prompts[0]).toMatch(
-      /^\[Robin, speaking on .*, on the Week screen, showing the Week of Monday 2026-10-26\]\n/,
+      /^\[Robin, speaking on .*, on the Week screen, showing the Week of Monday 2026-10-26; answer for the ear: .*\]\n/,
     );
     expect(prompts[1]).toMatch(
       /^\[Robin, speaking on .*, on the Pantry screen, so day names mean the coming days: .*\]\n/,

@@ -67,8 +67,16 @@ export function presentTurn(turn: {
     const coming = Array.from({ length: 7 }, (_, days) => dayOf(addDays(turn.today, days)));
     parts.push(`so day names mean the coming days: ${coming.join(", ")}`);
   }
-  return `[${parts.join(", ")}]\n${turn.text}`;
+  const header = parts.join(", ");
+  return `[${turn.spoken ? `${header}; ${FOR_THE_EAR}` : header}]\n${turn.text}`;
 }
+
+/**
+ * How to answer a spoken turn, said with the turn itself: the model follows a rule beside the
+ * message more closely than one in the system prompt, and read out, a long list is lost.
+ */
+const FOR_THE_EAR =
+  "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on";
 
 /** `date` with its weekday, as a turn names it. */
 function dayOf(date: LocalDate): string {
