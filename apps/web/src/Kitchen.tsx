@@ -1,27 +1,14 @@
 import { type ChatWhere, type Household, type Recipe, type RecipeId, scaledLines } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
-import {
-  type Confirmation,
-  confirmationTaps,
-  pendingConfirmations,
-  TAP_REFUSALS,
-  type TapRefusal,
-} from "./confirmations";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
-import { type MessageKey, t } from "./messages";
+import { t } from "./messages";
 import { savedRecipe, saveRecipe } from "./offline";
+import { HeldDuringVoice, MicButton, VoiceListening, VoiceProblem } from "./VoiceControls";
 import type { OpenVoice } from "./voice";
 import { createVoiceSession, type VoiceRefusal } from "./voiceSession";
 import type { SlotKey } from "./Week";
-
-const VOICE_ERRORS: Record<VoiceRefusal, MessageKey> = {
-  voice: "chat.voice.failed",
-  voiceInUse: "chat.voice.inUse",
-  voiceSpent: "chat.voice.spent",
-  voiceOff: "chat.voice.off",
-};
 
 /**
  * Kitchen mode: a Recipe cooked one step at a time, in the high-contrast theme, with the screen kept
@@ -94,39 +81,6 @@ export function KitchenMode(props: {
     }),
   );
 
-  // The Pending Confirmations made since this device first talked here; those pending before are the
-  // chat's to show. Counted from the first start, not by when each is read, so one held as the session
-  // ends still shows, though read after.
-  const [pendingHere, setPendingHere] = createSignal<Confirmation[]>([]);
-  const [tapping, setTapping] = createSignal(false);
-  const [tapError, setTapError] = createSignal<TapRefusal>();
-  const pendingBefore = new Set<number>();
-  let talked = false;
-  createEffect(() => {
-    if (voice.talking()) talked = true;
-  });
-  const refetchPending = props.voice
-    ? keepFresh(
-        props.client,
-        ["chat"],
-        () => props.client.conversation(),
-        (conversation) => {
-          const pending = pendingConfirmations(conversation);
-          if (!talked) for (const turn of pending) pendingBefore.add(turn.id);
-          setPendingHere(pending.filter((turn) => !pendingBefore.has(turn.id)));
-        },
-      )
-    : undefined;
-  const taps = confirmationTaps(props.client);
-  const tap = async (answer: () => Promise<TapRefusal | undefined>) => {
-    if (tapping()) return;
-    setTapError(undefined);
-    setTapping(true);
-    setTapError(await answer());
-    setTapping(false);
-    void refetchPending?.();
-  };
-
   // Offline, the saved Recipe stands.
   keepFresh(
     props.client,
@@ -148,85 +102,15 @@ export function KitchenMode(props: {
             <h1 class="kitchen-title">{recipe()?.title ?? t("app.loading")}</h1>
           </div>
           <div class="kitchen-header-actions">
-            <Show when={!voice.talking() && voice.micShown()}>
-              <button
-                type="button"
-                class="icon-button"
-                aria-label={t("chat.voice.start")}
-                disabled={voice.micReason() !== undefined}
-                aria-describedby={voice.micReason() ? micId : undefined}
-                onClick={() => void voice.start()}
-              >
-                <Icon name="mic" />
-              </button>
-            </Show>
+            <MicButton voice={voice} micId={micId} />
             <button type="button" class="icon-button" aria-label={t("kitchen.leave")} onClick={() => props.onClose()}>
               <Icon name="close" />
             </button>
           </div>
         </header>
-        <Show when={voice.talking()}>
-          <div class="kitchen-voice">
-            <p class="meta" role="status">
-              <Icon name="mic" />
-              {t(voice.state() === "on" ? "chat.voice.listening" : "chat.voice.starting")}
-            </p>
-            <button type="button" class="button-quiet" onClick={voice.end}>
-              {t("chat.voice.end")}
-            </button>
-          </div>
-        </Show>
-        <Show when={pendingHere().length > 0}>
-          <fieldset class="kitchen-held">
-            <legend>{t("chat.confirmation.pending")}</legend>
-            <For each={pendingHere()}>
-              {(turn) => (
-                <div class="kitchen-held-actions">
-                  <button
-                    type="button"
-                    class="button-secondary button-block"
-                    disabled={tapping()}
-                    onClick={() => void tap(() => taps.confirm(turn.id))}
-                  >
-                    {turn.summary}
-                  </button>
-                  <button
-                    type="button"
-                    class="button-quiet"
-                    disabled={tapping()}
-                    aria-label={t("chat.confirmation.cancelLabel", { summary: turn.summary })}
-                    onClick={() => void tap(() => taps.cancel(turn.id))}
-                  >
-                    {t("chat.confirmation.cancel")}
-                  </button>
-                </div>
-              )}
-            </For>
-          </fieldset>
-        </Show>
-        <Show when={tapError()}>
-          {(refused) => (
-            <p class="banner banner-warn" role="alert">
-              {t(TAP_REFUSALS[refused()])}
-            </p>
-          )}
-        </Show>
-        <Show when={!voice.talking() && voice.micShown() && !voiceError() && voice.micReason()}>
-          {(reason) => (
-            <p id={micId} class="control-reason">
-              {reason()}
-            </p>
-          )}
-        </Show>
-        <Show when={voiceError()}>
-          {(failed) => (
-            <p class="banner banner-warn" role="alert">
-              {failed() === "voiceInUse" && voice.speaker()
-                ? t("chat.voice.talking", { name: voice.speaker() ?? "" })
-                : t(VOICE_ERRORS[failed()], { time: voice.minutesBackAt() })}
-            </p>
-          )}
-        </Show>
+        <VoiceListening voice={voice} />
+        <HeldDuringVoice client={props.client} voice={voice} listening={props.voice !== undefined} />
+        <VoiceProblem voice={voice} micId={micId} error={voiceError()} />
         <Show when={recipe()}>
           {(open) => {
             const servings = () => props.servings ?? open().baseServings;

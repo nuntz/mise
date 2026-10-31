@@ -162,7 +162,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ### 4.8 Voice — drop 3
 - GPT-Live-1 over WebRTC from the PWA. The household answers its delegations over a sideband with turns of the one shared conversation, so the agent and tools are the same (ADR 0028).
-- A Voice Session starts from a mic in the chat sheet, which stays open and shows the transcript and any Pending Confirmation, or from Kitchen mode's own mic, which runs over the step. One Voice Session per Household at a time: a second start is refused with the name of the person talking.
+- A Voice Session starts from a mic in the chat sheet, which stays open and shows the transcript and any Pending Confirmation, or from the own mic of a screen the person looks at while talking, which the chat sheet would cover: Kitchen mode's, over the step, and the Pantry check-in's, over its cards. One Voice Session per Household at a time: a second start is refused with the name of the person talking.
 - Every turn is the starting Caller's. The prompt says anyone in the room may speak, and "I" means the Caller unless a name is said.
 - A turn is everything said since the last cut. A backchannel GPT-Live answered itself carries into the next turn. A delegation arriving while a turn runs waits as its own turn.
 - Each turn carries the `where` of its moment, plus a voice flag. With no Week on screen, a day name means the next one from today: on a Friday, "Tuesday" is next Tuesday, never the one eaten already. Kitchen mode's `where` names the Slot (or the Recipe) and the step on screen, so "how much garlic" gets the Slot's scaled amount.

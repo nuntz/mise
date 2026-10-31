@@ -2074,23 +2074,23 @@ form.row {
   gap: var(--space-2);
 }
 
-/* A Voice Session over the step: a small indicator, and its end, out of the way of the step. */
-.kitchen-voice {
+/* A screen's own Voice Session: a small indicator, and its end, out of the way of what the screen shows. */
+.voice-listening {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
 }
 
-.kitchen-voice .meta {
+.voice-listening .meta {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-/* A change held for a tap during a Voice Session, over the step and in reach as it scrolls: tapped from
- * across the kitchen, by the only way it runs (ADR 0024). */
-.kitchen-held {
+/* A change held for a tap during a screen's Voice Session, over the step or the card and in reach as it
+ * scrolls: tapped from across the kitchen, by the only way it runs (ADR 0024). */
+.voice-held {
   position: sticky;
   top: var(--space-3);
   z-index: 1;
@@ -2098,7 +2098,7 @@ form.row {
   background: var(--surface);
 }
 
-.kitchen-held-actions {
+.voice-held-actions {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

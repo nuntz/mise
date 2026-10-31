@@ -21,7 +21,7 @@ A call the agent made that only a person's tap runs (a delete, a cleared Week, a
 _Avoid_: Approval, consent
 
 **Voice Session**:
-A spoken conversation with the agent, started from the chat or from Kitchen mode by one Caller; its turns join the Household's one conversation, and it counts against the Household's daily voice minutes.
+A spoken conversation with the agent, started from the chat, Kitchen mode or the Pantry check-in by one Caller; its turns join the Household's one conversation, and it counts against the Household's daily voice minutes.
 _Avoid_: Call, voice chat
 
 **Diner**:

@@ -1,6 +1,7 @@
 import {
   type CheckEvery,
   type DueStaples,
+  type Household,
   INGREDIENT_UNITS,
   type IngredientUnit,
   type ItemId,
@@ -20,6 +21,9 @@ import { Icon, type IconName } from "./icons";
 import { createItems, itemNamed } from "./items";
 import { nameText, t } from "./messages";
 import { NeedsConnection } from "./NeedsConnection";
+import { HeldDuringVoice, MicButton, VoiceListening, VoiceProblem } from "./VoiceControls";
+import type { OpenVoice } from "./voice";
+import { createVoiceSession, type VoiceRefusal } from "./voiceSession";
 
 /**
  * How many Staples are due for a check, kept current; zero until loaded or when loading fails.
@@ -66,12 +70,13 @@ export function PantryBanner(props: { client: MiseClient; online: boolean; onOpe
   );
 }
 
-/** The pantry check-in, then every Staple and a form to add or change one. */
+/** The pantry check-in, with its mic if there is `voice`, then every Staple and a form to add or change one. */
 export function PantryPage(props: {
   client: MiseClient;
   locale: string;
   online: boolean;
-  talking: boolean;
+  voice?: OpenVoice;
+  household?: Household | null;
   onWeek: () => void;
 }) {
   return (
@@ -80,7 +85,8 @@ export function PantryPage(props: {
         client={props.client}
         locale={props.locale}
         online={props.online}
-        talking={props.talking}
+        voice={props.voice}
+        household={props.household}
         onWeek={props.onWeek}
       />
       <StapleList client={props.client} locale={props.locale} online={props.online} />
@@ -94,11 +100,22 @@ export function PantryPage(props: {
  * times running is suggested for always buying before the next card. Answers aren't kept to sync
  * later, so offline nothing can be answered; a check under way waits on its card for the connection.
  * A Staple answered elsewhere, as Mise's agent records them in a Voice Session, is answered here too:
- * the cards move past it and the summary counts it. Before the check starts, only an answer heard
- * while this device is `talking` starts it: a tap on another phone or a Grocery List line ticked as
- * had only lowers the count.
+ * the cards move past it and the summary counts it. Before the check starts, one answered elsewhere
+ * only lowers the count.
+ *
+ * With `voice`, its own mic starts the check and a Voice Session from the Pantry together, so that
+ * the cards stay in view as Mise's agent leads the Check-in aloud; the chat sheet would cover them.
+ * A change the agent holds for a tap shows over the card. The session ends with its End button, when
+ * the Pantry is left, or when the page is hidden.
  */
-function CheckIn(props: { client: MiseClient; locale: string; online: boolean; talking: boolean; onWeek: () => void }) {
+function CheckIn(props: {
+  client: MiseClient;
+  locale: string;
+  online: boolean;
+  voice?: OpenVoice;
+  household?: Household | null;
+  onWeek: () => void;
+}) {
   const [due, setDue] = createSignal<DueStaples>();
   const [session, setSession] = createSignal<Staple[]>();
   const [index, setIndex] = createSignal(0);
@@ -132,12 +149,11 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; t
   );
 
   /**
-   * Answers each Staple the check asks about (or would, before it starts) that was checked elsewhere
-   * since it was loaded, and moves the cards past the furthest: one passed over was skipped aloud.
+   * Answers each Staple the check asks about that was checked elsewhere since it was loaded, and moves the cards past the furthest: one passed over was skipped aloud.
    * An answer changed elsewhere since, as when a mishearing is put right, changes in the summary.
    */
   const followAnswersElsewhere = (staples: readonly Staple[]) => {
-    const asked = session() ?? due()?.staples ?? [];
+    const asked = session() ?? [];
     const stored = new Map(staples.map((staple) => [staple.item, staple]));
     const answeredHere = new Map(answers().map((answer) => [answer.staple.item, answer.status]));
     const checked = asked.flatMap((staple) => {
@@ -150,10 +166,7 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; t
       ({ staple, status }) => answeredHere.has(staple.item) && answeredHere.get(staple.item) !== status,
     );
     if (fresh.length === 0 && changed.length === 0) return;
-    if (!session()) {
-      if (!props.talking) return;
-      start();
-    }
+    if (!session()) return;
     setAnswers((all) => [
       ...all.map((answer) => changed.find(({ staple }) => staple === answer.staple) ?? answer),
       ...fresh,
@@ -167,6 +180,30 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; t
     setIndex(0);
     setAnswers([]);
     setSuggested([]);
+  };
+
+  const [voiceError, setVoiceError] = createSignal<VoiceRefusal>();
+  const voice = createVoiceSession({
+    get client() {
+      return props.client;
+    },
+    get online() {
+      return props.online;
+    },
+    where: () => ({ screen: "pantry" }),
+    get voice() {
+      return props.voice;
+    },
+    get household() {
+      return props.household;
+    },
+    onStarting: () => setVoiceError(undefined),
+    onRefused: setVoiceError,
+  });
+  const micId = createUniqueId();
+  /** Talking starts the check, unless one is under way or nothing is due. */
+  const startTalking = () => {
+    if (!session() && (due()?.due ?? 0) > 0) start();
   };
 
   const answer = async (staple: Staple, status: StapleStatus) => {
@@ -234,14 +271,20 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; t
   return (
     <>
       <header class="page-header">
-        <div class="page-heading">
-          <p class="overline">{t("pantry.overline")}</p>
-          <h1 id="pantry-title">{title()}</h1>
-          <Show when={done() || (session()?.length ?? due()?.due) !== 0}>
-            <p class="meta">{done() ? t("pantry.doneSub") : t("pantry.walk")}</p>
-          </Show>
+        <div class="page-header-row">
+          <div class="page-heading">
+            <p class="overline">{t("pantry.overline")}</p>
+            <h1 id="pantry-title">{title()}</h1>
+          </div>
+          <MicButton voice={voice} micId={micId} onStart={startTalking} />
         </div>
+        <Show when={done() || (session()?.length ?? due()?.due) !== 0}>
+          <p class="meta">{done() ? t("pantry.doneSub") : t("pantry.walk")}</p>
+        </Show>
       </header>
+      <VoiceListening voice={voice} />
+      <HeldDuringVoice client={props.client} voice={voice} listening={props.voice !== undefined} />
+      <VoiceProblem voice={voice} micId={micId} error={voiceError()} />
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
           {t("app.error")}
