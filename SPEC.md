@@ -244,7 +244,7 @@ notify:    get_push_key, subscribe_push, get_push_device, unsubscribe_push   (a 
 **Exit: "re-propose but keep Tuesday" works in chat; a TikTok shared from an iPhone lands as a Draft Recipe and, once accepted, can be planned and shopped; a Doc dropped in the Drive folder appears by morning.**
 
 ### Drop 3 — Voice (2–3 weeks)
-- First: phone spike. The `prototype/voice-backend` branch on an iPhone and an Android phone, installed as the PWA, in a kitchen, without headphones (mic and WebRTC, locked screen in Kitchen mode, echo). It decides whether Kitchen mode needs push-to-talk instead of open mic.
+- First: phone spike (done on an iPhone; Android isn't used). Kitchen mode uses open mic. iOS turns the mic off when the screen locks, so a Voice Session ends when its page is hidden.
 - GPT-Live-1 over WebRTC in the PWA, answered by the household over a sideband (ADR 0028); same agent backend; minute cap.
 - Voice-first pantry walkthrough and kitchen mode.
 **Exit: pantry check done by voice in under two minutes.**

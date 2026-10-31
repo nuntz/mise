@@ -64,12 +64,53 @@ The prototype is kept on the `prototype/voice-backend` branch, outside `master`.
 5. **Answers for voice.** The agent writes for a screen: Markdown, ISO dates, several paragraphs. A voice `where` could ask for one or two spoken sentences.
 
 Not tested:
-- phones and the installed PWA (iOS Safari, Android Chrome);
+- phones and the installed PWA (iOS Safari, Android Chrome), since tested on an iPhone (see "Phone results" below);
 - a Durable Object restart or deploy mid-session;
 - the household's CPU cost of the reflected audio;
 - a full Household from a Paprika import.
 
 Found along the way: `search_recipes` doesn't find "Beef and Broccoli Stir-Fry" for "stir fry", which voice transcripts always spell without the hyphen (#97).
+
+## Phone results (2026-10-30)
+
+The same prototype was installed as the PWA on an iPhone 18 Pro (iOS Safari) and run against `bun run dev` over HTTPS on the tailnet (`tailscale serve`), with the seeded Household and this Week planned (#99). It was used on the speaker, without headphones. Android wasn't tested: no one in the household uses it.
+
+**Verdict for Kitchen mode: open mic**, for as long as the page is showing. Kitchen mode already keeps the screen awake. When the page is hidden, the session has to end.
+
+### The installed PWA
+
+- The mic and WebRTC start from the installed PWA. iOS asked for microphone access on the first Start.
+- The installed app opens on the manifest's `start_url`. For the spike the built manifest pointed it at `/prototype-voice`. The real mic lives in the app's own screens, so this doesn't matter after the spike.
+
+### Screen locked
+
+- **When the screen locks, iOS turns the mic off but keeps playing the session's audio.** GPT-Live goes on talking and can't hear the person, and the session keeps billing. Nothing in the page reports it: the session is still "running".
+- A session started from the chat sheet has no wake lock, so the phone's Auto-Lock leads to this too. It doesn't take a deliberate lock.
+- A long session with the screen kept awake wasn't run. It isn't practical on battery, so open mic depends on Kitchen mode's wake lock, and a session runs only while it is in use.
+
+### Echo and interruption
+
+- On the speaker, GPT-Live didn't answer its own words, and it didn't miss the person while it talked.
+- Interrupting it mid-answer worked: it stopped and took the new turn.
+- Every question was delegated. The page counted 5 times GPT-Live spoke without delegating, greetings included.
+
+### Latency (5 turns)
+
+| Leg | Range | Typical |
+|---|---|---|
+| Last word heard → `session.delegation.created` | 0.3–1.1 s | 0.5 s |
+| Mise's agent | 0.9–2.0 s | 1.3 s |
+| `session.commentary.append` → first words of the answer | 0.0–0.6 s | 0.5 s |
+| **Last word → answer spoken** | **1.3–2.9 s** | **2.7 s** |
+
+- This was faster than desktop (2.4–4.7 s, typically 3.9 s). Most of the difference is GPT-Live deciding sooner that the person had finished. These were short questions with one tool each, against 9 desktop turns that also made changes.
+- The transcript was complete at every delegation, as on desktop.
+- Reflected audio into the household was 121 KB/s, as on desktop. Billed seconds matched wall time: 21 s for 22 s.
+
+### Answers
+
+- The answer for the whole week was read out in full: Markdown list, breakfasts and lunches, and a Pending Confirmation left over from the desktop spike ("the clear-week request is still waiting for your tap"). This is the case for answers written for voice, and for showing held changes during the session.
+- Tonight's and this week's dinners were spoken in the past tense: "Tuesday the 27th's dinner *was* Black Bean Burrito Bowls", "Tonight's dinner *was*…".
 
 ## Sources
 
