@@ -278,14 +278,14 @@ test("a dinner's Recipe opens over the Week, its Ingredients scaled to what the 
   ).toEqual(["300 g spaghetti", "3 cloves garlic, minced", "salt to taste"]);
 });
 
-test("a Ready-made dish opened over the Week is heated whole, never part of its package", async () => {
+test("a Ready-made dish opened over the Week is heated whole, in as many packages as it takes", async () => {
   const user = userEvent.setup();
   const week = emptyWeek("2026-10-26");
   Object.assign(week.slots[5] as Slot, {
     kind: "recipe",
     recipe: { id: 1, title: "Dumplings", baseServings: 4, photoKey: null, readyMade: true },
-    servings: 3,
-    cookFor: 3,
+    servings: 6,
+    cookFor: 6,
   });
   const dumplings = {
     ...pastaRecipe,
@@ -304,7 +304,7 @@ test("a Ready-made dish opened over the Week is heated whole, never part of its 
 
   const sheet = await screen.findByRole("dialog", { name: "Dumplings" });
   const ingredients = await within(sheet).findByRole("list", { name: "Ingredients" });
-  expect(within(ingredients).getByRole("listitem").textContent).toBe("1 package frozen vegetable dumplings");
+  expect(within(ingredients).getByRole("listitem").textContent).toBe("2 packages frozen vegetable dumplings");
 });
 
 test("a Recipe opened over the Week is cooked from there, for as many as its Slot", async () => {

@@ -309,7 +309,7 @@ describe("the Day Sheet", () => {
 
     expect(dinner?.servingsText).toBe("For 6. The Recipe makes 4.");
     expect(dinner?.recipe).toEqual({
-      ingredients: ["3 cloves garlic, minced", "1½ cup rice", "600 ml coconut milk", "salt to taste"],
+      ingredients: ["3 cloves garlic, minced", "1½ cups rice", "600 ml coconut milk", "salt to taste"],
       steps: ["Fry the garlic.", "Add the coconut milk and simmer.", "Serve over the rice."],
     });
     // Kitchen mode writes each line with this same function, for the same Slot.

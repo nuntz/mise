@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseIngredient, scaledLines, scaleIngredient } from "./ingredients";
+import { parseIngredient, scaledLine, scaledLines, scaleIngredient } from "./ingredients";
 
 /** raw line → [amount (a number or [min, max]), unit, name, note, item]. */
 type Row = [string, number | [number, number] | null, string | null, string, string | null, string | null];
@@ -190,7 +190,7 @@ describe("a Recipe's lines for the number eating", () => {
   test("a Ready-made dish is heated whole: never part of a package", () => {
     const dumplings = recipe(["1 package frozen vegetable dumplings"], true);
     expect(scaledLines(dumplings, 3, "en-CA")).toEqual(["1 package frozen vegetable dumplings"]);
-    expect(scaledLines(dumplings, 6, "en-CA")).toEqual(["2 package frozen vegetable dumplings"]);
+    expect(scaledLines(dumplings, 6, "en-CA")).toEqual(["2 packages frozen vegetable dumplings"]);
   });
 
   test("a Ready-made dish's range rounds up at both ends, whatever its unit", () => {
@@ -199,5 +199,86 @@ describe("a Recipe's lines for the number eating", () => {
 
   test("an ordinary Recipe still uses part of a can", () => {
     expect(scaledLines(recipe(["1 can tomatoes"], false), 3, "en-CA")).toEqual(["½ can tomatoes"]);
+  });
+});
+
+describe("a scaled line agrees with its amount", () => {
+  const line = (raw: string, by: number, whole = false) => scaledLine(parseIngredient(raw), by, "en-CA", whole);
+
+  test("its unit is made plural, in the cook's own spelling", () => {
+    expect(line("1 can tomatoes", 2)).toBe("2 cans tomatoes");
+    expect(line("1 tin tomatoes", 2)).toBe("2 tins tomatoes");
+    expect(line("1 pack tofu", 2)).toBe("2 packs tofu");
+    expect(line("1 clove garlic", 3)).toBe("3 cloves garlic");
+  });
+
+  test("a unit at the end of the name is the word made plural", () => {
+    expect(line("1 garlic clove", 2)).toBe("2 garlic cloves");
+    expect(line("4 garlic cloves, minced", 0.25)).toBe("1 garlic clove, minced");
+  });
+
+  test("with no unit, the thing counted is made plural", () => {
+    expect(line("1 onion", 2)).toBe("2 onions");
+    expect(line("an egg", 3)).toBe("3 eggs");
+    expect(line("1 large onion, diced", 2)).toBe("2 large onions, diced");
+    expect(line("1 peach", 2)).toBe("2 peaches");
+    expect(line("1 berry", 2)).toBe("2 berries");
+  });
+
+  test("scaled down, the thing counted is made singular", () => {
+    expect(line("2 onions", 0.5)).toBe("1 onion");
+    expect(line("4 peaches", 0.25)).toBe("1 peach");
+    expect(line("2 berries", 0.5)).toBe("1 berry");
+  });
+
+  test("a thing already plural, or already singular, stays as written", () => {
+    expect(line("2 eggs", 2)).toBe("4 eggs");
+    expect(line("1 onion", 0.5)).toBe("½ onion");
+  });
+
+  test("irregular words have their own plurals, even before the name", () => {
+    expect(line("1 potato", 2)).toBe("2 potatoes");
+    expect(line("2 tomatoes", 0.5)).toBe("1 tomato");
+    expect(line("1 bay leaf", 2)).toBe("2 bay leaves");
+    expect(line("2 leaves basil", 0.5)).toBe("1 leaf basil");
+  });
+
+  test("a Ready-made dish's package agrees too", () => {
+    expect(line("1 package frozen vegetable dumplings", 1.5, true)).toBe("2 packages frozen vegetable dumplings");
+  });
+
+  test("a line rewritten from its parts agrees too", () => {
+    expect(line("(about) 1 cup flour", 2)).toBe("2 cups flour, about");
+    expect(line("(about) 1 onion", 2)).toBe("2 onions, about");
+  });
+
+  test("unscaled, the line is exactly as written", () => {
+    expect(line("1 cans  tomatoes", 1)).toBe("1 cans  tomatoes");
+    expect(line("salt to taste", 2)).toBe("salt to taste");
+  });
+
+  test("scaled down, a plural unit is made singular", () => {
+    expect(line("2 cups flour", 0.5)).toBe("1 cup flour");
+    expect(line("2 cans tomatoes", 0.25)).toBe("½ can tomatoes");
+  });
+
+  test("more than one at most is plural", () => {
+    expect(line("1 cup flour", 1.5)).toBe("1½ cups flour");
+    expect(line("1 cup flour", 0.5)).toBe("½ cup flour");
+    expect(line("1–2 cups flour", 0.5)).toBe("½–1 cup flour");
+    expect(line("1 cup flour", 2.5)).toBe("2½ cups flour");
+  });
+
+  test("symbols and abbreviations are written the same for one or many", () => {
+    expect(line("1 tbsp oil", 2)).toBe("2 tbsp oil");
+    expect(line("100 g butter", 2)).toBe("200 g butter");
+    expect(line("1 lb beef", 2)).toBe("2 lb beef");
+    expect(line("2 lbs beef", 0.5)).toBe("1 lbs beef");
+    expect(line("1 T. sugar", 2)).toBe("2 T. sugar");
+  });
+
+  test("a name after a unit, and the note, stay as written", () => {
+    expect(line("1 can tomatoes, drained", 2)).toBe("2 cans tomatoes, drained");
+    expect(line("1 (14 oz) can tomatoes", 2)).toBe("2 (14 oz) cans tomatoes");
   });
 });

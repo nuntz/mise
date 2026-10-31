@@ -70,10 +70,10 @@ for (const unit of INGREDIENT_UNITS) {
 const aliasesLongestFirst = [...unitsByAlias.keys()].sort((a, b) => b.length - a.length);
 
 /**
- * The unit `text` starts with, and the text after it. A unit ends at a space, a full stop or the end
- * of the text, so "garlic" does not start with "g".
+ * The unit `text` starts with, as written, and the text after it. A unit ends at a space, a full
+ * stop or the end of the text, so "garlic" does not start with "g".
  */
-export function readUnit(text: string): { unit: IngredientUnit; rest: string } | null {
+export function readUnit(text: string): { unit: IngredientUnit; written: string; rest: string } | null {
   for (const alias of aliasesLongestFirst) {
     const head = text.slice(0, alias.length);
     const matches = CASE_SENSITIVE.has(alias) ? head === alias : head.toLowerCase() === alias;
@@ -81,7 +81,7 @@ export function readUnit(text: string): { unit: IngredientUnit; rest: string } |
     const after = text.slice(alias.length);
     if (after !== "" && !/^[\s.,)]/.test(after)) continue;
     const unit = unitsByAlias.get(alias) as IngredientUnit;
-    return { unit, rest: after.replace(/^\.?\s*/, "") };
+    return { unit, written: head, rest: after.replace(/^\.?\s*/, "") };
   }
   return null;
 }
@@ -93,6 +93,33 @@ export function trailingCountUnit(name: string): { unit: IngredientUnit; rest: s
   const [, rest, last] = match as unknown as [string, string, string];
   const unit = unitsByAlias.get(last.toLowerCase());
   return unit && unitFamily(unit) === "count" ? { unit, rest } : null;
+}
+
+/** Spellings that are abbreviations, written the same for one or many, even those ending in s. */
+const ABBREVIATIONS = new Set(["kgs", "lbs", "mls", "tsps", "tbsps", "pkgs", "pcs"]);
+
+/** Each spelling's other number, from the table: can ↔ cans, tin ↔ tins, bunch ↔ bunches. */
+const otherNumber = new Map<string, { singular: string; plural: string }>();
+for (const unit of INGREDIENT_UNITS) {
+  const aliases: readonly string[] = UNIT_TABLE[unit].aliases;
+  for (const singular of aliases) {
+    const plural = aliases.find((alias) => alias === `${singular}s` || alias === `${singular}es`);
+    if (!plural || ABBREVIATIONS.has(plural)) continue;
+    const pair = { singular, plural };
+    otherNumber.set(singular, pair);
+    otherNumber.set(plural, pair);
+  }
+}
+
+/**
+ * A unit as the cook wrote it, made singular or plural: "can" → "cans", "Tins" → "Tin". Symbols and
+ * abbreviations (g, tbsp, lbs) are the same either way.
+ */
+export function unitInNumber(written: string, plural: boolean): string {
+  const pair = otherNumber.get(written.toLowerCase());
+  if (!pair) return written;
+  const word = plural ? pair.plural : pair.singular;
+  return written[0] === written[0]?.toUpperCase() ? word[0]?.toUpperCase() + word.slice(1) : word;
 }
 
 /**

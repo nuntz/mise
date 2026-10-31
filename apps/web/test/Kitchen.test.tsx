@@ -209,7 +209,7 @@ test("the Ingredients are one tap away, scaled to what the dinner is cooked for,
     within(list)
       .getAllByRole("listitem")
       .map((item) => item.textContent),
-  ).toEqual(["3 cloves garlic, minced", "1½ cup rice", "600 ml coconut milk", "salt to taste"]);
+  ).toEqual(["3 cloves garlic, minced", "1½ cups rice", "600 ml coconut milk", "salt to taste"]);
 
   // Back to the step being cooked.
   await user.click(within(kitchen).getByRole("button", { name: "Back to the steps" }));
