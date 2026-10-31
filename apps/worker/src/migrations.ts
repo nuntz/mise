@@ -465,6 +465,22 @@ const migrations: { version: number; statements: string[] }[] = [
       "ALTER TABLE recipe ADD COLUMN ready_made INTEGER NOT NULL DEFAULT 0",
     ],
   },
+  {
+    version: 27,
+    statements: [
+      // The daily voice cap, in minutes; Households set up before it get the default.
+      "ALTER TABLE household ADD COLUMN voice_minutes_per_day INTEGER NOT NULL DEFAULT 30",
+      // Each Voice Session's billed seconds (ADR 0028), counted toward the Household local day it
+      // started on: at least the 15-second start charge, then Live's latest cumulative count.
+      // `confirmed` is 1 once `session.closed` gave the final count.
+      `CREATE TABLE voice_session (
+        id TEXT PRIMARY KEY,
+        day TEXT NOT NULL,
+        seconds INTEGER NOT NULL,
+        confirmed INTEGER NOT NULL DEFAULT 0
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

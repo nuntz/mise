@@ -119,6 +119,18 @@ export function HouseholdSettingsForm(props: { client: MiseClient; household: Ho
   return (
     <form onSubmit={submit}>
       <HouseholdSettingsFields settings={draft()} onChange={change} />
+      <label>
+        {t("settings.voiceMinutes")}
+        <input
+          type="number"
+          required
+          min={0}
+          max={240}
+          value={draft().voiceMinutesPerDay}
+          onInput={(e) => change("voiceMinutesPerDay", e.currentTarget.valueAsNumber)}
+        />
+      </label>
+      <p class="meta">{t("settings.voiceMinutesHint")}</p>
       <Show when={draft().weekStartsOn !== props.household.weekStartsOn}>
         <p class="meta">{t("settings.weekStartHint", { weekday: t(`weekday.${draft().weekStartsOn}`) })}</p>
       </Show>

@@ -235,13 +235,14 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 26,
+      schemaVersion: 27,
       tables: {
         calendar_token: [],
         chat_turn: [],
         drive_doc: [],
         push_subscription: [],
         kitchen_display: [],
+        voice_session: [],
         household: [
           {
             id: 1,
@@ -251,6 +252,7 @@ describe("export and restore", () => {
             week_starts_on: "monday",
             units: "metric",
             locale: "en-CA",
+            voice_minutes_per_day: 30,
           },
         ],
         member: [

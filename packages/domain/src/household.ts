@@ -26,6 +26,9 @@ export const Timezone = z.string().transform((name, ctx) => {
 /** A local wall-clock time, HH:MM in 24-hour form. */
 export const LocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
 
+/** The most voice time a Household may use in a day, in whole minutes: up to four hours, or none. */
+export const VoiceMinutes = z.number().int().min(0).max(240);
+
 /** How the Household runs its kitchen: everything about it except its Members. */
 export const HouseholdSettings = z.object({
   name: z.string().trim().min(1).max(100),
@@ -34,6 +37,8 @@ export const HouseholdSettings = z.object({
   weekStartsOn: Weekday,
   units: Units,
   locale: Locale,
+  /** The daily voice cap: minutes of Voice Session a Household local day may use. */
+  voiceMinutesPerDay: VoiceMinutes,
 });
 export type HouseholdSettings = z.infer<typeof HouseholdSettings>;
 
@@ -83,6 +88,7 @@ export const HOUSEHOLD_DEFAULTS = {
   weekStartsOn: "monday",
   units: "metric",
   locale: "en-CA",
+  voiceMinutesPerDay: 30,
 } as const satisfies Omit<HouseholdSettings, "name">;
 
 /** First-run setup: the settings, with defaults, and any Members known so far. */
@@ -92,6 +98,7 @@ export const SetupHouseholdInput = HouseholdSettings.extend({
   weekStartsOn: Weekday.default(HOUSEHOLD_DEFAULTS.weekStartsOn),
   units: Units.default(HOUSEHOLD_DEFAULTS.units),
   locale: Locale.default(HOUSEHOLD_DEFAULTS.locale),
+  voiceMinutesPerDay: VoiceMinutes.default(HOUSEHOLD_DEFAULTS.voiceMinutesPerDay),
   members: z.array(NewMember).max(50).default([]),
 }).strict();
 

@@ -17,6 +17,7 @@ const tremblays: Household = {
   weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
+  voiceMinutesPerDay: 30,
   members: [robin],
   effortBudgets: DEFAULT_EFFORT_BUDGETS,
   storeSections: [...STORE_SECTIONS],
@@ -106,6 +107,7 @@ test("every setting chosen at setup can be changed from the Household page", asy
       weekStartsOn: "sunday",
       units: "imperial",
       locale: "en-CA",
+      voiceMinutesPerDay: 30,
     },
   ]);
   await user.click(screen.getByRole("button", { name: "Household", current: false }));
@@ -115,6 +117,24 @@ test("every setting chosen at setup can be changed from the Household page", asy
       "Week starts on Sunday. Dinner at 19:30, America/Toronto. Units: Imperial. Language: English (Canada).",
     ),
   ).toBeTruthy();
+});
+
+test("the daily voice cap shows on the Household page and is saved with the settings", async () => {
+  const user = userEvent.setup();
+  const { client, updates } = fakeHousehold();
+  render(() => <App client={client} />);
+  await openSettings(user);
+
+  const minutes = screen.getByRole("spinbutton", { name: "Voice minutes a day" }) as HTMLInputElement;
+  expect(minutes.value).toBe("30");
+  await user.clear(minutes);
+  await user.type(minutes, "45");
+  await user.click(screen.getByRole("button", { name: "Save settings" }));
+
+  expect(updates).toEqual([expect.objectContaining({ voiceMinutesPerDay: 45 })]);
+  await waitFor(() =>
+    expect((screen.getByRole("spinbutton", { name: "Voice minutes a day" }) as HTMLInputElement).value).toBe("45"),
+  );
 });
 
 test("Settings ends with which build of Mise is running, dev when none was built in", async () => {

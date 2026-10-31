@@ -39,6 +39,7 @@ type HouseholdRow = {
   week_starts_on: string;
   units: string;
   locale: string;
+  voice_minutes_per_day: number;
 };
 
 type MemberRow = { id: number; name: string; email: string | null };
@@ -79,14 +80,15 @@ export const handlers: Handlers = {
       return { ok: false, error: { code: "already_set_up", message: "The Household is already set up" } };
     }
     sql.exec(
-      `INSERT INTO household (id, name, timezone, dinner_time, week_starts_on, units, locale)
-       VALUES (1, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO household (id, name, timezone, dinner_time, week_starts_on, units, locale, voice_minutes_per_day)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
       input.name,
       input.timezone,
       input.dinnerTime,
       input.weekStartsOn,
       input.units,
       input.locale,
+      input.voiceMinutesPerDay,
     );
     for (const member of input.members) {
       const added = insertMember(sql, member);
@@ -116,14 +118,15 @@ export const handlers: Handlers = {
       }
     }
     sql.exec(
-      `UPDATE household SET name = ?, timezone = ?, dinner_time = ?, week_starts_on = ?, units = ?, locale = ?
-       WHERE id = 1`,
+      `UPDATE household SET name = ?, timezone = ?, dinner_time = ?, week_starts_on = ?, units = ?, locale = ?,
+       voice_minutes_per_day = ? WHERE id = 1`,
       updated.name,
       updated.timezone,
       updated.dinnerTime,
       updated.weekStartsOn,
       updated.units,
       updated.locale,
+      updated.voiceMinutesPerDay,
     );
     return { ok: true, value: readHousehold(sql) as Household };
   },
@@ -279,6 +282,7 @@ export function readSettings(sql: SqlStorage): SettingsAndCalendar | null {
     weekStartsOn: row.week_starts_on,
     units: row.units,
     locale: row.locale,
+    voiceMinutesPerDay: row.voice_minutes_per_day,
   });
   const weekStartChanges = sql
     .exec<{ from_date: string; stretches: string }>("SELECT * FROM week_start_change ORDER BY from_date")

@@ -11,6 +11,11 @@ export type PretendSession = {
   sent: LiveClientEvent[];
   /** Sends a server event on the sideband, as JSON text, as the real one arrives. */
   serverSends(event: Record<string, unknown>): void;
+  /**
+   * Drops the sideband with no `session.closed`, as a deploy or a lost connection does, once what was
+   * sent before has arrived.
+   */
+  drop(): void;
 };
 
 type Listener = { message(data: string): void; close(): void };
@@ -40,6 +45,7 @@ export function pretendLive({ refuse = false, hold = false }: { refuse?: boolean
       const queue: string[] = [];
       let listener: Listener | undefined;
       let pump: ReturnType<typeof setInterval> | undefined;
+      let dropping = false;
       const closeSocket = () => {
         if (session.closed) return;
         session.closed = true;
@@ -66,9 +72,13 @@ export function pretendLive({ refuse = false, hold = false }: { refuse?: boolean
               listener?.message(data);
               if (closing) closeSocket();
             }
+            if (dropping) closeSocket();
           }, TICK_MS);
         },
         close: closeSocket,
+        drop() {
+          dropping = true;
+        },
       };
       sessions.push(session);
       while (!released) await new Promise((resolve) => setTimeout(resolve, TICK_MS));

@@ -3,14 +3,18 @@ import type { ChatWhere, VoiceStartReply } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { openAiLive, useLive } from "../src/live";
+import { VOICE_TIME_WARNING, VoiceSession } from "../src/voice";
 import { connectAs } from "./connect";
-import { pretendLive } from "./liveService";
+import { type PretendSession, pretendLive } from "./liveService";
 import { familyHousehold, lastText, scriptModel } from "./scripted";
 
 const ON_THE_WEEK: ChatWhere = { screen: "week", week: "2026-10-26" };
 const OFFER = "v=0 offer";
 
-afterEach(() => useAgentModels(undefined));
+afterEach(() => {
+  useAgentModels(undefined);
+  vi.useRealTimers();
+});
 
 /** Robin, signed in, with a Voice Session started on a pretend Live, and the agent answering with `respond`. */
 async function robinTalking(
@@ -265,6 +269,195 @@ describe("a Voice Session", () => {
     expect(noOffer).toMatchObject({ ok: false, error: { code: "invalid_input" } });
     expect(nowhere).toMatchObject({ ok: false, error: { code: "invalid_input" } });
     expect(sessions).toEqual([]);
+  });
+});
+
+/** Robin, signed in, in a Household with `minutes` of voice a day, on a pretend Live. */
+async function robinWithCap(minutes: number) {
+  scriptModel(() => fauxAssistantMessage("Noted."));
+  const { live, sessions } = pretendLive();
+  useLive(() => live);
+  const household = await familyHousehold();
+  await household.callTool("update_household_settings", { voiceMinutesPerDay: minutes });
+  const robin = await connectAs(household, "robin@example.com");
+  const start = () => robin.rpc("startVoice", [OFFER, ON_THE_WEEK]) as Promise<VoiceStartReply>;
+  /** Starts a session, lets `use` run it, and waits until its sideband is closed. */
+  const talk = async (use: (session: PretendSession) => void) => {
+    expect(await start()).toMatchObject({ ok: true });
+    const session = sessions.at(-1);
+    if (!session) throw new Error("No session was created");
+    use(session);
+    await vi.waitFor(() => expect(session.closed).toBe(true));
+  };
+  return { household, robin, start, talk, sessions };
+}
+
+describe("the daily voice cap", () => {
+  test("counts each session's final usage, and refuses a start once the day's minutes are spent", async () => {
+    const { start, talk } = await robinWithCap(1);
+
+    await talk((session) => session.serverSends({ type: "session.closed", usage: { seconds: 50 } }));
+
+    expect(await start()).toMatchObject({ ok: false, error: { code: "spent" } });
+  });
+
+  test("takes each usage update as the session's running total, never summing them", async () => {
+    const { start, talk } = await robinWithCap(1);
+
+    await talk((session) => {
+      session.serverSends({ type: "session.usage.updated", usage: { seconds: 15 } });
+      session.serverSends({ type: "session.usage.updated", usage: { seconds: 30 } });
+      session.drop();
+    });
+
+    // 30 seconds used, not 45: the next session still has its start charge's worth.
+    expect(await start()).toMatchObject({ ok: true });
+  });
+
+  test("keeps the latest usage of a session whose sideband dropped", async () => {
+    const { start, talk } = await robinWithCap(1);
+
+    await talk((session) => {
+      session.serverSends({ type: "session.usage.updated", usage: { seconds: 50 } });
+      session.drop();
+    });
+
+    expect(await start()).toMatchObject({ ok: false, error: { code: "spent" } });
+  });
+
+  test("counts the 15-second start charge of every session created, however soon it ends", async () => {
+    const { start, talk } = await robinWithCap(1);
+
+    for (let i = 0; i < 4; i++) await talk((session) => session.drop());
+
+    expect(await start()).toMatchObject({ ok: false, error: { code: "spent" } });
+  });
+
+  test("puts each session's usage and the cap in the export", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T20:00:00-07:00"));
+    const { household, talk, sessions } = await robinWithCap(20);
+    await talk((session) => session.serverSends({ type: "session.closed", usage: { seconds: 42.4 } }));
+
+    const response = await household.fetch("http://mise.example.com/agents/household/household/export");
+    const { tables } = (await response.json()) as { tables: Record<string, Record<string, unknown>[]> };
+
+    expect(tables.voice_session).toEqual([{ id: sessions[0]?.id, day: "2026-10-28", seconds: 43, confirmed: 1 }]);
+    expect(tables.household?.[0]).toMatchObject({ voice_minutes_per_day: 20 });
+  });
+
+  test("is refused with when the minutes come back: the Household's next local midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T20:00:00-07:00"));
+    const { start, talk } = await robinWithCap(1);
+    await talk((session) => session.serverSends({ type: "session.closed", usage: { seconds: 60 } }));
+
+    expect(await start()).toEqual({
+      ok: false,
+      error: { code: "spent", message: expect.any(String), until: "2026-10-29T07:00:00.000Z" },
+    });
+  });
+
+  test("is refused as unavailable when the cap is 0, since no midnight brings minutes back", async () => {
+    const { start, sessions } = await robinWithCap(0);
+
+    expect(await start()).toMatchObject({ ok: false, error: { code: "unavailable" } });
+    expect(sessions).toEqual([]);
+  });
+
+  test("gives the day's minutes back at the Household's local midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T23:50:00-07:00"));
+    const { start, talk } = await robinWithCap(1);
+    await talk((session) => session.serverSends({ type: "session.closed", usage: { seconds: 60 } }));
+    expect(await start()).toMatchObject({ ok: false, error: { code: "spent" } });
+
+    vi.setSystemTime(new Date("2026-10-29T00:05:00-07:00"));
+
+    expect(await start()).toMatchObject({ ok: true });
+  });
+});
+
+/** A Voice Session started straight on a pretend Live, with `allowance` seconds of the day left, on fake timers. */
+async function sessionWithAllowance(allowance: number) {
+  vi.useFakeTimers();
+  const { live, sessions } = pretendLive();
+  const ended: string[] = [];
+  await VoiceSession.start(
+    live,
+    OFFER,
+    ON_THE_WEEK,
+    { answer: async () => "Noted.", usage: () => {}, end: () => ended.push("ended") },
+    allowance,
+  );
+  const session = sessions[0];
+  if (!session) throw new Error("No session was created");
+  return { session, ended };
+}
+
+/** Long enough for the pretend sideband to deliver what was sent. */
+const DELIVERED = 10;
+
+const WARNING = { type: "session.commentary.append", delegation_id: null, content: VOICE_TIME_WARNING };
+
+describe("a Voice Session's allowance", () => {
+  test("warns half a minute before the day's minutes run out, then closes when they have", async () => {
+    const { session } = await sessionWithAllowance(120);
+
+    vi.advanceTimersByTime(89_000);
+    expect(session.sent).toEqual([]);
+    vi.advanceTimersByTime(1_000);
+    expect(session.sent).toEqual([WARNING]);
+    vi.advanceTimersByTime(29_000);
+    expect(session.sent).toEqual([WARNING]);
+    vi.advanceTimersByTime(1_000);
+    expect(session.sent).toEqual([WARNING, { type: "session.close" }]);
+  });
+
+  test("follows Live's count of the time used, as each usage update gives it", async () => {
+    const { session } = await sessionWithAllowance(120);
+
+    vi.advanceTimersByTime(15_000);
+    session.serverSends({ type: "session.usage.updated", usage: { seconds: 60 } });
+    vi.advanceTimersByTime(DELIVERED);
+    vi.advanceTimersByTime(30_000);
+
+    expect(session.sent).toEqual([WARNING]);
+    vi.advanceTimersByTime(30_000);
+    expect(session.sent).toEqual([WARNING, { type: "session.close" }]);
+  });
+
+  test("warns at once when it starts with less than half a minute left", async () => {
+    const { session } = await sessionWithAllowance(20);
+
+    vi.advanceTimersByTime(10);
+    expect(session.sent).toEqual([WARNING]);
+    vi.advanceTimersByTime(20_000);
+    expect(session.sent).toEqual([WARNING, { type: "session.close" }]);
+  });
+
+  test("closes after two minutes with nothing heard, counted from the last thing heard", async () => {
+    const { session } = await sessionWithAllowance(1800);
+
+    vi.advanceTimersByTime(90_000);
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Hmm." });
+    vi.advanceTimersByTime(DELIVERED);
+    vi.advanceTimersByTime(119_000);
+    expect(session.sent).toEqual([]);
+    vi.advanceTimersByTime(1_000);
+
+    expect(session.sent).toEqual([{ type: "session.close" }]);
+  });
+
+  test("stops counting once it has ended", async () => {
+    const { session, ended } = await sessionWithAllowance(120);
+
+    session.serverSends({ type: "session.closed", reason: "remote_hangup" });
+    vi.advanceTimersByTime(10);
+    expect(ended).toEqual(["ended"]);
+    vi.advanceTimersByTime(600_000);
+
+    expect(session.sent).toEqual([]);
   });
 });
 

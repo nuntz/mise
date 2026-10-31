@@ -47,6 +47,7 @@ const ERRORS = {
   unconfirmed: "chat.confirmation.failed",
   voice: "chat.voice.failed",
   voiceInUse: "chat.voice.inUse",
+  voiceSpent: "chat.voice.spent",
 } as const;
 
 /** Why a tap on a confirmation was refused: what it describes changed, or someone already tapped it. */
@@ -141,6 +142,8 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
   };
 
   const [voice, setVoice] = createSignal<"off" | "starting" | "on">("off");
+  /** When the day's voice minutes come back, after a start refused because they were spent. */
+  const [voiceBack, setVoiceBack] = createSignal("");
   // The call running, and which start is current: one ended, or the sheet closed, while a start
   // waits makes that start hang up when it resumes.
   let call: VoiceCall | undefined;
@@ -161,7 +164,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
     setVoice("starting");
     // The call to end if the start goes no further: the household may hold its session by then.
     let opened: VoiceCall | undefined;
-    let refusal: "voice" | "voiceInUse" = "voice";
+    let refusal: "voice" | "voiceInUse" | "voiceSpent" = "voice";
     try {
       opened = await dial();
       const reply = current() ? await props.client.startVoice(opened.offer, props.where()) : undefined;
@@ -170,6 +173,10 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
         opened.hangUp();
         opened = undefined;
         if (reply.error.code === "in_use") refusal = "voiceInUse";
+        if (reply.error.code === "spent") {
+          refusal = "voiceSpent";
+          setVoiceBack(new Date(reply.error.until).toLocaleTimeString(undefined, { timeStyle: "short" }));
+        }
         throw new Error(reply.error.message);
       }
       if (reply && current()) await opened.connect(reply.value.sdp);
@@ -311,7 +318,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
         <Show when={error()}>
           {(failed) => (
             <p class="banner banner-warn" role="alert">
-              {t(ERRORS[failed()])}
+              {t(ERRORS[failed()], { time: voiceBack() })}
             </p>
           )}
         </Show>

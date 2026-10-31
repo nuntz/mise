@@ -15,6 +15,7 @@ describe("parseToolInput", () => {
         weekStartsOn: "monday",
         units: "metric",
         locale: "en-CA",
+        voiceMinutesPerDay: 30,
         members: [],
       },
     });

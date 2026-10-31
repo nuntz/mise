@@ -57,6 +57,19 @@ describe("changing the Household's settings", () => {
     expect(succeeded(await household.callTool("get_household", {}))).toEqual(updated);
   });
 
+  test("has 30 minutes of voice a day until changed, and keeps a new daily voice cap", async () => {
+    const household = await setUpHousehold();
+
+    const before = succeeded<Household>(await household.callTool("get_household", {}));
+    const updated = succeeded<Household>(
+      await household.callTool("update_household_settings", { voiceMinutesPerDay: 45 }),
+    );
+
+    expect(before.voiceMinutesPerDay).toBe(30);
+    expect(updated.voiceMinutesPerDay).toBe(45);
+    expect(succeeded(await household.callTool("get_household", {}))).toEqual(updated);
+  });
+
   test("is validated as setup is, and a refused change changes nothing", async () => {
     const household = await setUpHousehold();
     const before = succeeded(await household.callTool("get_household", {}));
@@ -66,6 +79,8 @@ describe("changing the Household's settings", () => {
       { dinnerTime: "7pm" },
       { weekStartsOn: "someday" },
       { units: "furlongs" },
+      { voiceMinutesPerDay: -1 },
+      { voiceMinutesPerDay: 2.5 },
       { name: " " },
       { members: [] },
     ]) {

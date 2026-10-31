@@ -27,6 +27,7 @@ const household: Household = {
   weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
+  voiceMinutesPerDay: 30,
   members: [],
   effortBudgets: DEFAULT_EFFORT_BUDGETS,
   storeSections: [...STORE_SECTIONS],
@@ -590,6 +591,22 @@ test("a Voice Session the household refused to start says so and lets go of the 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Someone else is talking to Mise.");
   expect(voice.calls[0]?.hungUp).toBe(true);
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("a start refused because the day's voice minutes are spent says when they come back", async () => {
+  const until = "2026-10-29T07:00:00.000Z";
+  const fake = talkingClient(async () => ({ ok: false, error: { code: "spent", message: "", until } }));
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  const back = new Date(until).toLocaleTimeString(undefined, { timeStyle: "short" });
+  expect((await within(chat).findByRole("alert")).textContent).toBe(
+    `Today's voice minutes are used up. Talk to Mise again from ${back}.`,
+  );
+  expect(voice.calls[0]?.hungUp).toBe(true);
 });
 
 test("a start the household didn't answer ends whatever session it made, and lets go of the mic", async () => {

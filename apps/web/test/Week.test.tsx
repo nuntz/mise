@@ -41,6 +41,7 @@ const household: Household = {
   weekStartChanges: [],
   units: "metric",
   locale: "en-CA",
+  voiceMinutesPerDay: 30,
   members: [robin, alex, sam],
   effortBudgets: DEFAULT_EFFORT_BUDGETS,
   storeSections: [...STORE_SECTIONS],

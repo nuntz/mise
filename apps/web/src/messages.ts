@@ -380,6 +380,7 @@ const en = {
   "chat.voice.end": "End voice",
   "chat.voice.failed": "Voice couldn't start. Try again.",
   "chat.voice.inUse": "Someone else is talking to Mise.",
+  "chat.voice.spent": "Today's voice minutes are used up. Talk to Mise again from {time}.",
 
   "ranOut.action": "Ran out",
   "ranOut.overline": "Staples",
@@ -865,6 +866,9 @@ const en = {
   "household.untaggedOne": "1 untagged",
   "household.untagged": "{count} untagged",
   "household.allTagged": "All tagged",
+  "settings.voiceMinutes": "Voice minutes a day",
+  "settings.voiceMinutesHint":
+    "Talking to Mise stops for the day once these are used, and starts again at midnight. 0 turns voice off.",
   "settings.save": "Save settings",
   "settings.saving": "Saving…",
   "settings.build": "Mise build {build}",

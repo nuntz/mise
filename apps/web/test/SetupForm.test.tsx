@@ -49,6 +49,7 @@ test("setup sends the Household's settings and its Members, with their Constrain
       weekStartsOn: "monday",
       units: "metric",
       locale: "en-CA",
+      voiceMinutesPerDay: 30,
       members: [{ name: "Robin", email: null, constraints: [{ kind: "allergy", allergen: "peanut" }] }],
     },
   ]);

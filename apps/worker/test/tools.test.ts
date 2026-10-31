@@ -27,6 +27,7 @@ describe("first-run Household setup", () => {
       weekStartsOn: "monday",
       units: "metric",
       locale: "en-CA",
+      voiceMinutesPerDay: 30,
       weekStartChanges: [],
       members: [],
       effortBudgets: DEFAULT_EFFORT_BUDGETS,

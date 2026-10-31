@@ -70,6 +70,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
+  VOICE_START_CHARGE_SECONDS,
   type VoiceStartReply,
   type Week,
 } from "@mise/domain";
@@ -106,6 +107,7 @@ import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from
 import { type HouseholdToolName, handlers } from "./tools";
 import { callerOfTurn, recordTurn, speakerOfTurn } from "./turns";
 import { VoiceSession } from "./voice";
+import { recordVoiceUsage, voiceSecondsOn } from "./voiceUsage";
 import { readSlots } from "./weeks";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
@@ -278,7 +280,8 @@ class HouseholdAgent extends Agent<Env> {
    * Starts a Voice Session from the browser's WebRTC offer, sent from the screen and Week `where`
    * names, and resolves with the SDP answer. Each turn heard is the starting Caller's, through the
    * same path as `chat`, spoken from where `moveVoice` last said the person was. Refused to a
-   * request with no Caller, while another session runs, and on a deployment without an OpenAI key.
+   * request with no Caller, while another session runs, on a deployment without an OpenAI key, and
+   * once the day's voice minutes are spent, with when they come back.
    */
   @callable()
   async startVoice(offer: unknown, where: unknown): Promise<VoiceStartReply> {
@@ -292,6 +295,20 @@ class HouseholdAgent extends Agent<Env> {
     const live = openLive(this.env);
     if (!live) return { ok: false, error: { code: "unavailable", message: "This deployment has no OpenAI key" } };
     if (this.voice) return { ok: false, error: { code: "in_use", message: "Someone is already talking to Mise" } };
+    const household = this.household();
+    if (!household) return { ok: false, error: { code: "not_set_up", message: "Set up the Household first" } };
+    if (household.voiceMinutesPerDay === 0) {
+      return { ok: false, error: { code: "unavailable", message: "Voice is turned off in the Household's settings" } };
+    }
+    const { sql } = this.ctx.storage;
+    const now = new Date();
+    // A session counts toward the day it started on, even if it runs past midnight.
+    const day = localDate(now, household.timezone);
+    const left = household.voiceMinutesPerDay * 60 - voiceSecondsOn(sql, day);
+    if (left < VOICE_START_CHARGE_SECONDS) {
+      const until = nextOccurrence(now, "00:00", household.timezone).toISOString();
+      return { ok: false, error: { code: "spent", message: "Today's voice minutes are used up", until } };
+    }
     // Claimed before the first await, so that a second start finds it taken.
     const starting = { starting: true as const, cancelled: false, where: from.data };
     this.voice = starting;
@@ -301,14 +318,18 @@ class HouseholdAgent extends Agent<Env> {
         live,
         offer,
         from.data,
-        async (text, where) =>
-          Sentry.startSpan({ name: "voice turn", op: "mise.voice" }, async () => {
-            const reply = await this.answerTurn(caller, text, where, true);
-            return reply.ok ? reply.value.text : null;
-          }),
-        (ended) => {
-          if (this.voice === ended) this.voice = null;
+        {
+          answer: async (text, where) =>
+            Sentry.startSpan({ name: "voice turn", op: "mise.voice" }, async () => {
+              const reply = await this.answerTurn(caller, text, where, true);
+              return reply.ok ? reply.value.text : null;
+            }),
+          usage: (usage) => recordVoiceUsage(sql, day, usage),
+          end: (ended) => {
+            if (this.voice === ended) this.voice = null;
+          },
         },
+        left,
       );
       if (starting.cancelled) {
         session.end();
