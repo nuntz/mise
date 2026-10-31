@@ -81,9 +81,9 @@ const ServerEvent = z.discriminatedUnion("type", [
 
 /**
  * A session's billed time as the household records it: `seconds` so far, at least the start
- * charge, and `confirmed` once `session.closed` gave the final count.
+ * charge, `confirmed` once `session.closed` gave the final count, and `running` until it has ended.
  */
-export type VoiceUsage = { id: string; seconds: number; confirmed: boolean };
+export type VoiceUsage = { id: string; seconds: number; confirmed: boolean; running: boolean };
 
 /** What a Voice Session asks of the household that holds it. */
 export type VoiceHooks = {
@@ -92,7 +92,7 @@ export type VoiceHooks = {
    * the changes it held for a tap (ADR 0024); null when the agent couldn't.
    */
   answer(text: string, where: ChatWhere): Promise<{ text: string; held: string[] } | null>;
-  /** Records the session's usage, each time it changes: from its creation to its end. */
+  /** Records the session's usage, each time it changes: from its creation to its end, as it ends. */
   usage(usage: VoiceUsage): void;
   /** Called once, when the session has ended. */
   end(session: VoiceSession): void;
@@ -117,6 +117,7 @@ export class VoiceSession {
   private ended = false;
   /** Live's latest cumulative count, never below the start charge billed at creation. */
   private seconds = VOICE_START_CHARGE_SECONDS;
+  private confirmed = false;
   private warned = false;
   /** The warning, the close when the allowance runs out, and the close after a silence. */
   private warning: ReturnType<typeof setTimeout> | undefined;
@@ -148,8 +149,14 @@ export class VoiceSession {
     const created = await Sentry.startSpan({ name: "voice create", op: "mise.voice" }, () =>
       live.create(offer, VOICE_SESSION),
     );
-    hooks.usage({ id: created.id, seconds: VOICE_START_CHARGE_SECONDS, confirmed: false });
-    const sideband = await Sentry.startSpan({ name: "voice attach", op: "mise.voice" }, () => live.attach(created.id));
+    const charged = { id: created.id, seconds: VOICE_START_CHARGE_SECONDS, confirmed: false };
+    hooks.usage({ ...charged, running: true });
+    const sideband = await Sentry.startSpan({ name: "voice attach", op: "mise.voice" }, () =>
+      live.attach(created.id),
+    ).catch((error: unknown) => {
+      hooks.usage({ ...charged, running: false });
+      throw error;
+    });
     const session = new VoiceSession(created.id, sideband, where, hooks, allowance);
     sideband.listen({ message: (data) => session.onMessage(data), close: () => session.finish("sideband_closed") });
     // Billing started at creation, a moment before the sideband attached: the first usage update corrects for it.
@@ -241,6 +248,7 @@ export class VoiceSession {
     clearTimeout(this.warning);
     clearTimeout(this.runOut);
     clearTimeout(this.silence);
+    this.report(false);
     Sentry.startSpan({ name: "voice close", op: "mise.voice", attributes: { "mise.voice.reason": reason } }, () =>
       this.sideband.close(),
     );
@@ -271,7 +279,12 @@ export class VoiceSession {
 
   private count(seconds: number, confirmed: boolean): void {
     this.seconds = Math.max(VOICE_START_CHARGE_SECONDS, Math.ceil(seconds));
-    this.hooks.usage({ id: this.id, seconds: this.seconds, confirmed });
+    this.confirmed = confirmed;
+    this.report(true);
+  }
+
+  private report(running: boolean): void {
+    this.hooks.usage({ id: this.id, seconds: this.seconds, confirmed: this.confirmed, running });
   }
 }
 

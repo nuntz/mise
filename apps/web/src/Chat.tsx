@@ -63,6 +63,7 @@ const ERRORS = {
   voiceInUse: "chat.voice.inUse",
   voiceSpent: "chat.voice.spent",
   voiceOff: "chat.voice.off",
+  voiceEnded: "chat.voice.ended",
 } as const;
 
 /** The refusals of a start that the mic's reason would repeat. */

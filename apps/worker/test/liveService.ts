@@ -16,6 +16,11 @@ export type PretendSession = {
    * sent before has arrived.
    */
   drop(): void;
+  /**
+   * Loses the sideband with no word to the household, as when a restart or deploy tears down the
+   * household that held it: the household is gone, and never hears the socket close.
+   */
+  lose(): void;
 };
 
 type Listener = { message(data: string): void; close(): void };
@@ -78,6 +83,10 @@ export function pretendLive({ refuse = false, hold = false }: { refuse?: boolean
         close: closeSocket,
         drop() {
           dropping = true;
+        },
+        lose() {
+          session.closed = true;
+          clearInterval(pump);
         },
       };
       sessions.push(session);

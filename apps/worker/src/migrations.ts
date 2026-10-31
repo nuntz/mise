@@ -481,6 +481,13 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 28,
+    statements: [
+      // 1 while the session runs, so that the household finds one a restart or deploy cut short.
+      "ALTER TABLE voice_session ADD COLUMN running INTEGER NOT NULL DEFAULT 0",
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

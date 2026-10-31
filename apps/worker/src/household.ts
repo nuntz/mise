@@ -114,7 +114,7 @@ import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from
 import { type HouseholdToolName, handlers } from "./tools";
 import { callerOfTurn, recordTurn, speakerName, speakerOfTurn } from "./turns";
 import { VoiceSession } from "./voice";
-import { recordVoiceUsage, voiceSecondsOn } from "./voiceUsage";
+import { endCutShortVoiceSessions, recordVoiceUsage, voiceSecondsOn } from "./voiceUsage";
 import { readSlots } from "./weeks";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
@@ -210,6 +210,8 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   override async onStart(): Promise<void> {
+    // The Voice Session a restart or deploy cut short isn't reattached: screens are told voice ended.
+    if (endCutShortVoiceSessions(this.ctx.storage.sql)) this.notify("voice", this.revision());
     await this.followAgentModel();
     await this.scheduleDailyRuns();
   }

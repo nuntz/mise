@@ -385,6 +385,7 @@ const en = {
   "chat.voice.needsConnection": "Voice needs a connection.",
   "chat.voice.off": "Voice is turned off. Give it minutes a day in the Household's settings.",
   "chat.voice.spent": "Today's voice minutes are used up. Talk to Mise again from {time} tomorrow.",
+  "chat.voice.ended": "Voice ended. Talk to Mise to start again.",
 
   "ranOut.action": "Ran out",
   "ranOut.overline": "Staples",

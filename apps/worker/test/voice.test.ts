@@ -1,3 +1,5 @@
+import { abortAllDurableObjects } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { type FauxResponseFactory, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { JsonObject } from "@earendil-works/pi-durable";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
@@ -874,7 +876,9 @@ describe("the daily voice cap", () => {
     const response = await household.fetch("http://mise.example.com/agents/household/household/export");
     const { tables } = (await response.json()) as { tables: Record<string, Record<string, unknown>[]> };
 
-    expect(tables.voice_session).toEqual([{ id: sessions[0]?.id, day: "2026-10-28", seconds: 43, confirmed: 1 }]);
+    expect(tables.voice_session).toEqual([
+      { id: sessions[0]?.id, day: "2026-10-28", seconds: 43, confirmed: 1, running: 0 },
+    ]);
     expect(tables.household?.[0]).toMatchObject({ voice_minutes_per_day: 20 });
   });
 
@@ -907,6 +911,47 @@ describe("the daily voice cap", () => {
     vi.setSystemTime(new Date("2026-10-29T00:05:00-07:00"));
 
     expect(await start()).toMatchObject({ ok: true });
+  });
+});
+
+/**
+ * Tears the household down at once, as a restart or deploy does, its Voice Session's sideband lost
+ * with it; resolves with a stub to the household that starts up next.
+ */
+async function restart(household: HouseholdStub, session: PretendSession | undefined): Promise<HouseholdStub> {
+  session?.lose();
+  await abortAllDurableObjects();
+  return env.Household.get(household.id);
+}
+
+/** The Voice Sessions' usage as the Household's export gives it. */
+async function exportedVoiceSessions(household: HouseholdStub) {
+  const response = await household.fetch("http://mise.example.com/agents/household/household/export");
+  const { tables } = (await response.json()) as { tables: Record<string, Record<string, unknown>[]> };
+  return tables.voice_session;
+}
+
+describe("a Voice Session the household lost to a restart or deploy", () => {
+  test("keeps the last usage seen, marked unconfirmed, so the cap still counts it", async () => {
+    const { household, start, sessions } = await robinWithCap(30);
+    expect(await start()).toMatchObject({ ok: true });
+    sessions[0]?.serverSends({ type: "session.usage.updated", usage: { seconds: 50 } });
+    await vi.waitFor(async () => expect(await exportedVoiceSessions(household)).toMatchObject([{ seconds: 50 }]));
+
+    const restarted = await restart(household, sessions[0]);
+
+    expect(await exportedVoiceSessions(restarted)).toEqual([
+      { id: "live_1", day: expect.any(String), seconds: 50, confirmed: 0, running: 0 },
+    ]);
+  });
+
+  test("is over for the screens that reconnect, and a new session may start", async () => {
+    const { household, session } = await robinTalking();
+
+    const robin = await connectAs(await restart(household, session), "robin@example.com");
+
+    expect(await robin.rpc("voiceAvailability", [])).toEqual({ status: "available" });
+    expect(await robin.rpc("startVoice", [OFFER, ON_THE_WEEK])).toMatchObject({ ok: true });
   });
 });
 

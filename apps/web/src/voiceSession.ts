@@ -6,8 +6,11 @@ import { keepFresh } from "./fresh";
 import { t } from "./messages";
 import type { OpenVoice, VoiceCall } from "./voice";
 
-/** Why a start went no further: the mic, WebRTC or the household failed, or the household refused it. */
-export type VoiceRefusal = "voice" | "voiceInUse" | "voiceSpent" | "voiceOff";
+/**
+ * Why voice stopped short: a start went no further, as the mic, WebRTC or the household failed or
+ * the household refused it, or (`voiceEnded`) a session ended without this device ending it.
+ */
+export type VoiceRefusal = "voice" | "voiceInUse" | "voiceSpent" | "voiceOff" | "voiceEnded";
 
 /** How soon the mic asks again whether the day's voice minutes are back, at the soonest. */
 const MINUTES_BACK_RETRY_MS = 5000;
@@ -50,6 +53,7 @@ export function createVoiceSession(props: {
       () => props.client.voiceAvailability(),
       (now) => {
         setAvailability(now);
+        closeIfHouseholdLetGo(now);
         // No notice comes at midnight: the mic asks again once the day's minutes are back, and again
         // a little later while this device's clock runs ahead of the household's.
         clearTimeout(minutesBack);
@@ -86,6 +90,25 @@ export function createVoiceSession(props: {
   // waits makes that start hang up when it resumes.
   let call: VoiceCall | undefined;
   let attempt = 0;
+  /** Lets go of a Voice Session that ended without this device ending it, and says so. */
+  const endedFor = (ended: VoiceCall) => {
+    if (call !== ended) return;
+    call = undefined;
+    setState("off");
+    props.onRefused?.("voiceEnded");
+  };
+
+  /**
+   * Closes the Voice Session running once the household, which held it from the start, says none
+   * runs: a restart or deploy lost it, and GPT-Live would go on answering with nobody behind it.
+   * While the household holds one, even as another connection's after this one came back, it goes on.
+   */
+  const closeIfHouseholdLetGo = (now: VoiceAvailability) => {
+    const running = call;
+    if (!running || now.status === "in_use") return;
+    running.close();
+    endedFor(running);
+  };
   // The household closes the session first, so it ends as asked rather than as a dropped call.
   const hangUp = (ending: VoiceCall) =>
     void props.client
@@ -133,11 +156,7 @@ export function createVoiceSession(props: {
     }
     if (!current()) return hangUp(opened);
     call = opened;
-    opened.onEnd(() => {
-      if (call !== opened) return;
-      call = undefined;
-      setState("off");
-    });
+    opened.onEnd(() => endedFor(opened));
     setState("on");
   };
 

@@ -473,6 +473,7 @@ function talkingClient(
   const started: { offer: string; where: ChatWhere }[] = [];
   const moved: ChatWhere[] = [];
   let ended = 0;
+  let answered = 0;
   const fake = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }), undefined, {
     startVoice: async (offer, where) => {
       started.push({ offer, where });
@@ -485,9 +486,20 @@ function talkingClient(
     endVoice: async () => {
       ended++;
     },
-    voiceAvailability: async () => voiceIs.availability,
+    voiceAvailability: async () => {
+      answered++;
+      return voiceIs.availability;
+    },
   });
-  return { ...fake, started, moved, ended: () => ended, voiceIs };
+  /** Announces that voice is now `availability`, and waits until the screens have had the answer. */
+  const voiceNow = async (now: VoiceAvailability) => {
+    voiceIs.availability = now;
+    const before = answered;
+    fake.notify("voice");
+    await waitFor(() => expect(answered).toBeGreaterThan(before));
+    await new Promise((resolve) => setTimeout(resolve));
+  };
+  return { ...fake, started, moved, ended: () => ended, voiceIs, voiceNow };
 }
 
 test("the chat's mic starts a Voice Session, shows its turns as they're answered, and ends it with a tap", async () => {
@@ -603,6 +615,41 @@ test("a Voice Session GPT-Live ended goes back to the mic", async () => {
 
   expect(await within(chat).findByRole("button", { name: "Talk to Mise" })).toBeTruthy();
   expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
+  expect(within(chat).getByRole("alert").textContent).toBe(VOICE_ENDED);
+});
+
+const VOICE_ENDED = "Voice ended. Talk to Mise to start again.";
+
+test("a Voice Session the household no longer holds, after a restart or deploy, is closed and says it ended", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(await mic(chat));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  // The household started up again without the session, and says voice is free.
+  await fake.voiceNow({ status: "available" });
+
+  expect(await within(chat).findByRole("alert")).toHaveProperty("textContent", VOICE_ENDED);
+  expect(voice.calls[0]).toMatchObject({ closed: true, hungUp: true });
+  expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
+  expect((await mic(chat)).disabled).toBe(false);
+});
+
+test("a Voice Session goes on while the household says this device's session runs through another connection", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(await mic(chat));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  // The connection came back after a blip: the household still holds the session, as the old connection's.
+  await fake.voiceNow({ status: "in_use", by: "Robin", yours: false });
+
+  expect(within(chat).getByText("Listening. Talk to Mise.")).toBeTruthy();
+  expect(voice.calls[0]).toMatchObject({ closed: false, hungUp: false });
 });
 
 test("a Voice Session the household refused to start says so and lets go of the mic", async () => {

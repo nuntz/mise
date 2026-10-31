@@ -9,13 +9,23 @@ import type { VoiceUsage } from "./voice";
 /** Records a session's usage on `day`: its first count, or a newer one in place of the last. */
 export function recordVoiceUsage(sql: SqlStorage, day: LocalDate, usage: VoiceUsage): void {
   sql.exec(
-    `INSERT INTO voice_session (id, day, seconds, confirmed) VALUES (?, ?, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET seconds = excluded.seconds, confirmed = excluded.confirmed`,
+    `INSERT INTO voice_session (id, day, seconds, confirmed, running) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET
+       seconds = excluded.seconds, confirmed = excluded.confirmed, running = excluded.running`,
     usage.id,
     day,
     usage.seconds,
     usage.confirmed ? 1 : 0,
+    usage.running ? 1 : 0,
   );
+}
+
+/**
+ * Ends the sessions still recorded as running: a restart or deploy cut them short, and the household
+ * doesn't reattach. Each keeps the last usage seen, unconfirmed. Returns whether there were any.
+ */
+export function endCutShortVoiceSessions(sql: SqlStorage): boolean {
+  return sql.exec("UPDATE voice_session SET running = 0 WHERE running = 1").rowsWritten > 0;
 }
 
 /** The seconds of voice the Household's sessions started on `day` have used. */

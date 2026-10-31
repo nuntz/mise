@@ -24,6 +24,7 @@ const VOICE_ERRORS: Record<VoiceRefusal, MessageKey> = {
   voiceInUse: "chat.voice.inUse",
   voiceSpent: "chat.voice.spent",
   voiceOff: "chat.voice.off",
+  voiceEnded: "chat.voice.ended",
 };
 
 /** The mic, while no session runs and voice is there to be had; `micId` names why it can't start, if it can't. */

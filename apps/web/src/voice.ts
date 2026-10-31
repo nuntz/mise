@@ -15,10 +15,19 @@ export type VoiceCall = {
   onEnd(listener: () => void): void;
   /** Stops the mic and the connection. */
   hangUp(): void;
+  /**
+   * Asks GPT-Live to close the session, on the data channel, and hangs up once it has, or soon after
+   * (at once without the channel); the mic and GPT-Live's voice stop at once. For a session the
+   * household no longer answers, which GPT-Live would otherwise go on with. Ends as `onEnd` reports.
+   */
+  close(): void;
 };
 
 /** Asks for the mic and makes an offer. Rejects if the mic is refused or WebRTC is missing. */
 export type OpenVoice = () => Promise<VoiceCall>;
+
+/** How long a call asked to close waits for GPT-Live's `session.closed` before it hangs up anyway. */
+const CLOSE_FALLBACK_MS = 2000;
 
 export const openVoice: OpenVoice = async () => {
   const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -35,12 +44,26 @@ export const openVoice: OpenVoice = async () => {
   const listeners: (() => void)[] = [];
   let over = false;
   let endedOnItsOwn = false;
+  /** Stops the mic and silences GPT-Live, leaving the connection to close. */
+  const silence = () => {
+    for (const track of mic.getTracks()) track.stop();
+    speaker.srcObject = null;
+  };
   const hangUp = () => {
     if (over) return;
     over = true;
-    for (const track of mic.getTracks()) track.stop();
+    clearTimeout(closing);
+    silence();
     peer.close();
-    speaker.srcObject = null;
+  };
+  // Closed by GPT-Live once it has `session.close`, or by the browser soon after anyway.
+  let closing: ReturnType<typeof setTimeout> | undefined;
+  const close = () => {
+    if (over) return;
+    silence();
+    if (channel.readyState !== "open") return hangUp();
+    channel.send(JSON.stringify({ type: "session.close" }));
+    closing ??= setTimeout(hangUp, CLOSE_FALLBACK_MS);
   };
   const ended = () => {
     if (over) return;
@@ -71,6 +94,7 @@ export const openVoice: OpenVoice = async () => {
         else listeners.push(listener);
       },
       hangUp,
+      close,
     };
   } catch (error) {
     hangUp();
