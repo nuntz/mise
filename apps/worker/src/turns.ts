@@ -21,7 +21,7 @@ export function recordTurn(sql: SqlStorage, caller: ResolvedCaller | null, sentA
 }
 
 /** Who a turn names as its speaker: the Member's name, else the Caller's email, else no one. */
-function speakerName(caller: ResolvedCaller | null): string | null {
+export function speakerName(caller: ResolvedCaller | null): string | null {
   return caller?.member?.name ?? caller?.email ?? null;
 }
 

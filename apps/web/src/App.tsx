@@ -241,7 +241,13 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
               </Show>
               <header class="app-header">
                 <RanOut client={props.client} online={online()} />
-                <Chat client={props.client} online={online()} where={where} voice={props.voice} />
+                <Chat
+                  client={props.client}
+                  online={online()}
+                  where={where}
+                  voice={props.voice}
+                  household={loaded.household}
+                />
               </header>
               <main class="page">
                 {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}

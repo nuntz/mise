@@ -18,6 +18,7 @@ export function createFakeClient(
     startVoice,
     moveVoice,
     endVoice,
+    voiceAvailability,
     ...rest
   }: { online?: boolean } & Partial<
     Pick<
@@ -32,6 +33,7 @@ export function createFakeClient(
       | "startVoice"
       | "moveVoice"
       | "endVoice"
+      | "voiceAvailability"
       | "signedIn"
     >
   > = {},
@@ -89,6 +91,11 @@ export function createFakeClient(
       if (!connection.online) throw new Error("Connection closed");
       if (!endVoice) throw new Error("Unexpected endVoice");
       return endVoice();
+    },
+    async voiceAvailability() {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!voiceAvailability) throw new Error("Unexpected voiceAvailability");
+      return voiceAvailability();
     },
     subscribe(topics, refetch) {
       const subscription = { topics, refetch };

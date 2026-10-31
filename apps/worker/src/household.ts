@@ -61,6 +61,7 @@ import {
   type RecipeId,
   type RecipeImage,
   type RecipeReading,
+  type ResolvedCaller,
   readPaprikaExport,
   reviewMessage,
   type Suggestion,
@@ -71,6 +72,7 @@ import {
   type ToolOutput,
   type ToolResult,
   VOICE_START_CHARGE_SECONDS,
+  type VoiceAvailability,
   type VoiceStartReply,
   type Week,
 } from "@mise/domain";
@@ -96,7 +98,7 @@ import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport 
 import { readCatalogue } from "./items";
 import { type DaySheetAnswer, readDaySheet } from "./kitchenDisplays";
 import { fetchPhoto, readLink } from "./links";
-import { LiveError, openLive } from "./live";
+import { type Live, LiveError, openLive } from "./live";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
 import { piReports, reportWakeErrors, sentryOptions, sentryTelemetry } from "./observability";
@@ -105,7 +107,7 @@ import { removePushSubscription, subscriptionsFor } from "./pushDevices";
 import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { type HouseholdToolName, handlers } from "./tools";
-import { callerOfTurn, recordTurn, speakerOfTurn } from "./turns";
+import { callerOfTurn, recordTurn, speakerName, speakerOfTurn } from "./turns";
 import { VoiceSession } from "./voice";
 import { recordVoiceUsage, voiceSecondsOn } from "./voiceUsage";
 import { readSlots } from "./weeks";
@@ -248,8 +250,7 @@ class HouseholdAgent extends Agent<Env> {
   /** A turn of the shared conversation from `who`, typed in the chat or `spoken` in a Voice Session. */
   private async answerTurn(who: Caller | null, text: string, where: ChatWhere, spoken: boolean): Promise<ChatReply> {
     const { sql } = this.ctx.storage;
-    const caller = handlers.get_caller(sql, {}, { caller: who });
-    const speaker = caller.ok ? caller.value : null;
+    const speaker = this.resolvedCaller(who);
     const now = new Date();
     const turn = recordTurn(sql, speaker, now.toISOString());
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
@@ -275,13 +276,56 @@ class HouseholdAgent extends Agent<Env> {
   private voice: VoiceSession | { starting: true; cancelled: boolean; where: ChatWhere } | null = null;
   /** The connection that started the Voice Session: the device the person talks through. */
   private voiceConnection: string | undefined;
+  /** Who is talking to Mise in the Voice Session, as their turns name them. */
+  private voiceSpeaker: string | null = null;
+
+  /** Whether a Voice Session could start now, for the mic to say before anyone taps it. */
+  @callable()
+  async voiceAvailability(): Promise<VoiceAvailability> {
+    const ready = this.voiceReadiness(new Date());
+    if (ready.status === "not_set_up") return { status: "unavailable" };
+    if (ready.status === "available") return { status: "available" };
+    if (ready.status === "in_use") {
+      const asker = getCurrentAgent().connection?.id;
+      return { ...ready, yours: asker !== undefined && asker === this.voiceConnection };
+    }
+    return ready;
+  }
+
+  /**
+   * Whether a Voice Session could start at `now`, in the order a start is refused: on a deployment
+   * without an OpenAI key, while another session runs, before the Household is set up, with a cap of
+   * 0, and once the day's voice minutes are spent, with when they come back. When it could, the Live
+   * to start it on, the day it counts toward and the seconds that day has left.
+   */
+  private voiceReadiness(
+    now: Date,
+  ):
+    | Exclude<VoiceAvailability, { status: "available" | "in_use" }>
+    | { status: "in_use"; by: string | null }
+    | { status: "not_set_up" }
+    | { status: "available"; live: Live; day: LocalDate; left: number } {
+    const live = openLive(this.env);
+    if (!live) return { status: "unavailable" };
+    if (this.voice) return { status: "in_use", by: this.voiceSpeaker };
+    const household = this.household();
+    if (!household) return { status: "not_set_up" };
+    if (household.voiceMinutesPerDay === 0) return { status: "off" };
+    // A session counts toward the day it started on, even if it runs past midnight.
+    const day = localDate(now, household.timezone);
+    const left = household.voiceMinutesPerDay * 60 - voiceSecondsOn(this.ctx.storage.sql, day);
+    if (left < VOICE_START_CHARGE_SECONDS) {
+      return { status: "spent", until: nextOccurrence(now, "00:00", household.timezone).toISOString() };
+    }
+    return { status: "available", live, day, left };
+  }
 
   /**
    * Starts a Voice Session from the browser's WebRTC offer, sent from the screen and Week `where`
    * names, and resolves with the SDP answer. Each turn heard is the starting Caller's, through the
    * same path as `chat`, spoken from where `moveVoice` last said the person was. Refused to a
-   * request with no Caller, while another session runs, on a deployment without an OpenAI key, and
-   * once the day's voice minutes are spent, with when they come back.
+   * request with no Caller, and whenever `voiceAvailability` says voice isn't available. Every
+   * device is told when a session starts and when it ends.
    */
   @callable()
   async startVoice(offer: unknown, where: unknown): Promise<VoiceStartReply> {
@@ -292,27 +336,30 @@ class HouseholdAgent extends Agent<Env> {
       return { ok: false, error: { code: "invalid_input", message: "Send a WebRTC offer and where it was sent from" } };
     }
     if (!caller) return { ok: false, error: { code: "not_signed_in", message: "Sign in to talk to Mise" } };
-    const live = openLive(this.env);
-    if (!live) return { ok: false, error: { code: "unavailable", message: "This deployment has no OpenAI key" } };
-    if (this.voice) return { ok: false, error: { code: "in_use", message: "Someone is already talking to Mise" } };
-    const household = this.household();
-    if (!household) return { ok: false, error: { code: "not_set_up", message: "Set up the Household first" } };
-    if (household.voiceMinutesPerDay === 0) {
-      return { ok: false, error: { code: "off", message: "Voice is turned off in the Household's settings" } };
+    const ready = this.voiceReadiness(new Date());
+    switch (ready.status) {
+      case "unavailable":
+        return { ok: false, error: { code: "unavailable", message: "This deployment has no OpenAI key" } };
+      case "in_use":
+        return { ok: false, error: { code: "in_use", message: "Someone is already talking to Mise", by: ready.by } };
+      case "not_set_up":
+        return { ok: false, error: { code: "not_set_up", message: "Set up the Household first" } };
+      case "off":
+        return { ok: false, error: { code: "off", message: "Voice is turned off in the Household's settings" } };
+      case "spent":
+        return {
+          ok: false,
+          error: { code: "spent", message: "Today's voice minutes are used up", until: ready.until },
+        };
     }
+    const { live, day, left } = ready;
     const { sql } = this.ctx.storage;
-    const now = new Date();
-    // A session counts toward the day it started on, even if it runs past midnight.
-    const day = localDate(now, household.timezone);
-    const left = household.voiceMinutesPerDay * 60 - voiceSecondsOn(sql, day);
-    if (left < VOICE_START_CHARGE_SECONDS) {
-      const until = nextOccurrence(now, "00:00", household.timezone).toISOString();
-      return { ok: false, error: { code: "spent", message: "Today's voice minutes are used up", until } };
-    }
     // Claimed before the first await, so that a second start finds it taken.
     const starting = { starting: true as const, cancelled: false, where: from.data };
     this.voice = starting;
     this.voiceConnection = connection?.id;
+    this.voiceSpeaker = speakerName(this.resolvedCaller(caller));
+    this.notify("voice", this.revision());
     try {
       const { session, sdp } = await VoiceSession.start(
         live,
@@ -326,25 +373,33 @@ class HouseholdAgent extends Agent<Env> {
             }),
           usage: (usage) => recordVoiceUsage(sql, day, usage),
           end: (ended) => {
-            if (this.voice === ended) this.voice = null;
+            if (this.voice === ended) this.releaseVoice();
           },
         },
         left,
       );
       if (starting.cancelled) {
         session.end();
-        this.voice = null;
+        this.releaseVoice();
         return { ok: false, error: { code: "not_started", message: "The Voice Session was ended while it started" } };
       }
       // A sideband that closed while starting has ended the session already.
-      this.voice = session.running ? session : null;
+      if (session.running) this.voice = session;
+      else this.releaseVoice();
       session.moveTo(starting.where);
       return { ok: true, value: { sdp } };
     } catch (error) {
-      this.voice = null;
+      this.releaseVoice();
       if (error instanceof LiveError) return { ok: false, error: { code: "not_started", message: error.message } };
       throw error;
     }
+  }
+
+  /** Lets go of the Household's Voice Session, and tells every device that voice is free. */
+  private releaseVoice(): void {
+    this.voice = null;
+    this.voiceSpeaker = null;
+    this.notify("voice", this.revision());
   }
 
   /**
@@ -1175,6 +1230,12 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   /** The caller over a WebSocket; RPC from inside the deployment (tests, scheduled jobs) has none. */
+  /** `who`, with the Member they sign in as, if any. */
+  private resolvedCaller(who: Caller | null): ResolvedCaller | null {
+    const caller = handlers.get_caller(this.ctx.storage.sql, {}, { caller: who });
+    return caller.ok ? caller.value : null;
+  }
+
   private callerOf(connection: Connection | undefined): Caller | null {
     return (connection?.state as ConnectionState | null | undefined)?.caller ?? null;
   }
@@ -1198,6 +1259,11 @@ class HouseholdAgent extends Agent<Env> {
 
   private notify(topic: ChangeTopic, revision: number): void {
     this.broadcast(JSON.stringify({ type: "mise:change", topic, revision } satisfies ChangeNotice));
+  }
+
+  /** The revision as it stands, for a notice of a change that isn't to the Household's data. */
+  private revision(): number {
+    return this.ctx.storage.sql.exec<{ value: number }>("SELECT value FROM revision WHERE id = 1").one().value;
   }
 
   private bumpRevision(): number {

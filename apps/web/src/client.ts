@@ -14,6 +14,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
+  type VoiceAvailability,
   type VoiceStartReply,
 } from "@mise/domain";
 import { AgentClient } from "agents/client";
@@ -56,6 +57,8 @@ export type MiseClient = {
   moveVoice(where: ChatWhere): Promise<boolean>;
   /** Ends the Household's Voice Session, if one runs. */
   endVoice(): Promise<void>;
+  /** Whether a Voice Session could start now, as the household sees it; "voice" announces each change. */
+  voiceAvailability(): Promise<VoiceAvailability>;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
   photoUrl(recipeId: RecipeId, photoKey: string): string;
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
@@ -104,6 +107,8 @@ export function createMiseClient(host = window.location.host): MiseClient {
     moveVoice: (where) => agent.call("moveVoice", [where]),
 
     endVoice: () => agent.call("endVoice", []),
+
+    voiceAvailability: () => agent.call("voiceAvailability", []),
 
     onConnection(listener) {
       // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".

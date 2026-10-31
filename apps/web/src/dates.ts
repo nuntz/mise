@@ -14,3 +14,8 @@ export function shortDate(date: LocalDate, locale: Locale): string {
 export function whenText(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+
+/** An instant's time of day on the Household's clock, such as "12:00 a.m.". */
+export function householdTime(iso: string, household: { timezone: string; locale: Locale }): string {
+  return new Date(iso).toLocaleTimeString(household.locale, { timeStyle: "short", timeZone: household.timezone });
+}

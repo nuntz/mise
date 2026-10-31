@@ -380,8 +380,10 @@ const en = {
   "chat.voice.end": "End voice",
   "chat.voice.failed": "Voice couldn't start. Try again.",
   "chat.voice.inUse": "Someone else is talking to Mise.",
+  "chat.voice.talking": "{name} is talking to Mise.",
+  "chat.voice.needsConnection": "Voice needs a connection.",
   "chat.voice.off": "Voice is turned off. Give it minutes a day in the Household's settings.",
-  "chat.voice.spent": "Today's voice minutes are used up. Talk to Mise again from {time}.",
+  "chat.voice.spent": "Today's voice minutes are used up. Talk to Mise again from {time} tomorrow.",
 
   "ranOut.action": "Ran out",
   "ranOut.overline": "Staples",

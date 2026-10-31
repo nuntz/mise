@@ -7,6 +7,7 @@ import {
   type Household,
   STORE_SECTIONS,
   type ToolResult,
+  type VoiceAvailability,
   type VoiceStartReply,
 } from "@mise/domain";
 import { render, screen, waitFor, within } from "@solidjs/testing-library";
@@ -44,7 +45,7 @@ function fakeClient(
   confirm: (id: number) => ToolResult<unknown> = () => {
     throw new Error("Unexpected confirm");
   },
-  voice: Partial<Pick<MiseClient, "startVoice" | "moveVoice" | "endVoice">> = {},
+  voice: Partial<Pick<MiseClient, "startVoice" | "moveVoice" | "endVoice" | "voiceAvailability">> = {},
 ) {
   const conversation = [...earlier];
   const confirmed: number[] = [];
@@ -462,13 +463,18 @@ function fakeVoice() {
   return { open, calls };
 }
 
-/** A Household where Robin's spoken turns join the conversation, and the household's voice calls. */
+/**
+ * A Household where Robin's spoken turns join the conversation, and the household's voice calls;
+ * voice is as `availability` says until a test changes it and announces it.
+ */
 function talkingClient(
   start: (offer: string, where: ChatWhere) => Promise<VoiceStartReply> = async (offer) => ({
     ok: true,
     value: { sdp: `answer to ${offer}` },
   }),
+  availability: VoiceAvailability = { status: "available" },
 ) {
+  const voiceIs = { availability };
   const started: { offer: string; where: ChatWhere }[] = [];
   const moved: ChatWhere[] = [];
   let ended = 0;
@@ -484,8 +490,9 @@ function talkingClient(
     endVoice: async () => {
       ended++;
     },
+    voiceAvailability: async () => voiceIs.availability,
   });
-  return { ...fake, started, moved, ended: () => ended };
+  return { ...fake, started, moved, ended: () => ended, voiceIs };
 }
 
 test("the chat's mic starts a Voice Session, shows its turns as they're answered, and ends it with a tap", async () => {
@@ -494,7 +501,7 @@ test("the chat's mic starts a Voice Session, shows its turns as they're answered
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   expect(await within(chat).findByText("Listening. Talk to Mise.")).toBeTruthy();
   // The Week screen shows no Week here, as none loads.
@@ -523,7 +530,7 @@ test("a Voice Session follows the screen and Week the person moves to, until it 
   const [where, setWhere] = createSignal<ChatWhere>({ screen: "week" });
   render(() => <Chat client={fake.client} online={true} where={where} voice={voice.open} />);
   const chat = await openChat();
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
   await within(chat).findByText("Listening. Talk to Mise.");
 
   setWhere({ screen: "week", week: "2026-10-26" });
@@ -540,7 +547,7 @@ test("closing the chat ends its Voice Session", async () => {
   const voice = fakeVoice();
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
   await within(chat).findByText("Listening. Talk to Mise.");
 
   await userEvent.click(within(chat).getByRole("button", { name: "Close the chat" }));
@@ -554,7 +561,7 @@ test("a Voice Session ends when the page is hidden, since a locked phone turns t
   const voice = fakeVoice();
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
   await within(chat).findByText("Listening. Talk to Mise.");
 
   Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
@@ -571,7 +578,7 @@ test("a Voice Session GPT-Live ended goes back to the mic", async () => {
   const voice = fakeVoice();
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
   await within(chat).findByText("Listening. Talk to Mise.");
 
   voice.calls[0]?.endFromLive();
@@ -581,14 +588,14 @@ test("a Voice Session GPT-Live ended goes back to the mic", async () => {
 });
 
 test("a Voice Session the household refused to start says so and lets go of the mic", async () => {
-  const fake = talkingClient(async () => ({ ok: false, error: { code: "in_use", message: "" } }));
+  const fake = talkingClient(async () => ({ ok: false, error: { code: "in_use", message: "", by: "Alex" } }));
   const voice = fakeVoice();
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
-  expect((await within(chat).findByRole("alert")).textContent).toBe("Someone else is talking to Mise.");
+  expect((await within(chat).findByRole("alert")).textContent).toBe("Alex is talking to Mise.");
   expect(voice.calls[0]?.hungUp).toBe(true);
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
 });
@@ -600,18 +607,17 @@ test("a start refused because the day's voice minutes are spent says when they c
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
-  const back = new Date(until).toLocaleTimeString(undefined, { timeStyle: "short" });
   expect((await within(chat).findByRole("alert")).textContent).toBe(
-    `Today's voice minutes are used up. Talk to Mise again from ${back}.`,
+    "Today's voice minutes are used up. Talk to Mise again from 12:00 a.m. tomorrow.",
   );
   expect(voice.calls[0]?.hungUp).toBe(true);
 });
 
 test("a refused start's alert is scrolled into view below a long conversation", async () => {
   const scrolling = watchScrolling();
-  const fake = talkingClient(async () => ({ ok: false, error: { code: "in_use", message: "" } }));
+  const fake = talkingClient(async () => ({ ok: false, error: { code: "in_use", message: "", by: null } }));
   fake.conversation.push(
     { role: "member", speaker: "Robin", text: "What's for dinner Monday?" },
     { role: "agent", text: "Dal." },
@@ -621,7 +627,7 @@ test("a refused start's alert is scrolled into view below a long conversation", 
   const chat = await openChat();
   await within(chat).findByText("Dal.");
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   await within(chat).findByRole("alert");
   expect(scrolling.last()).toBe("Someone else is talking to Mise.");
@@ -633,7 +639,7 @@ test("a start refused because the Household turned voice off says so", async () 
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   expect((await within(chat).findByRole("alert")).textContent).toBe(
     "Voice is turned off. Give it minutes a day in the Household's settings.",
@@ -648,7 +654,7 @@ test("a start the household didn't answer ends whatever session it made, and let
   render(() => <App client={fake.client} voice={voice.open} />);
   const chat = await openChat();
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Voice couldn't start. Try again.");
   expect(fake.ended()).toBe(1);
@@ -663,8 +669,96 @@ test("a mic the browser refused says voice couldn't start", async () => {
   render(() => <App client={fake.client} voice={refused} />);
   const chat = await openChat();
 
-  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Voice couldn't start. Try again.");
   expect(fake.started).toEqual([]);
+});
+
+/** The mic, found by its name. */
+function mic(chat: HTMLElement) {
+  return within(chat).findByRole("button", { name: "Talk to Mise" }) as Promise<HTMLButtonElement>;
+}
+
+test("the mic is hidden on a deployment where voice isn't available", async () => {
+  const fake = talkingClient(undefined, { status: "unavailable" });
+  render(() => <App client={fake.client} voice={fakeVoice().open} />);
+  const chat = await openChat();
+  await within(chat).findByText("Ask about the Week, for example:");
+
+  // Given time to load what voice can do, it still shows no mic.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(within(chat).queryByRole("button", { name: "Talk to Mise" })).toBeNull();
+});
+
+test("offline, the mic is disabled and says voice needs a connection", async () => {
+  const fake = talkingClient();
+  render(() => <App client={fake.client} voice={fakeVoice().open} />);
+  const chat = await openChat();
+  expect((await mic(chat)).disabled).toBe(false);
+
+  fake.goOffline();
+
+  await waitFor(async () => expect((await mic(chat)).disabled).toBe(true));
+  expect((await mic(chat)).getAttribute("aria-describedby")).toBeTruthy();
+  expect(within(chat).getByText("Voice needs a connection.")).toBeTruthy();
+});
+
+test("while someone else talks to Mise, the mic is disabled and says who, until their session ends", async () => {
+  const fake = talkingClient(undefined, { status: "in_use", by: "Alex", yours: false });
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+
+  await waitFor(async () => expect((await mic(chat)).disabled).toBe(true));
+  expect(within(chat).getByText("Alex is talking to Mise.")).toBeTruthy();
+
+  fake.voiceIs.availability = { status: "available" };
+  fake.notify("voice");
+
+  await waitFor(async () => expect((await mic(chat)).disabled).toBe(false));
+  expect(within(chat).queryByText("Alex is talking to Mise.")).toBeNull();
+});
+
+test("with the day's voice minutes spent, the mic is disabled and says when they come back, before anyone taps it", async () => {
+  const until = "2026-10-29T07:00:00.000Z";
+  const fake = talkingClient(undefined, { status: "spent", until });
+  render(() => <App client={fake.client} voice={fakeVoice().open} />);
+  const chat = await openChat();
+
+  await waitFor(async () => expect((await mic(chat)).disabled).toBe(true));
+  // Midnight in the Household's timezone, Vancouver, whatever the browser's.
+  expect(
+    within(chat).getByText("Today's voice minutes are used up. Talk to Mise again from 12:00 a.m. tomorrow."),
+  ).toBeTruthy();
+  expect(fake.started).toEqual([]);
+});
+
+test("with voice turned off in the Household's settings, the mic is disabled and says so", async () => {
+  const fake = talkingClient(undefined, { status: "off" });
+  render(() => <App client={fake.client} voice={fakeVoice().open} />);
+  const chat = await openChat();
+
+  await waitFor(async () => expect((await mic(chat)).disabled).toBe(true));
+  expect(
+    within(chat).getByText("Voice is turned off. Give it minutes a day in the Household's settings."),
+  ).toBeTruthy();
+});
+
+test("once this device hangs up, its own session closing doesn't say someone is talking to Mise", async () => {
+  const fake = talkingClient();
+  render(() => <App client={fake.client} voice={fakeVoice().open} />);
+  const chat = await openChat();
+  await userEvent.click(await mic(chat));
+  await within(chat).findByText("Listening. Talk to Mise.");
+  // The household announced the session this device started; it holds it until Live has closed it.
+  fake.voiceIs.availability = { status: "in_use", by: "Robin", yours: true };
+  fake.notify("voice");
+
+  await userEvent.click(within(chat).getByRole("button", { name: "End voice" }));
+
+  expect(within(chat).queryByText("Robin is talking to Mise.")).toBeNull();
+  fake.voiceIs.availability = { status: "available" };
+  fake.notify("voice");
+  await waitFor(async () => expect((await mic(chat)).disabled).toBe(false));
 });

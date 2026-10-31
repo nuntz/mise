@@ -89,9 +89,10 @@ import {
  * the Unresolved Ingredients they are for and resolve them when accepted. "plan" is the Weeks and their Slots;
  * "grocery" their Grocery Lists and the Household's Staples, which the lists buy and their Have Ticks
  * restock; the lists also depend on the plan, the Recipes and the Household. "chat" is the Household's
- * conversation with the agent, announced once each turn is answered, and its confirmations.
+ * conversation with the agent, announced once each turn is answered, and its confirmations. "voice"
+ * is whether a Voice Session runs, announced as one starts and ends; it is not the Household's data.
  */
-export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery", "chat"]);
+export const ChangeTopic = z.enum(["household", "recipes", "plan", "grocery", "chat", "voice"]);
 export type ChangeTopic = z.infer<typeof ChangeTopic>;
 
 /**
@@ -668,7 +669,7 @@ export function parseToolInput(name: string, input: unknown): ToolResult<unknown
   return { ok: true, value: parsed.data };
 }
 
-/** Broadcast to every connected client after a mutation; clients refetch through tools. */
+/** Broadcast to every connected client after a mutation, or as a Voice Session starts or ends; clients refetch. */
 export const ChangeNotice = z.object({
   type: z.literal("mise:change"),
   topic: ChangeTopic,

@@ -378,6 +378,73 @@ describe("the daily voice cap", () => {
   });
 });
 
+describe("voice availability", () => {
+  test("says voice is unavailable on a deployment without an OpenAI key", async () => {
+    useLive(() => null);
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+
+    expect(await robin.rpc("voiceAvailability", [])).toEqual({ status: "unavailable" });
+  });
+
+  test("says who is talking to Mise while a session runs, and is available again once it ends", async () => {
+    const { household, robin } = await robinTalking();
+    const alex = await connectAs(household, "alex@example.com");
+
+    expect(await alex.rpc("voiceAvailability", [])).toEqual({ status: "in_use", by: "Robin", yours: false });
+    expect(await robin.rpc("voiceAvailability", [])).toEqual({ status: "in_use", by: "Robin", yours: true });
+
+    await robin.rpc("endVoice", []);
+    await vi.waitFor(async () => expect(await alex.rpc("voiceAvailability", [])).toEqual({ status: "available" }));
+  });
+
+  test("refuses a second start with who is talking to Mise", async () => {
+    const { household } = await robinTalking();
+    const alex = await connectAs(household, "alex@example.com");
+
+    const second = (await alex.rpc("startVoice", [OFFER, ON_THE_WEEK])) as VoiceStartReply;
+
+    expect(second).toMatchObject({ ok: false, error: { code: "in_use", by: "Robin" } });
+  });
+
+  test("tells every device when a session starts and when it ends", async () => {
+    const { household, robin } = await robinTalking();
+    const alex = await connectAs(household, "alex@example.com");
+    // Alex connected after the start: Robin's device saw it.
+    await vi.waitFor(() => expect(robin.notices.map((notice) => notice.topic)).toContain("voice"));
+
+    await robin.rpc("endVoice", []);
+
+    await vi.waitFor(() => expect(alex.notices.map((notice) => notice.topic)).toContain("voice"));
+  });
+
+  test("says voice is off when the cap is 0", async () => {
+    const { robin } = await robinWithCap(0);
+
+    expect(await robin.rpc("voiceAvailability", [])).toEqual({ status: "off" });
+  });
+
+  test("says when the day's spent minutes come back", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T20:00:00-07:00"));
+    const { robin, talk } = await robinWithCap(1);
+    expect(await robin.rpc("voiceAvailability", [])).toEqual({ status: "available" });
+
+    await talk((session) => session.serverSends({ type: "session.closed", usage: { seconds: 60 } }));
+
+    expect(await robin.rpc("voiceAvailability", [])).toEqual({ status: "spent", until: "2026-10-29T07:00:00.000Z" });
+  });
+
+  test("answers a typed chat turn while a session runs", async () => {
+    const { household } = await robinTalking();
+    const alex = await connectAs(household, "alex@example.com");
+
+    const reply = await alex.rpc("chat", ["What's for dinner Thursday?", ON_THE_WEEK]);
+
+    expect(reply).toEqual({ ok: true, value: { role: "agent", text: "Thursday's dinner is Rice bowl 2." } });
+  });
+});
+
 /** A Voice Session started straight on a pretend Live, with `allowance` seconds of the day left, on fake timers. */
 async function sessionWithAllowance(allowance: number) {
   vi.useFakeTimers();
