@@ -183,6 +183,8 @@ export class VoiceSession {
         // Speech with no delegation since the person last spoke: GPT-Live answering on its own.
         const own = this.delegationsSinceSpeech === 0;
         if (!this.spokenSinceDelegation) this.log({ kind: "speaking", own, at: now });
+        // What GPT-Live answered itself (a greeting) is not part of the next turn.
+        if (own) this.heard = "";
         if (this.answered) {
           // Roughly when the answer started being said (the acknowledgement may still be running).
           this.log({
