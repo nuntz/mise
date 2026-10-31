@@ -234,6 +234,10 @@ describe("a scaled line agrees with its amount", () => {
   test("a thing already plural, or already singular, stays as written", () => {
     expect(line("2 eggs", 2)).toBe("4 eggs");
     expect(line("1 onion", 0.5)).toBe("½ onion");
+    // A unit Mise doesn't know, so the name is taken as counted: it is plural already.
+    expect(line("1 bag frozen peas", 2)).toBe("2 bag frozen peas");
+    expect(line("1 box tomatoes", 2)).toBe("2 box tomatoes");
+    expect(line("2 bags frozen potato", 0.5)).toBe("1 bags frozen potato");
   });
 
   test("irregular words have their own plurals, even before the name", () => {
@@ -241,6 +245,12 @@ describe("a scaled line agrees with its amount", () => {
     expect(line("2 tomatoes", 0.5)).toBe("1 tomato");
     expect(line("1 bay leaf", 2)).toBe("2 bay leaves");
     expect(line("2 leaves basil", 0.5)).toBe("1 leaf basil");
+    expect(line("1 loaf sourdough", 2)).toBe("2 loaves sourdough");
+  });
+
+  test("a potato or tomato before the name says what kind, not how many", () => {
+    expect(line("1 potato bun", 2)).toBe("2 potato buns");
+    expect(line("2 tomato wedges", 0.5)).toBe("1 tomato wedge");
   });
 
   test("a Ready-made dish's package agrees too", () => {

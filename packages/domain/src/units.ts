@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Units } from "./household";
+import { matchCase } from "./plurals";
 
 /** What a unit measures. Amounts convert within a family, never across. */
 export const UNIT_FAMILIES = ["mass", "volume", "count"] as const;
@@ -118,8 +119,7 @@ for (const unit of INGREDIENT_UNITS) {
 export function unitInNumber(written: string, plural: boolean): string {
   const pair = otherNumber.get(written.toLowerCase());
   if (!pair) return written;
-  const word = plural ? pair.plural : pair.singular;
-  return written[0] === written[0]?.toUpperCase() ? word[0]?.toUpperCase() + word.slice(1) : word;
+  return matchCase(written, plural ? pair.plural : pair.singular);
 }
 
 /**

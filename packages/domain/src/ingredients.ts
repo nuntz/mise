@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type ItemCatalogue, ItemId, SHIPPED_ITEMS } from "./items";
+import { isCountingWord, nounInNumber } from "./plurals";
 import { IngredientUnit, readUnit, trailingCountUnit, unitFamily, unitInNumber } from "./units";
 
 /** How much of something: a single number has `min` equal to `max`; "2–3" is a range. */
@@ -114,7 +115,7 @@ export function scaledLine(ingredient: Ingredient, by: number, locale: string, w
   const written = leadingAmount(ingredient.raw);
   if (written) return `${scaled} ${inNumber(written.rest, ingredient, plural, locale)}`;
   const words = [unit?.replace("_", " "), name].filter(Boolean).join(" ");
-  return `${scaled} ${inNumber(words, ingredient, plural, locale)}` + (note ? `, ${note}` : "");
+  return `${scaled} ${inNumber(words, ingredient, plural, locale)}${note ? `, ${note}` : ""}`;
 }
 
 /** Parentheses before the unit: "(14 oz) can tomatoes". */
@@ -129,64 +130,21 @@ function inNumber(rest: string, { amount, unit, name }: Ingredient, plural: bool
   const named = name ? rest.indexOf(name) : -1;
   if (unit && named >= 0) {
     const after = named + name.length;
-    const word = /^\s+(\S+?)(?=$|[\s.,()])/.exec(rest.slice(after));
-    if (word)
-      return replaceAt(
-        rest,
-        after + word[0].length - (word[1] as string).length,
-        word[1] as string,
-        unitInNumber(word[1] as string, plural),
-      );
+    const match = /^\s+(\S+?)(?=$|[\s.,()])/.exec(rest.slice(after));
+    if (match) {
+      const word = match[1] as string;
+      return replaceAt(rest, after + match[0].length - word.length, word, unitInNumber(word, plural));
+    }
   }
-  // With no unit the name is what's counted. Its word is changed only when the number changes, since
-  // made plural again "eggs" would be "eggses".
+  // With no unit the name is what's counted, its word changed only when the number changes: one
+  // hummus halved is still hummus.
   if (unit || named < 0 || (amount && amount.max > 1) === plural) return rest;
   const words = name.split(" ");
   const first = words[0] as string;
-  // "leaves basil" is leaves of it; "large onion" is onions.
-  const counted = words.length > 1 && isIrregular(first) ? first : (words.at(-1) as string);
+  // "leaves basil" is leaves of it; "large onion" is onions, and "potato bun" buns.
+  const counted = words.length > 1 && isCountingWord(first) ? first : (words.at(-1) as string);
   const start = counted === first ? named : named + name.length - counted.length;
   return replaceAt(rest, start, counted, nounInNumber(counted, plural, locale));
-}
-
-/** English words not made plural by the rule. */
-const IRREGULAR: [string, string][] = [
-  ["leaf", "leaves"],
-  ["loaf", "loaves"],
-  ["potato", "potatoes"],
-  ["tomato", "tomatoes"],
-];
-const IRREGULAR_PLURALS = new Map(IRREGULAR);
-const IRREGULAR_SINGULARS = new Map(IRREGULAR.map(([singular, plural]) => [plural, singular]));
-
-function isIrregular(word: string): boolean {
-  const lower = word.toLowerCase();
-  return IRREGULAR_PLURALS.has(lower) || IRREGULAR_SINGULARS.has(lower);
-}
-
-/**
- * A word made singular or plural. Only English has the rule (#82 brings French), so other languages
- * keep the word as written.
- */
-function nounInNumber(word: string, plural: boolean, locale: string): string {
-  if (!locale.startsWith("en")) return word;
-  const lower = word.toLowerCase();
-  const irregular = (plural ? IRREGULAR_PLURALS : IRREGULAR_SINGULARS).get(lower);
-  const changed = irregular ?? (plural ? englishPlural(lower) : englishSingular(lower));
-  return word[0] === word[0]?.toUpperCase() ? changed[0]?.toUpperCase() + changed.slice(1) : changed;
-}
-
-function englishPlural(word: string): string {
-  if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
-  if (/(?:s|x|z|ch|sh)$/.test(word)) return `${word}es`;
-  return `${word}s`;
-}
-
-function englishSingular(word: string): string {
-  if (/[^aeiou]ies$/.test(word)) return `${word.slice(0, -3)}y`;
-  if (/(?:s|x|z|ch|sh)es$/.test(word)) return word.slice(0, -2);
-  if (/[^s]s$/.test(word)) return word.slice(0, -1);
-  return word;
 }
 
 function replaceAt(text: string, at: number, word: string, replacement: string): string {
