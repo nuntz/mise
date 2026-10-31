@@ -1,4 +1,4 @@
-import type { Live, LiveClientEvent, LiveSessionConfig } from "../src/live";
+import { type Live, type LiveClientEvent, LiveError, type LiveSessionConfig } from "../src/live";
 
 /** A session the pretend Live made: what it was made with, and what the household sent on its sideband. */
 export type PretendSession = {
@@ -15,19 +15,27 @@ export type PretendSession = {
 
 type Listener = { message(data: string): void; close(): void };
 
+/** A session as the pretend Live keeps it: what the test sees, and its socket's end. */
+type HeldSession = PretendSession & { listen(listener: Listener): void; close(): void };
+
 /** How often the sideband delivers what the test sent. */
 const TICK_MS = 1;
 
 /**
  * A pretend GPT-Live, kept to the real one's contract: a session answers the offer, its sideband
- * delivers nothing sent before it is listened to, and `session.close` is answered with
- * `session.closed` and then the socket closing. Events arrive later, in the household's own context,
- * as a real socket's do: a timer the household started delivers them, never the test's call.
+ * delivers events once it is listened to, and `session.close` is answered with `session.closed` and
+ * then the socket closing. Events arrive later, in the household's own context, as a real socket's
+ * do: a timer the household started delivers them, never the test's call. Refusals are `LiveError`s.
+ *
+ * With `refuse`, every create is refused. With `hold`, creates wait until `release()`.
  */
-export function pretendLive() {
+export function pretendLive({ refuse = false, hold = false }: { refuse?: boolean; hold?: boolean } = {}) {
   const sessions: PretendSession[] = [];
+  // Polled from the household's timers: a promise it made can't be resolved from the test.
+  let released = !hold;
   const live: Live = {
     async create(offer, config) {
+      if (refuse) throw new LiveError("OpenAI refused the session (401)");
       // What the test sent, waiting for the household's timer to deliver it.
       const queue: string[] = [];
       let listener: Listener | undefined;
@@ -38,7 +46,7 @@ export function pretendLive() {
         clearInterval(pump);
         listener?.close();
       };
-      const session: PretendSession & { listen(listener: Listener): void; close(): void } = {
+      const session: HeldSession = {
         id: `live_${sessions.length + 1}`,
         offer,
         config,
@@ -63,13 +71,12 @@ export function pretendLive() {
         close: closeSocket,
       };
       sessions.push(session);
+      while (!released) await new Promise((resolve) => setTimeout(resolve, TICK_MS));
       return { id: session.id, sdp: `answer to ${offer}` };
     },
     async attach(id) {
-      const session = sessions.find((made) => made.id === id) as
-        | (PretendSession & { listen(listener: Listener): void; close(): void })
-        | undefined;
-      if (!session) throw new Error(`No session ${id}`);
+      const session = sessions.find((made) => made.id === id) as HeldSession | undefined;
+      if (!session) throw new LiveError("OpenAI refused the sideband (404)");
       session.attached = true;
       return {
         send(event) {
@@ -84,5 +91,9 @@ export function pretendLive() {
       };
     },
   };
-  return { live, sessions };
+  /** Lets held creates answer: those waiting, and every one after. */
+  const release = () => {
+    released = true;
+  };
+  return { live, sessions, release };
 }

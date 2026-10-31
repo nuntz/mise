@@ -142,6 +142,52 @@ describe("a Voice Session", () => {
     expect(sessions).toHaveLength(1);
   });
 
+  test("ends once started when it was ended while starting, and the Household can start another", async () => {
+    scriptModel(() => fauxAssistantMessage("Hello."));
+    const { live, sessions, release } = pretendLive({ hold: true });
+    useLive(() => live);
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+
+    const starting = robin.rpc("startVoice", [OFFER, ON_THE_WEEK]);
+    await vi.waitFor(() => expect(sessions).toHaveLength(1));
+    await robin.rpc("endVoice", []);
+    release();
+
+    expect(await starting).toMatchObject({ ok: false, error: { code: "not_started" } });
+    expect(sessions[0]?.sent).toEqual([{ type: "session.close" }]);
+    await vi.waitFor(() => expect(sessions[0]?.closed).toBe(true));
+    const again = await robin.rpc("startVoice", [OFFER, ON_THE_WEEK]);
+    expect(again).toMatchObject({ ok: true });
+  });
+
+  test("is refused when OpenAI refuses it, and the Household can start another", async () => {
+    useLive(() => pretendLive({ refuse: true }).live);
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+
+    const refused = await robin.rpc("startVoice", [OFFER, ON_THE_WEEK]);
+    useLive(() => pretendLive().live);
+    const again = await robin.rpc("startVoice", [OFFER, ON_THE_WEEK]);
+
+    expect(refused).toMatchObject({ ok: false, error: { code: "not_started" } });
+    expect(again).toMatchObject({ ok: true });
+  });
+
+  test("speaks a long answer cut at a sentence, within commentary's limit", async () => {
+    const { session } = await robinTalking(() => fauxAssistantMessage("Dal is on Thursday. ".repeat(100)));
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Read me the week." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+    const [commentary] = session.sent;
+    const content = commentary?.type === "session.commentary.append" ? commentary.content : "";
+    expect(content.length).toBeLessThanOrEqual(1200);
+    expect(content.length).toBeGreaterThan(1000);
+    expect(content.endsWith("Dal is on Thursday.")).toBe(true);
+  });
+
   test("is refused to a request with no Caller, before anything is created", async () => {
     const { live, sessions } = pretendLive();
     useLive(() => live);

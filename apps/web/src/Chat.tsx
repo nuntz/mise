@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatWhere, ToolResult, VoiceStartReply } from "@mise/domain";
+import type { ChatMessage, ChatWhere, ToolResult } from "@mise/domain";
 import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
@@ -153,43 +153,33 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
       .finally(() => ending.hangUp());
 
   const startVoice = async () => {
-    const open = props.voice;
-    if (!open || voice() !== "off") return;
+    const dial = props.voice;
+    if (!dial || voice() !== "off") return;
     const mine = ++attempt;
     const current = () => mine === attempt;
     setError(undefined);
     setVoice("starting");
-    const failed = (code: "voice" | "voiceInUse") => {
-      if (!current()) return;
-      setVoice("off");
-      setError(code);
-    };
-    let opened: VoiceCall;
+    // The call to end if the start goes no further: the household may hold its session by then.
+    let opened: VoiceCall | undefined;
+    let refusal: "voice" | "voiceInUse" = "voice";
     try {
-      opened = await open();
+      opened = await dial();
+      const reply = current() ? await props.client.startVoice(opened.offer, props.where()) : undefined;
+      if (reply && !reply.ok) {
+        // Refused, so there is no session to end: only the mic to let go of.
+        opened.hangUp();
+        opened = undefined;
+        if (reply.error.code === "in_use") refusal = "voiceInUse";
+        throw new Error(reply.error.message);
+      }
+      if (reply && current()) await opened.connect(reply.value.sdp);
     } catch {
-      // The mic was refused, or the browser has no WebRTC.
-      failed("voice");
-      return;
-    }
-    if (!current()) return opened.hangUp();
-    let reply: VoiceStartReply | undefined;
-    try {
-      reply = await props.client.startVoice(opened.offer, props.where());
-    } catch {
-      // Shown as not started below.
-    }
-    if (!reply?.ok) {
-      opened.hangUp();
-      failed(reply?.error.code === "in_use" ? "voiceInUse" : "voice");
-      return;
-    }
-    if (!current()) return hangUp(opened);
-    try {
-      await opened.connect(reply.value.sdp);
-    } catch {
-      hangUp(opened);
-      failed("voice");
+      // The mic was refused, the browser has no WebRTC, or the household refused or didn't answer.
+      if (opened) hangUp(opened);
+      if (current()) {
+        setVoice("off");
+        setError(refusal);
+      }
       return;
     }
     if (!current()) return hangUp(opened);

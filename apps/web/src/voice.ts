@@ -8,7 +8,10 @@ export type VoiceCall = {
   offer: string;
   /** Connects with the SDP answer the household got back. */
   connect(answer: string): Promise<void>;
-  /** Calls `listener` once, when the session ends on its own: closed by GPT-Live, or the connection lost. */
+  /**
+   * Calls `listener` once, when the session ends on its own: closed by GPT-Live, or the connection
+   * lost. One that ended before this was called is called at once.
+   */
   onEnd(listener: () => void): void;
   /** Stops the mic and the connection. */
   hangUp(): void;
@@ -31,6 +34,7 @@ export const openVoice: OpenVoice = async () => {
 
   const listeners: (() => void)[] = [];
   let over = false;
+  let endedOnItsOwn = false;
   const hangUp = () => {
     if (over) return;
     over = true;
@@ -40,6 +44,7 @@ export const openVoice: OpenVoice = async () => {
   };
   const ended = () => {
     if (over) return;
+    endedOnItsOwn = true;
     hangUp();
     for (const listener of listeners.splice(0)) listener();
   };
@@ -61,7 +66,10 @@ export const openVoice: OpenVoice = async () => {
     return {
       offer: offer.sdp ?? "",
       connect: (answer) => peer.setRemoteDescription({ type: "answer", sdp: answer }),
-      onEnd: (listener) => listeners.push(listener),
+      onEnd: (listener) => {
+        if (endedOnItsOwn) listener();
+        else listeners.push(listener);
+      },
       hangUp,
     };
   } catch (error) {

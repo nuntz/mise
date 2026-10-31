@@ -266,8 +266,11 @@ class HouseholdAgent extends Agent<Env> {
     return { ok: true, value: { role: "agent", text: answer.text ?? "" } };
   }
 
-  /** The Household's Voice Session, if one runs or is starting: one at a time, held in memory (ADR 0028). */
-  private voice: VoiceSession | "starting" | null = null;
+  /**
+   * The Household's Voice Session, if one runs or is starting: one at a time, held in memory (ADR
+   * 0028). A start asked to end while it waits on OpenAI ends the session once it has one.
+   */
+  private voice: VoiceSession | { starting: true; cancelled: boolean } | null = null;
 
   /**
    * Starts a Voice Session from the browser's WebRTC offer, sent from the screen and Week `where`
@@ -287,7 +290,8 @@ class HouseholdAgent extends Agent<Env> {
     if (!live) return { ok: false, error: { code: "unavailable", message: "This deployment has no OpenAI key" } };
     if (this.voice) return { ok: false, error: { code: "in_use", message: "Someone is already talking to Mise" } };
     // Claimed before the first await, so that a second start finds it taken.
-    this.voice = "starting";
+    const starting = { starting: true as const, cancelled: false };
+    this.voice = starting;
     try {
       const { session, sdp } = await VoiceSession.start(
         live,
@@ -301,6 +305,11 @@ class HouseholdAgent extends Agent<Env> {
           if (this.voice === ended) this.voice = null;
         },
       );
+      if (starting.cancelled) {
+        session.end();
+        this.voice = null;
+        return { ok: false, error: { code: "not_started", message: "The Voice Session was ended while it started" } };
+      }
       // A sideband that closed while starting has ended the session already.
       this.voice = session.running ? session : null;
       return { ok: true, value: { sdp } };
@@ -311,10 +320,11 @@ class HouseholdAgent extends Agent<Env> {
     }
   }
 
-  /** Ends the Household's Voice Session, if one runs. */
+  /** Ends the Household's Voice Session, if one runs or is starting. */
   @callable()
   async endVoice(): Promise<void> {
     if (this.voice instanceof VoiceSession) this.voice.end();
+    else if (this.voice) this.voice.cancelled = true;
   }
 
   /** The Caller whose turn the conversation `id` is answering. */

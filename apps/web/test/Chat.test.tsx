@@ -422,18 +422,21 @@ test("a confirmation can be cancelled from the chat", async () => {
 
 /**
  * The browser's WebRTC, faked: each call made, whether it was connected and hung up, and a way for
- * GPT-Live to end it. Like the real one, a call hung up never reports ending on its own.
+ * GPT-Live to end it. Like the real one, a call hung up never reports ending on its own, and one
+ * that ended before `onEnd` reports it at once.
  */
 function fakeVoice() {
   const calls: { connected: string | null; hungUp: boolean; endFromLive(): void }[] = [];
   const open: OpenVoice = async () => {
     const listeners: (() => void)[] = [];
+    let endedOnItsOwn = false;
     const made = {
       connected: null as string | null,
       hungUp: false,
       endFromLive() {
         if (made.hungUp) return;
         made.hungUp = true;
+        endedOnItsOwn = true;
         for (const listener of listeners.splice(0)) listener();
       },
     };
@@ -443,7 +446,10 @@ function fakeVoice() {
       connect: async (answer) => {
         made.connected = answer;
       },
-      onEnd: (listener) => listeners.push(listener),
+      onEnd: (listener) => {
+        if (endedOnItsOwn) listener();
+        else listeners.push(listener);
+      },
       hangUp: () => {
         made.hungUp = true;
       },
@@ -559,6 +565,21 @@ test("a Voice Session the household refused to start says so and lets go of the 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Someone else is talking to Mise.");
   expect(voice.calls[0]?.hungUp).toBe(true);
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("a start the household didn't answer ends whatever session it made, and lets go of the mic", async () => {
+  const fake = talkingClient(async () => {
+    throw new Error("Request timed out");
+  });
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  expect((await within(chat).findByRole("alert")).textContent).toBe("Voice couldn't start. Try again.");
+  expect(fake.ended()).toBe(1);
+  await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
 });
 
 test("a mic the browser refused says voice couldn't start", async () => {

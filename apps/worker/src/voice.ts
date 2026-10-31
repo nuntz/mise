@@ -35,8 +35,11 @@ export const VOICE_SESSION: LiveSessionConfig = {
   client: { data_channel: { allowed_client_events: ["session.close"] } },
 };
 
-/** Commentary takes at most 500 tokens; this many characters stays under it. */
-const MAX_COMMENTARY_CHARS = 1600;
+/**
+ * Commentary takes at most 500 tokens. English runs about four characters a token; this leaves room
+ * for answers dense in numbers and units, which take more.
+ */
+const MAX_COMMENTARY_CHARS = 1200;
 
 /** Spoken when Mise's agent gives no answer: neither a mishearing nor a claim that nothing changed. */
 export const FAILURE_LINE = "Mise couldn't answer that. Try again in a moment.";
@@ -141,9 +144,12 @@ export class VoiceSession {
   private async delegate(id: string, text: string): Promise<void> {
     let content = NOTHING_HEARD;
     if (text) {
-      // A turn that throws is answered like one the agent failed.
-      const reply = await this.answer(text).catch(() => null);
-      content = reply ? reply.slice(0, MAX_COMMENTARY_CHARS) : FAILURE_LINE;
+      // A turn that throws is answered like one the agent failed, and reported.
+      const reply = await this.answer(text).catch((error: unknown) => {
+        Sentry.captureException(error);
+        return null;
+      });
+      content = reply ? commentaryOf(reply) : FAILURE_LINE;
     }
     if (!this.ended) this.sideband.send({ type: "session.commentary.append", delegation_id: id, content });
   }
@@ -156,4 +162,17 @@ export class VoiceSession {
     );
     this.onEnd(this);
   }
+}
+
+/** The agent's answer cut to fit commentary, at the end of a sentence where there is one to cut at. */
+function commentaryOf(answer: string): string {
+  if (answer.length <= MAX_COMMENTARY_CHARS) return answer;
+  const cut = answer.slice(0, MAX_COMMENTARY_CHARS);
+  const sentenceEnd = Math.max(
+    cut.lastIndexOf(". "),
+    cut.lastIndexOf("! "),
+    cut.lastIndexOf("? "),
+    cut.lastIndexOf("\n"),
+  );
+  return sentenceEnd > 0 ? cut.slice(0, sentenceEnd + 1).trimEnd() : cut;
 }
