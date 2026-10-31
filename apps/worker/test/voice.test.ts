@@ -90,7 +90,9 @@ describe("a Voice Session", () => {
     expect(prompts[0]).toMatch(
       /^\[Robin, speaking on .*, on the Week screen, showing the Week of Monday 2026-10-26\]\n/,
     );
-    expect(prompts[1]).toMatch(/^\[Robin, speaking on .*, on the Pantry screen, in the Week of .*\]\n/);
+    expect(prompts[1]).toMatch(
+      /^\[Robin, speaking on .*, on the Pantry screen, so day names mean the coming days: .*\]\n/,
+    );
   });
 
   test("is moved only by the connection that started it", async () => {

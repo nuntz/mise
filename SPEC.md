@@ -165,7 +165,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 - A Voice Session starts from a mic in the chat sheet, which stays open and shows the transcript and any Pending Confirmation, or from Kitchen mode's own mic, which runs over the step. One Voice Session per Household at a time: a second start is refused with the name of the person talking.
 - Every turn is the starting Caller's. The prompt says anyone in the room may speak, and "I" means the Caller unless a name is said.
 - A turn is everything said since the last cut. A backchannel GPT-Live answered itself carries into the next turn. A delegation arriving while a turn runs waits as its own turn.
-- Each turn carries the `where` of its moment, plus a voice flag. With no Week on screen it means this Week, never next Week. Kitchen mode's `where` names the Slot (or the Recipe) and the step on screen, so "how much garlic" gets the Slot's scaled amount.
+- Each turn carries the `where` of its moment, plus a voice flag. With no Week on screen, a day name means the next one from today: on a Friday, "Tuesday" is next Tuesday, never the one eaten already. Kitchen mode's `where` names the Slot (or the Recipe) and the step on screen, so "how much garlic" gets the Slot's scaled amount.
 - Spoken answers: one or two plain sentences, dates as weekdays, an offer to go on instead of a list. Same conversation, same prompt.
 - Confirmations are tapped, never spoken (ADR 0024).
 - Kitchen mode: the agent reads the next step aloud, and the household tells the session's connection to show it. This is the one message to a device that is not a tool.

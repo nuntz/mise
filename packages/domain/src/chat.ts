@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ConfirmationStatus } from "./confirmations";
-import { LocalDate, weekdayOf } from "./weeks";
+import { addDays, LocalDate, weekdayOf } from "./weeks";
 
 /** The longest message a Member can send the agent. */
 export const MAX_CHAT_MESSAGE = 4000;
@@ -47,15 +47,14 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * A turn as the model is shown it: who is speaking, whether they wrote or spoke (`spoken`, a turn
  * of a Voice Session, which only the household marks), on which day in the Household's timezone
  * (the conversation spans days, so "tomorrow" in an earlier turn meant another day), and from where,
- * then what they said. A spoken turn from a screen with no Week is given `thisWeek`, the start of
- * the Week `today` is in, so that "Tuesday" never means next Week's.
+ * then what they said. A spoken turn from a screen with no Week is given the dates of the coming
+ * seven days, so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
  */
 export function presentTurn(turn: {
   speaker: string | null;
   today: LocalDate;
   where: ChatWhere;
   spoken: boolean;
-  thisWeek: LocalDate;
   text: string;
 }): string {
   const parts = [
@@ -64,7 +63,10 @@ export function presentTurn(turn: {
     `on the ${SCREEN_NAMES[turn.where.screen]} screen`,
   ];
   if (turn.where.week) parts.push(`showing the Week of ${dayOf(turn.where.week)}`);
-  else if (turn.spoken) parts.push(`in the Week of ${dayOf(turn.thisWeek)}`);
+  else if (turn.spoken) {
+    const coming = Array.from({ length: 7 }, (_, days) => dayOf(addDays(turn.today, days)));
+    parts.push(`so day names mean the coming days: ${coming.join(", ")}`);
+  }
   return `[${parts.join(", ")}]\n${turn.text}`;
 }
 

@@ -8,7 +8,6 @@ describe("presentTurn", () => {
       today: "2026-10-27",
       where: { screen: "week", week: "2026-11-02" },
       spoken: false,
-      thisWeek: "2026-10-26",
       text: "I won't be eating dinner tomorrow",
     });
 
@@ -24,7 +23,6 @@ describe("presentTurn", () => {
       today: "2026-10-26",
       where: { screen: "week", week: "2026-10-26" },
       spoken: false,
-      thisWeek: "2026-10-26",
       text: "re-propose the week but keep Tuesday",
     });
 
@@ -39,7 +37,6 @@ describe("presentTurn", () => {
       today: "2026-10-26",
       where: { screen: "pantry" },
       spoken: false,
-      thisWeek: "2026-10-26",
       text: "we're out of cumin",
     });
 
@@ -52,7 +49,6 @@ describe("presentTurn", () => {
       today: "2026-10-26",
       where: { screen: "recipes" },
       spoken: false,
-      thisWeek: "2026-10-26",
       text: "hello",
     });
 
@@ -65,7 +61,6 @@ describe("presentTurn", () => {
       today: "2026-10-30",
       where: { screen: "week", week: "2026-11-02" },
       spoken: true,
-      thisWeek: "2026-10-26",
       text: "just the two of us Tuesday",
     });
 
@@ -75,18 +70,19 @@ describe("presentTurn", () => {
     );
   });
 
-  test("gives a spoken turn from a screen with no Week this Week, never the next", () => {
+  test("gives a spoken turn from a screen with no Week the coming days, so a day passed means next Week's", () => {
     const presented = presentTurn({
       speaker: "Robin",
       today: "2026-10-30",
       where: { screen: "pantry" },
       spoken: true,
-      thisWeek: "2026-10-26",
       text: "move Tuesday's dinner to Wednesday",
     });
 
     expect(presented).toBe(
-      "[Robin, speaking on Friday 2026-10-30, on the Pantry screen, in the Week of Monday 2026-10-26]\n" +
+      "[Robin, speaking on Friday 2026-10-30, on the Pantry screen, so day names mean the coming days: " +
+        "Friday 2026-10-30, Saturday 2026-10-31, Sunday 2026-11-01, Monday 2026-11-02, Tuesday 2026-11-03, " +
+        "Wednesday 2026-11-04, Thursday 2026-11-05]\n" +
         "move Tuesday's dinner to Wednesday",
     );
   });

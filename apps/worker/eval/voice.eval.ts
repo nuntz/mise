@@ -15,7 +15,7 @@ import { dinnerOn, familyHousehold, type HouseholdStub } from "../test/scripted"
  *   bun run eval:agent
  */
 
-// Friday 30 October 2026, in a Week of Monday 26 October: Tuesday and Wednesday have passed.
+// Friday 30 October 2026, in a Week of Monday 26 October: this Tuesday and Wednesday have passed.
 const FRIDAY_NOON = new Date("2026-10-30T12:00:00-07:00");
 const ON_THE_PANTRY: ChatWhere = { screen: "pantry" };
 // How long a turn may take: the agent may read the Week and make several calls first.
@@ -33,16 +33,19 @@ afterAll(() => vi.useRealTimers());
 
 /**
  * The family's Household with this Week's dinners planned (Tuesday Rice bowl 2, Wednesday Rice bowl 3,
- * Thursday Rice bowl 4) and next Thursday's (Rice bowl 5), and Robin talking from `where`. `say` sends
- * one turn and resolves with what Mise would speak back.
+ * Sunday Rice bowl 4) and next Week's (Tuesday Rice bowl 6, Wednesday Rice bowl 7, Sunday Rice bowl
+ * 5), and Robin talking from `where`. `say` sends one turn and resolves with what Mise would
+ * speak back.
  */
 async function robinTalking(where: ChatWhere) {
   const household = await familyHousehold();
   const dinners: [string, number][] = [
     ["2026-10-27", 2],
     ["2026-10-28", 3],
-    ["2026-10-29", 4],
-    ["2026-11-05", 5],
+    ["2026-11-01", 4],
+    ["2026-11-03", 6],
+    ["2026-11-04", 7],
+    ["2026-11-08", 5],
   ];
   for (const [date, recipeId] of dinners) {
     await household.callTool("set_slot", { date, meal: "dinner", kind: "recipe", recipeId });
@@ -86,32 +89,28 @@ function sentences(answer: string): number {
 
 describe("a spoken turn", () => {
   test(
-    "moving a past day's dinner asks first, then moves it within this Week, never next Week",
+    "a day that has passed, named from a screen with no Week, is next Week's: moving it moves next Week's dinner",
     async () => {
       const { household, say } = await robinTalking(ON_THE_PANTRY);
 
-      const asked = await say("Move Tuesday's dinner to Wednesday.");
+      // Agreeing if the agent asks first, as a person would.
+      const answer = await say("Move Tuesday's dinner to Wednesday.");
+      if (answer.includes("?")) await say("Yes.");
 
-      expect(asked, "asks before changing a past day").toContain("?");
-      expect(asked, "says Tuesday has passed").toMatch(/passed|already|gone|earlier this week/i);
-      expect(await dinnerTitle(household, "2026-10-27"), "nothing moves before a yes").toBe("Rice bowl 2");
-
-      await say("Yes.");
-
-      expect(await dinnerTitle(household, "2026-10-28")).toBe("Rice bowl 2");
-      expect(await dinnerTitle(household, "2026-10-27")).toBe("unplanned");
-      expect(await dinnerTitle(household, "2026-11-03"), "next Week's Tuesday is untouched").toBe("unplanned");
-      expect(await dinnerTitle(household, "2026-11-04"), "next Week's Wednesday is untouched").toBe("unplanned");
+      expect(await dinnerTitle(household, "2026-11-04")).toBe("Rice bowl 6");
+      expect(await dinnerTitle(household, "2026-11-03"), "moved, not swapped").toBe("unplanned");
+      expect(await dinnerTitle(household, "2026-10-27"), "this Week's Tuesday is untouched").toBe("Rice bowl 2");
+      expect(await dinnerTitle(household, "2026-10-28"), "this Week's Wednesday is untouched").toBe("Rice bowl 3");
     },
     4 * TURN_MS,
   );
 
   test(
-    "a day named from a screen with no Week is this Week's, said in a sentence or two, with no date read out",
+    "a day still to come, named from a screen with no Week, is this Week's, said in a sentence or two, with no date read out",
     async () => {
       const { say } = await robinTalking(ON_THE_PANTRY);
 
-      const answer = await say("What's for dinner Thursday?");
+      const answer = await say("What's for dinner Sunday?");
 
       expect(answer).toContain("Rice bowl 4");
       expect(answer).not.toContain("Rice bowl 5");

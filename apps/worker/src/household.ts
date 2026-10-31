@@ -21,7 +21,6 @@ import {
   driveFlaggedMessage,
   exportKey,
   firstDocImage,
-  HOUSEHOLD_DEFAULTS,
   type Household as HouseholdData,
   type ImportError,
   type ImportedPhoto,
@@ -73,8 +72,6 @@ import {
   type ToolResult,
   type VoiceStartReply,
   type Week,
-  weekOf,
-  weekStartOf,
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { Agent, type Connection, type ConnectionContext, callable, getCurrentAgent } from "agents";
@@ -254,12 +251,8 @@ class HouseholdAgent extends Agent<Env> {
     const now = new Date();
     const turn = recordTurn(sql, speaker, now.toISOString());
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
-    const household = this.household();
-    const today = localDate(now, household?.timezone ?? "UTC");
-    const thisWeek = household
-      ? weekOf(today, household).startDate
-      : weekStartOf(today, HOUSEHOLD_DEFAULTS.weekStartsOn);
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, spoken, thisWeek, text });
+    const today = localDate(now, this.household()?.timezone ?? "UTC");
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, spoken, text });
     const entry: TurnData = { turn, text };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {
