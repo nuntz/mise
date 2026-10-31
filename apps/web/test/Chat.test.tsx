@@ -36,8 +36,8 @@ const household: Household = {
 
 /**
  * A client for a Household whose conversation with the agent starts as `earlier`; each message gets
- * `reply`, and joins the conversation with the agent's answer, as the household keeps it. A tap on a
- * confirmation gets `confirm`. A Voice Session is started and ended with `voice`.
+ * `reply`, and joins the conversation with the agent's answer, or unanswered, as the household keeps
+ * it. A tap on a confirmation gets `confirm`. A Voice Session is started and ended with `voice`.
  */
 function fakeClient(
   earlier: ChatMessage[],
@@ -87,6 +87,11 @@ function fakeClient(
         sentFrom.push(where);
         const answer = await reply(text);
         if (answer.ok) conversation.push({ role: "member", speaker: "Robin", text }, answer.value);
+        else if (answer.error.code === "unanswered") {
+          // The household keeps a turn it couldn't answer, and announces the conversation.
+          conversation.push({ role: "member", speaker: "Robin", text, unanswered: true });
+          queueMicrotask(() => fake.notify("chat"));
+        }
         return answer;
       },
       confirm: async (id) => {
@@ -257,6 +262,34 @@ test("a message the agent could not answer says so and stays to send again", asy
 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Mise couldn't answer that. Try again.");
   expect(messageBox(chat).value).toBe("What's for dinner?");
+  await waitFor(() =>
+    expect(
+      within(chat)
+        .getAllByRole("listitem")
+        .map((turn) => turn.textContent),
+    ).toEqual(["Robin: What's for dinner? (Not answered)"]),
+  );
+});
+
+test("a turn Mise couldn't answer shows as not answered among the others", async () => {
+  const { client } = fakeClient(
+    [
+      { role: "member", speaker: "Robin", text: "Plan Friday", unanswered: true },
+      { role: "member", speaker: "Alex", text: "Plan Saturday" },
+      { role: "agent", text: "Saturday is Dal." },
+    ],
+    async () => ({ ok: true, value: { role: "agent", text: "" } }),
+  );
+  render(() => <App client={client} />);
+
+  const chat = await openChat();
+
+  const turns = await within(chat).findAllByRole("listitem");
+  expect(turns.map((turn) => turn.textContent)).toEqual([
+    "Robin: Plan Friday (Not answered)",
+    "Alex: Plan Saturday",
+    "Mise: Saturday is Dal.",
+  ]);
 });
 
 test("offline, the chat can't be opened: the agent needs the connection", async () => {

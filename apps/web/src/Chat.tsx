@@ -77,10 +77,10 @@ const TAP_ERRORS: Partial<Record<string, "changed" | "answered">> = { expired: "
 
 /**
  * The Household's shared conversation with the agent, and a message to add to it; a sheet over the
- * page. Turns others send show as the conversation changes. A call the agent asked to make that waits
- * for a person shows as a button saying what it will do. A Voice Session's turns show as they are
- * answered; it ends with a tap, when the sheet closes, or when the page is hidden (a locked phone
- * turns the mic off). The mic shows only where voice is available, and says before a tap why it
+ * page. Turns others send show as the conversation changes, and a turn Mise couldn't answer says so.
+ * A call the agent asked to make that waits for a person shows as a button saying what it will do. A
+ * Voice Session's turns show as they are answered; it ends with a tap, when the sheet closes, or when
+ * the page is hidden (a locked phone turns the mic off). The mic shows only where voice is available, and says before a tap why it
  * can't start: offline, someone else talking, the day's minutes spent, or voice turned off.
  */
 function ChatSheet(props: {
@@ -384,6 +384,13 @@ function ChatSheet(props: {
                           <span class="visually-hidden">: </span>
                         </span>
                         {turn.text}
+                        <Show when={turn.role === "member" && turn.unanswered}>
+                          <small class="chat-unanswered">
+                            <span class="visually-hidden"> (</span>
+                            {t("chat.notAnswered")}
+                            <span class="visually-hidden">)</span>
+                          </small>
+                        </Show>
                       </li>
                     )
                   }

@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { type Models, Type } from "@earendil-works/pi-ai";
+import { type Models, type StopReason, Type } from "@earendil-works/pi-ai";
 import type {
   CompactionSettings,
   Conversation,
@@ -378,15 +378,35 @@ type ConfirmationDetails = { confirmation: number };
  * one at a time, each placed as its run starts, so a run's tools find their own turn.
  */
 export async function turnBeingAnswered(conversation: Conversation): Promise<number | null> {
+  for await (const entry of newestFirst(conversation)) {
+    if (entry.kind === TURN_ENTRY) return (entry.data as TurnData).turn;
+  }
+  return null;
+}
+
+/**
+ * Whether the newest Member's turn placed in the conversation went unanswered: its run failed. A turn
+ * still being answered hasn't.
+ */
+export async function lastTurnUnanswered(conversation: Conversation): Promise<boolean> {
+  // A run's last answer comes before its turn.
+  for await (const entry of newestFirst(conversation)) {
+    if (entry.kind === TURN_ENTRY) return false;
+    if (entry.kind !== "pi.assistant") continue;
+    const answer = [...(entry.model ?? [])].reverse().find((message) => message.role === "assistant");
+    if (answer?.role === "assistant") return FAILED.has(answer.stopReason);
+  }
+  return false;
+}
+
+/** The conversation's entries, newest first, read a page at a time as they are asked for. */
+async function* newestFirst(conversation: Conversation): AsyncGenerator<EntryRecord> {
   let cursor: Cursor | undefined;
   do {
-    // Newest first.
     const page = await conversation.entries({}, 50, cursor, BACKGROUND_CONTEXT);
-    const turn = page.items.find((entry) => entry.kind === TURN_ENTRY);
-    if (turn) return (turn.data as TurnData).turn;
+    yield* page.items;
     cursor = page.next;
   } while (cursor);
-  return null;
 }
 
 /** What the chat shows a transcript entry with: who said each turn, and what became of each confirmation. */
@@ -405,12 +425,14 @@ export async function recentChat(
   count: number,
   lookups: ChatLookups,
 ): Promise<ChatMessage[]> {
+  let entries: EntryRecord[] = [];
   let messages: ChatMessage[] = [];
   let cursor: Cursor | undefined;
   do {
-    // Newest first.
+    // Newest first. Read again as a whole: a turn and the run answering it may be on two pages.
     const page = await conversation.entries({}, 100, cursor, BACKGROUND_CONTEXT);
-    messages = [...chatMessages([...page.items].reverse(), lookups), ...messages];
+    entries = [...[...page.items].reverse(), ...entries];
+    messages = chatMessages(entries, lookups);
     cursor = page.next;
   } while (cursor && messages.length < count);
   return messages.slice(-count);
@@ -418,14 +440,17 @@ export async function recentChat(
 
 /**
  * Entries as the chat shows them, in their order: what Members said, the agent's answers, and the
- * confirmations its held calls wait for, where it made them.
+ * confirmations its held calls wait for, where it made them. A turn whose run failed is marked
+ * unanswered, whatever its run did before failing.
  */
 function chatMessages(entries: readonly EntryRecord[], lookups: ChatLookups): ChatMessage[] {
   const messages: ChatMessage[] = [];
+  let latestTurn: Extract<ChatMessage, { role: "member" }> | undefined;
   for (const entry of entries) {
     if (entry.kind === TURN_ENTRY) {
       const { turn, text } = entry.data as TurnData;
-      messages.push({ role: "member", speaker: lookups.speakerOf(turn), text });
+      latestTurn = { role: "member", speaker: lookups.speakerOf(turn), text };
+      messages.push(latestTurn);
       continue;
     }
     if (entry.kind !== "pi.assistant" && entry.kind !== "pi.tool-result") continue;
@@ -436,12 +461,16 @@ function chatMessages(entries: readonly EntryRecord[], lookups: ChatLookups): Ch
         if (id !== null && shown) messages.push({ role: "confirmation", id, ...shown });
       }
       if (message.role !== "assistant") continue;
+      if (latestTurn && FAILED.has(message.stopReason)) latestTurn.unanswered = true;
       const text = textOf(message.content);
       if (text) messages.push({ role: "agent", text });
     }
   }
   return messages;
 }
+
+/** How a run that answered nothing ends: its model failed, or the run was stopped. */
+const FAILED: ReadonlySet<StopReason> = new Set(["error", "aborted"]);
 
 /** The confirmation a tool result's details name, if they name one. */
 function confirmationIn(details: unknown): number | null {

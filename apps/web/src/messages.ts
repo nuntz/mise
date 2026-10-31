@@ -364,6 +364,7 @@ const en = {
   "chat.send": "Send",
   "chat.waiting": "Mise is thinking…",
   "chat.unanswered": "Mise couldn't answer that. Try again.",
+  "chat.notAnswered": "Not answered",
   "chat.confirmation.pending": "Tap to confirm",
   "chat.confirmation.done": "Done",
   "chat.confirmation.cancelled": "Cancelled",

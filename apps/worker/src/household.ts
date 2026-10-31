@@ -83,6 +83,7 @@ import {
   type AgentCallResult,
   agentCompaction,
   agentModels,
+  lastTurnUnanswered,
   miseExtension,
   recentChat,
   TURN_ENTRY,
@@ -255,7 +256,9 @@ class HouseholdAgent extends Agent<Env> {
     const turn = recordTurn(sql, speaker, now.toISOString());
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
     const today = localDate(now, this.household()?.timezone ?? "UTC");
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, spoken, text });
+    // After a failed run, the turns it left waiting aren't answered with this one.
+    const afterUnanswered = await lastTurnUnanswered(await (await this.harness.pi()).root(BACKGROUND_CONTEXT));
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, spoken, afterUnanswered, text });
     const entry: TurnData = { turn, text };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {

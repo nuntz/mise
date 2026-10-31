@@ -1132,6 +1132,11 @@ fieldset > .toggle-chip {
   font: var(--type-label);
 }
 
+/* Under a turn whose run failed: Mise didn't act on it. */
+.chat-unanswered {
+  display: block;
+}
+
 /* The message field with its send button beside it, at the field's foot as the field grows. */
 .chat-form {
   flex-direction: row;

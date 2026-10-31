@@ -157,6 +157,29 @@ describe("a Voice Session", () => {
     );
   });
 
+  test("after a turn it couldn't answer, presents the next one to be answered alone", async () => {
+    let requests = 0;
+    const { household, session, prompts } = await robinTalking(() =>
+      ++requests === 1
+        ? fauxAssistantMessage([], { stopReason: "error", errorMessage: "model_error" })
+        : fauxAssistantMessage("Friday is Rice bowl 2."),
+    );
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday, please." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+
+    expect(prompts[1]).toMatch(/; Mise couldn't answer the messages before this one: answer only this message\]\n/);
+    expect(await household.conversation()).toEqual([
+      { role: "member", speaker: "Robin", text: "Plan Friday.", unanswered: true },
+      { role: "member", speaker: "Robin", text: "Plan Friday, please." },
+      { role: "agent", text: "Friday is Rice bowl 2." },
+    ]);
+  });
+
   test("ends when asked: session.close is sent, the sideband closes, and nothing more is answered", async () => {
     const { robin, session, prompts } = await robinTalking();
 

@@ -88,6 +88,41 @@ describe("presentTurn", () => {
         "move Tuesday's dinner to Wednesday",
     );
   });
+
+  test("after a turn left unanswered, says to answer only this one", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-10-30",
+      where: { screen: "pantry" },
+      spoken: false,
+      afterUnanswered: true,
+      text: "we're out of cumin",
+    });
+
+    expect(presented).toBe(
+      "[Robin, writing on Friday 2026-10-30, on the Pantry screen; " +
+        "Mise couldn't answer the messages before this one: answer only this message]\n" +
+        "we're out of cumin",
+    );
+  });
+
+  test("says so with a spoken turn too, after how to answer for the ear", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-10-30",
+      where: { screen: "week", week: "2026-10-26" },
+      spoken: true,
+      afterUnanswered: true,
+      text: "next step",
+    });
+
+    expect(presented).toBe(
+      "[Robin, speaking on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-10-26; " +
+        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on; " +
+        "Mise couldn't answer the messages before this one: answer only this message]\n" +
+        "next step",
+    );
+  });
 });
 
 describe("ChatWhere", () => {

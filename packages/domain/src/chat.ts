@@ -22,11 +22,12 @@ export type ChatWhere = z.infer<typeof ChatWhere>;
 /**
  * One turn of the Household's shared conversation with the agent, as the chat shows it. A Member's
  * turn names who said it: the Member's name, the Caller's email when no Member signs in with it, or
- * null when no one signed in (calls from inside the deployment). A confirmation is a call the agent
- * made that waits for a person's tap (ADR 0024), shown where the agent made it.
+ * null when no one signed in (calls from inside the deployment), and is `unanswered` when the run
+ * answering it failed. A confirmation is a call the agent made that waits for a person's tap (ADR
+ * 0024), shown where the agent made it.
  */
 export type ChatMessage =
-  | { role: "member"; speaker: string | null; text: string }
+  | { role: "member"; speaker: string | null; text: string; unanswered?: true }
   | { role: "agent"; text: string }
   | { role: "confirmation"; id: number; summary: string; status: ConfirmationStatus };
 
@@ -49,12 +50,15 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * (the conversation spans days, so "tomorrow" in an earlier turn meant another day), and from where,
  * then what they said. A spoken turn from a screen with no Week is given the dates of the coming
  * seven days, so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
+ * A turn `afterUnanswered`, sent after a turn whose run failed, is to be answered alone: the model
+ * would otherwise answer every message still waiting at once.
  */
 export function presentTurn(turn: {
   speaker: string | null;
   today: LocalDate;
   where: ChatWhere;
   spoken: boolean;
+  afterUnanswered?: boolean;
   text: string;
 }): string {
   const parts = [
@@ -67,8 +71,10 @@ export function presentTurn(turn: {
     const coming = Array.from({ length: 7 }, (_, days) => dayOf(addDays(turn.today, days)));
     parts.push(`so day names mean the coming days: ${coming.join(", ")}`);
   }
-  const header = parts.join(", ");
-  return `[${turn.spoken ? `${header}; ${FOR_THE_EAR}` : header}]\n${turn.text}`;
+  const header = [parts.join(", ")];
+  if (turn.spoken) header.push(FOR_THE_EAR);
+  if (turn.afterUnanswered) header.push(ONLY_THIS_ONE);
+  return `[${header.join("; ")}]\n${turn.text}`;
 }
 
 /**
@@ -77,6 +83,9 @@ export function presentTurn(turn: {
  */
 const FOR_THE_EAR =
   "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on";
+
+/** What a turn after an unanswered one says, so that the messages left waiting aren't answered with it. */
+const ONLY_THIS_ONE = "Mise couldn't answer the messages before this one: answer only this message";
 
 /** `date` with its weekday, as a turn names it. */
 function dayOf(date: LocalDate): string {

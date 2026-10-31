@@ -119,6 +119,82 @@ describe("the agent", () => {
   });
 });
 
+/**
+ * A scripted model that fails the requests `failing` names (by the message's text), and otherwise
+ * answers like a model shown several waiting messages: every message since its last answer, unless
+ * the newest says to answer only it.
+ */
+function failingOn(...failing: string[]): FauxResponseFactory {
+  return (context) => {
+    const newest = lastUserText(context);
+    if (failing.some((text) => newest.endsWith(`\n${text}`))) {
+      return fauxAssistantMessage([], { stopReason: "error", errorMessage: "model_error" });
+    }
+    const answered = context.messages.map((message) => message.role).lastIndexOf("assistant");
+    const sinceAnswer = context.messages.slice(answered + 1).filter((message) => message.role === "user");
+    const waiting = /answer only this message/i.test(newest) ? [newest] : sinceAnswer.map(textOf);
+    return fauxAssistantMessage(`Answering: ${waiting.map((text) => text.split("\n").at(-1)).join(" and ")}`);
+  };
+}
+
+describe("after a failed turn", () => {
+  test("the failed turn is shown unanswered, also once the conversation is read again", async () => {
+    scriptModel(failingOn("What's for dinner Thursday?"));
+    const household = await householdWithThursdayDinner();
+
+    await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
+    const shown = await household.conversation();
+    await evictDurableObject(household);
+
+    const unanswered = { role: "member", speaker: null, text: "What's for dinner Thursday?", unanswered: true };
+    expect(shown).toEqual([unanswered]);
+    expect(await household.conversation()).toEqual([unanswered]);
+  });
+
+  test("the next message gets one answer, to it only", async () => {
+    scriptModel(failingOn("What's for dinner Thursday?"));
+    const household = await householdWithThursdayDinner();
+
+    await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
+    const reply = await household.chat("Plan Friday", ON_THE_WEEK);
+
+    expect(reply).toEqual({ ok: true, value: { role: "agent", text: "Answering: Plan Friday" } });
+    expect(await household.conversation()).toEqual([
+      { role: "member", speaker: null, text: "What's for dinner Thursday?", unanswered: true },
+      { role: "member", speaker: null, text: "Plan Friday" },
+      { role: "agent", text: "Answering: Plan Friday" },
+    ]);
+  });
+
+  test("a turn answered after the failure leaves the turns answered before it as they read", async () => {
+    const seen: TranscriptContext[] = [];
+    const answer = failingOn("Plan Friday");
+    scriptModel((context, ...rest) => {
+      seen.push(context);
+      return answer(context, ...rest);
+    });
+    const household = await householdWithThursdayDinner();
+
+    await household.chat("Hello", ON_THE_WEEK);
+    await household.chat("Plan Friday", ON_THE_WEEK);
+    await household.chat("Plan Saturday", ON_THE_WEEK);
+    await household.chat("Thanks", ON_THE_WEEK);
+
+    expect(await household.conversation()).toEqual([
+      { role: "member", speaker: null, text: "Hello" },
+      { role: "agent", text: "Answering: Hello" },
+      { role: "member", speaker: null, text: "Plan Friday", unanswered: true },
+      { role: "member", speaker: null, text: "Plan Saturday" },
+      { role: "agent", text: "Answering: Plan Saturday" },
+      { role: "member", speaker: null, text: "Thanks" },
+      { role: "agent", text: "Answering: Thanks" },
+    ]);
+    // Only the turn sent after the failure is told to answer alone; the others read as they were sent.
+    const users = (seen.at(-1)?.messages ?? []).filter((message) => message.role === "user").map(textOf);
+    expect(users.map((text) => /answer only this message/.test(text))).toEqual([false, false, true, false]);
+  });
+});
+
 describe("what the agent is told", () => {
   test("the system prompt describes the Household, its Members and their Constraints", async () => {
     const seen: string[] = [];
