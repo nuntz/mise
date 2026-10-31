@@ -57,30 +57,32 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | Promise<
 /** A client with rice and eggs due, unless `answers` say otherwise; it records every call. */
 function fakeClient(answers: Record<string, Answer> = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
-  const { client, goOffline, notify } = createFakeClient(async (name: string, input: Record<string, unknown>) => {
-    calls.push({ name, input });
-    const answer = answers[name]?.(input);
-    if (answer) return answer;
-    switch (name) {
-      case "get_household":
-        return { ok: true, value: household };
-      case "get_week":
-        return { ok: false, error: { code: "not_found", message: "" } };
-      case "list_items":
-        return { ok: true, value: ITEMS };
-      case "list_due_staples":
-        return { ok: true, value: { due: 2, staples: [rice, egg] } satisfies DueStaples };
-      case "list_staples":
-        return { ok: true, value: [rice, egg, milk] };
-      case "record_staple_status":
-      case "upsert_staple":
-      case "remove_staple":
-        return { ok: true, value: rice };
-      default:
-        throw new Error(`Unexpected tool ${name}`);
-    }
-  });
-  return { client, calls, goOffline, notify };
+  const { client, goOffline, goOnline, notify } = createFakeClient(
+    async (name: string, input: Record<string, unknown>) => {
+      calls.push({ name, input });
+      const answer = answers[name]?.(input);
+      if (answer) return answer;
+      switch (name) {
+        case "get_household":
+          return { ok: true, value: household };
+        case "get_week":
+          return { ok: false, error: { code: "not_found", message: "" } };
+        case "list_items":
+          return { ok: true, value: ITEMS };
+        case "list_due_staples":
+          return { ok: true, value: { due: 2, staples: [rice, egg] } satisfies DueStaples };
+        case "list_staples":
+          return { ok: true, value: [rice, egg, milk] };
+        case "record_staple_status":
+        case "upsert_staple":
+        case "remove_staple":
+          return { ok: true, value: rice };
+        default:
+          throw new Error(`Unexpected tool ${name}`);
+      }
+    },
+  );
+  return { client, calls, goOffline, goOnline, notify };
 }
 
 const writes = (calls: { name: string; input: Record<string, unknown> }[]) =>
@@ -379,4 +381,118 @@ test("an Item that isn't in the catalogue can't be made a Staple", async () => {
 
   expect(within(form).getByRole("alert").textContent).toContain("No Item is called “unobtainium”");
   expect(writes(calls)).toEqual([]);
+});
+
+/** The text of what describes `control`: "Needs a connection." offline. */
+const reasonOf = (control: HTMLElement) =>
+  document.getElementById(String(control.getAttribute("aria-describedby")))?.textContent;
+
+test("opened offline, the check-in can't start and says it needs a connection, until it's back", async () => {
+  const { client, goOffline, goOnline } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const pantry = await screen.findByRole("button", { name: "Pantry" });
+
+  goOffline();
+  await user.click(pantry);
+
+  const start = (await screen.findByRole("button", { name: "Start the pantry check" })) as HTMLButtonElement;
+  expect(start.disabled).toBe(true);
+  expect(reasonOf(start)).toBe("Needs a connection.");
+  expect(screen.queryByRole("alert")).toBeNull();
+
+  goOnline();
+
+  expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+  const back = screen.getByRole("button", { name: "Start the pantry check" }) as HTMLButtonElement;
+  expect(back.disabled).toBe(false);
+  expect(back.getAttribute("aria-describedby")).toBeNull();
+  expect(screen.queryByText("Needs a connection.")).toBeNull();
+});
+
+test("losing the connection mid-check keeps the card and answers given, and waits to answer until it's back", async () => {
+  const { client, calls, goOffline, goOnline } = fakeClient();
+  const user = await openPantry(client);
+  await user.click(await screen.findByRole("button", { name: "Start the pantry check" }));
+  await user.click(within(screen.getByRole("group", { name: "Rice" })).getByRole("button", { name: "Low" }));
+  const egg = await screen.findByRole("group", { name: "Egg" });
+
+  goOffline();
+
+  for (const name of ["Stocked", "Low", "Out"]) {
+    const answer = within(egg).getByRole("button", { name }) as HTMLButtonElement;
+    expect(answer.disabled, name).toBe(true);
+    expect(reasonOf(answer), name).toBe("Needs a connection.");
+  }
+  expect((within(egg).getByRole("button", { name: "Skip for now" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(within(egg).getByText("2 of 2 · Fridge")).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+
+  goOnline();
+  await user.click(within(screen.getByRole("group", { name: "Egg" })).getByRole("button", { name: "Out" }));
+
+  expect(await screen.findByText("All checked.")).toBeTruthy();
+  expect(writes(calls).map((call) => [call.input.item, call.input.status])).toEqual([
+    ["rice", "low"],
+    ["egg", "out"],
+  ]);
+});
+
+test("online, a check-in that fails to load says so, until a later load works", async () => {
+  let failing = true;
+  const { client, notify } = fakeClient({
+    list_due_staples: () => {
+      if (failing) throw new Error("Household unavailable");
+      return undefined;
+    },
+  });
+  await openPantry(client);
+  expect((await screen.findByRole("alert")).textContent).toContain("Something went wrong");
+
+  failing = false;
+  notify("grocery");
+
+  expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("offline, the Staples stay listed but can't be saved, removed or added: each says it needs a connection", async () => {
+  const { client, calls, goOffline } = fakeClient();
+  const user = await openPantry(client);
+  const staples = await screen.findByRole("region", { name: "Staples" });
+  await user.click(await within(staples).findByRole("button", { name: "Edit Rice" }));
+  const edit = within(staples).getByRole("form", { name: "Edit Rice" });
+  const add = screen.getByRole("form", { name: "Add a Staple" });
+
+  goOffline();
+
+  for (const control of [
+    within(edit).getByRole("button", { name: "Save" }),
+    within(edit).getByRole("button", { name: "Remove Rice" }),
+    within(add).getByRole("button", { name: "Add Staple" }),
+  ] as HTMLButtonElement[]) {
+    expect(control.disabled, control.textContent ?? "").toBe(true);
+    expect(reasonOf(control), control.textContent ?? "").toBe("Needs a connection.");
+  }
+  expect(within(staples).getByText("Egg")).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(writes(calls)).toEqual([]);
+});
+
+test("offline, Always buy it says it needs a connection, while the check can still go on without it", async () => {
+  const { client, goOffline } = fakeClient({
+    record_staple_status: (input) =>
+      input.item === "rice" ? { ok: true, value: { ...rice, status: "out", suggestAlwaysBuy: true } } : undefined,
+  });
+  const user = await openPantry(client);
+  await user.click(await screen.findByRole("button", { name: "Start the pantry check" }));
+  await user.click(within(screen.getByRole("group", { name: "Rice" })).getByRole("button", { name: "Out" }));
+  const always = (await screen.findByRole("button", { name: "Always buy rice" })) as HTMLButtonElement;
+
+  goOffline();
+
+  expect(always.disabled).toBe(true);
+  expect(reasonOf(always)).toBe("Needs a connection.");
+  await user.click(screen.getByRole("button", { name: "Keep checking" }));
+  expect(screen.getByRole("group", { name: "Egg" })).toBeTruthy();
 });

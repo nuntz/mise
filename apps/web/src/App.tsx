@@ -291,7 +291,12 @@ export function App(props: { client: MiseClient }) {
                     />
                   </Match>
                   <Match when={page() === "pantry"}>
-                    <PantryPage client={props.client} locale={household().locale} onWeek={() => go("week")} />
+                    <PantryPage
+                      client={props.client}
+                      locale={household().locale}
+                      online={online()}
+                      onWeek={() => go("week")}
+                    />
                   </Match>
                   <Match when={page() === "recipes"}>
                     <RecipesPage

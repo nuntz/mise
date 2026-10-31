@@ -280,6 +280,7 @@ export function WeekPage(props: {
                       household={props.household}
                       slot={slot()}
                       readOnly={readOnly()}
+                      online={props.online}
                       rate={open.rate}
                       onEdit={() => {
                         setOpened(undefined);
@@ -748,6 +749,7 @@ function Cooking(props: {
   household: Household;
   slot: Slot;
   readOnly: boolean;
+  online: boolean;
   /** Opened to rate it: the rating has the focus. */
   rate: boolean;
   onEdit: () => void;
@@ -812,7 +814,7 @@ function Cooking(props: {
           <CookedChip />
         </p>
         <Show when={props.slot.meal === "dinner" && props.slot.recipe}>
-          {(recipe) => <RunOut client={props.client} recipeId={recipe().id} />}
+          {(recipe) => <RunOut client={props.client} recipeId={recipe().id} online={props.online} />}
         </Show>
         <For each={props.slot.ratings}>{(given) => <p class="meta">{ratedText(given)}</p>}</For>
         <form class="slot-form" aria-label={t("cooking.prompt")} onSubmit={rate}>

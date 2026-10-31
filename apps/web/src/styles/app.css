@@ -469,7 +469,8 @@ details[open] > summary::after {
   align-items: flex-end;
 }
 
-.actions .control {
+.actions .control,
+:is(.screen, .stack) > .control {
   align-items: stretch;
 }
 

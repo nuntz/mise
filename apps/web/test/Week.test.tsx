@@ -1551,6 +1551,49 @@ test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run ou
   ]);
 });
 
+test("offline, a cooked dinner's Staples stay shown, but marking one low or out says it needs a connection", async () => {
+  const cooked = emptyWeek("2026-10-26");
+  Object.assign(cooked.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T02:00:00.000Z",
+  });
+  const oil: Staple = {
+    item: "olive_oil",
+    name: "olive oil",
+    location: "pantry",
+    checkEvery: 14,
+    alwaysBuy: false,
+    qtyPerShop: null,
+    status: "stocked",
+    lastChecked: null,
+    outInARow: 0,
+    suggestAlwaysBuy: false,
+  };
+  const { client, calls, goOffline } = fakeClient({
+    get_week: () => ({ ok: true, value: cooked }),
+    list_staples: (input) => ({ ok: true, value: input.usedBy === 1 ? [oil] : [] }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const runOut = await within(sheet).findByRole("group", { name: "Anything run out?" });
+
+  goOffline();
+
+  for (const name of ["Olive oil: Low", "Olive oil: Out"]) {
+    const mark = within(runOut).getByRole("button", { name }) as HTMLButtonElement;
+    expect(mark.disabled, name).toBe(true);
+    expect(document.getElementById(String(mark.getAttribute("aria-describedby")))?.textContent, name).toBe(
+      "Needs a connection.",
+    );
+  }
+  expect(within(sheet).queryByRole("alert")).toBeNull();
+  expect(writes(calls)).toEqual([]);
+});
+
 test("marking a dinner cooked asks at once whether any Staple its Recipe uses has run out", async () => {
   const cooked = emptyWeek("2026-10-26");
   Object.assign(cooked.slots[5] as Slot, {

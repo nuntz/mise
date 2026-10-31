@@ -67,11 +67,11 @@ export function PantryBanner(props: { client: MiseClient; online: boolean; onOpe
 }
 
 /** The pantry check-in, then every Staple and a form to add or change one. */
-export function PantryPage(props: { client: MiseClient; locale: string; onWeek: () => void }) {
+export function PantryPage(props: { client: MiseClient; locale: string; online: boolean; onWeek: () => void }) {
   return (
     <section class="screen" aria-labelledby="pantry-title">
-      <CheckIn client={props.client} locale={props.locale} onWeek={props.onWeek} />
-      <StapleList client={props.client} locale={props.locale} />
+      <CheckIn client={props.client} locale={props.locale} online={props.online} onWeek={props.onWeek} />
+      <StapleList client={props.client} locale={props.locale} online={props.online} />
     </section>
   );
 }
@@ -79,9 +79,10 @@ export function PantryPage(props: { client: MiseClient; locale: string; onWeek: 
 /**
  * The Staples due, one card at a time, each answered Stocked, Low or Out. The session asks about the
  * Staples due when it started, so answering one doesn't reshuffle the rest. A Staple found out three
- * times running is suggested for always buying before the next card.
+ * times running is suggested for always buying before the next card. Answers aren't kept to sync
+ * later, so offline nothing can be answered; a check under way waits on its card for the connection.
  */
-function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void }) {
+function CheckIn(props: { client: MiseClient; locale: string; online: boolean; onWeek: () => void }) {
   const [due, setDue] = createSignal<DueStaples>();
   const [session, setSession] = createSignal<Staple[]>();
   const [index, setIndex] = createSignal(0);
@@ -89,15 +90,18 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
   const [suggested, setSuggested] = createSignal<Staple[]>([]);
   const [error, setError] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
+  const reasonId = createUniqueId();
 
+  // Offline, failing to load isn't an error: the start button says why it can't be used.
   keepFresh(
     props.client,
     ["grocery"],
     () => props.client.call("list_due_staples", {}),
     (result) => {
+      setError(!result.ok);
       if (result.ok) setDue(result.value);
     },
-    () => setError(true),
+    () => setError(props.online),
   );
 
   const start = () => {
@@ -138,6 +142,21 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
   };
   const dismiss = (staple: Staple) => setSuggested((all) => all.filter((one) => one.item !== staple.item));
 
+  const startButton = () => (
+    <div class="control">
+      <button
+        type="button"
+        class="button-primary"
+        disabled={!props.online}
+        aria-describedby={props.online ? undefined : reasonId}
+        onClick={start}
+      >
+        {t("pantry.start")}
+      </button>
+      <NeedsConnection id={reasonId} online={props.online} />
+    </div>
+  );
+
   const done = () => {
     const staples = session();
     return staples !== undefined && index() >= staples.length && suggested().length === 0;
@@ -170,7 +189,14 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
       <Show
         when={session()}
         fallback={
-          <Show when={due()} fallback={<Show when={!error()}>{<CheckInLoading />}</Show>}>
+          <Show
+            when={due()}
+            fallback={
+              <Show when={!props.online} fallback={<Show when={!error()}>{<CheckInLoading />}</Show>}>
+                {startButton()}
+              </Show>
+            }
+          >
             {(shown) => (
               <Show
                 when={shown().due > 0}
@@ -182,9 +208,7 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
                   </div>
                 }
               >
-                <button type="button" class="button-primary" onClick={start}>
-                  {t("pantry.start")}
-                </button>
+                {startButton()}
               </Show>
             )}
           </Show>
@@ -218,7 +242,8 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
                         <button
                           type="button"
                           class={`answer answer-${status}`}
-                          disabled={busy()}
+                          disabled={busy() || !props.online}
+                          aria-describedby={props.online ? undefined : reasonId}
                           onClick={() => answer(staple(), status)}
                         >
                           <Icon name={STATUS_ICON[status]} />
@@ -226,6 +251,7 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
                         </button>
                       )}
                     </For>
+                    <NeedsConnection id={reasonId} online={props.online} />
                     <button
                       type="button"
                       class="button-quiet"
@@ -255,9 +281,18 @@ function CheckIn(props: { client: MiseClient; locale: string; onWeek: () => void
                   </h2>
                   <p>{t("pantry.suggestAlwaysBuy", { name: staple().name })}</p>
                 </section>
-                <button type="button" class="button-primary" onClick={() => alwaysBuy(staple())}>
-                  {t("pantry.alwaysBuyIt", { name: staple().name })}
-                </button>
+                <div class="control">
+                  <button
+                    type="button"
+                    class="button-primary"
+                    disabled={!props.online}
+                    aria-describedby={props.online ? undefined : reasonId}
+                    onClick={() => alwaysBuy(staple())}
+                  >
+                    {t("pantry.alwaysBuyIt", { name: staple().name })}
+                  </button>
+                  <NeedsConnection id={reasonId} online={props.online} />
+                </div>
                 <button type="button" class="button-secondary" onClick={() => dismiss(staple())}>
                   {t("pantry.keepChecking")}
                 </button>
@@ -395,8 +430,11 @@ const STATUS_CHIP = { stocked: "chip-leaf", low: "chip-amber", out: "chip-warn" 
   string
 >;
 
-/** Every Staple as a row, each opening in place to change or remove it, and a form to add one. */
-function StapleList(props: { client: MiseClient; locale: string }) {
+/**
+ * Every Staple as a row, each opening in place to change or remove it, and a form to add one.
+ * Offline, the rows last loaded stay, but nothing can be saved.
+ */
+function StapleList(props: { client: MiseClient; locale: string; online: boolean }) {
   // Reconciled by Item, so a refetch keeps each row, and a Staple being edited keeps its draft.
   const [loaded, setLoaded] = createStore<{ staples: Staple[] }>({ staples: [] });
   // A row closes only its own form, so a save that finishes after another row was opened leaves that one open.
@@ -422,6 +460,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
               <StapleRow
                 client={props.client}
                 locale={props.locale}
+                online={props.online}
                 staple={staple}
                 editing={editing() === staple.item}
                 onEdit={(on) => setEditing((open) => (on ? staple.item : open === staple.item ? undefined : open))}
@@ -430,7 +469,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
           )}
         </For>
       </ul>
-      <AddStaple client={props.client} />
+      <AddStaple client={props.client} online={props.online} />
     </section>
   );
 }
@@ -439,6 +478,7 @@ function StapleList(props: { client: MiseClient; locale: string }) {
 function StapleRow(props: {
   client: MiseClient;
   locale: string;
+  online: boolean;
   staple: Staple;
   editing: boolean;
   onEdit: (on: boolean) => void;
@@ -446,6 +486,8 @@ function StapleRow(props: {
   const [draft, setDraft] = createSignal<StapleDraft>(draftOf(props.staple));
   const [error, setError] = createSignal<string>();
   const [busy, setBusy] = createSignal(false);
+  const saveReasonId = createUniqueId();
+  const removeReasonId = createUniqueId();
 
   const summary = () => {
     const staple = props.staple;
@@ -519,30 +561,43 @@ function StapleRow(props: {
             {error()}
           </p>
         </Show>
-        <button type="submit" class="button-primary" disabled={busy()}>
-          {t("pantry.save")}
-        </button>
+        <div class="control">
+          <button
+            type="submit"
+            class="button-primary"
+            disabled={busy() || !props.online}
+            aria-describedby={props.online ? undefined : saveReasonId}
+          >
+            {t("pantry.save")}
+          </button>
+          <NeedsConnection id={saveReasonId} online={props.online} />
+        </div>
         <button type="button" class="button-quiet" onClick={() => props.onEdit(false)}>
           {t("pantry.cancel")}
         </button>
-        <button
-          type="button"
-          class="button-danger"
-          aria-label={t("pantry.remove", { name: nameText(props.staple.name) })}
-          disabled={busy()}
-          onClick={() => run(() => props.client.call("remove_staple", { item: props.staple.item }))}
-        >
-          {t("member.remove")}
-        </button>
+        <div class="control">
+          <button
+            type="button"
+            class="button-danger"
+            aria-label={t("pantry.remove", { name: nameText(props.staple.name) })}
+            disabled={busy() || !props.online}
+            aria-describedby={props.online ? undefined : removeReasonId}
+            onClick={() => run(() => props.client.call("remove_staple", { item: props.staple.item }))}
+          >
+            {t("member.remove")}
+          </button>
+          <NeedsConnection id={removeReasonId} online={props.online} />
+        </div>
       </form>
     </Show>
   );
 }
 
 /** "Add a Staple": an Item from the catalogue, where it's kept and how often it's checked. */
-function AddStaple(props: { client: MiseClient }) {
+function AddStaple(props: { client: MiseClient; online: boolean }) {
   const items = createItems(props.client);
   const titleId = createUniqueId();
+  const reasonId = createUniqueId();
   const [draft, setDraft] = createSignal<StapleDraft>(EMPTY_DRAFT);
   const [error, setError] = createSignal<string>();
   const change = (fields: Partial<StapleDraft>) => setDraft((current) => ({ ...current, ...fields }));
@@ -580,9 +635,17 @@ function AddStaple(props: { client: MiseClient }) {
         <For each={[...items().values()]}>{(item) => <option value={item.name} />}</For>
       </datalist>
       <StapleFields draft={draft()} onChange={change} />
-      <button type="submit" class="button-secondary">
-        {t("pantry.addAction")}
-      </button>
+      <div class="control">
+        <button
+          type="submit"
+          class="button-secondary"
+          disabled={!props.online}
+          aria-describedby={props.online ? undefined : reasonId}
+        >
+          {t("pantry.addAction")}
+        </button>
+        <NeedsConnection id={reasonId} online={props.online} />
+      </div>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
           {error()}
@@ -674,10 +737,14 @@ function StapleFields(props: { draft: StapleDraft; onChange: (fields: Partial<St
   );
 }
 
-/** After a dinner is cooked: the Staples its Recipe uses, each to mark low or out. */
-export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
+/**
+ * After a dinner is cooked: the Staples its Recipe uses, each to mark low or out. Offline, they stay
+ * shown but can't be marked.
+ */
+export function RunOut(props: { client: MiseClient; recipeId: RecipeId; online: boolean }) {
   const [staples, setStaples] = createSignal<Staple[]>([]);
   const [error, setError] = createSignal(false);
+  const reasonId = createUniqueId();
 
   // On failure there's nothing to ask about until the next change or reconnect.
   keepFresh(
@@ -724,6 +791,8 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
                       class="button-row"
                       aria-label={t(`pantry.record.${status}`, { name: nameText(staple.name) })}
                       aria-pressed={staple.status === status}
+                      disabled={!props.online}
+                      aria-describedby={props.online ? undefined : reasonId}
                       onClick={() => record(staple, status)}
                     >
                       {t(`staple.${status}`)}
@@ -734,6 +803,7 @@ export function RunOut(props: { client: MiseClient; recipeId: RecipeId }) {
             )}
           </For>
         </ul>
+        <NeedsConnection id={reasonId} online={props.online} />
         <Show when={error()}>
           <p class="banner banner-warn" role="alert">
             {t("app.error")}
