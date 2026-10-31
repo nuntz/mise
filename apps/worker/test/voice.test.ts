@@ -47,6 +47,14 @@ describe("a Voice Session", () => {
     expect(session.attached).toBe(true);
   });
 
+  test("tells GPT-Live to delegate a “never mind”, which only Mise's agent can act on", async () => {
+    const { session } = await robinTalking();
+
+    const delegated = session.config.instructions.split("Do not generate")[0];
+
+    expect(delegated).toMatch(/never mind/);
+  });
+
   test("answers a delegation with one turn of what was heard, as the Caller who started it, spoken back as commentary", async () => {
     const { household, session, prompts } = await robinTalking();
 

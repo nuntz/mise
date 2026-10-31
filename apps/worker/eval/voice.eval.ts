@@ -166,3 +166,28 @@ describe("a spoken turn", () => {
     2 * TURN_MS,
   );
 });
+
+describe("a held change in a spoken turn (ADR 0024)", () => {
+  test(
+    "a spoken “yes” doesn't run it, and “never mind” withdraws it",
+    async () => {
+      const { household, say } = await robinTalking(ON_THE_PANTRY);
+
+      expect(await say("Delete the Satay recipe.")).toMatch(/tap/i);
+      await say("Yes.");
+      expect(await household.callTool("get_recipe", { id: 1 }), "a spoken yes runs nothing").toMatchObject({
+        ok: true,
+      });
+
+      await say("Never mind, keep it.");
+
+      const shown = (await household.conversation()).filter((message) => message.role === "confirmation");
+      expect(shown.length, "held at least once").toBeGreaterThan(0);
+      expect(
+        shown.map((confirmation) => confirmation.status),
+        "every button is withdrawn",
+      ).not.toContain("pending");
+    },
+    4 * TURN_MS,
+  );
+});
