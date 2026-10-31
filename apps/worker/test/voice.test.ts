@@ -55,6 +55,15 @@ describe("a Voice Session", () => {
     expect(delegated).toMatch(/never mind/);
   });
 
+  test("tells GPT-Live to say Mise's failure line as it is, never as a request to repeat", async () => {
+    const { session } = await robinTalking();
+
+    const speaking = session.config.instructions.split("# Speaking results")[1]?.split("\n# ")[0] ?? "";
+
+    expect(speaking).toContain(FAILURE_LINE);
+    expect(speaking).toMatch(/never ask the person to repeat/i);
+  });
+
   test("answers a delegation with one turn of what was heard, as the Caller who started it, spoken back as commentary", async () => {
     const { household, session, prompts } = await robinTalking();
 
@@ -137,18 +146,26 @@ describe("a Voice Session", () => {
       fauxAssistantMessage([], { stopReason: "error", errorMessage: "model_error" }),
     );
 
-    session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday." });
-    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    const spoken = await say(session, "Plan Friday.");
 
-    await vi.waitFor(() =>
-      expect(session.sent).toEqual([
-        {
-          type: "session.commentary.append",
-          delegation_id: "item_1",
-          content: "Mise couldn't answer that. Try again in a moment.",
-        },
-      ]),
+    expect(spoken).toBe("Mise couldn't answer that. Try again in a moment.");
+    // Neither a mishearing, which the person would answer by repeating into the same failure, nor a
+    // claim that nothing changed, which a change made before the failure would belie.
+    expect(spoken).not.toMatch(/again\?|repeat|say (it|that)|catch|hear|nothing (changed|happened)|no change/i);
+  });
+
+  test("speaks the same failure line when a change was made before the agent failed, and the change stays", async () => {
+    const FRIDAY = { date: "2026-10-30", meal: "dinner" };
+    const { household, session } = await robinTalking((context) =>
+      context.messages.some((message) => message.role === "toolResult")
+        ? fauxAssistantMessage([], { stopReason: "error", errorMessage: "model_error" })
+        : fauxAssistantMessage(fauxToolCall("set_slot", { ...FRIDAY, kind: "recipe", recipeId: 2 }), {
+            stopReason: "toolUse",
+          }),
     );
+
+    expect(await say(session, "Plan Rice bowl 2 for Friday.")).toBe(FAILURE_LINE);
+    expect(await dinnerOn(household, FRIDAY.date)).toMatchObject({ kind: "recipe", recipe: { id: 2 } });
   });
 
   test("after a turn it couldn't answer, presents the next one to be answered alone", async () => {
@@ -165,7 +182,13 @@ describe("a Voice Session", () => {
     session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday, please." });
     session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
     await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
+    expect(session.sent).toEqual([
+      { type: "session.commentary.append", delegation_id: "item_1", content: FAILURE_LINE },
+      { type: "session.commentary.append", delegation_id: "item_2", content: "Friday is Rice bowl 2." },
+    ]);
+    expect(prompts).toHaveLength(2);
     expect(prompts[1]).toMatch(/; Mise couldn't answer the messages before this one: answer only this message\]\n/);
     expect(await household.conversation()).toEqual([
       { role: "member", speaker: "Robin", text: "Plan Friday.", unanswered: true },

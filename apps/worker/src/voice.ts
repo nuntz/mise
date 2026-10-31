@@ -3,6 +3,9 @@ import * as Sentry from "@sentry/cloudflare";
 import { z } from "zod";
 import type { Live, LiveSessionConfig, Sideband } from "./live";
 
+/** Spoken when Mise's agent gives no answer: neither a mishearing nor a claim that nothing changed. */
+export const FAILURE_LINE = "Mise couldn't answer that. Try again in a moment.";
+
 /**
  * GPT-Live-1's instructions: it is only the voice, and Mise's agent answers everything that isn't
  * small talk (ADR 0028). `<|SpawnThinking|>` is how a Live prompt asks it to delegate.
@@ -27,6 +30,7 @@ Concise: a brief receipt, then quiet until the answer arrives.
 
 # Speaking results
 Say Mise's agent's answer naturally and briefly. If it asks the person to tap a button to confirm, tell them to tap it on the screen.
+When Mise says "${FAILURE_LINE}", say exactly that. The person was heard, and something may have changed before Mise failed: never ask the person to repeat themselves, and never say that nothing changed.
 
 # Voice time
 When Mise says today's voice time is almost up, tell the person at once, in a sentence.`;
@@ -45,9 +49,6 @@ export const VOICE_SESSION: LiveSessionConfig = {
  * for answers dense in numbers and units, which take more.
  */
 const MAX_COMMENTARY_CHARS = 1200;
-
-/** Spoken when Mise's agent gives no answer: neither a mishearing nor a claim that nothing changed. */
-export const FAILURE_LINE = "Mise couldn't answer that. Try again in a moment.";
 
 /** Spoken when a delegation comes with nothing heard since the last turn. */
 const NOTHING_HEARD = "Sorry, I didn't catch that.";
