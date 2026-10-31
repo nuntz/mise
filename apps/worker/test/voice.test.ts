@@ -4,10 +4,10 @@ import type { ChatWhere, VoiceStartReply } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { openAiLive, useLive } from "../src/live";
-import { VOICE_TIME_WARNING, VoiceSession } from "../src/voice";
+import { FAILURE_LINE, VOICE_TIME_WARNING, VoiceSession } from "../src/voice";
 import { connectAs } from "./connect";
 import { type PretendSession, pretendLive } from "./liveService";
-import { familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
+import { dinnerOn, familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
 
 const ON_THE_WEEK: ChatWhere = { screen: "week", week: "2026-10-26" };
 const OFFER = "v=0 offer";
@@ -75,20 +75,6 @@ describe("a Voice Session", () => {
     ]);
   });
 
-  test("cuts each turn from what was heard since the last one", async () => {
-    const { household, session } = await robinTalking(() => fauxAssistantMessage("Noted."));
-
-    session.serverSends({ type: "session.input_transcript.delta", delta: "We're out of rice." });
-    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
-    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
-    session.serverSends({ type: "session.input_transcript.delta", delta: "And cumin." });
-    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
-    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
-
-    const said = (await household.conversation()).filter((turn) => turn.role === "member").map((turn) => turn.text);
-    expect(said).toEqual(["We're out of rice.", "And cumin."]);
-  });
-
   test("presents each turn as spoken, from where the person was when it was cut", async () => {
     const { robin, session, prompts } = await robinTalking(() => fauxAssistantMessage("Noted."));
 
@@ -143,8 +129,7 @@ describe("a Voice Session", () => {
 
     await vi.waitFor(() => expect(session.sent).toHaveLength(1));
     expect(prompts[0]).toMatch(/\nHi there\.$/);
-    const said = (await household.conversation()).filter((turn) => turn.role === "member").map((turn) => turn.text);
-    expect(said).toEqual(["Hi there."]);
+    expect(await saidTurns(household)).toEqual(["Hi there."]);
   });
 
   test("speaks a failure line, not the agent's error, when the agent can't answer", async () => {
@@ -339,6 +324,185 @@ const DELETE_SATAY: [string, JsonObject] = ["delete_recipe", { id: 1, confirm: t
 async function confirmations(household: HouseholdStub) {
   return (await household.conversation()).filter((message) => message.role === "confirmation");
 }
+
+/** What was said in each turn of the conversation, as recorded. */
+async function saidTurns(household: HouseholdStub): Promise<string[]> {
+  return (await household.conversation()).filter((turn) => turn.role === "member").map((turn) => turn.text);
+}
+
+/** What was said in a turn as the agent was given it: its last line, below the header. */
+function spokenLine(prompt: string): string | undefined {
+  return prompt.split("\n").at(-1);
+}
+
+describe("cutting a Voice Session's turns", () => {
+  test("cuts each turn from what was heard since the last one", async () => {
+    const { household, session } = await robinTalking(() => fauxAssistantMessage("Noted."));
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "We're out of rice." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+    session.serverSends({ type: "session.input_transcript.delta", delta: "And cumin." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+
+    expect(await saidTurns(household)).toEqual(["We're out of rice.", "And cumin."]);
+  });
+
+  test("keeps what was said before a backchannel GPT-Live answered itself in the next turn", async () => {
+    const { household, session, prompts } = await robinTalking(() => fauxAssistantMessage("Saturday it is."));
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "No," });
+    // GPT-Live heard only a pause, and answered it itself: no delegation.
+    session.serverSends({ type: "session.output_transcript.delta", delta: "Mm-hmm." });
+    session.serverSends({ type: "session.input_transcript.delta", delta: " Saturday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toMatch(/\]\nNo, Saturday\.$/);
+    expect(await saidTurns(household)).toEqual(["No, Saturday."]);
+  });
+
+  test("sends a one-word reply as a turn, read against the agent's question, without what GPT-Live said aloud", async () => {
+    const contexts: string[][] = [];
+    const { household, session, prompts } = await robinTalking((context) => {
+      contexts.push(context.messages.map((message) => textOf(message)));
+      return fauxAssistantMessage(
+        ["Clear next week too?", "Done. The week after as well?"][contexts.length - 1] ?? "Done.",
+      );
+    });
+
+    await say(session, "Clear this week.");
+    session.serverSends({ type: "session.output_transcript.delta", delta: "Want me to clear next week as well?" });
+    await say(session, "Yes.");
+    session.serverSends({ type: "session.output_transcript.delta", delta: "Done. And the week after?" });
+    await say(session, "No. Clear this week.");
+
+    expect(prompts.map(spokenLine)).toEqual(["Clear this week.", "Yes.", "No. Clear this week."]);
+    // Each reply follows the question it answers, and nothing GPT-Live paraphrased is in the conversation.
+    expect(contexts[1]?.slice(-2)).toEqual(["Clear next week too?", expect.stringMatching(/\nYes\.$/)]);
+    expect(contexts[2]?.slice(-2)).toEqual([
+      "Done. The week after as well?",
+      expect.stringMatching(/\nNo\. Clear this week\.$/),
+    ]);
+    expect(contexts.flat().join("\n")).not.toMatch(/Want me to/);
+    expect(await saidTurns(household)).toEqual(["Clear this week.", "Yes.", "No. Clear this week."]);
+  });
+
+  test("queues a delegation that arrives while a turn runs as its own turn, each answered in order", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const { household, session, prompts } = await robinTalking(async (context) => {
+      const asked = spokenLine(lastText(context));
+      // The first turn is still being answered when the second delegation arrives.
+      if (asked === "Plan Friday.") await firstHeld;
+      return fauxAssistantMessage(`Answered “${asked}”`);
+    });
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    session.serverSends({ type: "session.input_transcript.delta", delta: "And Saturday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(session.sent).toEqual([]);
+    releaseFirst();
+    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+
+    expect(session.sent).toEqual([
+      { type: "session.commentary.append", delegation_id: "item_1", content: "Answered “Plan Friday.”" },
+      { type: "session.commentary.append", delegation_id: "item_2", content: "Answered “And Saturday.”" },
+    ]);
+    expect(prompts.map(spokenLine)).toEqual(["Plan Friday.", "And Saturday."]);
+    expect(await saidTurns(household)).toEqual(["Plan Friday.", "And Saturday."]);
+  });
+
+  test("still answers a queued turn when the turn ahead of it fails, as the only one to answer", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const { household, session, prompts } = await robinTalking(async (context) => {
+      if (spokenLine(lastText(context)) !== "Plan Friday.") return fauxAssistantMessage("Saturday is Rice bowl 2.");
+      await firstHeld;
+      return fauxAssistantMessage([], { stopReason: "error", errorMessage: "model_error" });
+    });
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    session.serverSends({ type: "session.input_transcript.delta", delta: "And Saturday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    releaseFirst();
+    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+
+    expect(session.sent).toEqual([
+      { type: "session.commentary.append", delegation_id: "item_1", content: FAILURE_LINE },
+      { type: "session.commentary.append", delegation_id: "item_2", content: "Saturday is Rice bowl 2." },
+    ]);
+    expect(prompts[1]).toMatch(/answer only this message\]\nAnd Saturday\.$/);
+    expect(await household.conversation()).toEqual([
+      { role: "member", speaker: "Robin", text: "Plan Friday.", unanswered: true },
+      { role: "member", speaker: "Robin", text: "And Saturday." },
+      { role: "agent", text: "Saturday is Rice bowl 2." },
+    ]);
+  });
+
+  test("takes a correction as its own turn after the first, which the agent can undo", async () => {
+    const FRIDAY = { date: "2026-10-30", meal: "dinner" };
+    const THURSDAY = { date: "2026-10-29", meal: "dinner" };
+    const contexts: string[][] = [];
+    const { household, session } = await robinTalking((context, ...rest) => {
+      contexts.push(context.messages.map((message) => textOf(message)));
+      return byWhatWasSaid({
+        "Plan Rice bowl 2 for Friday.": {
+          calls: [["set_slot", { ...FRIDAY, kind: "recipe", recipeId: 2 }]],
+          answer: "Rice bowl 2 is on Friday.",
+        },
+        "Thursday, not Friday.": {
+          calls: [
+            ["set_slot", { ...FRIDAY, kind: "unplanned" }],
+            ["set_slot", { ...THURSDAY, kind: "recipe", recipeId: 2 }],
+          ],
+          answer: "Moved it to Thursday.",
+        },
+      })(context, ...rest);
+    });
+
+    await say(session, "Plan Rice bowl 2 for Friday.");
+    const correctionStart = contexts.length;
+    expect(await say(session, "Thursday, not Friday.")).toBe("Moved it to Thursday.");
+
+    // The correction's first request has the first turn, answered, before it.
+    expect(contexts[correctionStart]?.slice(-2)).toEqual([
+      "Rice bowl 2 is on Friday.",
+      expect.stringMatching(/\nThursday, not Friday\.$/),
+    ]);
+    expect(await saidTurns(household)).toEqual(["Plan Rice bowl 2 for Friday.", "Thursday, not Friday."]);
+    expect(await dinnerOn(household, "2026-10-30")).toMatchObject({ kind: "unplanned" });
+    expect(await dinnerOn(household, "2026-10-29")).toMatchObject({ kind: "recipe", recipe: { id: 2 } });
+  });
+
+  test("answers two delegations that arrive together as two turns, in order", async () => {
+    const { household, session, prompts } = await robinTalking((context) =>
+      fauxAssistantMessage(`Answered “${spokenLine(lastText(context))}”`),
+    );
+
+    // Delivered in one tick: the second delegation comes before the first turn has been submitted.
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Plan Friday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    session.serverSends({ type: "session.input_transcript.delta", delta: "And Saturday." });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_2" } });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(2));
+
+    expect(session.sent).toEqual([
+      { type: "session.commentary.append", delegation_id: "item_1", content: "Answered “Plan Friday.”" },
+      { type: "session.commentary.append", delegation_id: "item_2", content: "Answered “And Saturday.”" },
+    ]);
+    expect(prompts.map(spokenLine)).toEqual(["Plan Friday.", "And Saturday."]);
+    expect(await saidTurns(household)).toEqual(["Plan Friday.", "And Saturday."]);
+  });
+});
 
 describe("a held change during a Voice Session (ADR 0024)", () => {
   test("waits for a tap, and the commentary names the button to tap", async () => {

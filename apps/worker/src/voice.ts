@@ -99,13 +99,19 @@ export type VoiceHooks = {
 
 /**
  * One Voice Session the household holds the sideband of. Every delegation becomes a turn of what
- * was heard since the last one, from where the person was when it was cut, answered by `answer` (the
- * shared conversation's path) and spoken back as commentary, which names the button of each change
- * it held for a tap. Only the person's words leave here, as turn text; no audio is kept.
+ * was heard since the last one, from where the person was when it was cut. It is answered by `answer`
+ * (the shared conversation's path) after the turns cut before it, and spoken back as commentary,
+ * which names the button of each change it held for a tap. Only the person's words leave here, as
+ * turn text; no audio is kept.
  */
 export class VoiceSession {
   /** The input transcript heard since the last turn was cut. */
   private heard = "";
+  /**
+   * The turns being answered, one after another: a turn is submitted once the one before it has its
+   * answer, so turns keep the order they were cut in, and a turn ahead that fails leaves it to run.
+   */
+  private answering: Promise<void> = Promise.resolve();
   private ending = false;
   private ended = false;
   /** Live's latest cumulative count, never below the start charge billed at creation. */
@@ -193,7 +199,14 @@ export class VoiceSession {
         // The delegation carries no utterance: the turn is what was heard since the last one.
         const text = this.heard.trim();
         this.heard = "";
-        void this.delegate(event.data.delegation.id, text, this.place);
+        const { id } = event.data.delegation;
+        const where = this.place;
+        // Reported, so that one turn's failure never stops the turns behind it.
+        this.answering = this.answering
+          .then(() => this.delegate(id, text, where))
+          .catch((error: unknown) => {
+            Sentry.captureException(error);
+          });
         return;
       }
       case "session.usage.updated":
