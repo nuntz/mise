@@ -290,7 +290,10 @@ class HouseholdAgent extends Agent<Env> {
         offer,
         key,
         async (text) => {
-          const reply = await this.answerTurn(caller, text, { screen: "week" });
+          // As the chat sends from the Week screen: "Tuesday" is this Week's.
+          const week = handlers.get_week(this.ctx.storage.sql, {}, { caller });
+          const where = { screen: "week" as const, ...(week.ok ? { week: week.value.startDate } : {}) };
+          const reply = await this.answerTurn(caller, text, where);
           return reply.ok ? reply.value.text : `Mise's agent did not answer: ${reply.error.message}`;
         },
         log,
