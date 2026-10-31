@@ -20,6 +20,57 @@ Whether OpenAI's GPT-Live-1 can be only the voice layer of Mise (SPEC §2 Voice 
   - That a Durable Object can hold the sideband. That means an outbound WebSocket with an `Authorization` header and no hibernation, plus reflected 24 kHz PCM audio arriving on it, at acceptable CPU and duration cost.
   - What voice confirmation looks like under ADR 0024.
 
+## Spike results (2026-10-30)
+
+The prototype is kept on the `prototype/voice-backend` branch, outside `master`. `/prototype-voice` in `bun run dev` creates the session from the household, attaches the sideband there and answers each client delegation with a turn of the shared conversation (`apps/worker/src/prototypeVoice.ts`). `apps/worker/scripts/prototypeVoiceSeed.ts` seeds a fresh store with the sample Household. Four sessions were run locally in desktop Chrome. The last one used the seeded Household with this Week planned, and ran 9 turns.
+
+**Verdict: build Drop 3 on client delegation with the sideband in the household.** Every unknown in "What the prototype must still prove" above was answered, apart from phones and Durable Object restarts.
+
+### Latency (seeded Household, 9 turns)
+
+| Leg | Range | Typical |
+|---|---|---|
+| Last word heard → `session.delegation.created` (GPT-Live deciding the person has finished) | 0.9–1.5 s | 1.3 s |
+| Mise's agent: Haiku 5.5 through PiHarness, with real tools (`search_recipes`, `get_recipe`, `set_slot`, Staples) | 0.9–2.4 s | 2.0 s |
+| `session.commentary.append` → first words of the answer | 0.1–0.8 s | 0.6 s |
+| **Last word → answer spoken** | **2.4–4.7 s** | **3.9 s** |
+
+- GPT-Live speaks its automatic acknowledgement ("Checking…", "Let me see what I can do") about 0.2 s after delegating. The only silence is its own end-of-turn wait.
+- In every turn the transcript was complete when the delegation arrived. A turn can be cut from the input transcript at once, with no wait.
+- A turn that answered several queued questions took 6.1 s in the agent.
+
+### Second brain
+
+- GPT-Live answered on its own only for greetings and a backchannel ("Mm-hmm").
+- It delegated every question and every change, including one-word replies to the agent's questions ("Yeah", "Yes").
+- It delegated the kitchen-mode question ("how much garlic in the beef and broccoli"), and did not answer it from memory.
+- It paraphrased faithfully and made answers speakable: ISO dates became "this coming Monday", Markdown was dropped. It did not claim a held change was done ("Nothing has been cleared yet").
+- One exception: an error answer ("Mise's agent did not answer: model_error") was spoken as "Could you say it again?". So a failure needs wording GPT-Live can't turn into a mishearing.
+
+### Plumbing
+
+- Session create: 0.2–1.5 s.
+- A Durable Object opens the sideband with `fetch` Upgrade and an `Authorization` header. It answered `101` in 81–125 ms.
+- Reflected audio is a steady 110–124 KB/s into the household, which handled it. CPU was not measured.
+- `session.usage.updated` comes every 15 s. Billed seconds matched wall time: 129 s billed for 132 s.
+- `session.close` from the sideband ends the session as `close_requested`. If the browser drops WebRTC first, it ends as `remote_hangup` or `connection_lost`.
+
+### Decisions the spike leaves for the Drop 3 grilling
+
+1. **Which Week a voice turn means.** Sent with no Week, "Tuesday" on a Friday was read as next Week's. The prototype now sends this Week, as the chat does from the Week screen.
+2. **Confirmations (ADR 0024).** The agent's "tap the button above" pointed at nothing, so voice needs the held change visible while talking.
+3. **Failed turns in the shared conversation.** Turns that failed with `model_error` stayed in the conversation, and the next run answered all of them at once.
+4. **Cutting turns from the transcript.** A backchannel must not drop what came before it: "No, Saturday" reached the agent as ", Saturday" until that was fixed. A turn can also open with the answer to the previous question ("No. Clear this week").
+5. **Answers for voice.** The agent writes for a screen: Markdown, ISO dates, several paragraphs. A voice `where` could ask for one or two spoken sentences.
+
+Not tested:
+- phones and the installed PWA (iOS Safari, Android Chrome);
+- a Durable Object restart or deploy mid-session;
+- the household's CPU cost of the reflected audio;
+- a full Household from a Paprika import.
+
+Found along the way: `search_recipes` doesn't find "Beef and Broccoli Stir-Fry" for "stir fry", which voice transcripts always spell without the hyphen (#97).
+
 ## Sources
 
 All fetched 2026-10-30. OpenAI doc pages carry no version or date, so the changelog dates are given where they exist. OpenAI pages were read as Markdown (`.md` suffix, as each page instructs).
