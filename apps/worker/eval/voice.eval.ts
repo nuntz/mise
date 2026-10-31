@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
-import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { useLive } from "../src/live";
+import { anthropicModels } from "../src/llm";
 import { connectAs } from "../test/connect";
 import { pretendLive } from "../test/liveService";
 import { dinnerOn, familyHousehold, type HouseholdStub } from "../test/scripted";
@@ -13,6 +14,7 @@ import { dinnerOn, familyHousehold, type HouseholdStub } from "../test/scripted"
  * commentary it would speak. Calls Claude with the key in `.dev.vars`, so it runs only by hand:
  *
  *   bun run eval:agent
+ *   MISE_EVAL_MODEL=claude-sonnet-5-5 bun run eval:agent   (on another model than the agent's)
  */
 
 // Friday 30 October 2026, in a Week of Monday 26 October: this Tuesday and Wednesday have passed.
@@ -23,8 +25,14 @@ const TURN_MS = 90_000;
 
 beforeAll(() => {
   if (!env.ANTHROPIC_API_KEY) throw new Error("Put ANTHROPIC_API_KEY in apps/worker/.dev.vars to run the eval.");
-  // The real model, not a scripted one.
-  useAgentModels(undefined);
+  // The real model, not a scripted one: the agent's, or the one asked for.
+  const id = inject("agentModel");
+  useAgentModels(
+    id
+      ? (env) => ({ models: anthropicModels(env.ANTHROPIC_API_KEY), model: { provider: "anthropic", id } })
+      : undefined,
+  );
+  console.log(`Agent model: ${id || "the agent's own"}`);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(FRIDAY_NOON);
 });
