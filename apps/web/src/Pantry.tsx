@@ -67,10 +67,22 @@ export function PantryBanner(props: { client: MiseClient; online: boolean; onOpe
 }
 
 /** The pantry check-in, then every Staple and a form to add or change one. */
-export function PantryPage(props: { client: MiseClient; locale: string; online: boolean; onWeek: () => void }) {
+export function PantryPage(props: {
+  client: MiseClient;
+  locale: string;
+  online: boolean;
+  talking: boolean;
+  onWeek: () => void;
+}) {
   return (
     <section class="screen" aria-labelledby="pantry-title">
-      <CheckIn client={props.client} locale={props.locale} online={props.online} onWeek={props.onWeek} />
+      <CheckIn
+        client={props.client}
+        locale={props.locale}
+        online={props.online}
+        talking={props.talking}
+        onWeek={props.onWeek}
+      />
       <StapleList client={props.client} locale={props.locale} online={props.online} />
     </section>
   );
@@ -81,8 +93,12 @@ export function PantryPage(props: { client: MiseClient; locale: string; online: 
  * Staples due when it started, so answering one doesn't reshuffle the rest. A Staple found out three
  * times running is suggested for always buying before the next card. Answers aren't kept to sync
  * later, so offline nothing can be answered; a check under way waits on its card for the connection.
+ * A Staple answered elsewhere, as Mise's agent records them in a Voice Session, is answered here too:
+ * the cards move past it and the summary counts it. Before the check starts, only an answer heard
+ * while this device is `talking` starts it: a tap on another phone or a Grocery List line ticked as
+ * had only lowers the count.
  */
-function CheckIn(props: { client: MiseClient; locale: string; online: boolean; onWeek: () => void }) {
+function CheckIn(props: { client: MiseClient; locale: string; online: boolean; talking: boolean; onWeek: () => void }) {
   const [due, setDue] = createSignal<DueStaples>();
   const [session, setSession] = createSignal<Staple[]>();
   const [index, setIndex] = createSignal(0);
@@ -92,17 +108,59 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; o
   const [busy, setBusy] = createSignal(false);
   const reasonId = createUniqueId();
 
-  // Offline, failing to load isn't an error: the start button says why it can't be used.
+  // The Staple whose tap is being recorded: its own answer, not one given elsewhere. One at a time,
+  // since `busy` holds back the next tap; once recorded, it is among the answers.
+  let tapped: ItemId | undefined;
+
+  // Offline, failing to load isn't an error: the start button says why it can't be used. The
+  // Staples are loaded with the ones due, to find those answered elsewhere since the last load; if
+  // they fail to load, the cards just don't follow until the next load.
   keepFresh(
     props.client,
     ["grocery"],
-    () => props.client.call("list_due_staples", {}),
-    (result) => {
+    () =>
+      Promise.all([
+        props.client.call("list_due_staples", {}),
+        props.client.call("list_staples", {}).catch(() => undefined),
+      ]),
+    ([result, staples]) => {
       setError(!result.ok);
+      if (staples?.ok) followAnswersElsewhere(staples.value);
       if (result.ok) setDue(result.value);
     },
     () => setError(props.online),
   );
+
+  /**
+   * Answers each Staple the check asks about (or would, before it starts) that was checked elsewhere
+   * since it was loaded, and moves the cards past the furthest: one passed over was skipped aloud.
+   * An answer changed elsewhere since, as when a mishearing is put right, changes in the summary.
+   */
+  const followAnswersElsewhere = (staples: readonly Staple[]) => {
+    const asked = session() ?? due()?.staples ?? [];
+    const stored = new Map(staples.map((staple) => [staple.item, staple]));
+    const answeredHere = new Map(answers().map((answer) => [answer.staple.item, answer.status]));
+    const checked = asked.flatMap((staple) => {
+      const now = stored.get(staple.item);
+      if (!now || now.lastChecked === staple.lastChecked || staple.item === tapped) return [];
+      return [{ staple, status: now.status }];
+    });
+    const fresh = checked.filter(({ staple }) => !answeredHere.has(staple.item));
+    const changed = checked.filter(
+      ({ staple, status }) => answeredHere.has(staple.item) && answeredHere.get(staple.item) !== status,
+    );
+    if (fresh.length === 0 && changed.length === 0) return;
+    if (!session()) {
+      if (!props.talking) return;
+      start();
+    }
+    setAnswers((all) => [
+      ...all.map((answer) => changed.find(({ staple }) => staple === answer.staple) ?? answer),
+      ...fresh,
+    ]);
+    const furthest = Math.max(-1, ...fresh.map(({ staple }) => asked.indexOf(staple)));
+    setIndex((at) => Math.max(at, furthest + 1));
+  };
 
   const start = () => {
     setSession(due()?.staples ?? []);
@@ -113,6 +171,7 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; o
 
   const answer = async (staple: Staple, status: StapleStatus) => {
     setBusy(true);
+    tapped = staple.item;
     try {
       const result = await props.client.call("record_staple_status", {
         item: staple.item,
@@ -123,10 +182,12 @@ function CheckIn(props: { client: MiseClient; locale: string; online: boolean; o
       if (!result.ok) return;
       if (result.value.suggestAlwaysBuy) setSuggested((all) => [...all, result.value]);
       setAnswers((all) => [...all, { staple, status }]);
-      setIndex((at) => at + 1);
+      // Past this card, and not back to it when one after it was answered elsewhere meanwhile.
+      setIndex((at) => Math.max(at, (session()?.indexOf(staple) ?? at) + 1));
     } catch {
       setError(true);
     } finally {
+      tapped = undefined;
       setBusy(false);
     }
   };

@@ -155,6 +155,8 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
     return { screen: page(), ...(week && { week }) };
   };
   const [inKitchen, setInKitchen] = createSignal<KitchenRecipe>();
+  /** Whether the chat's Voice Session runs on this device. */
+  const [talking, setTalking] = createSignal(false);
   const [kitchenMode, setKitchenMode] = createKitchenMode();
   // The last Household loaded. Each refetch is reconciled in place (Members matched by id), so a
   // refresh updates the settings without remounting them and throwing away a form someone is filling in.
@@ -251,6 +253,7 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                   where={where}
                   voice={props.voice}
                   household={loaded.household}
+                  onTalking={setTalking}
                 />
               </header>
               <main class="page">
@@ -307,6 +310,7 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                       client={props.client}
                       locale={household().locale}
                       online={online()}
+                      talking={talking()}
                       onWeek={() => go("week")}
                     />
                   </Match>

@@ -66,6 +66,7 @@ import {
   readPaprikaExport,
   reviewMessage,
   type ShowStep,
+  type Staple,
   type Suggestion,
   screenshotUploadKey,
   suggestItems,
@@ -282,6 +283,7 @@ class HouseholdAgent extends Agent<Env> {
       today,
       where,
       cooking: this.cookingAt(where),
+      checkIn: spoken && where.screen === "pantry" ? this.dueStaples() : undefined,
       spoken,
       afterUnanswered,
       text,
@@ -319,6 +321,12 @@ class HouseholdAgent extends Agent<Env> {
       if (slot?.recipe?.id === where.recipe && slot.cookFor > 0) servings = slot.cookFor;
     }
     return { recipe: recipe.value, servings, locale: household.locale };
+  }
+
+  /** The Staples a Check-in asks about now, in the order the Pantry's cards ask about them. */
+  private dueStaples(): Staple[] {
+    const due = handlers.list_due_staples(this.ctx.storage.sql, {}, { caller: null });
+    return due.ok ? due.value.staples : [];
   }
 
   /** The spoken turns being answered: only their runs may move Kitchen mode's screen. */

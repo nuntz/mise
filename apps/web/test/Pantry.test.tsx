@@ -13,6 +13,7 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { createFakeClient } from "./fakeClient";
+import { fakeVoice } from "./fakeVoice";
 import { primaries } from "./primaries";
 
 const household: Household = {
@@ -55,8 +56,11 @@ const milk: Staple = { ...rice, item: "milk", name: "milk", location: "fridge", 
 
 type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | Promise<ToolResult<unknown>> | undefined;
 
-/** A client with rice and eggs due, unless `answers` say otherwise; it records every call. */
-function fakeClient(answers: Record<string, Answer> = {}) {
+/**
+ * A client with rice and eggs due, unless `answers` say otherwise, and the household's `voice` calls
+ * if given; it records every call.
+ */
+function fakeClient(answers: Record<string, Answer> = {}, voice: Parameters<typeof createFakeClient>[1] = {}) {
   const calls: { name: string; input: Record<string, unknown> }[] = [];
   const { client, goOffline, goOnline, notify } = createFakeClient(
     async (name: string, input: Record<string, unknown>) => {
@@ -82,6 +86,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
           throw new Error(`Unexpected tool ${name}`);
       }
     },
+    voice,
   );
   return { client, calls, goOffline, goOnline, notify };
 }
@@ -496,4 +501,96 @@ test("offline, Always buy it says it needs a connection, while the check can sti
   expect(reasonOf(always)).toBe("Needs a connection.");
   await user.click(screen.getByRole("button", { name: "Keep checking" }));
   expect(screen.getByRole("group", { name: "Egg" })).toBeTruthy();
+});
+
+/**
+ * A client with rice, eggs and flour due, whose answers can be given elsewhere, as Mise's agent
+ * records them in a Voice Session: each `answerElsewhere` records one and announces it.
+ */
+function checkedByVoice() {
+  const flour: Staple = { ...rice, item: "flour", name: "flour" };
+  let staples = [rice, flour, egg];
+  let due = [rice, flour, egg];
+  // Copies, as a real connection's replies are: a screen's store may change the ones it is given.
+  const fake = fakeClient(
+    {
+      list_due_staples: () => ({ ok: true, value: structuredClone({ due: due.length, staples: due }) }),
+      list_staples: () => ({ ok: true, value: structuredClone(staples) }),
+    },
+    {
+      conversation: async () => [],
+      voiceAvailability: async () => ({ status: "available" }),
+      startVoice: async (offer) => ({ ok: true, value: { sdp: `answer to ${offer}` } }),
+      moveVoice: async () => true,
+      endVoice: async () => {},
+    },
+  );
+  const answerElsewhere = (item: string, status: Staple["status"]) => {
+    const lastChecked = new Date().toISOString();
+    staples = staples.map((one) => (one.item === item ? { ...one, status, lastChecked } : one));
+    due = due.filter((one) => one.item !== item);
+    fake.notify("grocery");
+  };
+  return { ...fake, answerElsewhere };
+}
+
+test("the cards follow Staples answered by voice: the card moves past each, and the summary counts it", async () => {
+  const { client, answerElsewhere } = checkedByVoice();
+  const user = await openPantry(client);
+  await user.click(await screen.findByRole("button", { name: "Start the pantry check" }));
+  expect(screen.getByRole("group", { name: "Rice" })).toBeTruthy();
+
+  answerElsewhere("rice", "out");
+  expect(await screen.findByRole("group", { name: "Flour" })).toBeTruthy();
+  // Flour is skipped aloud, so nothing records it; egg, after it, is answered.
+  answerElsewhere("egg", "low");
+
+  expect(await screen.findByText("All checked.")).toBeTruthy();
+  expect(screen.getByText("Rice", { selector: ".row-meta" })).toBeTruthy();
+  expect(screen.getByText("Egg", { selector: ".row-meta" })).toBeTruthy();
+  expect(screen.queryByText("Flour", { selector: ".row-meta" })).toBeNull();
+});
+
+test("a Staple answered by voice before the check is started starts it, past that card", async () => {
+  const { client, answerElsewhere } = checkedByVoice();
+  const user = userEvent.setup();
+  render(() => <App client={client} voice={fakeVoice().open} />);
+  await user.click(await screen.findByRole("button", { name: "Pantry" }));
+  await screen.findByRole("button", { name: "Start the pantry check" });
+  await user.click(screen.getByRole("button", { name: "Ask Mise" }));
+  await user.click(await screen.findByRole("button", { name: "Talk to Mise" }));
+  await screen.findByText("Listening. Talk to Mise.");
+
+  answerElsewhere("rice", "stocked");
+
+  const flour = await screen.findByRole("group", { name: "Flour" });
+  expect(within(flour).getByText("2 of 3 · Pantry")).toBeTruthy();
+});
+
+test("an answer put right by voice changes in the summary", async () => {
+  const { client, answerElsewhere } = checkedByVoice();
+  const user = await openPantry(client);
+  await user.click(await screen.findByRole("button", { name: "Start the pantry check" }));
+
+  answerElsewhere("rice", "out");
+  await screen.findByRole("group", { name: "Flour" });
+  answerElsewhere("rice", "low");
+  answerElsewhere("flour", "stocked");
+  answerElsewhere("egg", "stocked");
+
+  expect(await screen.findByText("All checked.")).toBeTruthy();
+  expect(screen.getByText("Rice", { selector: ".row-meta" }).closest("li")?.textContent).toContain("1 low");
+});
+
+test("a Staple checked elsewhere, with no Voice Session on this device, doesn't start the check", async () => {
+  const { client, answerElsewhere } = checkedByVoice();
+  await openPantry(client);
+  await screen.findByRole("heading", { name: "3 to check" });
+
+  // As a tap on another phone, or a Grocery List line ticked as had, checks it.
+  answerElsewhere("rice", "stocked");
+
+  expect(await screen.findByRole("heading", { name: "2 to check" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Start the pantry check" })).toBeTruthy();
+  expect(screen.queryByRole("group")).toBeNull();
 });

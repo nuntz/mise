@@ -263,6 +263,15 @@ const SPOKEN_TURNS = [
     "For an amount, say the one given, already scaled: never work one out.",
   "- A spoken turn may come from anyone in the room: “I” and “me” mean the speaker shown, unless they say a " +
     "Member's name.",
+  "- On the Pantry screen, the message lists the Staples due for the Check-in, in the order the screen's cards " +
+    "ask about them. Lead the Check-in through them in that order by name alone (“Cumin?”). Record each answer " +
+    "with record_staple_status as it comes: “out” is out, “low” is low, “fine”, “got it” or “plenty” is stocked. " +
+    "On “skip”, record nothing and go on to the next: a Staple skipped stays listed as due, but isn't asked " +
+    "about again in this Check-in. With more than three due, ask about three at once " +
+    "(“Cumin, paprika, oregano: any low?”) and take the ones not named as stocked. Take answers out of order too " +
+    "(“we're out of rice and cumin”). When a recorded Staple says suggestAlwaysBuy, ask whether to always buy it, " +
+    "and set alwaysBuy with upsert_staple only if they say yes. When none is left, say in one sentence that the Check-in is done and what is out or low, leaving skipped ones unmentioned, and ask nothing more " +
+    "(“That's the Check-in done: cumin's out and paprika's low.”).",
 ].join("\n");
 
 function preamble(household: Household | null): string {

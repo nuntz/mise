@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ChatWhere, presentTurn } from "./chat";
+import { ChatWhere, type CheckInStaple, presentTurn } from "./chat";
 import { parseIngredient } from "./ingredients";
+import type { ItemId } from "./items";
 
 describe("presentTurn", () => {
   test("says the day the turn was sent, so “tomorrow” has one meaning", () => {
@@ -123,6 +124,40 @@ describe("presentTurn", () => {
         "Mise couldn't answer the messages before this one: answer only this message]\n" +
         "next step",
     );
+  });
+});
+
+describe("presentTurn on the Pantry screen", () => {
+  const cumin: CheckInStaple = { item: "cumin" as ItemId, name: "cumin", status: "stocked" };
+  const rice: CheckInStaple = { item: "rice" as ItemId, name: "rice", status: "low" };
+
+  test("gives a spoken turn the Staples due in card order, and says to lead the Check-in", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-10-30",
+      where: { screen: "pantry" },
+      checkIn: [cumin, rice],
+      spoken: true,
+      text: "let's do the pantry",
+    });
+
+    expect(presented).toBe(
+      "[Robin, speaking on Friday 2026-10-30, on the Pantry screen, so day names mean the coming days: " +
+        "Friday 2026-10-30, Saturday 2026-10-31, Sunday 2026-11-01, Monday 2026-11-02, Tuesday 2026-11-03, " +
+        "Wednesday 2026-11-04, Thursday 2026-11-05; " +
+        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on; " +
+        "lead the pantry Check-in: ask about the Staples due in card order, up to three at once, never again about one skipped, and record each answer as it comes]\n" +
+        "[Staples due for the Check-in, in card order: cumin (Item cumin, stocked when last checked); " +
+        "rice (Item rice, low when last checked)]\n" +
+        "let's do the pantry",
+    );
+  });
+
+  test("leaves the Check-in out of a written turn, and of a spoken one with nothing due", () => {
+    const turn = { speaker: "Robin", today: "2026-10-30", where: { screen: "pantry" as const }, text: "hi" };
+
+    expect(presentTurn({ ...turn, checkIn: [cumin], spoken: false })).not.toContain("Check-in");
+    expect(presentTurn({ ...turn, checkIn: [], spoken: true })).not.toContain("Check-in");
   });
 });
 

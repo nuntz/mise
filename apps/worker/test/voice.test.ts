@@ -563,6 +563,60 @@ describe("a Voice Session in Kitchen mode", () => {
   });
 });
 
+describe("the voice Check-in", () => {
+  /** Robin talking from the Pantry screen, with cumin and paprika due and `respond` answering. */
+  async function robinInThePantry(respond: FauxResponseFactory) {
+    const prompts: string[] = [];
+    scriptModel((context, options, state, model) => {
+      const turn = textOf(context.messages.filter((message) => message.role === "user").at(-1));
+      if (prompts.at(-1) !== turn) prompts.push(turn);
+      return respond(context, options, state, model);
+    });
+    const { live, sessions } = pretendLive();
+    useLive(() => live);
+    const household = await familyHousehold();
+    for (const item of ["paprika", "cumin"]) {
+      expect(await household.callTool("upsert_staple", { item })).toMatchObject({ ok: true });
+    }
+    const robin = await connectAs(household, "robin@example.com");
+    expect(await robin.rpc("startVoice", [OFFER, { screen: "pantry" }])).toMatchObject({ ok: true });
+    const session = sessions[0];
+    if (!session) throw new Error("No session was created");
+    return { household, robin, session, prompts };
+  }
+
+  test("is led through the Staples due in card order, each answer recorded, and the Pantry told", async () => {
+    const { household, robin, session, prompts } = await robinInThePantry(
+      byWhatWasSaid({
+        "Let's check the pantry.": { answer: "Cumin?" },
+        "Out.": { calls: [["record_staple_status", { item: "cumin", status: "out" }]], answer: "Paprika?" },
+        "Low.": { calls: [["record_staple_status", { item: "paprika", status: "low" }]], answer: "All done." },
+      }),
+    );
+
+    await say(session, "Let's check the pantry.");
+    const before = robin.notices.filter((notice) => notice.topic === "grocery").length;
+    expect(await say(session, "Out.")).toBe("Paprika?");
+    expect(await say(session, "Low.")).toBe("All done.");
+
+    expect(prompts[0]).toContain("lead the pantry Check-in");
+    expect(prompts[0]).toContain(
+      "[Staples due for the Check-in, in card order: cumin (Item cumin, stocked when last checked); " +
+        "paprika (Item paprika, stocked when last checked)]",
+    );
+    // Each turn is given the Staples due as it is said: cumin, answered, is no longer asked about.
+    expect(prompts[2]).toContain("in card order: paprika (Item paprika, stocked when last checked)]");
+    expect(await household.callTool("list_staples", {})).toMatchObject({
+      ok: true,
+      value: [
+        { item: "cumin", status: "out" },
+        { item: "paprika", status: "low" },
+      ],
+    });
+    expect(robin.notices.filter((notice) => notice.topic === "grocery").length).toBeGreaterThan(before);
+  });
+});
+
 /** Robin, signed in, in a Household with `minutes` of voice a day, on a pretend Live. */
 async function robinWithCap(minutes: number) {
   scriptModel(() => fauxAssistantMessage("Noted."));

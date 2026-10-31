@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatWhere, Household } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { confirmationTaps, TAP_REFUSALS, type TapRefusal } from "./confirmations";
 import { keepFresh } from "./fresh";
@@ -14,7 +14,7 @@ import { createVoiceSession } from "./voiceSession";
  * "Ask Mise", in the app header: a chat with the agent from whatever screen is open, which each
  * message names, with the Week it shows (`where`). Kitchen mode covers the header, so it has none.
  * The agent needs the connection. With `voice`, the chat has a mic for a Voice Session, whose times
- * are on the `household`'s clock.
+ * are on the `household`'s clock; `onTalking` hears whether this device's session runs.
  */
 export function Chat(props: {
   client: MiseClient;
@@ -22,6 +22,7 @@ export function Chat(props: {
   where: () => ChatWhere;
   voice?: OpenVoice;
   household?: Household | null;
+  onTalking?: (talking: boolean) => void;
 }) {
   const [open, setOpen] = createSignal(false);
   const reasonId = createUniqueId();
@@ -48,6 +49,7 @@ export function Chat(props: {
           where={props.where}
           voice={props.voice}
           household={props.household}
+          onTalking={props.onTalking}
           onClose={() => setOpen(false)}
         />
       </Show>
@@ -83,6 +85,7 @@ function ChatSheet(props: {
   where: () => ChatWhere;
   voice?: OpenVoice;
   household?: Household | null;
+  onTalking?: (talking: boolean) => void;
   onClose: () => void;
 }) {
   const titleId = createUniqueId();
@@ -183,6 +186,8 @@ function ChatSheet(props: {
     onRefused: setError,
   });
   const talking = voice.talking;
+  createEffect(() => props.onTalking?.(talking()));
+  onCleanup(() => props.onTalking?.(false));
   const micId = createUniqueId();
 
   return (

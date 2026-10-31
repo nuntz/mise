@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ConfirmationStatus } from "./confirmations";
 import { scaledLines } from "./ingredients";
 import { type Recipe, RecipeId } from "./recipes";
+import type { Staple } from "./staples";
 import { addDays, LocalDate, SlotRef, weekdayOf } from "./weeks";
 
 /** The longest message a Member can send the agent. */
@@ -53,6 +54,9 @@ export type Cooking = {
   locale: string;
 };
 
+/** A Staple a spoken turn from the Pantry screen asks about, as `list_due_staples` gives it, in card order. */
+export type CheckInStaple = Pick<Staple, "item" | "name" | "status">;
+
 /**
  * One turn of the Household's shared conversation with the agent, as the chat shows it. A Member's
  * turn names who said it: the Member's name, the Caller's email when no Member signs in with it, or
@@ -86,6 +90,8 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * screen, then its steps and its Ingredients scaled as the screen shows them, so that "next step" and
  * "how much garlic" are answered without a tool call, and amounts aren't left to the model's arithmetic. A spoken turn from a screen with no Week is given the dates of the coming
  * seven days, so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
+ * A spoken turn from the Pantry screen is given the Staples due, `checkIn`, in the order the Pantry's
+ * cards ask about them, with their Items to record each answer by, so that it can lead the Check-in.
  * A turn `afterUnanswered`, sent after a turn whose run failed, is to be answered alone: the model
  * would otherwise answer every message still waiting at once.
  */
@@ -94,6 +100,7 @@ export function presentTurn(turn: {
   today: LocalDate;
   where: ChatWhere;
   cooking?: Cooking;
+  checkIn?: readonly CheckInStaple[];
   spoken: boolean;
   afterUnanswered?: boolean;
   text: string;
@@ -111,10 +118,13 @@ export function presentTurn(turn: {
     const coming = Array.from({ length: 7 }, (_, days) => dayOf(addDays(turn.today, days)));
     parts.push(`so day names mean the coming days: ${coming.join(", ")}`);
   }
+  const checkIn = turn.spoken && where.screen === "pantry" && turn.checkIn?.length ? turn.checkIn : undefined;
   const header = [parts.join(", ")];
   if (turn.spoken) header.push(FOR_THE_EAR);
+  if (checkIn) header.push(LEAD_THE_CHECK_IN);
   if (turn.afterUnanswered) header.push(ONLY_THIS_ONE);
-  return [`[${header.join("; ")}]`, ...(kitchen?.lines ?? []), turn.text].join("\n");
+  const lines = kitchen?.lines ?? (checkIn ? [checkInLine(checkIn)] : []);
+  return [`[${header.join("; ")}]`, ...lines, turn.text].join("\n");
 }
 
 /** What a turn from Kitchen mode says of the Recipe `cooking`: in its header, and on lines of their own. */
@@ -139,6 +149,16 @@ function kitchenLines(where: KitchenWhere, cooking: Cooking | undefined) {
   }
   return { parts, lines };
 }
+
+/** The Staples due, as a spoken turn from the Pantry screen lists them. */
+function checkInLine(staples: readonly CheckInStaple[]): string {
+  const named = staples.map(({ item, name, status }) => `${name} (Item ${item}, ${status} when last checked)`);
+  return `[Staples due for the Check-in, in card order: ${named.join("; ")}]`;
+}
+
+/** What a spoken turn from the Pantry screen, with Staples due, says beside the message. */
+const LEAD_THE_CHECK_IN =
+  "lead the pantry Check-in: ask about the Staples due in card order, up to three at once, never again about one skipped, and record each answer as it comes";
 
 /**
  * How to answer a spoken turn, said with the turn itself: the model follows a rule beside the

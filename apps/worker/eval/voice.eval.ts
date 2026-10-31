@@ -217,3 +217,42 @@ describe("a spoken turn in Kitchen mode", () => {
     3 * TURN_MS,
   );
 });
+
+describe("the voice Check-in", () => {
+  test(
+    "on the Pantry screen, leads through the Staples due in card order, taking out, low, fine and skip as said",
+    async () => {
+      const { household, say } = await robinTalking(ON_THE_PANTRY);
+      // Four due, all in the pantry and never checked: the cards ask cumin, oregano, paprika, rice.
+      for (const item of ["rice", "paprika", "oregano", "cumin"]) {
+        await household.callTool("upsert_staple", { item });
+      }
+
+      const asked = await say("Let's check the pantry.");
+
+      expect(asked).toContain("?");
+      expect(asked.toLowerCase(), "starts with the first card").toContain("cumin");
+      const named = ["cumin", "oregano", "paprika", "rice"].filter((name) => asked.toLowerCase().includes(name));
+      expect(named.length, "asks about at most three at once").toBeLessThanOrEqual(3);
+      expect(sentences(asked)).toBeLessThanOrEqual(2);
+
+      // Cumin, skipped, is still due, so each turn after lists it first again: only the conversation
+      // says it was skipped.
+      await say("Skip cumin. Oregano's fine, paprika is low.");
+      const done = await say("Rice is out.");
+
+      expect(await household.callTool("list_staples", {}), "cumin skipped, so never checked").toMatchObject({
+        ok: true,
+        value: [
+          { item: "cumin", lastChecked: null },
+          { item: "oregano", status: "stocked" },
+          { item: "paprika", status: "low" },
+          { item: "rice", status: "out" },
+        ],
+      });
+      expect(done, "done, not asking about cumin again").not.toContain("?");
+      expect(sentences(done)).toBeLessThanOrEqual(2);
+    },
+    4 * TURN_MS,
+  );
+});
