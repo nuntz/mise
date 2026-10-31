@@ -153,7 +153,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   set_slot:
     "Sets what a Slot is, at breakfast, lunch or dinner: a Recipe (not a Draft, `recipeId` with kind `recipe`), " +
     "leftovers, eating out, unplanned or skipped. Moving a dinner to another day takes two calls: " +
-    "set the new day to it, then the old day to unplanned. Refused with " +
+    "set the new day to it, then the old day to unplanned. When the new day has a dinner already, first ask " +
+    "whether to replace it or swap the two, and do what they say. Refused with " +
     "`constraint_conflict` if it would bring a Conflict, unless `overrides` gives the person's reason for each, " +
     "which waits for their tap.",
   set_diners:

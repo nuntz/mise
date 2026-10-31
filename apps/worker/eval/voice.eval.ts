@@ -82,6 +82,19 @@ async function dinnerTitle(household: HouseholdStub, date: string): Promise<stri
   return slot?.kind === "recipe" ? (slot.recipe?.title ?? null) : (slot?.kind ?? null);
 }
 
+/** Satay, then what Recipes 2 to 9 are renamed for the long list. */
+const RECIPE_TITLES = [
+  "Satay",
+  "Lemon chicken",
+  "Black bean burrito bowls",
+  "Beef and broccoli stir-fry",
+  "Pork chops with apples",
+  "Salmon teriyaki",
+  "Mushroom risotto",
+  "Chickpea curry",
+  "Shepherd's pie",
+];
+
 /** Sentences in an answer, as a listener hears them. */
 function sentences(answer: string): number {
   return answer.split(/[.!?](?:\s|$)/).filter((part) => part.trim()).length;
@@ -89,13 +102,18 @@ function sentences(answer: string): number {
 
 describe("a spoken turn", () => {
   test(
-    "a day that has passed, named from a screen with no Week, is next Week's: moving it moves next Week's dinner",
+    "a day that has passed, named from a screen with no Week, is next Week's; moving onto a dinner asks replace or swap",
     async () => {
       const { household, say } = await robinTalking(ON_THE_PANTRY);
 
-      // Agreeing if the agent asks first, as a person would.
-      const answer = await say("Move Tuesday's dinner to Wednesday.");
-      if (answer.includes("?")) await say("Yes.");
+      const asked = await say("Move Tuesday's dinner to Wednesday.");
+
+      expect(asked, "asks, since Wednesday has a dinner").toContain("?");
+      expect(asked).toMatch(/replace/i);
+      expect(asked).toMatch(/swap/i);
+      expect(await dinnerTitle(household, "2026-11-04"), "nothing changes before the answer").toBe("Rice bowl 7");
+
+      await say("Replace it.");
 
       expect(await dinnerTitle(household, "2026-11-04")).toBe("Rice bowl 6");
       expect(await dinnerTitle(household, "2026-11-03"), "moved, not swapped").toBe("unplanned");
@@ -124,12 +142,17 @@ describe("a spoken turn", () => {
   test(
     "a long list is offered, not read out",
     async () => {
-      const { say } = await robinTalking(ON_THE_PANTRY);
+      const { household, say } = await robinTalking(ON_THE_PANTRY);
+      // Nine titles a listener tells apart, so a short answer can't just say "eight rice bowls".
+      for (const [index, title] of RECIPE_TITLES.slice(1).entries()) {
+        await household.callTool("update_recipe", { id: index + 2, title });
+      }
 
       const answer = await say("What recipes do we have?");
 
       expect(answer).toContain("?");
-      expect((answer.match(/Rice bowl|Satay/g) ?? []).length, "names at most three of nine").toBeLessThanOrEqual(3);
+      const named = RECIPE_TITLES.filter((title) => answer.includes(title));
+      expect(named.length, "names at most three of nine").toBeLessThanOrEqual(3);
       expect(sentences(answer)).toBeLessThanOrEqual(3);
     },
     2 * TURN_MS,
