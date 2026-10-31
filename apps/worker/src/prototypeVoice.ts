@@ -10,7 +10,7 @@ const LIVE = "https://api.openai.com/v1/live/sessions";
 /** The spike's hard stop, standing in for the daily minute cap. */
 const MAX_SESSION_SECONDS = 300;
 /** How long to wait for more transcript when a delegation arrives before the words have. */
-const TRANSCRIPT_GRACE_MS = 800;
+const TRANSCRIPT_GRACE_MS = 0;
 /** commentary.append takes at most 500 tokens; this keeps well under. */
 const MAX_COMMENTARY_CHARS = 1600;
 
@@ -44,6 +44,8 @@ export class VoiceSession {
   private heard = "";
   private lastHeardAt = 0;
   private spokenSinceDelegation = false;
+  /** Words GPT-Live said on its own since the person last spoke: a reply, not a backchannel, from 3. */
+  private ownWords = 0;
   private delegationsSinceSpeech = 0;
   /** Reflected audio, which the household does not need: counted to see what it costs. */
   private audioBytes = 0;
@@ -172,6 +174,9 @@ export class VoiceSession {
     const now = Date.now();
     switch (type) {
       case "session.input_transcript.delta": {
+        // GPT-Live answered what came before (a greeting) itself; a "Mm-hmm" keeps it.
+        if (this.ownWords >= 3) this.heard = "";
+        this.ownWords = 0;
         this.heard += textOf(event);
         this.lastHeardAt = now;
         this.spokenSinceDelegation = false;
@@ -183,8 +188,7 @@ export class VoiceSession {
         // Speech with no delegation since the person last spoke: GPT-Live answering on its own.
         const own = this.delegationsSinceSpeech === 0;
         if (!this.spokenSinceDelegation) this.log({ kind: "speaking", own, at: now });
-        // What GPT-Live answered itself (a greeting) is not part of the next turn.
-        if (own) this.heard = "";
+        if (own) this.ownWords += textOf(event).trim().split(/\s+/).filter(Boolean).length;
         if (this.answered) {
           // Roughly when the answer started being said (the acknowledgement may still be running).
           this.log({

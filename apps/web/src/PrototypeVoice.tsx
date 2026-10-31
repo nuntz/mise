@@ -124,11 +124,20 @@ export function PrototypeVoice() {
   }
 
   function stop() {
-    void agent.call("prototypeVoiceStop", []).catch(() => {});
-    for (const track of mic?.getTracks() ?? []) track.stop();
-    peer?.close();
+    // The household closes the session first, so it ends as close_requested, then the call is hung up.
+    const closing = peer;
+    const tracks = mic?.getTracks() ?? [];
     peer = null;
     setState("stopped");
+    void agent
+      .call("prototypeVoiceStop", [])
+      .catch(() => {})
+      .finally(() =>
+        setTimeout(() => {
+          for (const track of tracks) track.stop();
+          closing?.close();
+        }, 1500),
+      );
   }
 
   onCleanup(() => {
