@@ -12,6 +12,7 @@
     "seed": "bun run --filter @mise/worker seed",
     "screenshot": "bun run --filter @mise/worker screenshot",
     "eval": "bun run --filter @mise/worker eval",
+    "eval:agent": "bun run --filter @mise/worker eval:agent",
     "test": "bun test packages",
     "test:worker": "bun run --filter @mise/worker test",
     "test:web": "bun run --filter @mise/web test",

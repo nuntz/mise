@@ -34,7 +34,8 @@ Code that asks an LLM does it through an interface (`Llm`, or pi-ai's `Models` f
 every test, in `bun test` and the Worker and web suites, runs on a fake (`FakeLlm`, pi-ai's faux
 provider). A model's answer varies from run to run and costs money, so a test that calls one is
 neither repeatable nor free. Real models are checked by hand with `bun run eval` on the recorded
-fixtures in `fixtures/eval/`, whenever a prompt or a model changes.
+fixtures in `fixtures/eval/`, whenever a prompt or a model changes; the agent's turns, with
+`bun run eval:agent` on the cases in `apps/worker/eval/`.
 
 ## A late answer acts only on what asked for it
 
