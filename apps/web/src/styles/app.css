@@ -1144,6 +1144,20 @@ fieldset > .toggle-chip {
   min-height: 0;
 }
 
+/* A running Voice Session: what it's doing, and the tap that ends it. */
+.chat-voice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.chat-mic {
+  width: var(--field);
+  height: var(--field);
+  border-radius: var(--radius-full);
+}
+
 /* The composer's one action, in the primary's plum. */
 .chat-send {
   width: var(--field);

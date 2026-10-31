@@ -39,6 +39,7 @@ import { SwitchRow } from "./SwitchRow";
 import { TagRecipes } from "./TagRecipes";
 import { createKitchenMode } from "./theme";
 import { UpdateBanner } from "./Update";
+import type { OpenVoice } from "./voice";
 import { WeekPage } from "./Week";
 
 /** The pages the bottom nav goes to, in its order. */
@@ -127,7 +128,8 @@ function openFromLink(): Opening | undefined {
   return opening;
 }
 
-export function App(props: { client: MiseClient }) {
+/** `voice` is the browser's WebRTC for Voice Sessions; without it, the chat has no mic. */
+export function App(props: { client: MiseClient; voice?: OpenVoice }) {
   // The Household saved on this device, if any, shows at once: the household may be out of reach.
   const saved = savedHousehold();
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">(saved ? "ready" : "loading");
@@ -239,7 +241,7 @@ export function App(props: { client: MiseClient }) {
               </Show>
               <header class="app-header">
                 <RanOut client={props.client} online={online()} />
-                <Chat client={props.client} online={online()} where={where} />
+                <Chat client={props.client} online={online()} where={where} voice={props.voice} />
               </header>
               <main class="page">
                 {/* A failed refresh keeps the last Household on screen, and any forms with it. Offline, that's expected. */}

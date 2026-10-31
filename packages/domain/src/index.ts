@@ -26,6 +26,7 @@ export * from "./time";
 export * from "./tools";
 export * from "./units";
 export * from "./videos";
+export * from "./voice";
 export * from "./weeks";
 
 /** The one household Durable Object a deployment serves. */

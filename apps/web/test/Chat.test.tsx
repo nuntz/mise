@@ -7,11 +7,14 @@ import {
   type Household,
   STORE_SECTIONS,
   type ToolResult,
+  type VoiceStartReply,
 } from "@mise/domain";
 import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test } from "vitest";
 import { App } from "../src/App";
+import type { MiseClient } from "../src/client";
+import type { OpenVoice, VoiceCall } from "../src/voice";
 import { createFakeClient } from "./fakeClient";
 
 const household: Household = {
@@ -30,7 +33,7 @@ const household: Household = {
 /**
  * A client for a Household whose conversation with the agent starts as `earlier`; each message gets
  * `reply`, and joins the conversation with the agent's answer, as the household keeps it. A tap on a
- * confirmation gets `confirm`.
+ * confirmation gets `confirm`. A Voice Session is started and ended with `voice`.
  */
 function fakeClient(
   earlier: ChatMessage[],
@@ -38,6 +41,7 @@ function fakeClient(
   confirm: (id: number) => ToolResult<unknown> = () => {
     throw new Error("Unexpected confirm");
   },
+  voice: Partial<Pick<MiseClient, "startVoice" | "endVoice">> = {},
 ) {
   const conversation = [...earlier];
   const confirmed: number[] = [];
@@ -85,6 +89,7 @@ function fakeClient(
         confirmed.push(id);
         return confirm(id);
       },
+      ...voice,
     },
   );
   return { ...fake, sent, sentFrom, conversation, confirmed, cancelled };
@@ -413,4 +418,159 @@ test("a confirmation can be cancelled from the chat", async () => {
   expect(conversation).toEqual([{ role: "confirmation", id: 3, summary: "Delete “Satay”", status: "cancelled" }]);
   await waitFor(() => expect(within(chat).getByRole("listitem").textContent).toBe("Cancelled: Delete “Satay”"));
   expect(within(chat).queryByRole("button", { name: "Delete “Satay”" })).toBeNull();
+});
+
+/**
+ * The browser's WebRTC, faked: each call made, whether it was connected and hung up, and a way for
+ * GPT-Live to end it. Like the real one, a call hung up never reports ending on its own.
+ */
+function fakeVoice() {
+  const calls: { connected: string | null; hungUp: boolean; endFromLive(): void }[] = [];
+  const open: OpenVoice = async () => {
+    const listeners: (() => void)[] = [];
+    const made = {
+      connected: null as string | null,
+      hungUp: false,
+      endFromLive() {
+        if (made.hungUp) return;
+        made.hungUp = true;
+        for (const listener of listeners.splice(0)) listener();
+      },
+    };
+    calls.push(made);
+    const call: VoiceCall = {
+      offer: `offer ${calls.length}`,
+      connect: async (answer) => {
+        made.connected = answer;
+      },
+      onEnd: (listener) => listeners.push(listener),
+      hangUp: () => {
+        made.hungUp = true;
+      },
+    };
+    return call;
+  };
+  return { open, calls };
+}
+
+/** A Household where Robin's spoken turns join the conversation, and the household's voice calls. */
+function talkingClient(
+  start: (offer: string, where: ChatWhere) => Promise<VoiceStartReply> = async (offer) => ({
+    ok: true,
+    value: { sdp: `answer to ${offer}` },
+  }),
+) {
+  const started: { offer: string; where: ChatWhere }[] = [];
+  let ended = 0;
+  const fake = fakeClient([], async () => ({ ok: true, value: { role: "agent", text: "" } }), undefined, {
+    startVoice: async (offer, where) => {
+      started.push({ offer, where });
+      return start(offer, where);
+    },
+    endVoice: async () => {
+      ended++;
+    },
+  });
+  return { ...fake, started, ended: () => ended };
+}
+
+test("the chat's mic starts a Voice Session, shows its turns as they're answered, and ends it with a tap", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  expect(await within(chat).findByText("Listening. Talk to Mise.")).toBeTruthy();
+  // The Week screen shows no Week here, as none loads.
+  expect(fake.started).toEqual([{ offer: "offer 1", where: { screen: "week" } }]);
+  expect(voice.calls[0]?.connected).toBe("answer to offer 1");
+  // The household records each spoken turn and its answer, then announces the conversation.
+  fake.conversation.push(
+    { role: "member", speaker: "Robin", text: "What's for dinner Thursday?" },
+    { role: "agent", text: "Dal." },
+  );
+  fake.notify("chat");
+  const turns = await within(chat).findAllByRole("listitem");
+  expect(turns.map((turn) => turn.textContent)).toEqual(["Robin: What's for dinner Thursday?", "Mise: Dal."]);
+
+  await userEvent.click(within(chat).getByRole("button", { name: "End voice" }));
+
+  expect(fake.ended()).toBe(1);
+  await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
+  expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
+  expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("closing the chat ends its Voice Session", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Close the chat" }));
+
+  expect(fake.ended()).toBe(1);
+  await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
+});
+
+test("a Voice Session ends when the page is hidden, since a locked phone turns the mic off", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+  Reflect.deleteProperty(document, "visibilityState");
+
+  expect(fake.ended()).toBe(1);
+  await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
+  expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("a Voice Session GPT-Live ended goes back to the mic", async () => {
+  const fake = talkingClient();
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+  await within(chat).findByText("Listening. Talk to Mise.");
+
+  voice.calls[0]?.endFromLive();
+
+  expect(await within(chat).findByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+  expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
+});
+
+test("a Voice Session the household refused to start says so and lets go of the mic", async () => {
+  const fake = talkingClient(async () => ({ ok: false, error: { code: "in_use", message: "" } }));
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  expect((await within(chat).findByRole("alert")).textContent).toBe("Someone else is talking to Mise.");
+  expect(voice.calls[0]?.hungUp).toBe(true);
+  expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("a mic the browser refused says voice couldn't start", async () => {
+  const fake = talkingClient();
+  const refused: OpenVoice = async () => {
+    throw new Error("NotAllowedError");
+  };
+  render(() => <App client={fake.client} voice={refused} />);
+  const chat = await openChat();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  expect((await within(chat).findByRole("alert")).textContent).toBe("Voice couldn't start. Try again.");
+  expect(fake.started).toEqual([]);
 });

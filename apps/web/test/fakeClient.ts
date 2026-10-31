@@ -15,6 +15,8 @@ export function createFakeClient(
     chat,
     conversation,
     confirm,
+    startVoice,
+    endVoice,
     ...rest
   }: { online?: boolean } & Partial<
     Pick<
@@ -26,6 +28,8 @@ export function createFakeClient(
       | "chat"
       | "conversation"
       | "confirm"
+      | "startVoice"
+      | "endVoice"
       | "signedIn"
     >
   > = {},
@@ -68,6 +72,16 @@ export function createFakeClient(
       // The household announces the conversation once a tap has run its call, or found it expired.
       if (result.ok || result.error.code === "expired") notifyAll("chat");
       return result;
+    },
+    async startVoice(offer, where) {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!startVoice) throw new Error("Unexpected startVoice");
+      return startVoice(offer, where);
+    },
+    async endVoice() {
+      if (!connection.online) throw new Error("Connection closed");
+      if (!endVoice) throw new Error("Unexpected endVoice");
+      return endVoice();
     },
     subscribe(topics, refetch) {
       const subscription = { topics, refetch };

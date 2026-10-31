@@ -2,6 +2,7 @@ import { FakeLlm } from "@mise/domain";
 import { beforeEach } from "vitest";
 import { useDrive } from "../src/drive";
 import { useFetch } from "../src/links";
+import { useLive } from "../src/live";
 import { useLlm } from "../src/llm";
 import { usePush } from "../src/push";
 
@@ -18,3 +19,6 @@ beforeEach(() => useDrive(() => null));
 // Nor a real push service: a household pushes through the deployment's (none, in tests) unless a
 // test serves a pretend one.
 beforeEach(() => usePush(undefined));
+
+// Nor OpenAI's Live: a household has no voice unless a test serves a pretend one.
+beforeEach(() => useLive(() => null));

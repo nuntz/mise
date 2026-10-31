@@ -7,6 +7,7 @@ import { App } from "./App";
 import { createMiseClient } from "./client";
 import { setPseudoLocale, t } from "./messages";
 import { SharePage } from "./Share";
+import { openVoice } from "./voice";
 
 const params = new URLSearchParams(window.location.search);
 // `?pseudo` shows every message in the long pseudo-locale, for checking layouts.
@@ -20,7 +21,10 @@ if (!root) throw new Error("Missing #root");
 const client = createMiseClient();
 // `/share?url=…` is the iOS Shortcut's way in: a page of its own that imports the link, not the app.
 const shared = window.location.pathname === "/share";
-render(() => (shared ? <SharePage client={client} url={params.get("url")} /> : <App client={client} />), root);
+render(
+  () => (shared ? <SharePage client={client} url={params.get("url")} /> : <App client={client} voice={openVoice} />),
+  root,
+);
 
 // The service worker keeps the app shell so Mise opens offline; dev serves files that change too often.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

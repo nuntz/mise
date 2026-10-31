@@ -70,6 +70,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
+  type VoiceStartReply,
   type Week,
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
@@ -94,6 +95,7 @@ import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport 
 import { readCatalogue } from "./items";
 import { type DaySheetAnswer, readDaySheet } from "./kitchenDisplays";
 import { fetchPhoto, readLink } from "./links";
+import { LiveError, openLive } from "./live";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
 import { piReports, reportWakeErrors, sentryOptions, sentryTelemetry } from "./observability";
@@ -103,6 +105,7 @@ import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
 import { newTextsIn, remainingToSuggest, storeSuggestions, textsToSuggest } from "./suggestions";
 import { type HouseholdToolName, handlers } from "./tools";
 import { callerOfTurn, recordTurn, speakerOfTurn } from "./turns";
+import { VoiceSession } from "./voice";
 import { readSlots } from "./weeks";
 
 /** The image types a Recipe photo may be, and the largest one accepted. */
@@ -237,15 +240,20 @@ class HouseholdAgent extends Agent<Env> {
     if (!message.success || !from.success) {
       return { ok: false, error: { code: "invalid_input", message: "Send a message to the agent" } };
     }
+    return this.answerTurn(this.callerOf(getCurrentAgent().connection), message.data, from.data);
+  }
+
+  /** A turn of the shared conversation from `who`, typed in the chat or spoken in a Voice Session. */
+  private async answerTurn(who: Caller | null, text: string, where: ChatWhere): Promise<ChatReply> {
     const { sql } = this.ctx.storage;
-    const caller = handlers.get_caller(sql, {}, { caller: this.callerOf(getCurrentAgent().connection) });
+    const caller = handlers.get_caller(sql, {}, { caller: who });
     const speaker = caller.ok ? caller.value : null;
     const now = new Date();
     const turn = recordTurn(sql, speaker, now.toISOString());
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
     const today = localDate(now, this.household()?.timezone ?? "UTC");
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where: from.data, text: message.data });
-    const entry: TurnData = { turn, text: message.data };
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, text });
+    const entry: TurnData = { turn, text };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {
       const { operationId } = await this.harness.submit(presented, { entry: { kind: TURN_ENTRY, data: entry } });
@@ -256,6 +264,57 @@ class HouseholdAgent extends Agent<Env> {
       return { ok: false, error: { code: "unanswered", message: answer.reason ?? "The agent did not answer" } };
     }
     return { ok: true, value: { role: "agent", text: answer.text ?? "" } };
+  }
+
+  /** The Household's Voice Session, if one runs or is starting: one at a time, held in memory (ADR 0028). */
+  private voice: VoiceSession | "starting" | null = null;
+
+  /**
+   * Starts a Voice Session from the browser's WebRTC offer, sent from the screen and Week `where`
+   * names, and resolves with the SDP answer. Each turn heard is the starting Caller's, through the
+   * same path as `chat`. Refused to a request with no Caller, while another session runs, and on a
+   * deployment without an OpenAI key.
+   */
+  @callable()
+  async startVoice(offer: unknown, where: unknown): Promise<VoiceStartReply> {
+    const caller = this.callerOf(getCurrentAgent().connection);
+    const from = ChatWhere.safeParse(where);
+    if (typeof offer !== "string" || !offer.trim() || !from.success) {
+      return { ok: false, error: { code: "invalid_input", message: "Send a WebRTC offer and where it was sent from" } };
+    }
+    if (!caller) return { ok: false, error: { code: "not_signed_in", message: "Sign in to talk to Mise" } };
+    const live = openLive(this.env);
+    if (!live) return { ok: false, error: { code: "unavailable", message: "This deployment has no OpenAI key" } };
+    if (this.voice) return { ok: false, error: { code: "in_use", message: "Someone is already talking to Mise" } };
+    // Claimed before the first await, so that a second start finds it taken.
+    this.voice = "starting";
+    try {
+      const { session, sdp } = await VoiceSession.start(
+        live,
+        offer,
+        async (text) =>
+          Sentry.startSpan({ name: "voice turn", op: "mise.voice" }, async () => {
+            const reply = await this.answerTurn(caller, text, from.data);
+            return reply.ok ? reply.value.text : null;
+          }),
+        (ended) => {
+          if (this.voice === ended) this.voice = null;
+        },
+      );
+      // A sideband that closed while starting has ended the session already.
+      this.voice = session.running ? session : null;
+      return { ok: true, value: { sdp } };
+    } catch (error) {
+      this.voice = null;
+      if (error instanceof LiveError) return { ok: false, error: { code: "not_started", message: error.message } };
+      throw error;
+    }
+  }
+
+  /** Ends the Household's Voice Session, if one runs. */
+  @callable()
+  async endVoice(): Promise<void> {
+    if (this.voice instanceof VoiceSession) this.voice.end();
   }
 
   /** The Caller whose turn the conversation `id` is answering. */

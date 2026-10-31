@@ -103,6 +103,12 @@ const PATHS = {
     </>
   ),
   chat: () => <path d="M4 5h16v11H10l-6 4z" />,
+  mic: () => (
+    <>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </>
+  ),
   list: () => <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
   calendarPlus: () => (
     <>

@@ -374,6 +374,12 @@ const en = {
   "chat.confirmation.answered": "That has already been done.",
   "chat.confirmation.failed": "That didn't go through. Try again.",
   "chat.disclaimer": "Mise's answers come from an AI model reading your plan. Check anything that matters.",
+  "chat.voice.start": "Talk to Mise",
+  "chat.voice.starting": "Starting voice…",
+  "chat.voice.listening": "Listening. Talk to Mise.",
+  "chat.voice.end": "End voice",
+  "chat.voice.failed": "Voice couldn't start. Try again.",
+  "chat.voice.inUse": "Someone else is talking to Mise.",
 
   "ranOut.action": "Ran out",
   "ranOut.overline": "Staples",

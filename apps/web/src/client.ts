@@ -14,6 +14,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
+  type VoiceStartReply,
 } from "@mise/domain";
 import { AgentClient } from "agents/client";
 
@@ -43,6 +44,13 @@ export type MiseClient = {
    * Refused once run (`not_found`) or once what it describes has changed (`expired`).
    */
   confirm(id: number): Promise<ToolResult<unknown>>;
+  /**
+   * Starts a Voice Session from the browser's WebRTC offer, sent from the screen and Week `where`
+   * names: the SDP answer, or why there is none (ADR 0028).
+   */
+  startVoice(offer: string, where: ChatWhere): Promise<VoiceStartReply>;
+  /** Ends the Household's Voice Session, if one runs. */
+  endVoice(): Promise<void>;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
   photoUrl(recipeId: RecipeId, photoKey: string): string;
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
@@ -64,6 +72,9 @@ export type MiseClient = {
 /** How long an answer from the agent may take: a model turn or several, each with its tool calls. */
 const CHAT_TIMEOUT_MS = 120_000;
 
+/** How long starting a Voice Session may take: OpenAI creates the session, then the household attaches to it. */
+const VOICE_START_TIMEOUT_MS = 30_000;
+
 /** The tools that read a recipe with the model, or a whole export: slower than a call's usual 30 seconds. */
 const SLOW_TOOLS: ReadonlySet<ToolName> = new Set(["import_url", "import_text", "run_paprika_import"]);
 const SLOW_TOOL_TIMEOUT_MS = 120_000;
@@ -82,6 +93,10 @@ export function createMiseClient(host = window.location.host): MiseClient {
     conversation: () => agent.call("conversation", []),
 
     confirm: (id) => agent.call<ToolResult<unknown>>("confirm", [id]),
+
+    startVoice: (offer, where) => agent.call("startVoice", [offer, where], { timeout: VOICE_START_TIMEOUT_MS }),
+
+    endVoice: () => agent.call("endVoice", []),
 
     onConnection(listener) {
       // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".

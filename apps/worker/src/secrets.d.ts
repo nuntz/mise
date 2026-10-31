@@ -23,6 +23,8 @@ interface Secrets {
   VAPID_PRIVATE_KEY?: string;
   /** Who push services can reach about Mise's notifications: the deployment's `https://` address. */
   VAPID_SUBJECT?: string;
+  /** The OpenAI key GPT-Live-1's Voice Sessions are created with (ADR 0028). Without it, there is no voice. */
+  OPENAI_API_KEY?: string;
   /** Local development only (`.dev.vars`): the email to act as, since `wrangler dev` has no Access. */
   DEV_CALLER_EMAIL?: string;
 }

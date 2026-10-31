@@ -1,18 +1,19 @@
-import type { ChatMessage, ChatWhere, ToolResult } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
+import type { ChatMessage, ChatWhere, ToolResult, VoiceStartReply } from "@mise/domain";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { NeedsConnection } from "./NeedsConnection";
 import { Sheet, touch } from "./Sheet";
+import type { OpenVoice, VoiceCall } from "./voice";
 
 /**
  * "Ask Mise", in the app header: a chat with the agent from whatever screen is open, which each
  * message names, with the Week it shows (`where`). Kitchen mode covers the header, so it has none.
- * The agent needs the connection.
+ * The agent needs the connection. With `voice`, the chat has a mic for a Voice Session.
  */
-export function Chat(props: { client: MiseClient; online: boolean; where: () => ChatWhere }) {
+export function Chat(props: { client: MiseClient; online: boolean; where: () => ChatWhere; voice?: OpenVoice }) {
   const [open, setOpen] = createSignal(false);
   const reasonId = createUniqueId();
 
@@ -32,7 +33,7 @@ export function Chat(props: { client: MiseClient; online: boolean; where: () => 
         <NeedsConnection id={reasonId} online={props.online} />
       </div>
       <Show when={open()}>
-        <ChatSheet client={props.client} where={props.where} onClose={() => setOpen(false)} />
+        <ChatSheet client={props.client} where={props.where} voice={props.voice} onClose={() => setOpen(false)} />
       </Show>
     </>
   );
@@ -44,6 +45,8 @@ const ERRORS = {
   changed: "chat.confirmation.changed",
   answered: "chat.confirmation.answered",
   unconfirmed: "chat.confirmation.failed",
+  voice: "chat.voice.failed",
+  voiceInUse: "chat.voice.inUse",
 } as const;
 
 /** Why a tap on a confirmation was refused: what it describes changed, or someone already tapped it. */
@@ -52,14 +55,16 @@ const TAP_ERRORS: Partial<Record<string, "changed" | "answered">> = { expired: "
 /**
  * The Household's shared conversation with the agent, and a message to add to it; a sheet over the
  * page. Turns others send show as the conversation changes. A call the agent asked to make that waits
- * for a person shows as a button saying what it will do.
+ * for a person shows as a button saying what it will do. A Voice Session's turns show as they are
+ * answered; it ends with a tap, when the sheet closes, or when the page is hidden (a locked phone
+ * turns the mic off).
  */
-function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose: () => void }) {
+function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: OpenVoice; onClose: () => void }) {
   const titleId = createUniqueId();
   const [turns, setTurns] = createSignal<ChatMessage[]>();
   const [draft, setDraft] = createSignal("");
   const [waiting, setWaiting] = createSignal(false);
-  const [error, setError] = createSignal<"load" | "answer" | "changed" | "answered" | "unconfirmed">();
+  const [error, setError] = createSignal<keyof typeof ERRORS>();
   const [tapping, setTapping] = createSignal(false);
   let log!: HTMLDivElement;
   let box!: HTMLTextAreaElement;
@@ -134,6 +139,85 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
     if (!result?.ok) setError(TAP_ERRORS[result?.error.code ?? ""] ?? "unconfirmed");
     void refetch();
   };
+
+  const [voice, setVoice] = createSignal<"off" | "starting" | "on">("off");
+  // The call running, and which start is current: one ended, or the sheet closed, while a start
+  // waits makes that start hang up when it resumes.
+  let call: VoiceCall | undefined;
+  let attempt = 0;
+  // The household closes the session first, so it ends as asked rather than as a dropped call.
+  const hangUp = (ending: VoiceCall) =>
+    void props.client
+      .endVoice()
+      .catch(() => {})
+      .finally(() => ending.hangUp());
+
+  const startVoice = async () => {
+    const open = props.voice;
+    if (!open || voice() !== "off") return;
+    const mine = ++attempt;
+    const current = () => mine === attempt;
+    setError(undefined);
+    setVoice("starting");
+    const failed = (code: "voice" | "voiceInUse") => {
+      if (!current()) return;
+      setVoice("off");
+      setError(code);
+    };
+    let opened: VoiceCall;
+    try {
+      opened = await open();
+    } catch {
+      // The mic was refused, or the browser has no WebRTC.
+      failed("voice");
+      return;
+    }
+    if (!current()) return opened.hangUp();
+    let reply: VoiceStartReply | undefined;
+    try {
+      reply = await props.client.startVoice(opened.offer, props.where());
+    } catch {
+      // Shown as not started below.
+    }
+    if (!reply?.ok) {
+      opened.hangUp();
+      failed(reply?.error.code === "in_use" ? "voiceInUse" : "voice");
+      return;
+    }
+    if (!current()) return hangUp(opened);
+    try {
+      await opened.connect(reply.value.sdp);
+    } catch {
+      hangUp(opened);
+      failed("voice");
+      return;
+    }
+    if (!current()) return hangUp(opened);
+    call = opened;
+    opened.onEnd(() => {
+      if (call !== opened) return;
+      call = undefined;
+      setVoice("off");
+    });
+    setVoice("on");
+  };
+
+  const endVoice = () => {
+    attempt++;
+    const ending = call;
+    call = undefined;
+    setVoice("off");
+    if (ending) hangUp(ending);
+  };
+
+  const onHidden = () => {
+    if (document.visibilityState === "hidden") endVoice();
+  };
+  onMount(() => document.addEventListener("visibilitychange", onHidden));
+  onCleanup(() => {
+    document.removeEventListener("visibilitychange", onHidden);
+    endVoice();
+  });
 
   return (
     <Sheet labelledBy={titleId} class="sheet-chat" onEscape={() => props.onClose()}>
@@ -232,6 +316,16 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
         </Show>
       </div>
       <div class="chat-composer">
+        <Show when={voice() !== "off"}>
+          <div class="chat-voice">
+            <p class="meta" role="status">
+              {t(voice() === "on" ? "chat.voice.listening" : "chat.voice.starting")}
+            </p>
+            <button type="button" class="button-quiet" onClick={endVoice}>
+              {t("chat.voice.end")}
+            </button>
+          </div>
+        </Show>
         <form
           class="chat-form"
           onSubmit={(event) => {
@@ -256,6 +350,16 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; onClose:
               }
             }}
           />
+          <Show when={props.voice && voice() === "off"}>
+            <button
+              type="button"
+              class="icon-button chat-mic"
+              aria-label={t("chat.voice.start")}
+              onClick={() => void startVoice()}
+            >
+              <Icon name="mic" />
+            </button>
+          </Show>
           {/* Send shows once there's a message to send. */}
           <Show when={draft().trim()}>
             <button

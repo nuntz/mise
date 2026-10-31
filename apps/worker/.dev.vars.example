@@ -10,3 +10,5 @@ DEV_CALLER_EMAIL=cook@example.com
 # Push needs the built app's service worker, so check it on a deployment rather than in `wrangler dev`.
 # VAPID_PRIVATE_KEY=MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgExample
 # VAPID_SUBJECT=https://mise.example.com
+# Voice (ADR 0028): the OpenAI key GPT-Live-1 sessions are created with; without it, there is no voice.
+# OPENAI_API_KEY=sk-proj-example
