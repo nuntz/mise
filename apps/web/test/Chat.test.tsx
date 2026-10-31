@@ -17,8 +17,9 @@ import { afterEach, expect, test } from "vitest";
 import { App } from "../src/App";
 import { Chat } from "../src/Chat";
 import type { MiseClient } from "../src/client";
-import type { OpenVoice, VoiceCall } from "../src/voice";
+import type { OpenVoice } from "../src/voice";
 import { createFakeClient } from "./fakeClient";
+import { fakeVoice } from "./fakeVoice";
 
 const household: Household = {
   name: "The Tremblays",
@@ -456,45 +457,6 @@ test("a confirmation can be cancelled from the chat", async () => {
   await waitFor(() => expect(within(chat).getByRole("listitem").textContent).toBe("Cancelled: Delete “Satay”"));
   expect(within(chat).queryByRole("button", { name: "Delete “Satay”" })).toBeNull();
 });
-
-/**
- * The browser's WebRTC, faked: each call made, whether it was connected and hung up, and a way for
- * GPT-Live to end it. Like the real one, a call hung up never reports ending on its own, and one
- * that ended before `onEnd` reports it at once.
- */
-function fakeVoice() {
-  const calls: { connected: string | null; hungUp: boolean; endFromLive(): void }[] = [];
-  const open: OpenVoice = async () => {
-    const listeners: (() => void)[] = [];
-    let endedOnItsOwn = false;
-    const made = {
-      connected: null as string | null,
-      hungUp: false,
-      endFromLive() {
-        if (made.hungUp) return;
-        made.hungUp = true;
-        endedOnItsOwn = true;
-        for (const listener of listeners.splice(0)) listener();
-      },
-    };
-    calls.push(made);
-    const call: VoiceCall = {
-      offer: `offer ${calls.length}`,
-      connect: async (answer) => {
-        made.connected = answer;
-      },
-      onEnd: (listener) => {
-        if (endedOnItsOwn) listener();
-        else listeners.push(listener);
-      },
-      hangUp: () => {
-        made.hungUp = true;
-      },
-    };
-    return call;
-  };
-  return { open, calls };
-}
 
 /**
  * A Household where Robin's spoken turns join the conversation, and the household's voice calls;

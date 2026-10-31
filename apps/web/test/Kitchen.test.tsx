@@ -1,5 +1,6 @@
 import {
   addDays,
+  type ChatWhere,
   DEFAULT_EFFORT_BUDGETS,
   type Household,
   MEALS,
@@ -14,8 +15,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
+import { KitchenMode } from "../src/Kitchen";
 import { saveRecipe } from "../src/offline";
 import { createFakeClient } from "./fakeClient";
+import { fakeVoice } from "./fakeVoice";
 
 const household: Household = {
   name: "The Tremblays",
@@ -107,20 +110,43 @@ function week(): Week {
 }
 
 function fakeClient(): MiseClient {
-  return createFakeClient(async (name: string) => {
-    switch (name) {
-      case "get_household":
-        return { ok: true, value: household };
-      case "get_week":
-        return { ok: true, value: week() };
-      case "get_recipe":
-        return { ok: true, value: curry };
-      case "search_recipes":
-        return { ok: true, value: [] };
-      default:
-        throw new Error(`Unexpected tool ${name}`);
-    }
-  }).client;
+  return householdClient().client;
+}
+
+/** The Household's tools, and its Voice Sessions: each start and move, and how many were ended. */
+function householdClient() {
+  const voice = { started: [] as ChatWhere[], moved: [] as ChatWhere[], ended: 0 };
+  const fake = createFakeClient(
+    async (name: string) => {
+      switch (name) {
+        case "get_household":
+          return { ok: true, value: household };
+        case "get_week":
+          return { ok: true, value: week() };
+        case "get_recipe":
+          return { ok: true, value: curry };
+        case "search_recipes":
+          return { ok: true, value: [] };
+        default:
+          throw new Error(`Unexpected tool ${name}`);
+      }
+    },
+    {
+      voiceAvailability: async () => ({ status: "available" }),
+      startVoice: async (offer, where) => {
+        voice.started.push(where);
+        return { ok: true, value: { sdp: `answer to ${offer}` } };
+      },
+      moveVoice: async (where) => {
+        voice.moved.push(where);
+        return true;
+      },
+      endVoice: async () => {
+        voice.ended++;
+      },
+    },
+  );
+  return { ...fake, voice };
 }
 
 /** A screen wake lock the test can watch. */
@@ -231,4 +257,85 @@ test("kitchen mode keeps the screen awake until it is left", async () => {
 test("kitchen mode is high contrast", async () => {
   const { kitchen } = await cookMonday();
   expect(kitchen.closest("[data-theme]")?.getAttribute("data-theme")).toBe("kitchen");
+});
+
+/** Monday's Curry in Kitchen mode, with a mic for Voice Sessions. */
+async function cookMondayTalking() {
+  const user = userEvent.setup();
+  const fake = householdClient();
+  const calls = fakeVoice();
+  render(() => <App client={fake.client} voice={calls.open} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(within(monday).getByRole("button", { name: "Cook" }));
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+  await within(kitchen).findByRole("heading", { name: "Curry" });
+  return { user, kitchen, fake, calls };
+}
+
+const MONDAY_DINNER = { date: "2026-10-26", meal: "dinner" } as const;
+
+test("kitchen mode's mic starts a Voice Session over the step on screen, open until ended", async () => {
+  const { user, kitchen, fake, calls } = await cookMondayTalking();
+  await user.click(within(kitchen).getByRole("button", { name: "Next step" }));
+
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+
+  expect(await within(kitchen).findByText("Listening. Talk to Mise.")).toBeTruthy();
+  expect(fake.voice.started).toEqual([{ screen: "kitchen", recipe: 2, slot: MONDAY_DINNER, step: 2 }]);
+  expect(calls.calls[0]?.connected).toBe("answer to offer 1");
+  // Open mic: nothing to hold while talking, only a way to end it.
+  await user.click(within(kitchen).getByRole("button", { name: "End voice" }));
+
+  expect(fake.voice.ended).toBe(1);
+  await vi.waitFor(() => expect(calls.calls[0]?.hungUp).toBe(true));
+  expect(within(kitchen).queryByText("Listening. Talk to Mise.")).toBeNull();
+  expect(within(kitchen).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("kitchen mode moves to the step the agent read aloud, and the Voice Session moves with it", async () => {
+  const { user, kitchen, fake } = await cookMondayTalking();
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+  await user.click(within(kitchen).getByRole("button", { name: "Ingredients" }));
+
+  fake.showStep(3);
+
+  expect(await within(kitchen).findByText("Step 3 of 3")).toBeTruthy();
+  expect(within(kitchen).getByText("Serve over the rice.")).toBeTruthy();
+  await vi.waitFor(() =>
+    expect(fake.voice.moved).toEqual([{ screen: "kitchen", recipe: 2, slot: MONDAY_DINNER, step: 3 }]),
+  );
+});
+
+test("kitchen mode's Voice Session ends when the page is hidden, and when kitchen mode is left", async () => {
+  const { user, kitchen, fake, calls } = await cookMondayTalking();
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+  Reflect.deleteProperty(document, "visibilityState");
+
+  expect(fake.voice.ended).toBe(1);
+  await vi.waitFor(() => expect(calls.calls[0]?.hungUp).toBe(true));
+
+  await user.click(within(kitchen).getByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+  await user.click(within(kitchen).getByRole("button", { name: "Leave kitchen mode" }));
+
+  expect(fake.voice.ended).toBe(2);
+  await vi.waitFor(() => expect(calls.calls[1]?.hungUp).toBe(true));
+});
+
+test("kitchen mode cooked from a Recipe's page talks from the Recipe alone, with no Slot", async () => {
+  const user = userEvent.setup();
+  const fake = householdClient();
+  const calls = fakeVoice();
+  // As the Recipe's page opens it: no Slot, so no servings.
+  render(() => <KitchenMode client={fake.client} id={2} locale="en-CA" voice={calls.open} onClose={() => {}} />);
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+
+  await vi.waitFor(() => expect(fake.voice.started).toEqual([{ screen: "kitchen", recipe: 2, step: 1 }]));
 });

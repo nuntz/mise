@@ -1,13 +1,13 @@
-import type { ChatMessage, ChatWhere, Household, ToolResult, VoiceAvailability } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from "solid-js";
+import type { ChatMessage, ChatWhere, Household, ToolResult } from "@mise/domain";
+import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
-import { householdTime } from "./dates";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { NeedsConnection } from "./NeedsConnection";
 import { Sheet, touch } from "./Sheet";
-import type { OpenVoice, VoiceCall } from "./voice";
+import type { OpenVoice } from "./voice";
+import { createVoiceSession } from "./voiceSession";
 
 /**
  * "Ask Mise", in the app header: a chat with the agent from whatever screen is open, which each
@@ -68,9 +68,6 @@ const ERRORS = {
 
 /** The refusals of a start that the mic's reason would repeat. */
 const VOICE_REFUSALS: ReadonlySet<keyof typeof ERRORS> = new Set(["voiceInUse", "voiceSpent", "voiceOff"]);
-
-/** How soon the mic asks again whether the day's voice minutes are back, at the soonest. */
-const MINUTES_BACK_RETRY_MS = 5000;
 
 /** Why a tap on a confirmation was refused: what it describes changed, or someone already tapped it. */
 const TAP_ERRORS: Partial<Record<string, "changed" | "answered">> = { expired: "changed", not_found: "answered" };
@@ -176,141 +173,25 @@ function ChatSheet(props: {
     void refetch();
   };
 
-  const [voice, setVoice] = createSignal<"off" | "starting" | "on">("off");
-  /** Whether a Voice Session runs, or is starting. */
-  const talking = () => voice() !== "off";
-  /** When the day's voice minutes come back, or who is talking to Mise, after a start refused for it. */
-  const [voiceBack, setVoiceBack] = createSignal("");
-  const [voiceSpeaker, setVoiceSpeaker] = createSignal<string | null>(null);
-  const timeOf = (iso: string) =>
-    props.household
-      ? householdTime(iso, props.household)
-      : new Date(iso).toLocaleTimeString(undefined, { timeStyle: "short" });
-
-  // Whether voice could start, as the household last said: the last answer stays while offline.
-  const [availability, setAvailability] = createSignal<VoiceAvailability>();
-  let minutesBack: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(minutesBack));
-  if (props.voice) {
-    const reload = keepFresh(
-      props.client,
-      ["voice", "household"],
-      () => props.client.voiceAvailability(),
-      (now) => {
-        setAvailability(now);
-        // No notice comes at midnight: the mic asks again once the day's minutes are back, and again
-        // a little later while this device's clock runs ahead of the household's.
-        clearTimeout(minutesBack);
-        if (now.status === "spent") {
-          minutesBack = setTimeout(
-            () => void reload(),
-            Math.max(MINUTES_BACK_RETRY_MS, Date.parse(now.until) - Date.now()),
-          );
-        }
-      },
-    );
-  }
-  /** Whether the mic shows: voice is there to be had, and this device's own session isn't still closing. */
-  const micShown = () => {
-    const now = availability();
-    return now !== undefined && now.status !== "unavailable" && !(now.status === "in_use" && now.yours);
-  };
-  /** Why the mic can't start a session now, if it can't. */
-  const micReason = () => {
-    const now = availability();
-    if (!props.online) return t("chat.voice.needsConnection");
-    if (now?.status === "in_use") return now.by ? t("chat.voice.talking", { name: now.by }) : t("chat.voice.inUse");
-    if (now?.status === "spent") return t("chat.voice.spent", { time: timeOf(now.until) });
-    if (now?.status === "off") return t("chat.voice.off");
-    return undefined;
-  };
-  const micId = createUniqueId();
-  // The call running, and which start is current: one ended, or the sheet closed, while a start
-  // waits makes that start hang up when it resumes.
-  let call: VoiceCall | undefined;
-  let attempt = 0;
-  // The household closes the session first, so it ends as asked rather than as a dropped call.
-  const hangUp = (ending: VoiceCall) =>
-    void props.client
-      .endVoice()
-      .catch(() => {})
-      .finally(() => ending.hangUp());
-
-  const startVoice = async () => {
-    const dial = props.voice;
-    if (!dial || talking()) return;
-    const mine = ++attempt;
-    const current = () => mine === attempt;
-    setError(undefined);
-    setVoice("starting");
-    // The call to end if the start goes no further: the household may hold its session by then.
-    let opened: VoiceCall | undefined;
-    let refusal: "voice" | "voiceInUse" | "voiceSpent" | "voiceOff" = "voice";
-    try {
-      opened = await dial();
-      const reply = current() ? await props.client.startVoice(opened.offer, props.where()) : undefined;
-      if (reply && !reply.ok) {
-        // Refused, so there is no session to end: only the mic to let go of.
-        opened.hangUp();
-        opened = undefined;
-        if (reply.error.code === "in_use") {
-          refusal = "voiceInUse";
-          setVoiceSpeaker(reply.error.by);
-        }
-        if (reply.error.code === "off") refusal = "voiceOff";
-        if (reply.error.code === "spent") {
-          refusal = "voiceSpent";
-          setVoiceBack(timeOf(reply.error.until));
-        }
-        throw new Error(reply.error.message);
-      }
-      if (reply && current()) await opened.connect(reply.value.sdp);
-    } catch {
-      // The mic was refused, the browser has no WebRTC, or the household refused or didn't answer.
-      if (opened) hangUp(opened);
-      if (current()) {
-        setVoice("off");
-        setError(refusal);
-      }
-      return;
-    }
-    if (!current()) return hangUp(opened);
-    call = opened;
-    opened.onEnd(() => {
-      if (call !== opened) return;
-      call = undefined;
-      setVoice("off");
-    });
-    setVoice("on");
-  };
-
-  const endVoice = () => {
-    attempt++;
-    const ending = call;
-    call = undefined;
-    setVoice("off");
-    if (ending) hangUp(ending);
-  };
-
-  // Each turn is heard from where the person is when they say it, so a session follows them.
-  createEffect(
-    on(
-      props.where,
-      (where) => {
-        if (talking()) void props.client.moveVoice(where).catch(() => {});
-      },
-      { defer: true },
-    ),
-  );
-
-  const onHidden = () => {
-    if (document.visibilityState === "hidden") endVoice();
-  };
-  onMount(() => document.addEventListener("visibilitychange", onHidden));
-  onCleanup(() => {
-    document.removeEventListener("visibilitychange", onHidden);
-    endVoice();
+  const voice = createVoiceSession({
+    get client() {
+      return props.client;
+    },
+    get online() {
+      return props.online;
+    },
+    where: () => props.where(),
+    get voice() {
+      return props.voice;
+    },
+    get household() {
+      return props.household;
+    },
+    onStarting: () => setError(undefined),
+    onRefused: setError,
   });
+  const talking = voice.talking;
+  const micId = createUniqueId();
 
   return (
     <Sheet labelledBy={titleId} class="sheet-chat" onEscape={() => props.onClose()}>
@@ -414,9 +295,9 @@ function ChatSheet(props: {
         <Show when={error()}>
           {(failed) => (
             <p class="banner banner-warn" role="alert">
-              {failed() === "voiceInUse" && voiceSpeaker()
-                ? t("chat.voice.talking", { name: voiceSpeaker() ?? "" })
-                : t(ERRORS[failed()], { time: voiceBack() })}
+              {failed() === "voiceInUse" && voice.speaker()
+                ? t("chat.voice.talking", { name: voice.speaker() ?? "" })
+                : t(ERRORS[failed()], { time: voice.minutesBackAt() })}
             </p>
           )}
         </Show>
@@ -425,9 +306,9 @@ function ChatSheet(props: {
         <Show when={talking()}>
           <div class="chat-voice">
             <p class="meta" role="status">
-              {t(voice() === "on" ? "chat.voice.listening" : "chat.voice.starting")}
+              {t(voice.state() === "on" ? "chat.voice.listening" : "chat.voice.starting")}
             </p>
-            <button type="button" class="button-quiet" onClick={endVoice}>
+            <button type="button" class="button-quiet" onClick={voice.end}>
               {t("chat.voice.end")}
             </button>
           </div>
@@ -456,14 +337,14 @@ function ChatSheet(props: {
               }
             }}
           />
-          <Show when={props.voice && voice() === "off" && micShown()}>
+          <Show when={!talking() && voice.micShown()}>
             <button
               type="button"
               class="icon-button chat-mic"
               aria-label={t("chat.voice.start")}
-              disabled={micReason() !== undefined}
-              aria-describedby={micReason() ? micId : undefined}
-              onClick={() => void startVoice()}
+              disabled={voice.micReason() !== undefined}
+              aria-describedby={voice.micReason() ? micId : undefined}
+              onClick={() => void voice.start()}
             >
               <Icon name="mic" />
             </button>
@@ -483,7 +364,7 @@ function ChatSheet(props: {
         </form>
         {/* Under the composer, not beside the mic, where it would squeeze the message box; not while
             a refused start's alert says the same. */}
-        <Show when={voice() === "off" && micShown() && !VOICE_REFUSALS.has(error() ?? "load") && micReason()}>
+        <Show when={!talking() && voice.micShown() && !VOICE_REFUSALS.has(error() ?? "load") && voice.micReason()}>
           {(reason) => (
             <p id={micId} class="control-reason">
               {reason()}

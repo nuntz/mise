@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ChatWhere, presentTurn } from "./chat";
+import { parseIngredient } from "./ingredients";
 
 describe("presentTurn", () => {
   test("says the day the turn was sent, so “tomorrow” has one meaning", () => {
@@ -125,9 +126,79 @@ describe("presentTurn", () => {
   });
 });
 
+describe("presentTurn in Kitchen mode", () => {
+  const satay = {
+    title: "Satay",
+    baseServings: 4,
+    readyMade: false,
+    ingredients: ["2 cloves garlic", "400 g chicken"].map((line) => parseIngredient(line)),
+    steps: ["Marinate the chicken.", "Thread onto skewers.", "Grill for 8 minutes."],
+  };
+
+  test("names the Recipe, its Slot, the step on screen, and gives its steps and Ingredients scaled to the Slot", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-11-03",
+      where: { screen: "kitchen", recipe: 1, slot: { date: "2026-11-03", meal: "dinner" }, step: 2 },
+      cooking: { recipe: satay, servings: 6, locale: "en-CA" },
+      spoken: true,
+      text: "how much garlic",
+    });
+
+    const [header, steps, ingredients, text] = presented.split("\n");
+    expect(header).toMatch(
+      /^\[Robin, speaking on Tuesday 2026-11-03, in Kitchen mode, cooking Satay for the dinner of Tuesday 2026-11-03, for 6 servings, showing step 2 of 3, so day names mean .*; answer for the ear: .*\]$/,
+    );
+    expect(steps).toBe("[Satay's steps: 1. Marinate the chicken. 2. Thread onto skewers. 3. Grill for 8 minutes.]");
+    expect(ingredients).toBe(
+      "[Satay's Ingredients for 6 servings, as Kitchen mode shows them: 3 cloves garlic; 600 g chicken]",
+    );
+    expect(text).toBe("how much garlic");
+  });
+
+  test("cooked from the Recipe's page, gives its Ingredients at its own servings", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-11-03",
+      where: { screen: "kitchen", recipe: 1, step: 1 },
+      cooking: { recipe: satay, servings: 4, locale: "en-CA" },
+      spoken: true,
+      text: "how much garlic",
+    });
+
+    expect(presented).toMatch(/, in Kitchen mode, cooking Satay as written, for 4 servings, showing step 1 of 3, /);
+    expect(presented).toMatch(
+      /\n\[Satay's Ingredients for 4 servings, as Kitchen mode shows them: 2 cloves garlic; 400 g chicken\]\n/,
+    );
+  });
+
+  test("says only Kitchen mode when the Recipe is gone", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-11-03",
+      where: { screen: "kitchen", recipe: 1, step: 1 },
+      spoken: false,
+      text: "next step",
+    });
+
+    expect(presented).toBe("[Robin, writing on Tuesday 2026-11-03, in Kitchen mode]\nnext step");
+  });
+});
+
 describe("ChatWhere", () => {
   test("stays strict: the browser can't mark a turn as spoken", () => {
     expect(ChatWhere.safeParse({ screen: "week", week: "2026-10-26" }).success).toBe(true);
     expect(ChatWhere.safeParse({ screen: "pantry", voice: true }).success).toBe(false);
+    expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1, step: 1, spoken: true }).success).toBe(false);
+  });
+
+  test("carries Kitchen mode's Recipe, Slot and step, and no Week", () => {
+    expect(
+      ChatWhere.safeParse({ screen: "kitchen", recipe: 1, slot: { date: "2026-11-03", meal: "dinner" }, step: 2 })
+        .success,
+    ).toBe(true);
+    expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1 }).success).toBe(true);
+    expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1, step: 0 }).success).toBe(false);
+    expect(ChatWhere.safeParse({ screen: "kitchen", week: "2026-10-26" }).success).toBe(false);
   });
 });

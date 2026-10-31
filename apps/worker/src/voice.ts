@@ -119,7 +119,7 @@ export class VoiceSession {
   private constructor(
     private readonly id: string,
     private readonly sideband: Sideband,
-    private where: ChatWhere,
+    private place: ChatWhere,
     private readonly hooks: VoiceHooks,
     private readonly allowance: number,
   ) {}
@@ -156,9 +156,14 @@ export class VoiceSession {
     return !this.ended;
   }
 
-  /** Where the person is now: the screen and Week the next turn cut is sent from. */
+  /** Where the person is: the screen and Week, or Kitchen mode's step, the next turn cut is sent from. */
+  get where(): ChatWhere {
+    return this.place;
+  }
+
+  /** Where the person is now: the screen and Week, or Kitchen mode's step, the next turn cut is sent from. */
   moveTo(where: ChatWhere): void {
-    this.where = where;
+    this.place = where;
   }
 
   /** Asks Live to close the session; the sideband is closed either way once it has, or soon after. */
@@ -188,7 +193,7 @@ export class VoiceSession {
         // The delegation carries no utterance: the turn is what was heard since the last one.
         const text = this.heard.trim();
         this.heard = "";
-        void this.delegate(event.data.delegation.id, text, this.where);
+        void this.delegate(event.data.delegation.id, text, this.place);
         return;
       }
       case "session.usage.updated":

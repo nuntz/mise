@@ -51,7 +51,7 @@ import { ReadyMadeChip } from "./Recipes";
 import { Sheet } from "./Sheet";
 
 /** Which Slot of the Week: its day and meal. */
-type SlotKey = Pick<Slot, "date" | "meal">;
+export type SlotKey = Pick<Slot, "date" | "meal">;
 
 /**
  * The Recipe a Slot holds, or that its Leftovers are of, opened over the Week and scaled to the
@@ -68,7 +68,7 @@ export function WeekPage(props: {
   household: Household;
   online: boolean;
   onGrocery: () => void;
-  onCook: (recipe: RecipeId, servings: number) => void;
+  onCook: (recipe: RecipeId, servings: number, slot: SlotKey) => void;
   /** Told the start of the Week shown, or undefined while none is. */
   onWeekShown?: (start: LocalDate | undefined) => void;
   /** Opens on next Week, once the current one has said when that starts, as a notification's link asks. */
@@ -271,7 +271,11 @@ export function WeekPage(props: {
                 id={open.id}
                 servings={open.servings}
                 locale={props.household.locale}
-                onCook={slot().recipe ? props.onCook : undefined}
+                onCook={
+                  slot().recipe
+                    ? (recipe, servings) => props.onCook(recipe, servings, { date: slot().date, meal: slot().meal })
+                    : undefined
+                }
                 onClose={() => setOpened(undefined)}
                 slotActions={
                   <Show when={slot().recipe}>
@@ -362,7 +366,7 @@ function Day(props: {
   date: LocalDate;
   today: boolean;
   readOnly: boolean;
-  onCook: (recipe: RecipeId, servings: number) => void;
+  onCook: (recipe: RecipeId, servings: number, slot: SlotKey) => void;
   onOpen: (slot: Slot, rate?: boolean) => void;
   editing: SlotKey | undefined;
   onEdit: (slot: SlotKey, editing: boolean) => void;
@@ -478,7 +482,7 @@ function SlotView(props: {
   day: string;
   today: boolean;
   readOnly: boolean;
-  onCook: (recipe: RecipeId, servings: number) => void;
+  onCook: (recipe: RecipeId, servings: number, slot: SlotKey) => void;
   onOpen: (slot: Slot, rate?: boolean) => void;
   editing: boolean;
   onEdit: (editing: boolean) => void;
@@ -621,7 +625,12 @@ function SlotView(props: {
                   <button
                     type="button"
                     class="button-primary"
-                    onClick={() => props.onCook(recipe().id, props.slot.cookFor || recipe().baseServings)}
+                    onClick={() =>
+                      props.onCook(recipe().id, props.slot.cookFor || recipe().baseServings, {
+                        date: props.slot.date,
+                        meal: props.slot.meal,
+                      })
+                    }
                   >
                     <Icon name="pot" />
                     {t("kitchen.cook")}

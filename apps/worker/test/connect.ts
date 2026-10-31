@@ -7,7 +7,7 @@ type HouseholdStub = ReturnType<typeof env.Household.getByName>;
 /**
  * Opens a WebSocket to the household as `email`, stamped as the Worker stamps it after Access
  * (identity.test.ts covers that step), and calls the household over the Agents SDK's RPC protocol.
- * Keeps the change notices it is sent.
+ * Keeps the change notices it is sent, and the steps it is told to show.
  */
 export async function connectAs(household: HouseholdStub, email: string) {
   const response = await household.fetch("http://mise.example.com/agents/household/household", {
@@ -19,10 +19,12 @@ export async function connectAs(household: HouseholdStub, email: string) {
 
   const replies = new Map<string, (reply: { success: boolean; result?: unknown; error?: string }) => void>();
   const notices: ChangeNotice[] = [];
+  const steps: number[] = [];
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(String(event.data));
     if (message.type === "rpc") replies.get(message.id)?.(message);
     if (message.type === "mise:change") notices.push(message);
+    if (message.type === "mise:show-step") steps.push(message.step);
   });
 
   const rpc = (method: string, args: unknown[]) =>
@@ -36,5 +38,6 @@ export async function connectAs(household: HouseholdStub, email: string) {
     call: (name: string, input: unknown) => rpc("callTool", [name, input]),
     rpc,
     notices,
+    steps,
   };
 }

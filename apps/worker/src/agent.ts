@@ -98,6 +98,11 @@ export type AgentHost = {
   callTool(name: ToolName, input: unknown, caller: Caller | null): Promise<AgentCallResult>;
   /** The Caller of the turn the conversation is answering: the one its tools run as. */
   speakerIn(conversation: ConversationId): Promise<Caller | null>;
+  /**
+   * Moves Kitchen mode's screen to `step`, on the device a Voice Session from Kitchen mode talks
+   * through, while the conversation answers one of its spoken turns: the step shown, or null.
+   */
+  showStep(step: number, conversation: ConversationId): Promise<number | null>;
 };
 
 /**
@@ -205,7 +210,38 @@ export function miseExtension(host: AgentHost): Extension {
       { key: "preamble", tag: false, render: async () => preamble(await household(host)) },
       { key: "voice", tag: false, render: async () => SPOKEN_TURNS },
     ],
-    tools: Object.entries(AGENT_TOOLS).map(([name, description]) => agentTool(name as ToolName, description, host)),
+    tools: [
+      ...Object.entries(AGENT_TOOLS).map(([name, description]) => agentTool(name as ToolName, description, host)),
+      showStepTool(host),
+    ],
+  };
+}
+
+const ShowStepInput = z.object({ step: z.number().int().min(1) });
+
+/**
+ * Moves Kitchen mode's screen to the step the agent reads aloud. Not a registry tool: it changes no
+ * Household data, only what one device shows, and only a Voice Session from Kitchen mode has a screen
+ * to move.
+ */
+function showStepTool(host: AgentHost): ToolRegistration {
+  return {
+    name: "show_step",
+    description:
+      "In Kitchen mode, during a Voice Session: moves the screen to step `step`, counted from 1. Call it each time " +
+      "you read a step aloud (“next step”, “back”, “repeat that”).",
+    parameters: Type.Unsafe({
+      type: "object",
+      properties: { step: { type: "integer", minimum: 1, description: "The step's number, from 1" } },
+      required: ["step"],
+    }),
+    replay: "safe",
+    async execute(args, api) {
+      const input = ShowStepInput.safeParse(args);
+      const shown = input.success ? await host.showStep(input.data.step, api.conversationId) : null;
+      if (shown === null) throw new Error("Only a turn spoken in Kitchen mode has a screen to show a step on");
+      return { output: [{ type: "text", text: `Step ${shown} is on the screen.` }] };
+    },
   };
 }
 
@@ -222,6 +258,9 @@ const SPOKEN_TURNS = [
     "and change it only once they say yes.",
   "- When a change waits for a tap, name the button by what it says (“tap Delete Lemon chicken on the " +
     "screen”), never “the button above”: the person may be across the kitchen.",
+  "- In Kitchen mode, the message gives the Recipe's steps and its Ingredients as the screen shows them. For " +
+    "“next step”, “back” or “repeat that”, read that step aloud as written and call show_step with its number. " +
+    "For an amount, say the one given, already scaled: never work one out.",
   "- A spoken turn may come from anyone in the room: “I” and “me” mean the speaker shown, unless they say a " +
     "Member's name.",
 ].join("\n");

@@ -40,7 +40,7 @@ import { TagRecipes } from "./TagRecipes";
 import { createKitchenMode } from "./theme";
 import { UpdateBanner } from "./Update";
 import type { OpenVoice } from "./voice";
-import { WeekPage } from "./Week";
+import { type SlotKey, WeekPage } from "./Week";
 
 /** The pages the bottom nav goes to, in its order. */
 type Page = "week" | "recipes" | "grocery" | "pantry" | "household";
@@ -84,8 +84,8 @@ const CHIP_CLASS = {
   amber: "chip chip-amber",
 } satisfies Record<NonNullable<StatusChip["tone"]> | "plain", string>;
 
-/** The Recipe open in kitchen mode, scaled to `servings` when given. */
-type KitchenRecipe = { id: RecipeId; servings?: number };
+/** The Recipe open in kitchen mode, scaled to `servings` when given, for the dinner `slot` when cooked from the Week. */
+type KitchenRecipe = { id: RecipeId; servings?: number; slot?: SlotKey };
 
 /**
  * What a link opens: a Recipe, next Week, the pantry check, or one of the Household's settings.
@@ -196,7 +196,7 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
     setPage(to);
     window.scrollTo?.({ top: 0 });
   };
-  const cook = (id: RecipeId, servings?: number) => setInKitchen({ id, servings });
+  const cook = (id: RecipeId, servings?: number, slot?: SlotKey) => setInKitchen({ id, servings, slot });
   const resolve = (at?: string) => {
     setOpening({ page: "household", setting: "resolve", at });
     setPage("household");
@@ -223,7 +223,11 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                   client={props.client}
                   id={recipe().id}
                   servings={recipe().servings}
+                  slot={recipe().slot}
                   locale={household().locale}
+                  voice={props.voice}
+                  online={online()}
+                  household={household()}
                   onClose={() => setInKitchen(undefined)}
                 />
               )}

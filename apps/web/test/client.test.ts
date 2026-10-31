@@ -1,6 +1,6 @@
 import { type ChangeTopic, HOUSEHOLD_PATH, SCREENSHOT_UPLOAD_PATH } from "@mise/domain";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
-import { type ChangeSource, createMiseClient, subscribeTo } from "../src/client";
+import { type ChangeSource, createMiseClient, listenForSteps, subscribeTo } from "../src/client";
 import { createFakeClient } from "./fakeClient";
 
 /** A way to subscribe, and to drive the connection under it. */
@@ -78,6 +78,39 @@ describe.each([
     harness.goOffline();
     harness.goOnline();
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** A way to listen for steps to show, and to have the household send one. */
+type StepHarness = { onShowStep(listener: (step: number) => void): () => void; showStep(step: number): void };
+
+function realSteps(): StepHarness {
+  const socket = new EventTarget();
+  return {
+    onShowStep: (listener) => listenForSteps(socket, listener),
+    showStep(step) {
+      socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ type: "mise:show-step", step }) }));
+    },
+  };
+}
+
+function fakeSteps(): StepHarness {
+  const fake = createFakeClient(() => undefined);
+  return { onShowStep: fake.client.onShowStep, showStep: fake.showStep };
+}
+
+describe.each([
+  ["the real client", realSteps],
+  ["the test fake", fakeSteps],
+])("showing a step, with %s", (_name, connect) => {
+  test("tells each listener the step the household sent, until it stops listening", () => {
+    const harness = connect();
+    const listener = vi.fn();
+    const stop = harness.onShowStep(listener);
+    harness.showStep(3);
+    stop();
+    harness.showStep(4);
+    expect(listener.mock.calls).toEqual([[3]]);
   });
 });
 

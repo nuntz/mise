@@ -10,6 +10,7 @@ import {
   type RecipeId,
   recipePhotoPath,
   SCREENSHOT_UPLOAD_PATH,
+  ShowStep,
   type ToolInput,
   type ToolName,
   type ToolOutput,
@@ -59,6 +60,11 @@ export type MiseClient = {
   endVoice(): Promise<void>;
   /** Whether a Voice Session could start now, as the household sees it; "voice" announces each change. */
   voiceAvailability(): Promise<VoiceAvailability>;
+  /**
+   * Calls `listener` with each step of Kitchen mode the agent read aloud in this device's Voice
+   * Session, counted from 1. Returns an unsubscribe function.
+   */
+  onShowStep(listener: (step: number) => void): () => void;
   /** Where to load a Recipe's photo from; the key makes a new photo a new URL. */
   photoUrl(recipeId: RecipeId, photoKey: string): string;
   /** Photos are too big for a tool call, so they go over HTTP. True once stored. */
@@ -109,6 +115,8 @@ export function createMiseClient(host = window.location.host): MiseClient {
     endVoice: () => agent.call("endVoice", []),
 
     voiceAvailability: () => agent.call("voiceAvailability", []),
+
+    onShowStep: (listener) => listenForSteps(agent, listener),
 
     onConnection(listener) {
       // Connecting counts as reachable, so a page loaded with a signal doesn't flash "offline".
@@ -192,6 +200,21 @@ export function subscribeTo(socket: ChangeSource, topics: readonly ChangeTopic[]
     socket.removeEventListener("message", onMessage);
     socket.removeEventListener("open", onOpen);
   };
+}
+
+/** `MiseClient.onShowStep`, over `socket`. */
+export function listenForSteps(
+  socket: Pick<EventTarget, "addEventListener" | "removeEventListener">,
+  listener: (step: number) => void,
+): () => void {
+  const onMessage = (event: Event) => {
+    const { data } = event as MessageEvent;
+    if (typeof data !== "string") return;
+    const shown = ShowStep.safeParse(safeJson(data));
+    if (shown.success) listener(shown.data.step);
+  };
+  socket.addEventListener("message", onMessage);
+  return () => socket.removeEventListener("message", onMessage);
 }
 
 function safeJson(text: string): unknown {

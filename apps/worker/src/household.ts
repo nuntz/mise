@@ -11,6 +11,7 @@ import {
   type ChatMessage,
   type ChatReply,
   ChatWhere,
+  type Cooking,
   changeTopicOf,
   checkInMessage,
   DRIVE_SYNC_TIME,
@@ -64,6 +65,7 @@ import {
   type ResolvedCaller,
   readPaprikaExport,
   reviewMessage,
+  type ShowStep,
   type Suggestion,
   screenshotUploadKey,
   suggestItems,
@@ -169,6 +171,7 @@ class HouseholdAgent extends Agent<Env> {
         miseExtension({
           callTool: (name, input, caller) => this.invokeTool(name, input, caller, "agent"),
           speakerIn: (id) => this.callerAnswered(id),
+          showStep: (step, id) => this.showStep(step, id),
         }),
       );
       return Harness.open(
@@ -269,23 +272,79 @@ class HouseholdAgent extends Agent<Env> {
     const speaker = this.resolvedCaller(who);
     const now = new Date();
     const turn = recordTurn(sql, speaker, now.toISOString());
+    if (spoken) this.spokenTurns.add(turn);
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
     const today = localDate(now, this.household()?.timezone ?? "UTC");
     // After a failed run, the turns it left waiting aren't answered with this one.
     const afterUnanswered = await lastTurnUnanswered(await (await this.harness.pi()).root(BACKGROUND_CONTEXT));
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, spoken, afterUnanswered, text });
+    const presented = presentTurn({
+      speaker: speakerOfTurn(sql, turn),
+      today,
+      where,
+      cooking: this.cookingAt(where),
+      spoken,
+      afterUnanswered,
+      text,
+    });
     const entry: TurnData = { turn, text };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {
       const { operationId } = await this.harness.submit(presented, { entry: { kind: TURN_ENTRY, data: entry } });
       return this.harness.wait(operationId);
-    });
+    }).finally(() => this.spokenTurns.delete(turn));
     this.notify("chat", this.bumpRevision());
     if (answer.status !== "done") {
       const message = answer.reason ?? "The agent did not answer";
       return { reply: { ok: false, error: { code: "unanswered", message } }, turn };
     }
     return { reply: { ok: true, value: { role: "agent", text: answer.text ?? "" } }, turn };
+  }
+
+  /**
+   * The Recipe Kitchen mode cooks at `where`, scaled as it shows it: to its Slot's servings, Leftovers
+   * included, while the Slot still holds it, or as written. None outside Kitchen mode, or once the
+   * Recipe is gone.
+   */
+  private cookingAt(where: ChatWhere): Cooking | undefined {
+    if (where.screen !== "kitchen") return undefined;
+    const { sql } = this.ctx.storage;
+    const recipe = handlers.get_recipe(sql, { id: where.recipe }, { caller: null });
+    const household = this.household();
+    if (!recipe.ok || !household) return undefined;
+    let servings = recipe.value.baseServings;
+    if (where.slot) {
+      const { date, meal } = where.slot;
+      const week = handlers.get_week(sql, { date }, { caller: null });
+      const slot = week.ok ? week.value.slots.find((one) => one.date === date && one.meal === meal) : undefined;
+      if (slot?.recipe?.id === where.recipe && slot.cookFor > 0) servings = slot.cookFor;
+    }
+    return { recipe: recipe.value, servings, locale: household.locale };
+  }
+
+  /** The spoken turns being answered: only their runs may move Kitchen mode's screen. */
+  private readonly spokenTurns = new Set<number>();
+
+  /**
+   * Moves Kitchen mode to `step` on the device the Voice Session talks through, and on no other: the
+   * agent read it aloud, answering a spoken turn in the `conversation`. A typed turn, from another
+   * device, never moves the cook's screen. The next turn is heard from the step, before the screen
+   * says it moved. Resolves with the step shown, at most the Recipe's last; null without a session
+   * from Kitchen mode.
+   */
+  private async showStep(step: number, conversation: ConversationId): Promise<number | null> {
+    const answering = await (await this.harness.pi()).conversation(conversation, BACKGROUND_CONTEXT);
+    const turn = answering && (await turnBeingAnswered(answering));
+    if (!turn || !this.spokenTurns.has(turn)) return null;
+    const session = this.voice;
+    if (!(session instanceof VoiceSession) || !this.voiceConnection) return null;
+    const { where } = session;
+    const steps = this.cookingAt(where)?.recipe.steps.length ?? 0;
+    const connection = this.getConnection(this.voiceConnection);
+    if (where.screen !== "kitchen" || steps === 0 || !connection) return null;
+    const shown = Math.min(step, steps);
+    connection.send(JSON.stringify({ type: "mise:show-step", step: shown } satisfies ShowStep));
+    session.moveTo({ ...where, step: shown });
+    return shown;
   }
 
   /** What the buttons say of the confirmations held since `turn` that still wait for a tap. */

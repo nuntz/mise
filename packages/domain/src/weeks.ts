@@ -215,7 +215,8 @@ export type Week = z.infer<typeof Week>;
 /** A Week is named by any date in it; without one, the Week the Household is in today. */
 export const GetWeekInput = z.object({ date: LocalDate.optional() }).strict();
 
-const SlotRef = { date: LocalDate, meal: Meal };
+/** A Slot named by its date and meal, as inputs give it. */
+export const SlotRef = { date: LocalDate, meal: Meal };
 
 const Diners = z
   .array(MemberId)

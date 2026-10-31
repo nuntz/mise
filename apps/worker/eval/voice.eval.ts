@@ -82,7 +82,7 @@ async function robinTalking(where: ChatWhere) {
     console.log(`  Robin: ${text}\n  Mise:  ${spoken}`);
     return spoken;
   };
-  return { household, say };
+  return { household, robin, say };
 }
 
 async function dinnerTitle(household: HouseholdStub, date: string): Promise<string | null> {
@@ -189,5 +189,31 @@ describe("a held change in a spoken turn (ADR 0024)", () => {
       ).not.toContain("pending");
     },
     4 * TURN_MS,
+  );
+});
+
+describe("a spoken turn in Kitchen mode", () => {
+  test(
+    "“next step” reads the next step aloud and shows it; “how much” gives the amount scaled to the Slot",
+    async () => {
+      // Next Tuesday's dinner, Rice bowl 6, cooked for the 3 eating it: its 400 g for 4 makes 300 g.
+      const where: ChatWhere = { screen: "kitchen", recipe: 6, slot: { date: "2026-11-03", meal: "dinner" }, step: 1 };
+      const { household, robin, say } = await robinTalking(where);
+      await household.callTool("update_recipe", {
+        id: 6,
+        steps: ["Rinse the rice until the water runs clear.", "Simmer the rice for 18 minutes.", "Fluff and serve."],
+      });
+
+      const read = await say("Next step.");
+
+      expect(read).toMatch(/18 minutes/);
+      await vi.waitFor(() => expect(robin.steps).toEqual([2]));
+
+      const amount = await say("How much rice?");
+
+      expect(amount).toMatch(/300/);
+      expect(amount).not.toMatch(/400/);
+    },
+    3 * TURN_MS,
   );
 });

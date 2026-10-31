@@ -448,6 +448,121 @@ describe("a held change during a Voice Session (ADR 0024)", () => {
   });
 });
 
+describe("a Voice Session in Kitchen mode", () => {
+  const MONDAY = "2026-11-02";
+  const WEDNESDAY = "2026-11-04";
+  const dinner = (date: string) => ({ date, meal: "dinner" as const });
+
+  /** Garlic chicken (Recipe 10, for 4) planned for Monday's dinner, with Wednesday's dinner its Leftovers. */
+  async function cookingGarlicChicken(household: HouseholdStub) {
+    expect(
+      await household.callTool("create_recipe", {
+        title: "Garlic chicken",
+        baseServings: 4,
+        ingredients: ["2 cloves garlic", "400 g rice"],
+        steps: ["Mince the garlic.", "Brown the chicken.", "Add the garlic and cook a minute."],
+        effortMinutes: 30,
+      }),
+    ).toMatchObject({ ok: true, value: { id: 10 } });
+    expect(await household.callTool("set_slot", { ...dinner(MONDAY), kind: "recipe", recipeId: 10 })).toMatchObject({
+      ok: true,
+    });
+    expect(await household.callTool("link_leftovers", { ...dinner(WEDNESDAY), of: dinner(MONDAY) })).toMatchObject({
+      ok: true,
+      value: { kind: "leftovers", servings: 3 },
+    });
+  }
+
+  /** Robin talking from Kitchen mode at `where`, with Alex connected on another device. */
+  async function robinCooking(where: ChatWhere, respond: FauxResponseFactory) {
+    const prompts: string[] = [];
+    scriptModel((context, options, state, model) => {
+      // One prompt per turn, however many requests answering it takes.
+      const turn = textOf(context.messages.filter((message) => message.role === "user").at(-1));
+      if (prompts.at(-1) !== turn) prompts.push(turn);
+      return respond(context, options, state, model);
+    });
+    const { live, sessions } = pretendLive();
+    useLive(() => live);
+    const household = await familyHousehold();
+    await cookingGarlicChicken(household);
+    const robin = await connectAs(household, "robin@example.com");
+    const alex = await connectAs(household, "alex@example.com");
+    expect(await robin.rpc("startVoice", [OFFER, where])).toMatchObject({ ok: true });
+    const session = sessions[0];
+    if (!session) throw new Error("No session was created");
+    return { household, robin, alex, session, prompts };
+  }
+
+  const AT_MONDAY_STEP_1: ChatWhere = { screen: "kitchen", recipe: 10, slot: dinner(MONDAY), step: 1 };
+
+  test("on “next step”, shows the step read aloud on the device talking, and on no other", async () => {
+    const { robin, alex, session, prompts } = await robinCooking(
+      AT_MONDAY_STEP_1,
+      byWhatWasSaid({
+        "Next step.": { calls: [["show_step", { step: 2 }]], answer: "Brown the chicken." },
+        "And then?": { answer: "Add the garlic." },
+      }),
+    );
+
+    expect(await say(session, "Next step.")).toBe("Brown the chicken.");
+    await vi.waitFor(() => expect(robin.steps).toEqual([2]));
+    await say(session, "And then?");
+
+    expect(alex.steps).toEqual([]);
+    expect(prompts[0]).toMatch(/cooking Garlic chicken for the dinner of Monday 2026-11-02, .*showing step 1 of 3/);
+    // The next turn is heard from the step shown, before the screen says it moved.
+    expect(prompts[1]).toMatch(/showing step 2 of 3/);
+  });
+
+  test("answers “how much” from the Ingredients scaled to the Slot, its Leftovers included", async () => {
+    const { session, prompts } = await robinCooking(
+      AT_MONDAY_STEP_1,
+      byWhatWasSaid({ "How much garlic?": { answer: "Three cloves." } }),
+    );
+
+    await say(session, "How much garlic?");
+
+    expect(prompts[0]).toMatch(
+      /\n\[Garlic chicken's Ingredients for 6 servings, as Kitchen mode shows them: 3 cloves garlic; 600 g rice\]\n/,
+    );
+  });
+
+  test("answers “how much” at the Recipe's own servings when cooked from its page", async () => {
+    const { session, prompts } = await robinCooking(
+      { screen: "kitchen", recipe: 10, step: 1 },
+      byWhatWasSaid({ "How much garlic?": { answer: "Two cloves." } }),
+    );
+
+    await say(session, "How much garlic?");
+
+    expect(prompts[0]).toMatch(/cooking Garlic chicken as written, for 4 servings/);
+    expect(prompts[0]).toMatch(/Ingredients for 4 servings, as Kitchen mode shows them: 2 cloves garlic; 400 g rice\]/);
+  });
+
+  test("shows no step for a typed turn from another device while the cook talks", async () => {
+    const { robin, alex } = await robinCooking(
+      AT_MONDAY_STEP_1,
+      byWhatWasSaid({ "Show step 3.": { calls: [["show_step", { step: 3 }]], answer: "Refused." } }),
+    );
+
+    expect(await alex.rpc("chat", ["Show step 3.", { screen: "week" }])).toMatchObject({ ok: true });
+
+    expect(robin.steps).toEqual([]);
+  });
+
+  test("shows no step outside Kitchen mode", async () => {
+    const { robin, session } = await robinCooking(
+      { screen: "pantry" },
+      byWhatWasSaid({ "Next step.": { calls: [["show_step", { step: 2 }]], answer: "Refused." } }),
+    );
+
+    await say(session, "Next step.");
+
+    expect(robin.steps).toEqual([]);
+  });
+});
+
 /** Robin, signed in, in a Household with `minutes` of voice a day, on a pretend Live. */
 async function robinWithCap(minutes: number) {
   scriptModel(() => fauxAssistantMessage("Noted."));

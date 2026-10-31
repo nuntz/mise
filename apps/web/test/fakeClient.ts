@@ -41,6 +41,7 @@ export function createFakeClient(
   const connection = { online };
   const subscriptions = new Set<{ topics: readonly ChangeTopic[]; refetch: () => void }>();
   const listeners = new Set<(online: boolean) => void>();
+  const stepListeners = new Set<(step: number) => void>();
   const setOnline = (value: boolean) => {
     const reconnected = value && !connection.online;
     connection.online = value;
@@ -108,6 +109,10 @@ export function createFakeClient(
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    onShowStep(listener) {
+      stepListeners.add(listener);
+      return () => stepListeners.delete(listener);
+    },
     photoUrl: (id, key) => `/photos/${id}?v=${key}`,
     uploadPhoto: async () => true,
     removePhoto: async () => true,
@@ -121,6 +126,11 @@ export function createFakeClient(
     client,
     /** A change notice for `topic`. */
     notify: notifyAll,
+    /** The household telling this device's Voice Session to show `step`; it arrives only while connected. */
+    showStep(step: number) {
+      if (!connection.online) return;
+      for (const listener of [...stepListeners]) listener(step);
+    },
     goOnline: () => setOnline(true),
     goOffline: () => setOnline(false),
   };
