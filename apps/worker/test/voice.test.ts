@@ -358,10 +358,10 @@ describe("the daily voice cap", () => {
     });
   });
 
-  test("is refused as unavailable when the cap is 0, since no midnight brings minutes back", async () => {
+  test("is refused as off when the cap is 0, since no midnight brings minutes back", async () => {
     const { start, sessions } = await robinWithCap(0);
 
-    expect(await start()).toMatchObject({ ok: false, error: { code: "unavailable" } });
+    expect(await start()).toMatchObject({ ok: false, error: { code: "off" } });
     expect(sessions).toEqual([]);
   });
 

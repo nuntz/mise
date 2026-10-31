@@ -298,7 +298,7 @@ class HouseholdAgent extends Agent<Env> {
     const household = this.household();
     if (!household) return { ok: false, error: { code: "not_set_up", message: "Set up the Household first" } };
     if (household.voiceMinutesPerDay === 0) {
-      return { ok: false, error: { code: "unavailable", message: "Voice is turned off in the Household's settings" } };
+      return { ok: false, error: { code: "off", message: "Voice is turned off in the Household's settings" } };
     }
     const { sql } = this.ctx.storage;
     const now = new Date();

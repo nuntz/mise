@@ -48,6 +48,7 @@ const ERRORS = {
   voice: "chat.voice.failed",
   voiceInUse: "chat.voice.inUse",
   voiceSpent: "chat.voice.spent",
+  voiceOff: "chat.voice.off",
 } as const;
 
 /** Why a tap on a confirmation was refused: what it describes changed, or someone already tapped it. */
@@ -71,11 +72,15 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
   let box!: HTMLTextAreaElement;
   let sendButton: HTMLButtonElement | undefined;
 
-  // The newest turn, or the note that Mise is thinking, stays in view as the conversation grows.
+  // The newest turn, the note that Mise is thinking, or what went wrong stays in view as the conversation grows.
   createEffect(() => {
     turns();
     waiting();
-    const end = log.querySelector('[role="status"]') ?? log.querySelector(".chat-turns > li:last-child");
+    error();
+    const end =
+      log.querySelector('[role="alert"]') ??
+      log.querySelector('[role="status"]') ??
+      log.querySelector(".chat-turns > li:last-child");
     end?.scrollIntoView?.({ block: "end" });
   });
 
@@ -164,7 +169,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
     setVoice("starting");
     // The call to end if the start goes no further: the household may hold its session by then.
     let opened: VoiceCall | undefined;
-    let refusal: "voice" | "voiceInUse" | "voiceSpent" = "voice";
+    let refusal: "voice" | "voiceInUse" | "voiceSpent" | "voiceOff" = "voice";
     try {
       opened = await dial();
       const reply = current() ? await props.client.startVoice(opened.offer, props.where()) : undefined;
@@ -173,6 +178,7 @@ function ChatSheet(props: { client: MiseClient; where: () => ChatWhere; voice?: 
         opened.hangUp();
         opened = undefined;
         if (reply.error.code === "in_use") refusal = "voiceInUse";
+        if (reply.error.code === "off") refusal = "voiceOff";
         if (reply.error.code === "spent") {
           refusal = "voiceSpent";
           setVoiceBack(new Date(reply.error.until).toLocaleTimeString(undefined, { timeStyle: "short" }));

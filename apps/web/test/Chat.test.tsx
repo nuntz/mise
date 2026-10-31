@@ -609,6 +609,37 @@ test("a start refused because the day's voice minutes are spent says when they c
   expect(voice.calls[0]?.hungUp).toBe(true);
 });
 
+test("a refused start's alert is scrolled into view below a long conversation", async () => {
+  const scrolling = watchScrolling();
+  const fake = talkingClient(async () => ({ ok: false, error: { code: "in_use", message: "" } }));
+  fake.conversation.push(
+    { role: "member", speaker: "Robin", text: "What's for dinner Monday?" },
+    { role: "agent", text: "Dal." },
+  );
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+  await within(chat).findByText("Dal.");
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  await within(chat).findByRole("alert");
+  expect(scrolling.last()).toBe("Someone else is talking to Mise.");
+});
+
+test("a start refused because the Household turned voice off says so", async () => {
+  const fake = talkingClient(async () => ({ ok: false, error: { code: "off", message: "" } }));
+  const voice = fakeVoice();
+  render(() => <App client={fake.client} voice={voice.open} />);
+  const chat = await openChat();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "Talk to Mise" }));
+
+  expect((await within(chat).findByRole("alert")).textContent).toBe(
+    "Voice is turned off. Give it minutes a day in the Household's settings.",
+  );
+});
+
 test("a start the household didn't answer ends whatever session it made, and lets go of the mic", async () => {
   const fake = talkingClient(async () => {
     throw new Error("Request timed out");
