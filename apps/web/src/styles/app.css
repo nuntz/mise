@@ -2088,6 +2088,22 @@ form.row {
   gap: var(--space-2);
 }
 
+/* A change held for a tap during a Voice Session, over the step and in reach as it scrolls: tapped from
+ * across the kitchen, by the only way it runs (ADR 0024). */
+.kitchen-held {
+  position: sticky;
+  top: var(--space-3);
+  z-index: 1;
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+
+.kitchen-held-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .step {
   display: flex;
   flex: 1;

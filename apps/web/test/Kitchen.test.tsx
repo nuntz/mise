@@ -1,5 +1,6 @@
 import {
   addDays,
+  type ChatMessage,
   type ChatWhere,
   DEFAULT_EFFORT_BUDGETS,
   type Household,
@@ -113,12 +114,29 @@ function fakeClient(): MiseClient {
   return householdClient().client;
 }
 
-/** The Household's tools, and its Voice Sessions: each start and move, and how many were ended. */
+/**
+ * The Household's tools, its shared conversation, and its Voice Sessions: each start and move, how
+ * many were ended, and each confirmation tapped or cancelled.
+ */
 function householdClient() {
   const voice = { started: [] as ChatWhere[], moved: [] as ChatWhere[], ended: 0 };
+  const conversation: ChatMessage[] = [];
+  const confirmed: number[] = [];
+  const cancelled: number[] = [];
+  /** Answers the pending confirmation `id`, as the household does once it's tapped or cancelled. */
+  const settle = (id: number, status: "done" | "cancelled") => {
+    const at = conversation.findIndex((turn) => turn.role === "confirmation" && turn.id === id);
+    const turn = conversation[at];
+    if (turn?.role === "confirmation") conversation[at] = { ...turn, status };
+  };
   const fake = createFakeClient(
-    async (name: string) => {
+    async (name: string, input: Record<string, unknown>) => {
       switch (name) {
+        case "cancel_confirmation":
+          cancelled.push(input.id as number);
+          settle(input.id as number, "cancelled");
+          fake.notify("chat");
+          return { ok: true, value: null };
         case "get_household":
           return { ok: true, value: household };
         case "get_week":
@@ -132,6 +150,12 @@ function householdClient() {
       }
     },
     {
+      conversation: async () => structuredClone(conversation),
+      confirm: async (id) => {
+        confirmed.push(id);
+        settle(id, "done");
+        return { ok: true, value: null };
+      },
       voiceAvailability: async () => ({ status: "available" }),
       startVoice: async (offer, where) => {
         voice.started.push(where);
@@ -146,7 +170,7 @@ function householdClient() {
       },
     },
   );
-  return { ...fake, voice };
+  return { ...fake, voice, conversation, confirmed, cancelled, settle };
 }
 
 /** A screen wake lock the test can watch. */
@@ -338,4 +362,104 @@ test("kitchen mode cooked from a Recipe's page talks from the Recipe alone, with
   await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
 
   await vi.waitFor(() => expect(fake.voice.started).toEqual([{ screen: "kitchen", recipe: 2, step: 1 }]));
+});
+
+test("a change held during kitchen mode's Voice Session shows over the step, and a tap runs it", async () => {
+  const { user, kitchen, fake } = await cookMondayTalking();
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+
+  fake.conversation.push(
+    { role: "member", speaker: "Robin", text: "Swap Thursday for the Dal." },
+    { role: "confirmation", id: 7, summary: "Plan “Dal” for Thursday dinner", status: "pending" },
+    { role: "agent", text: "Tap Plan Dal on the screen." },
+  );
+  fake.notify("chat");
+
+  const held = await within(kitchen).findByRole("group", { name: "Tap to confirm" });
+  // Over the step, which stays as it was.
+  expect(within(kitchen).getByText("Step 1 of 3")).toBeTruthy();
+  // The step's Next stays kitchen mode's one primary.
+  expect([...kitchen.querySelectorAll(".button-primary")].map((primary) => primary.textContent)).toEqual(["Next step"]);
+  await user.click(within(held).getByRole("button", { name: "Plan “Dal” for Thursday dinner" }));
+
+  expect(fake.confirmed).toEqual([7]);
+  await vi.waitFor(() => expect(within(kitchen).queryByRole("group", { name: "Tap to confirm" })).toBeNull());
+});
+
+test("a held change over the step goes when it's cancelled, by its own button or by voice", async () => {
+  const { user, kitchen, fake } = await cookMondayTalking();
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+
+  fake.conversation.push({ role: "confirmation", id: 7, summary: "Delete “Satay”", status: "pending" });
+  fake.notify("chat");
+  const held = await within(kitchen).findByRole("group", { name: "Tap to confirm" });
+  await user.click(within(held).getByRole("button", { name: "Cancel: Delete “Satay”" }));
+
+  expect(fake.cancelled).toEqual([7]);
+  await vi.waitFor(() => expect(within(kitchen).queryByRole("group", { name: "Tap to confirm" })).toBeNull());
+
+  // "Never mind": the agent cancels it, and the household announces the conversation.
+  fake.conversation.push({ role: "confirmation", id: 8, summary: "Delete “Dal”", status: "pending" });
+  fake.notify("chat");
+  await within(kitchen).findByRole("button", { name: "Delete “Dal”" });
+  fake.settle(8, "cancelled");
+  fake.notify("chat");
+
+  await vi.waitFor(() => expect(within(kitchen).queryByRole("group", { name: "Tap to confirm" })).toBeNull());
+  expect(fake.confirmed).toEqual([]);
+});
+
+test("only a change held during the Voice Session shows over the step, and it stays until answered", async () => {
+  const user = userEvent.setup();
+  const fake = householdClient();
+  const calls = fakeVoice();
+  // Held from a chat before kitchen mode was opened.
+  fake.conversation.push({ role: "confirmation", id: 3, summary: "Delete “Toast”", status: "pending" });
+  render(() => <KitchenMode client={fake.client} id={2} locale="en-CA" voice={calls.open} onClose={() => {}} />);
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+
+  fake.conversation.push({ role: "confirmation", id: 7, summary: "Delete “Satay”", status: "pending" });
+  fake.notify("chat");
+  const held = await within(kitchen).findByRole("group", { name: "Tap to confirm" });
+  expect(within(held).queryByRole("button", { name: "Delete “Toast”" })).toBeNull();
+
+  // Ended before the tap, the change still waits over the step: the cook asked for it.
+  await user.click(within(kitchen).getByRole("button", { name: "End voice" }));
+  await within(kitchen).findByRole("button", { name: "Talk to Mise" });
+  await user.click(within(held).getByRole("button", { name: "Delete “Satay”" }));
+
+  expect(fake.confirmed).toEqual([7]);
+});
+
+test("a tap over the step that's refused says why", async () => {
+  const { user, kitchen, fake } = await cookMondayTalking();
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+  fake.conversation.push({ role: "confirmation", id: 7, summary: "Delete “Satay”", status: "pending" });
+  fake.notify("chat");
+  const held = await within(kitchen).findByRole("group", { name: "Tap to confirm" });
+  // Tapped on another device first.
+  fake.client.confirm = async () => ({ ok: false, error: { code: "not_found", message: "Gone" } });
+
+  await user.click(within(held).getByRole("button", { name: "Delete “Satay”" }));
+
+  expect(await within(kitchen).findByText("That has already been done.")).toBeTruthy();
+});
+
+test("a change held just as the Voice Session ends still shows over the step, read after it ended", async () => {
+  const { user, kitchen, fake } = await cookMondayTalking();
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+  await within(kitchen).findByText("Listening. Talk to Mise.");
+  await user.click(within(kitchen).getByRole("button", { name: "End voice" }));
+  await within(kitchen).findByRole("button", { name: "Talk to Mise" });
+
+  // The agent's answer to the last spoken turn lands after the session ended.
+  fake.conversation.push({ role: "confirmation", id: 7, summary: "Delete “Satay”", status: "pending" });
+  fake.notify("chat");
+
+  expect(await within(kitchen).findByRole("button", { name: "Delete “Satay”" })).toBeTruthy();
 });

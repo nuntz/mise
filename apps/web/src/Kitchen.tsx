@@ -1,6 +1,13 @@
 import { type ChatWhere, type Household, type Recipe, type RecipeId, scaledLines } from "@mise/domain";
-import { createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import {
+  type Confirmation,
+  confirmationTaps,
+  pendingConfirmations,
+  TAP_REFUSALS,
+  type TapRefusal,
+} from "./confirmations";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { type MessageKey, t } from "./messages";
@@ -24,7 +31,9 @@ const VOICE_ERRORS: Record<VoiceRefusal, MessageKey> = {
  * With `voice`, its own mic starts a Voice Session over the step on screen, for the dinner `slot`
  * when cooked from the Week: open mic, as the phone spike found it works on a speaker, for as long as
  * the page shows (the wake lock keeps it showing; hidden, the session ends). The screen moves to each
- * step the agent reads aloud.
+ * step the agent reads aloud. A change the agent holds for a tap during the session shows over the
+ * step, so the cook needn't open the chat; it stays until tapped, cancelled, or withdrawn by voice, and
+ * only a tap runs it (ADR 0024).
  */
 export function KitchenMode(props: {
   client: MiseClient;
@@ -85,6 +94,39 @@ export function KitchenMode(props: {
     }),
   );
 
+  // The Pending Confirmations made since this device first talked here; those pending before are the
+  // chat's to show. Counted from the first start, not by when each is read, so one held as the session
+  // ends still shows, though read after.
+  const [pendingHere, setPendingHere] = createSignal<Confirmation[]>([]);
+  const [tapping, setTapping] = createSignal(false);
+  const [tapError, setTapError] = createSignal<TapRefusal>();
+  const pendingBefore = new Set<number>();
+  let talked = false;
+  createEffect(() => {
+    if (voice.talking()) talked = true;
+  });
+  const refetchPending = props.voice
+    ? keepFresh(
+        props.client,
+        ["chat"],
+        () => props.client.conversation(),
+        (conversation) => {
+          const pending = pendingConfirmations(conversation);
+          if (!talked) for (const turn of pending) pendingBefore.add(turn.id);
+          setPendingHere(pending.filter((turn) => !pendingBefore.has(turn.id)));
+        },
+      )
+    : undefined;
+  const taps = confirmationTaps(props.client);
+  const tap = async (answer: () => Promise<TapRefusal | undefined>) => {
+    if (tapping()) return;
+    setTapError(undefined);
+    setTapping(true);
+    setTapError(await answer());
+    setTapping(false);
+    void refetchPending?.();
+  };
+
   // Offline, the saved Recipe stands.
   keepFresh(
     props.client,
@@ -133,6 +175,41 @@ export function KitchenMode(props: {
               {t("chat.voice.end")}
             </button>
           </div>
+        </Show>
+        <Show when={pendingHere().length > 0}>
+          <fieldset class="kitchen-held">
+            <legend>{t("chat.confirmation.pending")}</legend>
+            <For each={pendingHere()}>
+              {(turn) => (
+                <div class="kitchen-held-actions">
+                  <button
+                    type="button"
+                    class="button-secondary button-block"
+                    disabled={tapping()}
+                    onClick={() => void tap(() => taps.confirm(turn.id))}
+                  >
+                    {turn.summary}
+                  </button>
+                  <button
+                    type="button"
+                    class="button-quiet"
+                    disabled={tapping()}
+                    aria-label={t("chat.confirmation.cancelLabel", { summary: turn.summary })}
+                    onClick={() => void tap(() => taps.cancel(turn.id))}
+                  >
+                    {t("chat.confirmation.cancel")}
+                  </button>
+                </div>
+              )}
+            </For>
+          </fieldset>
+        </Show>
+        <Show when={tapError()}>
+          {(refused) => (
+            <p class="banner banner-warn" role="alert">
+              {t(TAP_REFUSALS[refused()])}
+            </p>
+          )}
         </Show>
         <Show when={!voice.talking() && voice.micShown() && !voiceError() && voice.micReason()}>
           {(reason) => (

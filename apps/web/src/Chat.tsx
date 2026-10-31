@@ -1,6 +1,7 @@
-import type { ChatMessage, ChatWhere, Household, ToolResult } from "@mise/domain";
+import type { ChatMessage, ChatWhere, Household } from "@mise/domain";
 import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { confirmationTaps, TAP_REFUSALS, type TapRefusal } from "./confirmations";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
@@ -57,9 +58,7 @@ export function Chat(props: {
 const ERRORS = {
   load: "app.error",
   answer: "chat.unanswered",
-  changed: "chat.confirmation.changed",
-  answered: "chat.confirmation.answered",
-  unconfirmed: "chat.confirmation.failed",
+  ...TAP_REFUSALS,
   voice: "chat.voice.failed",
   voiceInUse: "chat.voice.inUse",
   voiceSpent: "chat.voice.spent",
@@ -68,9 +67,6 @@ const ERRORS = {
 
 /** The refusals of a start that the mic's reason would repeat. */
 const VOICE_REFUSALS: ReadonlySet<keyof typeof ERRORS> = new Set(["voiceInUse", "voiceSpent", "voiceOff"]);
-
-/** Why a tap on a confirmation was refused: what it describes changed, or someone already tapped it. */
-const TAP_ERRORS: Partial<Record<string, "changed" | "answered">> = { expired: "changed", not_found: "answered" };
 
 /**
  * The Household's shared conversation with the agent, and a message to add to it; a sheet over the
@@ -158,18 +154,14 @@ function ChatSheet(props: {
 
   // A tap on a confirmation runs the call the agent asked for, which only a person can (ADR 0024), or
   // cancels it.
-  const tap = async (answer: () => Promise<ToolResult<unknown>>) => {
+  const taps = confirmationTaps(props.client);
+  const tap = async (answer: () => Promise<TapRefusal | undefined>) => {
     if (tapping()) return;
     setError(undefined);
     setTapping(true);
-    let result: ToolResult<unknown> | undefined;
-    try {
-      result = await answer();
-    } catch {
-      // Shown as not gone through below.
-    }
+    const refused = await answer();
     setTapping(false);
-    if (!result?.ok) setError(TAP_ERRORS[result?.error.code ?? ""] ?? "unconfirmed");
+    if (refused) setError(refused);
     void refetch();
   };
 
@@ -247,7 +239,7 @@ function ChatSheet(props: {
                               type="button"
                               classList={{ "button-secondary button-block": talking() }}
                               disabled={tapping()}
-                              onClick={() => void tap(() => props.client.confirm(turn.id))}
+                              onClick={() => void tap(() => taps.confirm(turn.id))}
                             >
                               {turn.summary}
                             </button>
@@ -256,7 +248,7 @@ function ChatSheet(props: {
                               class="button-quiet"
                               disabled={tapping()}
                               aria-label={t("chat.confirmation.cancelLabel", { summary: turn.summary })}
-                              onClick={() => void tap(() => props.client.call("cancel_confirmation", { id: turn.id }))}
+                              onClick={() => void tap(() => taps.cancel(turn.id))}
                             >
                               {t("chat.confirmation.cancel")}
                             </button>
