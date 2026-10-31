@@ -23,6 +23,8 @@ interface Secrets {
   VAPID_PRIVATE_KEY?: string;
   /** Who push services can reach about Mise's notifications: the deployment's `https://` address. */
   VAPID_SUBJECT?: string;
+  /** PROTOTYPE (voice spike): the OpenAI key GPT-Live sessions are created with. */
+  OPENAI_API_KEY?: string;
   /** Local development only (`.dev.vars`): the email to act as, since `wrangler dev` has no Access. */
   DEV_CALLER_EMAIL?: string;
 }

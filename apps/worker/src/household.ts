@@ -97,6 +97,7 @@ import { fetchPhoto, readLink } from "./links";
 import { openLlm } from "./llm";
 import { migrate } from "./migrations";
 import { piReports, reportWakeErrors, sentryOptions, sentryTelemetry } from "./observability";
+import { type VoiceLog, VoiceSession } from "./prototypeVoice";
 import { openPush, PushError } from "./push";
 import { removePushSubscription, subscriptionsFor } from "./pushDevices";
 import { photoInUse, photoKeyOf, readRecipe, setPhotoKey } from "./recipes";
@@ -237,15 +238,20 @@ class HouseholdAgent extends Agent<Env> {
     if (!message.success || !from.success) {
       return { ok: false, error: { code: "invalid_input", message: "Send a message to the agent" } };
     }
+    return this.answerTurn(this.callerOf(getCurrentAgent().connection), message.data, from.data);
+  }
+
+  /** A turn of the shared conversation from `who`, as `chat` sends one; the voice spike sends them too. */
+  private async answerTurn(who: Caller | null, text: string, where: ChatWhere): Promise<ChatReply> {
     const { sql } = this.ctx.storage;
-    const caller = handlers.get_caller(sql, {}, { caller: this.callerOf(getCurrentAgent().connection) });
+    const caller = handlers.get_caller(sql, {}, { caller: who });
     const speaker = caller.ok ? caller.value : null;
     const now = new Date();
     const turn = recordTurn(sql, speaker, now.toISOString());
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
     const today = localDate(now, this.household()?.timezone ?? "UTC");
-    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where: from.data, text: message.data });
-    const entry: TurnData = { turn, text: message.data };
+    const presented = presentTurn({ speaker: speakerOfTurn(sql, turn), today, where, text });
+    const entry: TurnData = { turn, text };
     // `wait` gives the answer's text; `prompt` would also read the whole transcript after every turn.
     const answer = await Sentry.startSpan({ name: "agent run", op: "mise.agent" }, async () => {
       const { operationId } = await this.harness.submit(presented, { entry: { kind: TURN_ENTRY, data: entry } });
@@ -256,6 +262,51 @@ class HouseholdAgent extends Agent<Env> {
       return { ok: false, error: { code: "unanswered", message: answer.reason ?? "The agent did not answer" } };
     }
     return { ok: true, value: { role: "agent", text: answer.text ?? "" } };
+  }
+
+  /** PROTOTYPE (voice spike): the GPT-Live session this household holds the sideband of, if any. */
+  private voice: VoiceSession | null = null;
+
+  /**
+   * PROTOTYPE (voice spike): creates a GPT-Live session with the browser's SDP offer and attaches its
+   * sideband here. Each delegation becomes a turn from the Caller who started it; the session's events
+   * are sent to their connection as `prototype-voice` messages.
+   */
+  @callable()
+  async prototypeVoiceStart(offer: unknown): Promise<{ ok: true; sdp: string } | { ok: false; error: string }> {
+    const key = this.env.OPENAI_API_KEY;
+    if (!key) return { ok: false, error: "OPENAI_API_KEY is not set in .dev.vars" };
+    if (typeof offer !== "string") return { ok: false, error: "Send an SDP offer" };
+    const connection = getCurrentAgent().connection;
+    const caller = this.callerOf(connection);
+    const log: VoiceLog = (event) => {
+      try {
+        connection?.send(JSON.stringify({ type: "prototype-voice", at: Date.now(), ...event }));
+      } catch {}
+    };
+    this.voice?.stop();
+    try {
+      const { session, sdp } = await VoiceSession.start(
+        offer,
+        key,
+        async (text) => {
+          const reply = await this.answerTurn(caller, text, { screen: "week" });
+          return reply.ok ? reply.value.text : `Mise's agent did not answer: ${reply.error.message}`;
+        },
+        log,
+      );
+      this.voice = session;
+      return { ok: true, sdp };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  }
+
+  /** PROTOTYPE (voice spike): closes the session. */
+  @callable()
+  async prototypeVoiceStop(): Promise<void> {
+    this.voice?.stop();
+    this.voice = null;
   }
 
   /** The Caller whose turn the conversation `id` is answering. */

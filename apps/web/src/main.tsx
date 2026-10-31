@@ -6,6 +6,7 @@ import { render } from "solid-js/web";
 import { App } from "./App";
 import { createMiseClient } from "./client";
 import { setPseudoLocale, t } from "./messages";
+import { PrototypeVoice } from "./PrototypeVoice";
 import { SharePage } from "./Share";
 
 const params = new URLSearchParams(window.location.search);
@@ -20,7 +21,19 @@ if (!root) throw new Error("Missing #root");
 const client = createMiseClient();
 // `/share?url=…` is the iOS Shortcut's way in: a page of its own that imports the link, not the app.
 const shared = window.location.pathname === "/share";
-render(() => (shared ? <SharePage client={client} url={params.get("url")} /> : <App client={client} />), root);
+// PROTOTYPE (voice spike): `/prototype-voice` is the throwaway test page.
+const prototypeVoice = window.location.pathname === "/prototype-voice";
+render(
+  () =>
+    prototypeVoice ? (
+      <PrototypeVoice />
+    ) : shared ? (
+      <SharePage client={client} url={params.get("url")} />
+    ) : (
+      <App client={client} />
+    ),
+  root,
+);
 
 // The service worker keeps the app shell so Mise opens offline; dev serves files that change too often.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
