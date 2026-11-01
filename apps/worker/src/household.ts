@@ -272,7 +272,7 @@ class HouseholdAgent extends Agent<Env> {
   /**
    * The single entry point to every tool (ADR 0002). Input is validated against the registry. A
    * screen also sends when it sent the call (`sentAt`, ms since the epoch), so that its span shows
-   * how long the call queued behind the Household's other work.
+   * whether the call queued behind the Household's other work (see `queuedMs`).
    */
   @callable()
   async callTool(name: string, input: unknown, sentAt?: unknown): Promise<ToolResult<unknown>> {

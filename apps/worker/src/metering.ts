@@ -51,9 +51,11 @@ export function rowAttributes(rows: Rows): Record<string, number> {
 }
 
 /**
- * How long a call waited between the device sending it and the Household starting it, from the
- * device's clock, in ms; undefined when the device sent no time. Devices keep network time, so the
- * skew is well under a second: enough to tell a call queued for 40 s from one sent in a burst.
+ * The Household's clock when it started a call, less the device's when it sent it, in ms; undefined
+ * when the device sent no time. The Household's clock moves only on I/O, not when a message comes
+ * in, so this reads two ways: positive by as long as the call queued while the Household waited on
+ * I/O, negative by as long as synchronous work had held it, its clock standing still. Near zero is
+ * a call served at once. Devices keep network time, so their skew is well under a second.
  */
 export function queuedMs(sentAt: unknown, now: number): number | undefined {
   return typeof sentAt === "number" && Number.isFinite(sentAt) ? Math.round(now - sentAt) : undefined;

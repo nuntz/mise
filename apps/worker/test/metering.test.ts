@@ -59,7 +59,7 @@ describe("row metering", () => {
 });
 
 describe("queue time", () => {
-  test("is the time since the device sent the call, when it said", () => {
+  test("is the Household's clock less the device's send time, when the device said", () => {
     expect(queuedMs(1_000, 46_600.4)).toBe(45_600);
     expect(queuedMs(undefined, 1_000)).toBeUndefined();
     expect(queuedMs("1000", 1_000)).toBeUndefined();
