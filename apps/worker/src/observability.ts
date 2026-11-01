@@ -15,11 +15,17 @@ const SAFE_HEADERS = new Set(["accept", "content-length", "content-type"]);
 const CONTENT_ATTRIBUTE =
   /^gen_ai\.(prompt|completion|request\.messages|input\.messages|output\.messages|response\.text|system_instructions|tool\.(call\.)?(arguments|result|input|output))/;
 
-/** Attributes that carry request bodies or query strings (calendar tokens travel in the URL). */
+/** Attributes that carry request bodies or query strings. */
 const REQUEST_ATTRIBUTE = /^(http\.request\.body|http\.query|url\.query)/;
 
 /** Attributes holding a URL, kept without its query string. */
 const URL_ATTRIBUTE = /^(url\.|http\.(url|target)$)/;
+
+/**
+ * The Calendar Feed's path, whose token is its only secret (ADR 0019). Tokens are base64url, so
+ * the match stops where a query, fragment, colon or space begins and keeps what follows.
+ */
+const FEED_PATH = /\/cal\/[^\s?#:]*/g;
 
 /** Sentry for the Worker and the household Durable Object. No DSN, no reporting. */
 export function sentryOptions(env: Env): CloudflareOptions {
@@ -44,8 +50,12 @@ export function sentryOptions(env: Env): CloudflareOptions {
   };
 }
 
-/** Strips anything that could identify the Household from an error or transaction event. */
+/** Strips anything that could identify the Household from an error event. */
 export function scrubEvent<T extends Event>(event: T): T {
+  return withoutFeedTokens(scrubEventFields(event));
+}
+
+function scrubEventFields<T extends Event>(event: T): T {
   const { user: _user, extra: _extra, breadcrumbs, ...scrubbed } = event;
   // Console breadcrumbs repeat whatever was logged; other breadcrumbs keep only their category.
   const rest = {
@@ -70,18 +80,32 @@ export function scrubEvent<T extends Event>(event: T): T {
   } as T;
 }
 
-/** Strips prompts, model output, tool arguments, request bodies and query strings from a span. */
+/** Strips prompts, model output, tool arguments, request bodies, query strings and the Calendar Feed's token from a span. */
 export function scrubSpan(span: StreamedSpan): StreamedSpan {
   const attributes: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(span.attributes)) {
     if (CONTENT_ATTRIBUTE.test(key) || REQUEST_ATTRIBUTE.test(key)) continue;
     attributes[key] = typeof value === "string" && URL_ATTRIBUTE.test(key) ? withoutQuery(value) : value;
   }
-  return { ...span, attributes };
+  return withoutFeedTokens({ ...span, attributes });
 }
 
 function withoutQuery(url: string): string {
   return url.split(/[?#]/, 1)[0] ?? url;
+}
+
+/**
+ * Every string in `value` without the Calendar Feed's token. The token can surface in any field
+ * Sentry fills from the request (URLs, span and transaction names, tags, trace context), so all of
+ * them are searched.
+ */
+function withoutFeedTokens<T>(value: T): T {
+  if (typeof value === "string") return value.replace(FEED_PATH, "/cal/[token].ics") as T;
+  if (Array.isArray(value)) return value.map(withoutFeedTokens) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutFeedTokens(item)])) as T;
+  }
+  return value;
 }
 
 type TelemetryContext = NonNullable<HarnessOptions["telemetry"]>;

@@ -69,14 +69,94 @@ describe("Sentry scrubbing", () => {
         "gen_ai.tool.call.result": "{}",
         "http.request.body": "{}",
         "url.query": "token=secret",
-        "url.full": "https://mise.example.com/cal/feed.ics?token=secret",
+        "url.full": "https://mise.example.com/agents/household/household?_pk=abc",
       },
     };
 
     expect(scrubSpan(span).attributes).toEqual({
       "gen_ai.request.model": "claude-haiku-5-5",
       "gen_ai.usage.input_tokens": 120,
-      "url.full": "https://mise.example.com/cal/feed.ics",
+      "url.full": "https://mise.example.com/agents/household/household",
+    });
+  });
+
+  describe("the Calendar Feed's token", () => {
+    const TOKEN = "k9X2mQ7vLp4RtW8nZ3bY";
+
+    function feedSpan(overrides: Partial<Parameters<typeof scrubSpan>[0]> = {}): Parameters<typeof scrubSpan>[0] {
+      return {
+        span_id: "1",
+        trace_id: "2",
+        name: "GET",
+        start_timestamp: 0,
+        status: "ok",
+        is_segment: true,
+        attributes: {},
+        ...overrides,
+      };
+    }
+
+    test("is redacted from a span's URL attributes, absolute or relative", () => {
+      const span = feedSpan({
+        attributes: {
+          "url.full": `https://mise.example.com/cal/${TOKEN}.ics`,
+          "url.path": `/cal/${TOKEN}.ics`,
+          "http.response.status_code": 200,
+        },
+      });
+
+      expect(scrubSpan(span).attributes).toEqual({
+        "url.full": "https://mise.example.com/cal/[token].ics",
+        "url.path": "/cal/[token].ics",
+        "http.response.status_code": 200,
+      });
+    });
+
+    test("is redacted from a span named after the request", () => {
+      const span = feedSpan({ name: `GET /cal/${TOKEN}.ics` });
+
+      expect(scrubSpan(span).name).toBe("GET /cal/[token].ics");
+    });
+
+    test("is redacted without taking what follows it", () => {
+      const span = feedSpan({ name: `fetch /cal/${TOKEN}.ics: 500` });
+
+      expect(scrubSpan(span).name).toBe("fetch /cal/[token].ics: 500");
+    });
+
+    test("is redacted from an error raised while serving the feed", () => {
+      const event: ErrorEvent = {
+        type: undefined,
+        message: "Something broke",
+        transaction: `GET /cal/${TOKEN}.ics`,
+        request: { url: `https://mise.example.com/cal/${TOKEN}.ics`, method: "GET" },
+      };
+
+      expect(scrubEvent(event)).toMatchObject({
+        transaction: "GET /cal/[token].ics",
+        request: { url: "https://mise.example.com/cal/[token].ics", method: "GET" },
+      });
+    });
+
+    test("appears nowhere in what is sent", () => {
+      const attributes = {
+        "url.full": `https://mise.example.com/cal/${TOKEN}.ics?refresh=1#top`,
+        "url.path": `/cal/${TOKEN}.ics`,
+        "http.target": `/cal/${TOKEN}.ics`,
+        "sentry.op": "http.server",
+      };
+      const event: ErrorEvent = {
+        type: undefined,
+        message: "Something broke",
+        transaction: `GET /cal/${TOKEN}.ics`,
+        request: { url: `https://mise.example.com/cal/${TOKEN}.ics`, method: "GET" },
+        contexts: { trace: { trace_id: "2", span_id: "1", op: "http.server", data: attributes } },
+        tags: { transaction: `GET /cal/${TOKEN}.ics` },
+      };
+      const span = feedSpan({ name: `GET /cal/${TOKEN}.ics`, attributes });
+
+      expect(JSON.stringify(scrubEvent(event))).not.toContain(TOKEN);
+      expect(JSON.stringify(scrubSpan(span))).not.toContain(TOKEN);
     });
   });
 
