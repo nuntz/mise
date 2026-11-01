@@ -351,6 +351,20 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
         JSON.stringify(dinner.reason),
       );
     }
+    // Leftovers of a dinner left without a Recipe are of nothing in particular now, with no Recipe to
+    // override a Conflict of (ADR 0016).
+    const emptied = `SELECT date, meal FROM slot WHERE meal = 'dinner' AND date BETWEEN ? AND ? AND recipe_id IS NULL`;
+    const range = [span.startDate, span.endDate];
+    sql.exec(
+      `DELETE FROM slot_override WHERE (date, meal) IN
+         (SELECT date, meal FROM slot WHERE (leftovers_of_date, leftovers_of_meal) IN (${emptied}))`,
+      ...range,
+    );
+    sql.exec(
+      `UPDATE slot SET leftovers_of_date = NULL, leftovers_of_meal = NULL
+       WHERE (leftovers_of_date, leftovers_of_meal) IN (${emptied})`,
+      ...range,
+    );
     sql.exec(
       "UPDATE week SET proposal_seed = ?, proposal_choice = ?, reviewed = 0 WHERE start_date = ?",
       proposal.seed,

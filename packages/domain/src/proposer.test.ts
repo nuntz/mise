@@ -608,6 +608,39 @@ describe("proposeWeek, Leftovers", () => {
     expect(proposal.dinners[2]).toMatchObject({ kind: "leftovers", leftoversOf: addDays(MONDAY, 1) });
   });
 
+  test("a dinner cooked for Leftovers linked by hand keeps its Recipe when no other can be chosen, if it is safe", () => {
+    const mac = recipe(20, { allergens: { kind: "known", allergens: ["milk"] } });
+    const week = dinners().slice(0, 2);
+    week[0] = {
+      ...(week[0] as ProposerDinner),
+      kind: "recipe",
+      recipeId: 20,
+      keptLeftovers: [{ diners: [robin, alex], guests: 0, guestConstraints: [] }],
+    };
+    week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY };
+    // Nothing is quick enough to be chosen for Monday.
+    const effortBudgets = { ...input().effortBudgets, monday: 10 };
+
+    expect(proposeWeek(input({ dinners: week, recipes: [mac, ...plain], effortBudgets })).dinners[0]).toEqual({
+      date: MONDAY,
+      kind: "recipe",
+      recipeId: 20,
+      leftoversOf: null,
+      reason: { kind: "kept" },
+    });
+
+    // Unless a Guest eating its Leftovers is allergic to it.
+    week[0] = {
+      ...(week[0] as ProposerDinner),
+      keptLeftovers: [{ diners: [robin, alex], guests: 1, guestConstraints: [{ kind: "allergy", allergen: "milk" }] }],
+    };
+    expect(proposeWeek(input({ dinners: week, recipes: [mac, ...plain], effortBudgets })).dinners[0]).toMatchObject({
+      kind: "unplanned",
+      recipeId: null,
+      reason: { kind: "no_candidate" },
+    });
+  });
+
   test("a dinner's Recipe is safe for whoever eats its Leftovers kept by hand", () => {
     const satay = recipe(2, { allergens: { kind: "known", allergens: ["peanut"] } });
     const week = dinners().slice(0, 1);

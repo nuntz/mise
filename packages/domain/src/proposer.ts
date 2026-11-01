@@ -116,7 +116,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
  * A dinner whose Recipe yields Leftovers, and has none kept, gets them in the next dinner within two
- * days that is still to fill and eaten by the same Diners, if its Recipe is safe for them.
+ * days that is still to fill, has no Leftovers kept itself and is eaten by the same Diners, if its
+ * Recipe is safe for them. A dinner with Leftovers kept that no Recipe can be chosen for keeps the one
+ * it has, if it is safe for them all (ADR 0016).
  * The same input, seed and choice always give the same Proposal.
  */
 export function proposeWeek(input: ProposerInput): Proposal {
@@ -186,7 +188,11 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
 
   // In date order, so that a dinner's Leftovers are placed before the dinners after it are chosen.
   input.dinners.forEach((_, index) => {
-    if (open(index)) proposed[index] = chosen(input, index, planned(), recipes, window, random);
+    if (open(index)) {
+      proposed[index] = chosen(input, index, planned(), recipes, window, random);
+      if (proposed[index]?.kind === "unplanned")
+        proposed[index] = keptForLeftovers(input, index, recipes) ?? proposed[index];
+    }
     placeLeftovers(input, index, proposed, recipes);
   });
 
@@ -234,6 +240,22 @@ function chosen(
         leftoversOf: null,
         reason: { kind: "no_candidate", excluded },
       };
+}
+
+/**
+ * The dinner at `index` as it is, when no Recipe could be chosen for it but Leftovers linked by hand
+ * are cooked from its Recipe and no Hard Constraint of anyone eating either rules that Recipe out (ADR
+ * 0016); undefined otherwise.
+ */
+function keptForLeftovers(
+  input: ProposerInput,
+  index: number,
+  recipes: Map<RecipeId, ProposerRecipe>,
+): ProposedDinner | undefined {
+  const dinner = input.dinners[index] as ProposerDinner;
+  const recipe = dinner.recipeId == null ? undefined : recipes.get(dinner.recipeId);
+  if (dinner.keptLeftovers.length === 0 || !recipe || !isSafeFor(recipe, dinner)) return undefined;
+  return { date: dinner.date, kind: "recipe", recipeId: recipe.id, leftoversOf: null, reason: { kind: "kept" } };
 }
 
 /**
