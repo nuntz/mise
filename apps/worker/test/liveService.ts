@@ -28,13 +28,22 @@ type Listener = { message(data: string): void; close(): void };
 /** A session as the pretend Live keeps it: what the test sees, and its socket's end. */
 type HeldSession = PretendSession & { listen(listener: Listener): void; close(): void };
 
+/** What the pretend GPT-Live says as soon as it delegates, as the real one does by default. */
+export const ACKNOWLEDGEMENT = "Let me check.";
+
 /** How often the sideband delivers what the test sent. */
 const TICK_MS = 1;
+
+/** What GPT-Live says, as its output transcript gives it: in pieces, a word at a time. */
+function speech(text: string): Record<string, unknown>[] {
+  return text.split(/(?= )/).map((delta) => ({ type: "session.output_transcript.delta", delta }));
+}
 
 /**
  * A pretend GPT-Live, kept to the real one's contract: a session answers the offer, its sideband
  * delivers events once it is listened to, and `session.close` is answered with `session.closed` and
- * then the socket closing. Events arrive later, in the household's own context, as a real socket's
+ * then the socket closing. As the real one does, it says `ACKNOWLEDGEMENT` once it has delegated,
+ * and says each commentary the household sends once it has it; what it says by itself, the test sends. Events arrive later, in the household's own context, as a real socket's
  * do: a timer the household started delivers them, never the test's call. Refusals are `LiveError`s.
  *
  * With `refuse`, every create is refused. With `hold`, creates wait until `release()`.
@@ -73,9 +82,12 @@ export function pretendLive({ refuse = false, hold = false }: { refuse?: boolean
           pump = setInterval(() => {
             for (const data of queue.splice(0)) {
               if (session.closed) return;
-              const closing = (JSON.parse(data) as { type: string }).type === "session.closed";
+              const { type } = JSON.parse(data) as { type: string };
               listener?.message(data);
-              if (closing) closeSocket();
+              if (type === "session.closed") closeSocket();
+              // Spoken a moment after delegating: on the next delivery, after what was sent with it.
+              if (type === "session.delegation.created")
+                for (const said of speech(ACKNOWLEDGEMENT)) session.serverSends(said);
             }
             if (dropping) closeSocket();
           }, TICK_MS);
@@ -101,6 +113,8 @@ export function pretendLive({ refuse = false, hold = false }: { refuse?: boolean
         send(event) {
           if (session.closed) return;
           session.sent.push(event);
+          if (event.type === "session.commentary.append")
+            for (const said of speech(event.content)) session.serverSends(said);
           if (event.type === "session.close") {
             session.serverSends({ type: "session.closed", reason: "close_requested", usage: { seconds: 20 } });
           }

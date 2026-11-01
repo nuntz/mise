@@ -488,6 +488,24 @@ const migrations: { version: number; statements: string[] }[] = [
       "ALTER TABLE voice_session ADD COLUMN running INTEGER NOT NULL DEFAULT 0",
     ],
   },
+  {
+    version: 29,
+    statements: [
+      // What GPT-Live heard and said in each exchange of a Voice Session, for `bun run transcript`:
+      // conversation, not Household data, so the export leaves it out and only the latest are kept.
+      // An exchange handed to the agent (`delegated` 1) keeps no `heard` of its own, as its words are
+      // in the conversation, and keeps the `turn` it became (chat_turn's id) once it has one.
+      `CREATE TABLE voice_exchange (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        at TEXT NOT NULL,
+        heard TEXT,
+        said TEXT NOT NULL,
+        delegated INTEGER NOT NULL,
+        turn INTEGER
+      )`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

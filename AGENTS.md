@@ -7,7 +7,7 @@ Family meal planner. See `SPEC.md` for the product and architecture spec.
 - **CI**: `bun run ci:summary` runs `bun run ci` and prints only the failing step's errors and `exit=N`; the full log is in `.ci.log`.
 - **Deploy**: after a push, `bun run deployed` waits for that commit's CI run and exits 0 once its `deploy` job succeeds.
 - **Production**: `bun run sentry [--days N]` is the weekly Sentry sweep: unresolved issues grouped into incidents with the tool calls and slow requests around each, failed spans, and the busiest minutes for tool calls. Exits 1 when there is something to look at; file what needs code as a GitHub issue, then `/triage`.
-- **Agent turns**: `bun run transcript` prints the local Household's recent turns, tool calls (ok/error) and held confirmations; `--costs` adds tokens and cost.
+- **Agent turns**: `bun run transcript` prints the local Household's recent turns, tool calls (ok/error), held confirmations and what GPT-Live heard and said, including what it answered without handing on; `--costs` adds tokens and cost. `--deployed` reads the deployed Household instead. When a voice or agent hand test fails, run `bun run transcript --deployed` before asking the person anything. Its output is the Household's conversation: keep it out of commits, issues and Sentry.
 
 ## Agent skills
 

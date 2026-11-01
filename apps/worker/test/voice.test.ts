@@ -5,8 +5,9 @@ import type { JsonObject } from "@earendil-works/pi-durable";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
+import { KEPT_EXCHANGES } from "../src/agentLog";
 import { openAiLive, useLive } from "../src/live";
-import { FAILURE_LINE, VOICE_TIME_WARNING, VoiceSession } from "../src/voice";
+import { FAILURE_LINE, VOICE_TIME_WARNING, type VoiceExchange, VoiceSession } from "../src/voice";
 import { connectAs } from "./connect";
 import { type PretendSession, pretendLive } from "./liveService";
 import { caller, dinnerOn, familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
@@ -620,7 +621,12 @@ describe("a held change during a Voice Session (ADR 0024)", () => {
       live,
       OFFER,
       ON_THE_WEEK,
-      { answer: async () => answers.shift() ?? null, usage: () => {}, end: () => {} },
+      {
+        answer: async () => ({ turn: 1, reply: answers.shift() ?? null }),
+        exchange: () => {},
+        usage: () => {},
+        end: () => {},
+      },
       600,
     );
     const session = sessions[0];
@@ -1050,7 +1056,12 @@ async function sessionWithAllowance(allowance: number) {
     live,
     OFFER,
     ON_THE_WEEK,
-    { answer: async () => ({ text: "Noted.", held: [] }), usage: () => {}, end: () => ended.push("ended") },
+    {
+      answer: async () => ({ turn: 1, reply: { text: "Noted.", held: [] } }),
+      exchange: () => {},
+      usage: () => {},
+      end: () => ended.push("ended"),
+    },
     allowance,
   );
   const session = sessions[0];
@@ -1195,3 +1206,152 @@ describe("OpenAI's Live", () => {
 });
 
 afterEach(() => useLive(undefined));
+
+/** The Voice Sessions' exchanges as the agent log gives them, oldest first. */
+async function exchanges(household: HouseholdStub) {
+  return (await household.agentLog(10)).voice_exchange;
+}
+
+describe("what GPT-Live heard and said", () => {
+  test("is recorded for an exchange it answered itself, as heard, said and not handed on", async () => {
+    const { household, session } = await robinTalking();
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Thanks " });
+    session.serverSends({ type: "session.input_transcript.delta", delta: "so much." });
+    session.serverSends({ type: "session.output_transcript.delta", delta: "You're " });
+    session.serverSends({ type: "session.output_transcript.delta", delta: "welcome!" });
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Bye." });
+
+    await vi.waitFor(async () =>
+      expect(await exchanges(household)).toEqual([
+        {
+          id: expect.any(Number),
+          session_id: session.id,
+          at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+          heard: "Thanks so much.",
+          said: "You're welcome!",
+          delegated: 0,
+          turn: null,
+        },
+      ]),
+    );
+  });
+
+  test("is recorded for an exchange handed on, as the turn it became and what GPT-Live said, not what was heard", async () => {
+    const { household, robin, session } = await robinTalking();
+
+    expect(await say(session, "What's for dinner Thursday?")).toBe("Thursday's dinner is Rice bowl 2.");
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Thanks." });
+    session.serverSends({ type: "session.output_transcript.delta", delta: "You're welcome." });
+    await robin.rpc("endVoice", []);
+
+    await vi.waitFor(async () => expect(await exchanges(household)).toHaveLength(2));
+    const turn = (await household.agentLog(10)).pi_entries
+      .map((entry) => JSON.parse(entry.record) as { kind: string; data?: { turn: number } })
+      .find((entry) => entry.kind === "mise.turn")?.data?.turn;
+    expect(turn).toEqual(expect.any(Number));
+    expect(await exchanges(household)).toMatchObject([
+      {
+        heard: null,
+        // Transcript deltas mark no end of an utterance, so the two may run together.
+        said: expect.stringMatching(/^Let me check\.\s*Thursday's dinner is Rice bowl 2\.$/),
+        delegated: 1,
+        turn,
+      },
+      { heard: "Thanks.", said: "You're welcome.", delegated: 0, turn: null },
+    ]);
+  });
+
+  test("keeps what GPT-Live says of a turn with the turn, though more is heard before it answers", async () => {
+    const { household, robin, session } = await robinTalking();
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "What's for dinner" });
+    session.serverSends({ type: "session.delegation.created", delegation: { id: "item_1" } });
+    // The transcript's tail comes after the delegation, and the person goes on as GPT-Live acknowledges.
+    session.serverSends({ type: "session.input_transcript.delta", delta: " Thursday?" });
+    await vi.waitFor(() => expect(session.sent).toHaveLength(1));
+    session.serverSends({ type: "session.input_transcript.delta", delta: " Thanks." });
+    session.serverSends({ type: "session.output_transcript.delta", delta: "You're welcome." });
+    await robin.rpc("endVoice", []);
+
+    await vi.waitFor(async () => expect(await exchanges(household)).toHaveLength(2));
+    expect(await exchanges(household)).toMatchObject([
+      { delegated: 1, turn: expect.any(Number), said: expect.stringMatching(/Thursday's dinner is Rice bowl 2\.$/) },
+      { heard: "Thanks.", said: "You're welcome.", delegated: 0 },
+    ]);
+  });
+
+  test("keeps what was heard of a turn that failed to be recorded", async () => {
+    const { live, sessions } = pretendLive();
+    const recorded: VoiceExchange[] = [];
+    await VoiceSession.start(
+      live,
+      OFFER,
+      ON_THE_WEEK,
+      {
+        answer: async () => {
+          throw new Error("The household is gone");
+        },
+        exchange: (exchange) => recorded.push(exchange),
+        usage: () => {},
+        end: () => {},
+      },
+      600,
+    );
+    const session = sessions[0];
+    if (!session) throw new Error("No session was created");
+
+    expect(await say(session, "Plan Friday.")).toBe(FAILURE_LINE);
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Hello?" });
+
+    await vi.waitFor(() => expect(recorded).toHaveLength(1));
+    expect(recorded[0]).toMatchObject({ heard: "Plan Friday.", delegated: true, turn: null });
+  });
+
+  test("keeps only the latest exchanges, and stays out of the export", async () => {
+    const { household, robin, session } = await robinTalking();
+
+    for (let index = 1; index <= KEPT_EXCHANGES + 1; index++) {
+      session.serverSends({ type: "session.input_transcript.delta", delta: `Hello ${index}.` });
+      session.serverSends({ type: "session.output_transcript.delta", delta: "Hi!" });
+    }
+    await robin.rpc("endVoice", []);
+
+    await vi.waitFor(() => expect(session.closed).toBe(true));
+    const kept = await exchanges(household);
+    expect(kept).toHaveLength(KEPT_EXCHANGES);
+    expect(kept[0]).toMatchObject({ heard: "Hello 2." });
+    expect(kept.at(-1)).toMatchObject({ heard: `Hello ${KEPT_EXCHANGES + 1}.` });
+    const response = await household.fetch("http://mise.example.com/agents/household/household/export");
+    const { tables } = (await response.json()) as { tables: Record<string, unknown> };
+    expect(tables.voice_session).toHaveLength(1);
+    expect(tables).not.toHaveProperty("voice_exchange");
+  });
+});
+
+describe("the agent log", () => {
+  test("gives the latest turns asked for, with the exchanges since the first of them", async () => {
+    const { household, robin, session } = await robinTalking(() => fauxAssistantMessage("Noted."));
+
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Hello." });
+    session.serverSends({ type: "session.output_transcript.delta", delta: "Hi!" });
+    await say(session, "We're out of rice.");
+    await say(session, "And cumin.");
+    session.serverSends({ type: "session.input_transcript.delta", delta: "Thanks." });
+    session.serverSends({ type: "session.output_transcript.delta", delta: "Anytime." });
+    await robin.rpc("endVoice", []);
+    await vi.waitFor(async () => expect((await household.agentLog(10)).voice_exchange).toHaveLength(4));
+
+    const log = await household.agentLog(1);
+
+    const turns = log.pi_entries
+      .map((entry) => JSON.parse(entry.record) as { kind: string; data?: { text: string } })
+      .filter((entry) => entry.kind === "mise.turn");
+    expect(turns.map((turn) => turn.data?.text)).toEqual(["And cumin."]);
+    expect(log.voice_exchange).toMatchObject([
+      { delegated: 1, said: expect.stringContaining("Noted.") },
+      { heard: "Thanks.", said: "Anytime." },
+    ]);
+    expect(log.voice_session).toMatchObject([{ id: session.id }]);
+  });
+});

@@ -94,6 +94,7 @@ import {
   type TurnData,
   turnBeingAnswered,
 } from "./agent";
+import { type AgentLog, agentLog, recordExchange } from "./agentLog";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed, readPrepAhead } from "./calendar";
 import { confirmationShown, holdIfGuarded, releaseConfirmation, takeConfirmation } from "./confirmations";
@@ -512,8 +513,10 @@ class HouseholdAgent extends Agent<Env> {
           answer: async (text, where) =>
             Sentry.startSpan({ name: "voice turn", op: "mise.voice" }, async () => {
               const { reply, turn } = await this.answerTurn(caller, text, where, true);
-              return reply.ok ? { text: reply.value.text, held: await this.heldButtonsSince(turn) } : null;
+              if (!reply.ok) return { turn, reply: null };
+              return { turn, reply: { text: reply.value.text, held: await this.heldButtonsSince(turn) } };
             }),
+          exchange: (exchange) => recordExchange(sql, exchange),
           usage: (usage) => recordVoiceUsage(sql, day, usage),
           end: (ended) => {
             if (this.voice === ended) this.releaseVoice();
@@ -1177,6 +1180,15 @@ class HouseholdAgent extends Agent<Env> {
       suggestions: suggestions.ok ? suggestions.value.length : 0,
     });
     if (message) await this.push(message);
+  }
+
+  /**
+   * The conversation from the latest `turns` Member turns on, for `bun run transcript --deployed`.
+   * Called by the Worker over RPC for `AGENT_LOG_PATH`, which only the agent log's service token
+   * reaches; never callable over the WebSocket.
+   */
+  async agentLog(turns: number): Promise<AgentLog> {
+    return agentLog(this.ctx.storage.sql, turns);
   }
 
   /**

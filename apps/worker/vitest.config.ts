@@ -34,6 +34,9 @@ export default defineConfig({
         bindings: {
           ACCESS_TEAM_DOMAIN: "mise-test.cloudflareaccess.com",
           ACCESS_AUD: "test-audience",
+          // The agent log's own Access application, and the service token it admits.
+          AGENT_LOG_AUD: "test-agent-log-audience",
+          AGENT_LOG_CLIENT_ID: "test-agent-log.access",
           // `bun run check:export` points this at a downloaded export for test/stored-export.test.ts.
           ...(process.env.MISE_STORED_EXPORT && {
             STORED_EXPORT: readFileSync(process.env.MISE_STORED_EXPORT, "utf8"),

@@ -11,9 +11,10 @@ import { parseStoredHousehold } from "./tools";
 const NOT_HOUSEHOLD_DATA = /^(sqlite_|_cf_|cf_|pi_)/;
 /**
  * Our own bookkeeping, and Pending Confirmations (ADR 0024): they are tapped in the conversation, which
- * lives in Pi's tables and is not exported, so a restored Household has no chat to tap them in.
+ * lives in Pi's tables and is not exported, so a restored Household has no chat to tap them in. What
+ * GPT-Live heard and said is conversation too, kept only for `bun run transcript`.
  */
-const NOT_EXPORTED = new Set(["schema_version", "revision", "pending_confirmation"]);
+const NOT_EXPORTED = new Set(["schema_version", "revision", "pending_confirmation", "voice_exchange"]);
 
 export type RestoreError = {
   code: "invalid_export" | "schema_mismatch" | "not_empty";

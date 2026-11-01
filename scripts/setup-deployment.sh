@@ -200,7 +200,7 @@ finish() {
 
 run_wizard() {
 
-TOTAL_STAGES=8
+TOTAL_STAGES=9
 
 # Deployment values are personal and Mise is open source (ADR 0005): keep them outside the repo.
 ENV_FILE="${MISE_DEPLOY_ENV:-${XDG_CONFIG_HOME:-$HOME/.config}/mise/deploy.env}"
@@ -407,6 +407,21 @@ step "Sign in with an allowed Google account: the Mise setup screen appears."
 step "In a private window, sign in with an account that is not allowed: Access refuses it."
 step "Visit https://$MISE_HOSTNAME/cal/test.ics: no sign-in page (Not found until the calendar ships)."
 pause "Press Enter once all three check out"
+
+# ── 9 ─────────────────────────────────────────────────────────────────────
+stage "The agent log's service token"
+say "'bun run transcript --deployed' reads the deployed Household's conversation with a service token"
+say "Pulumi made on the deploy. It stays in $ENV_FILE, never in the repo."
+agent_log_output() { (cd "$REPO_ROOT/infra" && pulumi stack output "$1" --show-secrets --stack "$STACK" 2>/dev/null); }
+if AGENT_LOG_ID=$(agent_log_output agentLogClientId) && [[ -n "$AGENT_LOG_ID" ]] &&
+  AGENT_LOG_SECRET=$(agent_log_output agentLogClientSecret) && [[ -n "$AGENT_LOG_SECRET" ]]; then
+  write_env MISE_AGENT_LOG_CLIENT_ID "$AGENT_LOG_ID"
+  write_env MISE_AGENT_LOG_CLIENT_SECRET "$AGENT_LOG_SECRET"
+else
+  SKIPPED+=("the agent log's service token: re-run this wizard once a deploy has finished")
+  warn "No service token yet: the deploy that makes it hasn't run. Re-run this wizard once it has."
+fi
+pause
 
 finish
 }

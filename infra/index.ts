@@ -9,6 +9,8 @@ const WORKER_NAME = "mise";
 const BUCKET_NAME = "mise";
 /** Must match `DAY_SHEET_PATH` in packages/domain; apps/worker/wrangler.jsonc runs the Worker first for it. */
 const DAY_SHEET_PATH = "/kitchen-display/v1/day-sheet";
+/** Must match `AGENT_LOG_PATH` in apps/worker/src/agentLog.ts, which wrangler.jsonc runs the Worker first for. */
+const AGENT_LOG_PATH = "/agent-log";
 
 const config = new pulumi.Config("mise");
 const accountId = config.require("accountId");
@@ -100,6 +102,28 @@ new cloudflare.ZeroTrustAccessApplication("day-sheet", {
   policies: [{ id: daySheetBypass.id, precedence: 1 }],
 });
 
+// The agent log: the Household's conversation, read by `bun run transcript --deployed` with a service
+// token of its own and by no one else, a Member included. The Worker checks the token itself too.
+const agentLogToken = new cloudflare.ZeroTrustAccessServiceToken("agent-log", {
+  accountId,
+  name: "Mise agent log",
+});
+
+const agentLogReader = new cloudflare.ZeroTrustAccessPolicy("agent-log", {
+  accountId,
+  name: "Mise: agent log's service token",
+  decision: "non_identity",
+  includes: [{ serviceToken: { tokenId: agentLogToken.id } }],
+});
+
+const agentLog = new cloudflare.ZeroTrustAccessApplication("agent-log", {
+  accountId,
+  name: "Mise agent log",
+  type: "self_hosted",
+  domain: `${hostname}${AGENT_LOG_PATH}`,
+  policies: [{ id: agentLogReader.id, precedence: 1 }],
+});
+
 // The custom domain needs the Worker to exist, and `wrangler deploy` needs the bucket, so a brand-new
 // deployment binds its hostname on a second `pulumi up` once the Worker is up (CI does this).
 // The custom domain also creates the hostname's DNS record, so Pulumi owns DNS through it.
@@ -111,10 +135,21 @@ const domain = (await workerExists())
 export const cloudflareAccountId = pulumi.secret(accountId);
 export const workerSecrets = pulumi.secret(
   pulumi
-    .all([app.aud, sentryDsn, anthropicApiKey, openaiApiKey, googleServiceAccountKey, vapidPrivateKey])
-    .apply(([aud, dsn, anthropic, openai, driveKey, vapid]) => ({
+    .all([
+      app.aud,
+      agentLog.aud,
+      agentLogToken.clientId,
+      sentryDsn,
+      anthropicApiKey,
+      openaiApiKey,
+      googleServiceAccountKey,
+      vapidPrivateKey,
+    ])
+    .apply(([aud, agentLogAud, agentLogClientId, dsn, anthropic, openai, driveKey, vapid]) => ({
       ACCESS_TEAM_DOMAIN: accessTeamDomain,
       ACCESS_AUD: aud,
+      AGENT_LOG_AUD: agentLogAud,
+      AGENT_LOG_CLIENT_ID: agentLogClientId,
       ...(dsn ? { SENTRY_DSN: dsn } : {}),
       ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
       ...(openai ? { OPENAI_API_KEY: openai } : {}),
@@ -124,6 +159,9 @@ export const workerSecrets = pulumi.secret(
     })),
 );
 export const hostnameBound = domain !== undefined;
+/** For `bun run wizard`, which keeps them in the deployment's env file for `bun run transcript --deployed`. */
+export const agentLogClientId = pulumi.secret(agentLogToken.clientId);
+export const agentLogClientSecret = pulumi.secret(agentLogToken.clientSecret);
 
 /**
  * Whether the Worker has been deployed, asked of the Cloudflare API with the provider's token.

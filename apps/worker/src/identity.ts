@@ -1,5 +1,5 @@
 import { Caller } from "@mise/domain";
-import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from "jose";
+import { createRemoteJWKSet, type JWTPayload, type JWTVerifyGetKey, jwtVerify } from "jose";
 
 /** The header Cloudflare Access puts its signed identity token in. */
 const ACCESS_JWT_HEADER = "Cf-Access-Jwt-Assertion";
@@ -15,12 +15,34 @@ const keySets = new Map<string, JWTVerifyGetKey>();
  */
 export async function resolveCaller(request: Request, env: Env): Promise<Caller | null> {
   if (env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD) {
-    return verifyAccessJwt(request.headers.get(ACCESS_JWT_HEADER), env.ACCESS_TEAM_DOMAIN, env.ACCESS_AUD);
+    const payload = await verifyAccessJwt(
+      request.headers.get(ACCESS_JWT_HEADER),
+      env.ACCESS_TEAM_DOMAIN,
+      env.ACCESS_AUD,
+    );
+    // Service tokens carry no email; only people are callers.
+    return typeof payload?.email === "string" ? { email: payload.email.toLowerCase() } : null;
   }
   return env.DEV_CALLER_EMAIL ? { email: env.DEV_CALLER_EMAIL.toLowerCase() } : null;
 }
 
-async function verifyAccessJwt(jwt: string | null, teamDomain: string, audience: string): Promise<Caller | null> {
+/**
+ * Whether this request comes with the agent log's service token: a token signed by the deployment's
+ * Access team for the agent log's own application, naming the service token's client id. It is never
+ * a Caller. Without the agent log's settings, as in `wrangler dev`, nothing is.
+ */
+export async function isAgentLogReader(request: Request, env: Env): Promise<boolean> {
+  if (!env.ACCESS_TEAM_DOMAIN || !env.AGENT_LOG_AUD || !env.AGENT_LOG_CLIENT_ID) return false;
+  const payload = await verifyAccessJwt(
+    request.headers.get(ACCESS_JWT_HEADER),
+    env.ACCESS_TEAM_DOMAIN,
+    env.AGENT_LOG_AUD,
+  );
+  return payload?.common_name === env.AGENT_LOG_CLIENT_ID;
+}
+
+/** The claims of a token signed by the Access team for the application `audience`, or null. */
+async function verifyAccessJwt(jwt: string | null, teamDomain: string, audience: string): Promise<JWTPayload | null> {
   if (!jwt) return null;
   const issuer = `https://${teamDomain.replace(/^https:\/\//, "").replace(/\/$/, "")}`;
   let keys = keySets.get(issuer);
@@ -30,8 +52,7 @@ async function verifyAccessJwt(jwt: string | null, teamDomain: string, audience:
   }
   try {
     const { payload } = await jwtVerify(jwt, keys, { issuer, audience, algorithms: ["RS256"] });
-    // Service tokens carry no email; only people are callers.
-    return typeof payload.email === "string" ? { email: payload.email.toLowerCase() } : null;
+    return payload;
   } catch {
     return null;
   }

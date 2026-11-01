@@ -8,7 +8,8 @@ import {
 } from "@mise/domain";
 import * as Sentry from "@sentry/cloudflare";
 import { routeAgentRequest } from "agents";
-import { resolveCaller, withCaller } from "./identity";
+import { AGENT_LOG_PATH, turnsAsked } from "./agentLog";
+import { isAgentLogReader, resolveCaller, withCaller } from "./identity";
 import { sentryOptions } from "./observability";
 
 export { Household } from "./household";
@@ -22,6 +23,7 @@ export default Sentry.withSentry(sentryOptions, {
     // bypass the paths under it too, so the Worker answers those itself rather than serve the app.
     if (pathname === DAY_SHEET_PATH) return daySheet(request, env);
     if (pathname.startsWith("/kitchen-display/")) return json({ error: "not_found" }, 404);
+    if (pathname === AGENT_LOG_PATH) return readAgentLog(request, env);
     // One household per deployment: refuse any other agent instance.
     if (pathname !== HOUSEHOLD_PATH && !pathname.startsWith(`${HOUSEHOLD_PATH}/`)) {
       return new Response("Not found", { status: 404 });
@@ -50,6 +52,20 @@ async function calendarFeed(request: Request, env: Env): Promise<Response> {
       "X-Robots-Tag": "noindex",
     },
   });
+}
+
+/**
+ * The Household's conversation, for `bun run transcript --deployed`: read-only, and only for the
+ * agent log's service token. Anyone else finds nothing here, a Member included.
+ */
+async function readAgentLog(request: Request, env: Env): Promise<Response> {
+  if (!(await isAgentLogReader(request, env))) return new Response("Not found", { status: 404 });
+  if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { Allow: "GET" });
+  const turns = turnsAsked(new URL(request.url));
+  if (turns === null) return json({ error: "turns_is_a_positive_whole_number" }, 400);
+  const log = await env.Household.getByName(HOUSEHOLD_AGENT.name).agentLog(turns);
+  // What was said is kept out of every cache.
+  return json(log, 200, { "Cache-Control": "no-store" });
 }
 
 /** A Kitchen Display's Day Sheet: always JSON, never a redirect, whatever the answer. */

@@ -7,6 +7,8 @@ const team = `https://${testBinding(env.ACCESS_TEAM_DOMAIN)}`;
 const audience = testBinding(env.ACCESS_AUD);
 const certsUrl = `${team}/cdn-cgi/access/certs`;
 const householdUrl = "https://mise.example.com/agents/household/household";
+const agentLogAudience = testBinding(env.AGENT_LOG_AUD);
+const agentLogClient = testBinding(env.AGENT_LOG_CLIENT_ID);
 
 let accessKey: CryptoKey;
 let strangerKey: CryptoKey;
@@ -119,5 +121,51 @@ describe("identity at the HTTP seam", () => {
     const response = await exports.default.fetch("https://mise.example.com/cal/some-token.ics");
 
     expect(response.status).not.toBe(401);
+  });
+});
+
+/** A token as Access issues it for a service token: no email, and the token's client id as `common_name`. */
+function serviceTokenJwt(overrides: JWTPayload = {}): Promise<string> {
+  return accessJwt({ aud: [agentLogAudience], email: undefined, sub: "", common_name: agentLogClient, ...overrides });
+}
+
+/** Asks for the agent log through the Worker, with `jwt` as Access's token if given. */
+function agentLog(jwt?: string, query = ""): Promise<Response> {
+  return exports.default.fetch(`https://mise.example.com/agent-log${query}`, {
+    headers: jwt ? { "Cf-Access-Jwt-Assertion": jwt } : {},
+  });
+}
+
+describe("the agent log", () => {
+  test("answers the agent log's service token with the Household's conversation", async () => {
+    const response = await agentLog(await serviceTokenJwt(), "?turns=3");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toMatch(/no-store/);
+    expect(Object.keys(await response.json()).sort()).toEqual([
+      "pending_confirmation",
+      "pi_entries",
+      "voice_exchange",
+      "voice_session",
+    ]);
+  });
+
+  test.each([
+    ["no token", async () => undefined],
+    ["a Member's token", () => accessJwt()],
+    ["a Member's token for the agent log", () => accessJwt({ aud: [agentLogAudience] })],
+    ["the service token's for another application", () => serviceTokenJwt({ aud: [audience] })],
+    ["another service token's", () => serviceTokenJwt({ common_name: "someone-else.access" })],
+    ["one signed by someone other than Access", () => accessJwt({}, strangerKey)],
+  ])("is not found with %s", async (_, jwt) => {
+    const response = await agentLog(await jwt());
+
+    expect(response.status).toBe(404);
+  });
+
+  test("refuses a number of turns that isn't a positive whole number", async () => {
+    for (const turns of ["0", "-1", "2.5", "many"]) {
+      expect((await agentLog(await serviceTokenJwt(), `?turns=${turns}`)).status).toBe(400);
+    }
   });
 });

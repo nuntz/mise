@@ -42,7 +42,7 @@ bun run wizard
 
 The wizard walks you through Pulumi Cloud, a Cloudflare API token, a Google OAuth client, the ESC environment and the GitHub secrets and variables. Its answers stay in `~/.config/mise/deploy.env`. After that, every push to `master` runs `pulumi up` (Access, R2, the custom domain and its DNS record) and then `wrangler deploy`, which uploads the Worker secrets Pulumi computed. On a brand-new deployment the hostname binds on a second `pulumi up` in the same run, once the Worker exists.
 
-The Worker checks the Access token on every request and passes the signed-in email into tool calls (ADR 0007). `/cal/*` skips sign-in.
+The Worker checks the Access token on every request and passes the signed-in email into tool calls (ADR 0007). `/cal/*` skips sign-in. `/agent-log` has an Access application of its own, which admits only a service token Pulumi makes: `bun run transcript --deployed` reads the Household's conversation there, read-only, and no Member can. The wizard's last stage keeps the token in `~/.config/mise/deploy.env`.
 
 ## Share to Mise from an iPhone
 

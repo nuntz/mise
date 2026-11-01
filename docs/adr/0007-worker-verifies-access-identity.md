@@ -10,6 +10,7 @@ The Worker forwards the Caller to the household Durable Object in a `Mise-Caller
 - A WebSocket keeps the Caller it opened with for as long as it stays open, even past the token's expiry; Access checks the session again when the PWA reconnects.
 - Wrangler, not Pulumi, uploads the secrets (`wrangler deploy --secrets-file`, from a Pulumi output), since the Worker must exist first. A secret dropped from ESC stays on the Worker until removed with `wrangler secret delete`.
 - `/cal/*` bypasses Access and is routed before identity is resolved; it authenticates with its own token.
+- `/agent-log` admits one service token, verified the same way against its own Access application, and never makes a Caller (ADR 0029).
 
 ## Considered Options
 

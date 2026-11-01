@@ -17,11 +17,10 @@
  * and the deployment's DSN (`SENTRY_DSN`, else the one in `~/.config/mise/deploy.env`). The DSN
  * names the organisation, its region and the project, so nothing about a deployment is kept here.
  */
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { CONFIG, deploymentValue } from "./deployEnv";
 
-const CONFIG = join(homedir(), ".config/mise");
 /** Events further apart than this belong to different incidents. */
 const INCIDENT_GAP_MS = 5 * 60_000;
 /** How far before an incident to count tool calls. */
@@ -220,7 +219,7 @@ async function get<T>(path: string, params: Record<string, string> | URLSearchPa
 
 /** The API base, organisation and project, from a DSN like `https://<key>@o<org>.ingest.<region>.sentry.io/<project>`. */
 async function sentryProject(): Promise<{ api: string; org: string; project: string }> {
-  const dsn = process.env.SENTRY_DSN ?? (await envFileValue(join(CONFIG, "deploy.env"), "SENTRY_DSN"));
+  const dsn = await deploymentValue("SENTRY_DSN");
   const match = dsn?.match(/^https:\/\/[^@]+@o(\d+)\.ingest\.(?:([a-z]+)\.)?sentry\.io\/(\d+)$/);
   if (!match) {
     console.error("No Sentry DSN: set SENTRY_DSN, or run the deployment wizard (bun run wizard).");
@@ -238,13 +237,6 @@ async function sentryToken(): Promise<string> {
     `No Sentry token: set SENTRY_AUTH_TOKEN, or save a user token with read access to ${join(CONFIG, "sentry-token")}.`,
   );
   process.exit(2);
-}
-
-async function envFileValue(path: string, key: string): Promise<string | undefined> {
-  const file = Bun.file(path);
-  if (!(await file.exists())) return undefined;
-  const line = (await file.text()).split("\n").find((l) => l.startsWith(`${key}=`));
-  return line?.slice(key.length + 1).replace(/^['"]|['"]$/g, "");
 }
 
 /** A culprit URL without its origin, which is a deployment's own hostname. */

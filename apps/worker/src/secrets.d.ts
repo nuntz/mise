@@ -6,6 +6,10 @@ interface Secrets {
   ACCESS_TEAM_DOMAIN?: string;
   /** The Access application's audience tag. */
   ACCESS_AUD?: string;
+  /** The audience tag of the agent log's own Access application, which admits only its service token. */
+  AGENT_LOG_AUD?: string;
+  /** The client id of the service token `bun run transcript --deployed` reads the agent log with. */
+  AGENT_LOG_CLIENT_ID?: string;
   /** The Anthropic API key the agent's model calls are made with. */
   ANTHROPIC_API_KEY?: string;
   /**

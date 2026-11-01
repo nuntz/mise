@@ -74,6 +74,7 @@ const TYPE_WITHIN = 200;
 const Usage = z.object({ seconds: z.number().nonnegative() });
 const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.input_transcript.delta"), delta: z.string() }),
+  z.object({ type: z.literal("session.output_transcript.delta"), delta: z.string() }),
   z.object({ type: z.literal("session.delegation.created"), delegation: z.object({ id: z.string() }) }),
   z.object({ type: z.literal("session.usage.updated"), usage: Usage }),
   z.object({ type: z.literal("session.closed"), reason: z.string().optional(), usage: Usage.optional() }),
@@ -85,13 +86,43 @@ const ServerEvent = z.discriminatedUnion("type", [
  */
 export type VoiceUsage = { id: string; seconds: number; confirmed: boolean; running: boolean };
 
+/**
+ * One exchange of a Voice Session, `at` when it began: what GPT-Live `heard` and `said`, and whether
+ * it was `delegated` to the agent. A delegated exchange keeps the `turn` it became instead of what
+ * was heard, which is in the conversation; one with no turn, as nothing was heard or the turn
+ * couldn't be recorded, keeps what was heard.
+ */
+export type VoiceExchange = {
+  session: string;
+  at: string;
+  heard: string | null;
+  said: string;
+  delegated: boolean;
+  turn: number | null;
+};
+
+/**
+ * An exchange still going on: what was heard and said so far and, once delegated, the turn it is
+ * `becoming`, and how much had been said when the agent's answer was sent (`saidBeforeAnswer`).
+ */
+type OpenExchange = {
+  at: string;
+  heard: string;
+  said: string;
+  becoming?: Promise<number | null>;
+  saidBeforeAnswer?: number;
+};
+
 /** What a Voice Session asks of the household that holds it. */
 export type VoiceHooks = {
   /**
-   * Answers a turn heard from `where` through the shared conversation, with what the buttons say of
-   * the changes it held for a tap (ADR 0024); null when the agent couldn't.
+   * Answers a turn heard from `where` through the shared conversation: the turn as recorded, and the
+   * answer with what the buttons say of the changes it held for a tap (ADR 0024), null when the
+   * agent couldn't.
    */
-  answer(text: string, where: ChatWhere): Promise<{ text: string; held: string[] } | null>;
+  answer(text: string, where: ChatWhere): Promise<{ turn: number; reply: { text: string; held: string[] } | null }>;
+  /** Records an exchange once it has ended, and a delegated one once its turn is known. */
+  exchange(exchange: VoiceExchange): void;
   /** Records the session's usage, each time it changes: from its creation to its end, as it ends. */
   usage(usage: VoiceUsage): void;
   /** Called once, when the session has ended. */
@@ -103,11 +134,14 @@ export type VoiceHooks = {
  * was heard since the last one, from where the person was when it was cut. It is answered by `answer`
  * (the shared conversation's path) after the turns cut before it, and spoken back as commentary,
  * which names the button of each change it held for a tap. Only the person's words leave here, as
- * turn text; no audio is kept.
+ * turn text; no audio is kept. Each exchange, what GPT-Live heard and said, is recorded as it ends:
+ * when the person is heard once GPT-Live has answered, at the next delegation, or with the session.
  */
 export class VoiceSession {
   /** The input transcript heard since the last turn was cut. */
   private heard = "";
+  /** The exchange going on, if anything has been heard or said since the last one ended. */
+  private exchange: OpenExchange | null = null;
   /**
    * The turns being answered, one after another: a turn is submitted once the one before it has its
    * answer, so turns keep the order they were cut in, and a turn ahead that fails leaves it to run.
@@ -199,9 +233,15 @@ export class VoiceSession {
     const event = ServerEvent.safeParse(json);
     if (!event.success) return;
     switch (event.data.type) {
-      case "session.input_transcript.delta":
+      case "session.input_transcript.delta": {
+        if (this.exchange && spokeBack(this.exchange)) this.endExchange();
+        this.exchangeGoingOn().heard += event.data.delta;
         this.heard += event.data.delta;
         this.hearSomething();
+        return;
+      }
+      case "session.output_transcript.delta":
+        this.exchangeGoingOn().said += event.data.delta;
         return;
       case "session.delegation.created": {
         // The delegation carries no utterance: the turn is what was heard since the last one.
@@ -209,12 +249,18 @@ export class VoiceSession {
         this.heard = "";
         const { id } = event.data.delegation;
         const where = this.place;
+        // What GPT-Live says from here, its acknowledgement and the answer, is this exchange's.
+        if (this.exchange?.becoming) this.endExchange();
+        const exchange = this.exchangeGoingOn();
+        const turn = this.answering.then(() => this.delegate(id, text, where, exchange));
         // Reported, so that one turn's failure never stops the turns behind it.
-        this.answering = this.answering
-          .then(() => this.delegate(id, text, where))
-          .catch((error: unknown) => {
+        this.answering = turn.then(
+          () => {},
+          (error: unknown) => {
             Sentry.captureException(error);
-          });
+          },
+        );
+        exchange.becoming = turn.catch(() => null);
         return;
       }
       case "session.usage.updated":
@@ -229,17 +275,49 @@ export class VoiceSession {
     }
   }
 
-  private async delegate(id: string, text: string, where: ChatWhere): Promise<void> {
+  /** Answers a delegation made in `exchange`, and resolves with the turn it became, if any. */
+  private async delegate(id: string, text: string, where: ChatWhere, exchange: OpenExchange): Promise<number | null> {
     let content = NOTHING_HEARD;
+    let turn: number | null = null;
     if (text) {
       // A turn that throws is answered like one the agent failed, and reported.
-      const reply = await this.hooks.answer(text, where).catch((error: unknown) => {
+      const answered = await this.hooks.answer(text, where).catch((error: unknown) => {
         Sentry.captureException(error);
         return null;
       });
-      content = reply ? commentaryOf(reply.text, reply.held) : FAILURE_LINE;
+      turn = answered?.turn ?? null;
+      content = answered?.reply ? commentaryOf(answered.reply.text, answered.reply.held) : FAILURE_LINE;
     }
     if (!this.ended) this.sideband.send({ type: "session.commentary.append", delegation_id: id, content });
+    exchange.saidBeforeAnswer = exchange.said.length;
+    return turn;
+  }
+
+  /** The exchange going on, begun now if there was none. */
+  private exchangeGoingOn(): OpenExchange {
+    this.exchange ??= { at: new Date().toISOString(), heard: "", said: "" };
+    return this.exchange;
+  }
+
+  /** Ends the exchange going on, if any, and records it: a delegated one once its turn is known. */
+  private endExchange(): void {
+    const ended = this.exchange;
+    this.exchange = null;
+    if (!ended) return;
+    const { at, becoming } = ended;
+    const heard = ended.heard.trim();
+    const said = ended.said.trim();
+    if (!becoming) {
+      this.hooks.exchange({ session: this.id, at, heard, said, delegated: false, turn: null });
+      return;
+    }
+    becoming
+      .then((turn) =>
+        this.hooks.exchange({ session: this.id, at, heard: turn === null ? heard : null, said, delegated: true, turn }),
+      )
+      .catch((error: unknown) => {
+        Sentry.captureException(error);
+      });
   }
 
   private finish(reason: string): void {
@@ -248,6 +326,7 @@ export class VoiceSession {
     clearTimeout(this.warning);
     clearTimeout(this.runOut);
     clearTimeout(this.silence);
+    this.endExchange();
     this.report(false);
     Sentry.startSpan({ name: "voice close", op: "mise.voice", attributes: { "mise.voice.reason": reason } }, () =>
       this.sideband.close(),
@@ -286,6 +365,16 @@ export class VoiceSession {
   private report(running: boolean): void {
     this.hooks.usage({ id: this.id, seconds: this.seconds, confirmed: this.confirmed, running });
   }
+}
+
+/**
+ * Whether GPT-Live has answered what was heard in `exchange`, so that what is heard next is a new
+ * exchange: it has said something, and for a delegated exchange, something since the agent's answer.
+ * Until then, more heard is the person going on, or the transcript's tail arriving late.
+ */
+function spokeBack(exchange: OpenExchange): boolean {
+  if (!exchange.becoming) return exchange.said !== "";
+  return exchange.saidBeforeAnswer !== undefined && exchange.said.length > exchange.saidBeforeAnswer;
 }
 
 /**
