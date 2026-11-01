@@ -216,7 +216,17 @@ describe("proposeWeek, over random Weeks", () => {
     }
   });
 
-  test("never chooses a Recipe rated never, over the day's Effort Budget, or planned within 2 weeks", () => {
+  test("never fills a dinner with a Recipe rated never, Recurring or not", () => {
+    for (const seed of WEEKS) {
+      const week = randomWeek(seed);
+      for (const dinner of filled(proposeWeek(week))) {
+        const filledWith = week.recipes.find((other) => other.id === dinner.recipeId) as ProposerRecipe;
+        expect(filledWith.ratings).not.toContain("never");
+      }
+    }
+  });
+
+  test("never chooses a Recipe over the day's Effort Budget, or planned within 2 weeks", () => {
     for (const seed of WEEKS) {
       const week = randomWeek(seed);
       const proposal = proposeWeek(week);
@@ -228,7 +238,6 @@ describe("proposeWeek, over random Weeks", () => {
       ];
       for (const dinner of proposal.dinners.filter((other) => other.reason.kind === "chosen")) {
         const chosen = week.recipes.find((other) => other.id === dinner.recipeId) as ProposerRecipe;
-        expect(chosen.ratings).not.toContain("never");
         expect(chosen.effortMinutes ?? 0).toBeLessThanOrEqual(week.effortBudgets[weekdayOf(dinner.date)]);
         for (const other of planned) {
           if (other.recipeId !== chosen.id || other.date === dinner.date) continue;
@@ -362,6 +371,46 @@ describe("proposeWeek, rule by rule", () => {
       kind: "unplanned",
       reason: { kind: "no_candidate", excluded: { conflict: 0, never: 1, course: 2, recent: 0, effort: 1 } },
     });
+  });
+
+  test("a Recurring Recipe rated never is not pinned, and another Recipe is chosen for the dinner", () => {
+    const tacoTuesday = recipe(1, { recurring: { weekday: "tuesday" }, ratings: ["again", "never"] });
+    const pizza = recipe(2, { recurring: "weekly", ratings: ["never"] });
+
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const proposal = proposeWeek(input({ recipes: [tacoTuesday, pizza, ...input().recipes.slice(2)], seed }));
+
+      expect(proposal.dinners.map((dinner) => dinner.recipeId)).not.toContain(1);
+      expect(proposal.dinners.map((dinner) => dinner.recipeId)).not.toContain(2);
+      expect(proposal.dinners[1]).toMatchObject({ kind: "recipe", reason: { kind: "chosen" } });
+    }
+  });
+
+  test("a Locked or cooked dinner keeps its Recurring Recipe rated never", () => {
+    const tacoTuesday = recipe(1, { recurring: { weekday: "tuesday" }, ratings: ["never"] });
+    const pizza = recipe(2, { recurring: "weekly", ratings: ["never"] });
+    const week = dinners();
+    week[1] = { ...(week[1] as ProposerDinner), kind: "recipe", recipeId: 1, cooked: true };
+    week[4] = { ...(week[4] as ProposerDinner), kind: "recipe", recipeId: 2, locked: true };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: [tacoTuesday, pizza, ...input().recipes.slice(2)] }));
+
+    expect(proposal.dinners.map((dinner) => dinner.recipeId).filter((id) => id === 1 || id === 2)).toEqual([1, 2]);
+    expect(proposal.dinners[1]).toMatchObject({ recipeId: 1, reason: { kind: "cooked" } });
+    expect(proposal.dinners[4]).toMatchObject({ recipeId: 2, reason: { kind: "locked" } });
+  });
+
+  test("a dinner left unplanned when its only Recipe is Recurring and rated never counts it as never", () => {
+    for (const recurring of ["weekly", { weekday: "monday" }] as const) {
+      const proposal = proposeWeek(
+        input({ dinners: dinners().slice(0, 1), recipes: [recipe(1, { recurring, ratings: ["never"] })] }),
+      );
+
+      expect(proposal.dinners[0]).toMatchObject({
+        kind: "unplanned",
+        reason: { kind: "no_candidate", excluded: { conflict: 0, never: 1, course: 0, recent: 0, effort: 0 } },
+      });
+    }
   });
 
   test("a Recurring Recipe that is not a main dish is not pinned to a dinner", () => {

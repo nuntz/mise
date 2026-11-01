@@ -158,9 +158,10 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
   ];
   const open = (index: number) => proposed[index] === undefined;
 
-  // Recurring Recipes come first, those for a weekday before those for any day of the Week.
+  // Recurring Recipes come first, those for a weekday before those for any day of the Week. One rated
+  // "never" is ruled out of a Proposal like any other Recipe (ADR 0014).
   const recurring = input.recipes
-    .filter((recipe) => recipe.recurring !== null)
+    .filter((recipe) => recipe.recurring !== null && !recipe.ratings.includes("never"))
     .sort((a, b) => Number(a.recurring === "weekly") - Number(b.recurring === "weekly") || a.id - b.id);
   for (const recipe of recurring) {
     const { recurring: recurrence } = recipe;
