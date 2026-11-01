@@ -122,6 +122,28 @@ describe("Leftovers", () => {
     expect(await beefBought(household)).toBe(200);
   });
 
+  test("proposing the Week again keeps a Recipe in the Slot that Leftovers linked by hand come from", async () => {
+    const household = await setUpHousehold();
+    await plan(household, MONDAY, CHILI);
+    await household.callTool("lock_slot", { ...dinner(MONDAY), locked: true });
+    await plan(household, TUESDAY, 3);
+    succeeded(await household.callTool("link_leftovers", { ...dinner(WEDNESDAY), of: dinner(TUESDAY) }));
+    // The rest of the Week eats out, so Tuesday's is the only Rice bowl on the Grocery List.
+    for (const date of ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"]) {
+      succeeded(await household.callTool("set_slot", { ...dinner(date), kind: "eat_out" }));
+    }
+
+    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+
+    expect(slotOf(proposed, TUESDAY)).toMatchObject({ kind: "recipe", cookFor: 4, leftovers: [dinner(WEDNESDAY)] });
+    expect(slotOf(proposed, TUESDAY).recipe).not.toBeNull();
+    expect(slotOf(proposed, WEDNESDAY)).toMatchObject({ kind: "leftovers", leftoversOf: dinner(TUESDAY) });
+    // Tuesday's Rice bowl for 4: for Tuesday's 2 and Wednesday's 2.
+    const list = succeeded<GroceryList>(await household.callTool("build_grocery_list", { date: MONDAY }));
+    const rice = list.sections.flatMap((section) => section.lines).find((line) => line.name === "rice");
+    expect(rice?.amounts[0]?.amount.min).toBe(400);
+  });
+
   test("Leftovers link only to an earlier Slot that holds a Recipe", async () => {
     const household = await setUpHousehold();
     await plan(household, TUESDAY, CHILI);

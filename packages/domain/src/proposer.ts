@@ -238,8 +238,8 @@ function chosen(
 
 /**
  * Places the Leftovers of the dinner at `index`, if its Recipe yields them, it is not cooked yet and it has none kept: in
- * the first dinner within two days after it that is still to fill, eaten by the same Diners, whose
- * Guests (if any) its Recipe is safe for.
+ * the first dinner within two days after it that is still to fill and cooked for no Leftovers of its own, eaten by the
+ * same Diners, whose Guests (if any) its Recipe is safe for.
  */
 function placeLeftovers(
   input: ProposerInput,
@@ -259,6 +259,8 @@ function placeLeftovers(
     (dinner, other) =>
       other > index &&
       proposed[other] === undefined &&
+      // A dinner cooked for Leftovers linked by hand must keep a Recipe of its own.
+      dinner.keptLeftovers.length === 0 &&
       daysBetween(source.date, dinner.date) <= LEFTOVERS_WITHIN_DAYS &&
       dinersKey(dinner) === diners &&
       isSafe(recipe, dinner),
