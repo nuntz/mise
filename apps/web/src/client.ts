@@ -97,8 +97,13 @@ export function createMiseClient(host = window.location.host): MiseClient {
   const agent = new AgentClient({ ...HOUSEHOLD_AGENT, host });
 
   return {
+    // With when it was sent, so that the household's trace shows how long it queued there.
     call: (name, input) =>
-      agent.call("callTool", [name, input], SLOW_TOOLS.has(name) ? { timeout: SLOW_TOOL_TIMEOUT_MS } : undefined),
+      agent.call(
+        "callTool",
+        [name, input, Date.now()],
+        SLOW_TOOLS.has(name) ? { timeout: SLOW_TOOL_TIMEOUT_MS } : undefined,
+      ),
 
     subscribe: (topics, refetch) => subscribeTo(agent, topics, refetch),
 

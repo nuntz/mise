@@ -105,6 +105,7 @@ import { type DaySheetAnswer, readDaySheet } from "./kitchenDisplays";
 import { fetchPhoto, readLink } from "./links";
 import { type Live, LiveError, openLive } from "./live";
 import { openLlm } from "./llm";
+import { countRows, meterQueries, queuedMs, rowAttributes } from "./metering";
 import { migrate } from "./migrations";
 import { piReports, reportWakeErrors, sentryOptions, sentryTelemetry } from "./observability";
 import { openPush, PushError } from "./push";
@@ -149,6 +150,8 @@ const R2_DELETE_LIMIT = 1000;
 
 /** The scheduler callbacks the household runs once a day. */
 type DailyRun = "nightlyExport" | "nightlyDriveSync" | "morningPushes";
+/** Every scheduler callback the household runs. */
+type ScheduledRun = DailyRun | "askedDriveSync" | "suggestAfterImport";
 
 /** What the household remembers about each WebSocket; it survives hibernation. */
 type ConnectionState = { caller: Caller | null };
@@ -156,6 +159,11 @@ type ConnectionState = { caller: Caller | null };
 /** The household Durable Object: the one place Mise's data lives. */
 class HouseholdAgent extends Agent<Env> {
   private readonly models = agentModels(this.env);
+  /**
+   * This instance of the Household, on every span it sends: a wake after eviction, or a reset,
+   * starts a new one, so spans tell an instance that was stuck from one that was gone.
+   */
+  private readonly instance = crypto.randomUUID().slice(0, 8);
   /** The Drive sync running, if one is: the nightly sync joins one asked for, and the other way round. */
   private driveSync: Promise<ImportRun> | null = null;
   /** Whether "Sync Drive now" has scheduled a sync that has not finished, so that asking again starts none. */
@@ -205,16 +213,41 @@ class HouseholdAgent extends Agent<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    meterQueries(ctx.storage.sql);
     // Runs before any request, RPC call or WebSocket message is served.
+    // Not traced: Sentry isn't set up for the invocation yet, so a span started here is never sent.
     void ctx.blockConcurrencyWhile(async () => migrate(ctx.storage));
     this.lifecycle.use(this.harness);
   }
 
   override async onStart(): Promise<void> {
-    // The Voice Session a restart or deploy cut short isn't reattached: screens are told voice ended.
-    if (endCutShortVoiceSessions(this.ctx.storage.sql)) this.notify("voice", this.revision());
-    await this.followAgentModel();
-    await this.scheduleDailyRuns();
+    await this.traced("household start", "mise.start", async (span) => {
+      span.setAttribute("mise.database_bytes", this.ctx.storage.sql.databaseSize);
+      // The Voice Session a restart or deploy cut short isn't reattached: screens are told voice ended.
+      if (endCutShortVoiceSessions(this.ctx.storage.sql)) this.notify("voice", this.revision());
+      await this.followAgentModel();
+      await this.scheduleDailyRuns();
+    });
+  }
+
+  /**
+   * `work` in a span of its own, with the rows it read and wrote: its duration counts only the time
+   * it waited on I/O, as the clock stands still while synchronous code runs. The invocation's spans
+   * are tagged with this instance.
+   */
+  private traced<T>(name: string, op: string, work: (span: Sentry.Span) => Promise<T> | T): Promise<T> {
+    this.tagInstance();
+    return Sentry.startSpan({ name, op }, (span) =>
+      countRows(
+        () => work(span),
+        (rows) => span.setAttributes(rowAttributes(rows)),
+      ),
+    );
+  }
+
+  /** Tags every span of the invocation running now (its request, message or alarm) with this instance. */
+  private tagInstance(): void {
+    Sentry.getIsolationScope().setAttribute("mise.instance", this.instance);
   }
 
   /**
@@ -231,14 +264,20 @@ class HouseholdAgent extends Agent<Env> {
 
   /** Remembers who opened the connection, as the Worker resolved them, for every tool call it makes. */
   override async onConnect(connection: Connection<ConnectionState>, ctx: ConnectionContext): Promise<void> {
+    this.tagInstance();
     connection.setState({ caller: callerFrom(ctx.request) });
     await super.onConnect(connection, ctx);
   }
 
-  /** The single entry point to every tool (ADR 0002). Input is validated against the registry. */
+  /**
+   * The single entry point to every tool (ADR 0002). Input is validated against the registry. A
+   * screen also sends when it sent the call (`sentAt`, ms since the epoch), so that its span shows
+   * how long the call queued behind the Household's other work.
+   */
   @callable()
-  async callTool(name: string, input: unknown): Promise<ToolResult<unknown>> {
-    return this.invokeTool(name, input, this.callerOf(getCurrentAgent().connection), "client");
+  async callTool(name: string, input: unknown, sentAt?: unknown): Promise<ToolResult<unknown>> {
+    const queued = queuedMs(sentAt, Date.now());
+    return this.invokeTool(name, input, this.callerOf(getCurrentAgent().connection), "client", queued);
   }
 
   /**
@@ -579,6 +618,7 @@ class HouseholdAgent extends Agent<Env> {
     input: unknown,
     caller: Caller | null,
     calledBy: "client",
+    queued?: number,
   ): Promise<ToolResult<unknown>>;
   private async invokeTool(
     name: string,
@@ -591,12 +631,14 @@ class HouseholdAgent extends Agent<Env> {
     input: unknown,
     caller: Caller | null,
     calledBy: "agent" | "client",
+    queued?: number,
   ): Promise<AgentCallResult> {
     // One span per tool, named but without its input: inputs are Household data.
     const spanName = `tool ${isToolName(name) ? name : "unknown"}`;
-    // Whether the agent or a client (a screen, or RPC from inside the deployment) made it.
-    const attributes = { "mise.called_by": calledBy };
-    return Sentry.startSpan({ name: spanName, op: "mise.tool", attributes }, () => {
+    return this.traced<AgentCallResult>(spanName, "mise.tool", (span) => {
+      // Whether the agent or a client (a screen, or RPC from inside the deployment) made it.
+      span.setAttribute("mise.called_by", calledBy);
+      if (queued !== undefined) span.setAttribute("mise.queued_ms", queued);
       if (calledBy === "agent" && isToolName(name)) {
         const parsed = parseToolInput(name, input);
         if (!parsed.ok) return parsed;
@@ -877,15 +919,25 @@ class HouseholdAgent extends Agent<Env> {
 
   /** Runs the sync "Sync Drive now" scheduled. Run by the scheduler. */
   async askedDriveSync(): Promise<void> {
-    try {
-      await this.syncDrive();
-    } catch (error) {
-      // The scheduler swallows callback errors, so report them here.
-      Sentry.captureException(error);
-      throw error;
-    } finally {
-      this.driveSyncAsked = false;
-    }
+    await this.scheduledRun("askedDriveSync", async () => {
+      try {
+        await this.syncDrive();
+      } catch (error) {
+        // The scheduler swallows callback errors, so report them here.
+        Sentry.captureException(error);
+        throw error;
+      } finally {
+        this.driveSyncAsked = false;
+      }
+    });
+  }
+
+  /**
+   * A run the scheduler started, traced under its name: the alarm's own span says only that an
+   * alarm ran, not which callback or what it did.
+   */
+  private scheduledRun(name: ScheduledRun, run: () => Promise<void>): Promise<void> {
+    return this.traced(`scheduled ${name}`, "mise.scheduled", run);
   }
 
   /** Syncs the Drive folder (see `readDriveFolder`), or joins the sync already running. */
@@ -975,15 +1027,17 @@ class HouseholdAgent extends Agent<Env> {
 
   /** Syncs the Drive folder, if there is one, then schedules tomorrow's. Run by the scheduler every night. */
   async nightlyDriveSync(): Promise<void> {
-    try {
-      if (this.household()) await this.syncDrive();
-    } catch (error) {
-      // The scheduler swallows callback errors, so report them here.
-      Sentry.captureException(error);
-      throw error;
-    } finally {
-      await this.scheduleDailyRuns();
-    }
+    await this.scheduledRun("nightlyDriveSync", async () => {
+      try {
+        if (this.household()) await this.syncDrive();
+      } catch (error) {
+        // The scheduler swallows callback errors, so report them here.
+        Sentry.captureException(error);
+        throw error;
+      } finally {
+        await this.scheduleDailyRuns();
+      }
+    });
   }
 
   /** Asks the model for one batch of Suggestions; see `RequestSuggestionsInput`. */
@@ -1003,13 +1057,15 @@ class HouseholdAgent extends Agent<Env> {
 
   /** Asks the model about the new Unresolved texts an import brought. Run by the scheduler after it. */
   async suggestAfterImport({ texts }: { texts: string[] }): Promise<void> {
-    try {
-      // They come minutes after the import answered, so the review screen may no longer be open.
-      if ((await this.suggest(texts)).length > 0) await this.pushReview();
-    } catch (error) {
-      // The scheduler swallows callback errors, so report them here. The texts can be asked about again.
-      Sentry.captureException(error);
-    }
+    await this.scheduledRun("suggestAfterImport", async () => {
+      try {
+        // They come minutes after the import answered, so the review screen may no longer be open.
+        if ((await this.suggest(texts)).length > 0) await this.pushReview();
+      } catch (error) {
+        // The scheduler swallows callback errors, so report them here. The texts can be asked about again.
+        Sentry.captureException(error);
+      }
+    });
   }
 
   /** Asks the model about `texts` in batches, storing each batch as it comes. Returns the Suggestions made. */
@@ -1044,32 +1100,34 @@ class HouseholdAgent extends Agent<Env> {
    * dinner's Prep-ahead note.
    */
   async morningPushes(): Promise<void> {
-    try {
-      const household = this.household();
-      if (!household) return;
-      const { sql } = this.ctx.storage;
-      const today = localDate(new Date(), household.timezone);
-      const week = proposalWeekOn(today, household);
-      if (week) {
-        const proposed = this.proposeIfUnstarted(week);
-        const message = proposed && proposedMessage(proposed, household.locale);
-        if (message) await this.push(message);
-        const due = handlers.list_due_staples(sql, {}, { caller: null });
-        if (due.ok && due.value.due > 0) await this.push(checkInMessage(due.value.due));
+    await this.scheduledRun("morningPushes", async () => {
+      try {
+        const household = this.household();
+        if (!household) return;
+        const { sql } = this.ctx.storage;
+        const today = localDate(new Date(), household.timezone);
+        const week = proposalWeekOn(today, household);
+        if (week) {
+          const proposed = this.proposeIfUnstarted(week);
+          const message = proposed && proposedMessage(proposed, household.locale);
+          if (message) await this.push(message);
+          const due = handlers.list_due_staples(sql, {}, { caller: null });
+          if (due.ok && due.value.due > 0) await this.push(checkInMessage(due.value.due));
+        }
+        const tomorrow = addDays(today, 1);
+        const prepAhead = readPrepAhead(sql);
+        for (const slot of readSlots(sql, tomorrow, tomorrow)) {
+          const note = prepAheadDue(slot, prepAhead);
+          if (note && slot.recipe) await this.push(prepAheadMessage(slot.recipe, note));
+        }
+      } catch (error) {
+        // The scheduler swallows callback errors, so report them here.
+        Sentry.captureException(error);
+        throw error;
+      } finally {
+        await this.scheduleDailyRuns();
       }
-      const tomorrow = addDays(today, 1);
-      const prepAhead = readPrepAhead(sql);
-      for (const slot of readSlots(sql, tomorrow, tomorrow)) {
-        const note = prepAheadDue(slot, prepAhead);
-        if (note && slot.recipe) await this.push(prepAheadMessage(slot.recipe, note));
-      }
-    } catch (error) {
-      // The scheduler swallows callback errors, so report them here.
-      Sentry.captureException(error);
-      throw error;
-    } finally {
-      await this.scheduleDailyRuns();
-    }
+    });
   }
 
   /**
@@ -1126,6 +1184,7 @@ class HouseholdAgent extends Agent<Env> {
    * RPC for `/cal/<token>.ics`, which bypasses Access (ADR 0019); never callable over the WebSocket.
    */
   async calendarFeed(token: string, origin: string): Promise<string | null> {
+    this.tagInstance();
     return readCalendarFeed(this.ctx.storage.sql, token, origin, new Date());
   }
 
@@ -1134,6 +1193,7 @@ class HouseholdAgent extends Agent<Env> {
    * `DAY_SHEET_PATH`, which bypasses Access; never callable over the WebSocket.
    */
   async daySheet(token: string): Promise<DaySheetAnswer> {
+    this.tagInstance();
     return readDaySheet(this.ctx.storage.sql, token, new Date());
   }
 
@@ -1142,21 +1202,23 @@ class HouseholdAgent extends Agent<Env> {
    * at 03:00 Household time.
    */
   async nightlyExport(): Promise<void> {
-    try {
-      const household = this.household();
-      if (!household) return;
-      await this.env.BUCKET.put(exportKey(localDate(new Date(), household.timezone)), await this.exportFile(), {
-        httpMetadata: { contentType: "application/json" },
-      });
-      await this.pruneBackups();
-    } catch (error) {
-      // The scheduler swallows callback errors, so report them here.
-      Sentry.captureException(error);
-      throw error;
-    } finally {
-      // A failed night must not stop the next one.
-      await this.scheduleDailyRuns();
-    }
+    await this.scheduledRun("nightlyExport", async () => {
+      try {
+        const household = this.household();
+        if (!household) return;
+        await this.env.BUCKET.put(exportKey(localDate(new Date(), household.timezone)), await this.exportFile(), {
+          httpMetadata: { contentType: "application/json" },
+        });
+        await this.pruneBackups();
+      } catch (error) {
+        // The scheduler swallows callback errors, so report them here.
+        Sentry.captureException(error);
+        throw error;
+      } finally {
+        // A failed night must not stop the next one.
+        await this.scheduleDailyRuns();
+      }
+    });
   }
 
   /** Deletes the Backups retention no longer keeps (ADR 0006). A failure leaves them for the next night. */

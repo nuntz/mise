@@ -74,6 +74,15 @@ describe("callTool", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "invalid_input", issues: [{ path: "units" }] } });
     expect(await household.callTool("get_household", {})).toEqual({ ok: true, value: null });
   });
+
+  test("answers the same whether a screen says when it sent the call or not", async () => {
+    const household = freshHousehold();
+
+    await household.callTool("setup_household", { name: "The Example Family" }, Date.now() - 1_000);
+    const read = await household.callTool("get_household", {}, "yesterday");
+
+    expect(read).toMatchObject({ ok: true, value: { name: "The Example Family" } });
+  });
 });
 
 describe("get_caller", () => {
