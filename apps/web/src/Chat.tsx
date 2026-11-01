@@ -8,7 +8,7 @@ import { t } from "./messages";
 import { NeedsConnection } from "./NeedsConnection";
 import { Sheet, touch } from "./Sheet";
 import type { OpenVoice } from "./voice";
-import { createVoiceSession } from "./voiceSession";
+import { createVoiceSession, voiceBanner } from "./voiceSession";
 
 /**
  * "Ask Mise", in the app header: a chat with the agent from whatever screen is open, which each
@@ -287,7 +287,7 @@ function ChatSheet(props: {
         </Show>
         <Show when={error()}>
           {(failed) => (
-            <p class="banner banner-warn" role="alert">
+            <p class={voiceBanner(failed())} role="alert">
               {failed() === "voiceInUse" && voice.speaker()
                 ? t("chat.voice.talking", { name: voice.speaker() ?? "" })
                 : t(ERRORS[failed()], { time: voice.minutesBackAt() })}
@@ -333,7 +333,7 @@ function ChatSheet(props: {
           <Show when={!talking() && voice.micShown()}>
             <button
               type="button"
-              class="icon-button chat-mic"
+              class="icon-button mic"
               aria-label={t("chat.voice.start")}
               disabled={voice.micReason() !== undefined}
               aria-describedby={voice.micReason() ? micId : undefined}

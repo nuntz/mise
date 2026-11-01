@@ -10,7 +10,7 @@ import {
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { type MessageKey, t } from "./messages";
-import type { createVoiceSession, VoiceRefusal } from "./voiceSession";
+import { type createVoiceSession, type VoiceRefusal, voiceBanner } from "./voiceSession";
 
 /**
  * A screen's own mic and what goes with it, for a screen that is looked at while talking, as the chat
@@ -33,7 +33,7 @@ export function MicButton(props: { voice: ScreenVoice; micId: string; onStart?: 
     <Show when={!props.voice.talking() && props.voice.micShown()}>
       <button
         type="button"
-        class="icon-button"
+        class="icon-button mic"
         aria-label={t("chat.voice.start")}
         disabled={props.voice.micReason() !== undefined}
         aria-describedby={props.voice.micReason() ? props.micId : undefined}
@@ -78,7 +78,7 @@ export function VoiceProblem(props: { voice: ScreenVoice; micId: string; error: 
       </Show>
       <Show when={props.error}>
         {(failed) => (
-          <p class="banner banner-warn" role="alert">
+          <p class={voiceBanner(failed())} role="alert">
             {failed() === "voiceInUse" && props.voice.speaker()
               ? t("chat.voice.talking", { name: props.voice.speaker() ?? "" })
               : t(VOICE_ERRORS[failed()], { time: props.voice.minutesBackAt() })}

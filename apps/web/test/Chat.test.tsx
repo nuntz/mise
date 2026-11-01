@@ -632,6 +632,8 @@ test("a Voice Session GPT-Live ended goes back to the mic", async () => {
   expect(await within(chat).findByRole("button", { name: "Talk to Mise" })).toBeTruthy();
   expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
   expect(within(chat).getByRole("alert").textContent).toBe(VOICE_ENDED);
+  // A refusal, not a danger: amber, as warn is kept for a safety conflict or Out.
+  expect(within(chat).getByRole("alert").classList.contains("banner-amber")).toBe(true);
 });
 
 const VOICE_ENDED = "Voice ended. Talk to Mise to start again.";
@@ -677,6 +679,7 @@ test("a Voice Session the household refused to start says so and lets go of the 
   await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Alex is talking to Mise.");
+  expect(within(chat).getByRole("alert").classList.contains("banner-amber")).toBe(true);
   expect(voice.calls[0]?.hungUp).toBe(true);
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
 });
@@ -693,6 +696,7 @@ test("a start refused because the day's voice minutes are spent says when they c
   expect((await within(chat).findByRole("alert")).textContent).toBe(
     "Today's voice minutes are used up. Talk to Mise again from 12:00 a.m. tomorrow.",
   );
+  expect(within(chat).getByRole("alert").classList.contains("banner-amber")).toBe(true);
   expect(voice.calls[0]?.hungUp).toBe(true);
 });
 
@@ -725,6 +729,7 @@ test("a start refused because the Household turned voice off says so", async () 
   expect((await within(chat).findByRole("alert")).textContent).toBe(
     "Voice is turned off. Give it minutes a day in the Household's settings.",
   );
+  expect(within(chat).getByRole("alert").classList.contains("banner-amber")).toBe(true);
 });
 
 test("a start the household didn't answer ends whatever session it made, and lets go of the mic", async () => {
@@ -738,6 +743,8 @@ test("a start the household didn't answer ends whatever session it made, and let
   await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
 
   expect((await within(chat).findByRole("alert")).textContent).toBe("Voice couldn't start. Try again.");
+  // A failure, as the app's other errors show.
+  expect(within(chat).getByRole("alert").classList.contains("banner-warn")).toBe(true);
   expect(fake.ended()).toBe(1);
   await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
 });

@@ -119,7 +119,7 @@ function fakeClient(): MiseClient {
  * The Household's tools, its shared conversation, and its Voice Sessions: each start and move, how
  * many were ended, and each confirmation tapped or cancelled.
  */
-function householdClient() {
+function householdClient(startVoice?: MiseClient["startVoice"]) {
   const voice = { started: [] as ChatWhere[], moved: [] as ChatWhere[], ended: 0 };
   const conversation: ChatMessage[] = [];
   const confirmed: number[] = [];
@@ -158,10 +158,12 @@ function householdClient() {
         return { ok: true, value: null };
       },
       voiceAvailability: async () => ({ status: "available" }),
-      startVoice: async (offer, where) => {
-        voice.started.push(where);
-        return { ok: true, value: { sdp: `answer to ${offer}` } };
-      },
+      startVoice:
+        startVoice ??
+        (async (offer, where) => {
+          voice.started.push(where);
+          return { ok: true, value: { sdp: `answer to ${offer}` } };
+        }),
       moveVoice: async (where) => {
         voice.moved.push(where);
         return true;
@@ -273,9 +275,9 @@ test("kitchen mode is high contrast", async () => {
 });
 
 /** Monday's Curry in Kitchen mode, with a mic for Voice Sessions. */
-async function cookMondayTalking() {
+async function cookMondayTalking(startVoice?: MiseClient["startVoice"]) {
   const user = userEvent.setup();
-  const fake = householdClient();
+  const fake = householdClient(startVoice);
   const calls = fakeVoice();
   render(() => <App client={fake.client} voice={calls.open} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
@@ -303,6 +305,19 @@ test("kitchen mode's mic starts a Voice Session over the step on screen, open un
   await vi.waitFor(() => expect(calls.calls[0]?.hungUp).toBe(true));
   expect(within(kitchen).queryByText("Listening. Talk to Mise.")).toBeNull();
   expect(within(kitchen).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("kitchen mode's mic, refused because someone else is talking, says so in amber, not warn", async () => {
+  const { user, kitchen } = await cookMondayTalking(async () => ({
+    ok: false,
+    error: { code: "in_use", message: "", by: "Alex" },
+  }));
+
+  await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
+
+  const refusal = await within(kitchen).findByRole("alert");
+  expect(refusal.textContent).toBe("Alex is talking to Mise.");
+  expect(refusal.classList.contains("banner-amber")).toBe(true);
 });
 
 test("kitchen mode moves to the step the agent read aloud, and the Voice Session moves with it", async () => {

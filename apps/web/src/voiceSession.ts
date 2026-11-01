@@ -13,6 +13,22 @@ import { keepScreenAwake } from "./wakeLock";
  */
 export type VoiceRefusal = "voice" | "voiceInUse" | "voiceSpent" | "voiceOff" | "voiceEnded";
 
+/** The stops that are a caution without danger: someone else is talking, the minutes are spent, voice is off or ended. */
+const VOICE_CAUTIONS: ReadonlySet<string> = new Set<VoiceRefusal>([
+  "voiceInUse",
+  "voiceSpent",
+  "voiceOff",
+  "voiceEnded",
+]);
+
+/**
+ * The banner an error shows: amber for a voice caution, and warn, as the app's other errors, for
+ * anything else, a failed start among them.
+ */
+export function voiceBanner(error: string): "banner banner-amber" | "banner banner-warn" {
+  return VOICE_CAUTIONS.has(error) ? "banner banner-amber" : "banner banner-warn";
+}
+
 /** How soon the mic asks again whether the day's voice minutes are back, at the soonest. */
 const MINUTES_BACK_RETRY_MS = 5000;
 

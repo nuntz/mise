@@ -656,6 +656,8 @@ article:not([class]) {
   padding-inline: var(--space-4);
 }
 
+/* Amber is a caution without danger, such as a voice refusal; warn is a safety conflict or Out, and for
+ * now still every error (issue #116 leaves that wider drift for its own issue). */
 .banner-amber {
   background: var(--amber-soft);
   color: var(--amber);
@@ -1168,7 +1170,8 @@ fieldset > .toggle-chip {
   gap: var(--space-2);
 }
 
-.chat-mic {
+/* Talk to Mise, the same size wherever it shows: the chat sheet, Kitchen mode, the Pantry check-in. */
+.mic {
   width: var(--field);
   height: var(--field);
   border-radius: var(--radius-full);
@@ -2086,6 +2089,12 @@ form.row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* The indicator's mic grows with kitchen mode, as an icon button's does. */
+.voice-listening .icon {
+  width: var(--icon);
+  height: var(--icon);
 }
 
 /* A change held for a tap during a screen's Voice Session, over the step or the card and in reach as it

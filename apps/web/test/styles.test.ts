@@ -33,7 +33,10 @@ test("colours come from the tokens, never a hex colour in the component styles",
 
 test("every alert in the web components is a banner, so no error reads as body text", () => {
   expect(
-    inComponents(/<[a-z]+\b[^>]*\brole="alert"[^>]*>/g).filter((tag) => !/\bclass="[^"]*\bbanner\b/.test(tag)),
+    inComponents(/<[a-z]+\b[^>]*\brole="alert"[^>]*>/g).filter(
+      // A literal banner class, or the one `voiceBanner` picks.
+      (tag) => !/\bclass="[^"]*\bbanner\b/.test(tag) && !/\bclass=\{voiceBanner\(/.test(tag),
+    ),
   ).toEqual([]);
 });
 
@@ -149,4 +152,17 @@ test("in kitchen mode the scrim stands off the page at 3:1 over any photo, so a 
   for (const photo of photos) {
     expect(contrast(over(themes.kitchen.scrim, photo), surface)).toBeGreaterThanOrEqual(3);
   }
+});
+
+test("every mic is the chat sheet's, a field-sized circle, so none is smaller where you stand further off", () => {
+  expect(declarations(".mic")).toMatch(/width:\s*var\(--field\)/);
+  expect(declarations(".mic")).toMatch(/height:\s*var\(--field\)/);
+  const mics = inComponents(/<button\b[^>]*aria-label=\{t\("chat\.voice\.start"\)\}/g);
+  expect(mics.length).toBeGreaterThanOrEqual(2);
+  expect(mics.filter((mic) => !/\bclass="icon-button mic"/.test(mic))).toEqual([]);
+});
+
+test("the listening indicator's mic is icon-sized, so it grows with kitchen mode", () => {
+  expect(declarations(".voice-listening .icon")).toMatch(/width:\s*var\(--icon\)/);
+  expect(declarations(".voice-listening .icon")).toMatch(/height:\s*var\(--icon\)/);
 });
