@@ -13,13 +13,14 @@ import {
 } from "@mise/domain";
 import { render, screen, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { KitchenMode } from "../src/Kitchen";
 import { saveRecipe } from "../src/offline";
 import { createFakeClient } from "./fakeClient";
 import { fakeVoice } from "./fakeVoice";
+import { fakeWakeLock } from "./fakeWakeLock";
 
 const household: Household = {
   name: "The Tremblays",
@@ -172,18 +173,6 @@ function householdClient() {
   );
   return { ...fake, voice, conversation, confirmed, cancelled, settle };
 }
-
-/** A screen wake lock the test can watch. */
-function fakeWakeLock() {
-  const release = vi.fn(async () => {});
-  const request = vi.fn(async () => ({ release, released: false, type: "screen" }));
-  Object.defineProperty(navigator, "wakeLock", { value: { request }, configurable: true });
-  return { request, release };
-}
-
-afterEach(() => {
-  Reflect.deleteProperty(navigator, "wakeLock");
-});
 
 async function cookMonday() {
   const user = userEvent.setup();

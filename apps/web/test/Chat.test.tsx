@@ -20,6 +20,7 @@ import type { MiseClient } from "../src/client";
 import type { OpenVoice } from "../src/voice";
 import { createFakeClient } from "./fakeClient";
 import { fakeVoice } from "./fakeVoice";
+import { fakeWakeLock } from "./fakeWakeLock";
 
 const household: Household = {
   name: "The Tremblays",
@@ -529,6 +530,21 @@ test("the chat's mic starts a Voice Session, shows its turns as they're answered
   await waitFor(() => expect(voice.calls[0]?.hungUp).toBe(true));
   expect(within(chat).queryByText("Listening. Talk to Mise.")).toBeNull();
   expect(within(chat).getByRole("button", { name: "Talk to Mise" })).toBeTruthy();
+});
+
+test("a Voice Session from the chat keeps the screen awake until it ends", async () => {
+  const { request, release } = fakeWakeLock();
+  render(() => <App client={talkingClient().client} voice={fakeVoice().open} />);
+  const chat = await openChat();
+  expect(request).not.toHaveBeenCalled();
+
+  await userEvent.click(await within(chat).findByRole("button", { name: "Talk to Mise" }));
+  await within(chat).findByText("Listening. Talk to Mise.");
+  await waitFor(() => expect(request).toHaveBeenCalledWith("screen"));
+  expect(release).not.toHaveBeenCalled();
+
+  await userEvent.click(within(chat).getByRole("button", { name: "End voice" }));
+  await waitFor(() => expect(release).toHaveBeenCalled());
 });
 
 test("while a Voice Session runs, a change waiting for a tap shows as a large button, to tap from across the kitchen", async () => {

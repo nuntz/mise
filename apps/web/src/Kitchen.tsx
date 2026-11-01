@@ -1,5 +1,5 @@
 import { type ChatWhere, type Household, type Recipe, type RecipeId, scaledLines } from "@mise/domain";
-import { createSignal, createUniqueId, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
@@ -9,6 +9,7 @@ import { HeldDuringVoice, MicButton, VoiceListening, VoiceProblem } from "./Voic
 import type { OpenVoice } from "./voice";
 import { createVoiceSession, type VoiceRefusal } from "./voiceSession";
 import type { SlotKey } from "./Week";
+import { keepScreenAwake } from "./wakeLock";
 
 /**
  * Kitchen mode: a Recipe cooked one step at a time, in the high-contrast theme, with the screen kept
@@ -205,35 +206,6 @@ export function KitchenMode(props: {
       </div>
     </section>
   );
-}
-
-/**
- * Asks the browser to keep the screen on while mounted, and again whenever the page comes back into
- * view (the lock is dropped when it's hidden). Browsers without the Wake Lock API just sleep as usual.
- */
-function keepScreenAwake() {
-  let lock: WakeLockSentinel | undefined;
-  let active = true;
-  const request = async () => {
-    if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
-    try {
-      const granted = await navigator.wakeLock.request("screen");
-      if (active) lock = granted;
-      else void granted.release();
-    } catch {
-      // Refused, such as on low battery: the screen may sleep.
-    }
-  };
-  const onVisible = () => void request();
-  onMount(() => {
-    void request();
-    document.addEventListener("visibilitychange", onVisible);
-  });
-  onCleanup(() => {
-    active = false;
-    document.removeEventListener("visibilitychange", onVisible);
-    void lock?.release();
-  });
 }
 
 /** Who a Recipe's Ingredients are scaled for: `servings`, against the `base` it is written for. */

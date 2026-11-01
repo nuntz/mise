@@ -5,6 +5,7 @@ import { householdTime } from "./dates";
 import { keepFresh } from "./fresh";
 import { t } from "./messages";
 import type { OpenVoice, VoiceCall } from "./voice";
+import { keepScreenAwake } from "./wakeLock";
 
 /**
  * Why voice stopped short: a start went no further, as the mic, WebRTC or the household failed or
@@ -178,6 +179,9 @@ export function createVoiceSession(props: {
       { defer: true },
     ),
   );
+
+  // Auto-Lock would turn the mic off mid-session, so the screen stays on while one runs.
+  keepScreenAwake(() => state() === "on");
 
   const onHidden = () => {
     if (document.visibilityState === "hidden") end();
