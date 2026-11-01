@@ -262,6 +262,7 @@ step "Create Token → Create Custom Token → name it 'mise-ci'. Add these perm
 note "  Account · Workers Scripts · Edit"
 note "  Account · Workers R2 Storage · Edit"
 note "  Account · Access: Apps and Policies · Edit"
+note "  Account · Access: Service Tokens · Edit"
 note "  Account · Access: Organizations, Identity Providers, and Groups · Edit"
 note "  Zone · Workers Routes · Edit"
 note "  Zone · DNS · Edit"
