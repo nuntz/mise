@@ -218,7 +218,7 @@ async function get<T>(path: string, params: Record<string, string> | URLSearchPa
   return (await response.json()) as T;
 }
 
-/** The API base, organisation and project, from a DSN like `https://key@o123.ingest.us.sentry.io/456`. */
+/** The API base, organisation and project, from a DSN like `https://<key>@o<org>.ingest.<region>.sentry.io/<project>`. */
 async function sentryProject(): Promise<{ api: string; org: string; project: string }> {
   const dsn = process.env.SENTRY_DSN ?? (await envFileValue(join(CONFIG, "deploy.env"), "SENTRY_DSN"));
   const match = dsn?.match(/^https:\/\/[^@]+@o(\d+)\.ingest\.(?:([a-z]+)\.)?sentry\.io\/(\d+)$/);
