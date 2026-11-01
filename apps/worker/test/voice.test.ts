@@ -9,7 +9,7 @@ import { openAiLive, useLive } from "../src/live";
 import { FAILURE_LINE, VOICE_TIME_WARNING, VoiceSession } from "../src/voice";
 import { connectAs } from "./connect";
 import { type PretendSession, pretendLive } from "./liveService";
-import { dinnerOn, familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
+import { caller, dinnerOn, familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
 
 const ON_THE_WEEK: ChatWhere = { screen: "week", week: "2026-10-26" };
 const OFFER = "v=0 offer";
@@ -276,6 +276,25 @@ describe("a Voice Session", () => {
     expect(content.length).toBeLessThanOrEqual(1200);
     expect(content.length).toBeGreaterThan(1000);
     expect(content.endsWith("Dal is on Thursday.")).toBe(true);
+  });
+
+  test("tells the agent to offer a long list it would read aloud, and not a list it would write", async () => {
+    const results: string[] = [];
+    const listing = caller([["search_recipes", {}]]);
+    const { robin, session } = await robinTalking((context, ...rest) => {
+      const last = context.messages.at(-1);
+      if (last?.role === "toolResult") results.push(textOf(last));
+      return listing(context, ...rest);
+    });
+
+    await say(session, "What recipes do we have?");
+    expect(await robin.rpc("chat", ["What recipes do we have?", ON_THE_WEEK])).toMatchObject({ ok: true });
+
+    expect(results).toHaveLength(2);
+    expect(results[0], "spoken: the nine Recipes, then how to say them").toMatch(
+      /"Satay".*\]Read aloud, 9 things are too many to take in\./,
+    );
+    expect(results[1], "typed: the nine Recipes alone").toMatch(/"Satay".*\]$/);
   });
 
   test("is refused to a request with no Caller, before anything is created", async () => {

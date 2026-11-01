@@ -115,7 +115,20 @@ type ToolDefinition = {
   changes?: ChangeTopic;
   /** When a call from the agent needs a person's tap; absent for tools that never do. */
   confirm?: ConfirmationCase;
+  /**
+   * How many things a successful call's result lists for a person to hear: a long list read aloud
+   * is offered, not read out (`offerLongList`). Absent for tools whose result isn't such a list: a
+   * Week, read for one day as often as for all, and the Staples due, which a Check-in leads its own way.
+   */
+  listed?: (output: never) => number;
 };
+
+/** A list tool's count: its result's length. */
+const length = (output: readonly unknown[]) => output.length;
+
+/** A Grocery List's count: its lines, across its Store Sections. */
+const groceryLines = (list: GroceryList | null) =>
+  list?.sections.reduce((lines, section) => lines + section.lines.length, 0) ?? 0;
 
 function defineTool<const T extends ToolDefinition>(definition: T): T {
   return definition;
@@ -207,16 +220,19 @@ export const tools = {
   search_recipes: defineTool({
     input: SearchRecipesInput,
     output: z.array(RecipeSummary),
+    listed: length,
   }),
   /** Recipes missing a cuisine or a main protein, in title order, Drafts left out; `update_recipe` sets them. */
   list_untagged_recipes: defineTool({
     input: z.object({}).strict(),
     output: z.array(RecipeSummary),
+    listed: length,
   }),
   /** Unresolved Ingredients grouped by their normalised text, most frequent first. */
   list_unresolved_ingredients: defineTool({
     input: z.object({}).strict(),
     output: z.array(UnresolvedGroup),
+    listed: length,
   }),
   /** Refuses a text that already names another Item. */
   resolve_ingredient: defineTool({
@@ -252,6 +268,7 @@ export const tools = {
   list_suggestions: defineTool({
     input: z.object({}).strict(),
     output: z.array(Suggestion),
+    listed: length,
   }),
   /**
    * Refuses a Suggestion already accepted or dismissed (`not_found`), a new Item with no Allergens
@@ -273,6 +290,7 @@ export const tools = {
   list_items: defineTool({
     input: z.object({}).strict(),
     output: z.array(Item),
+    listed: length,
   }),
   /**
    * Imports the export uploaded with `PUT …/imports/paprika` (ADR 0011), then deletes the upload.
@@ -344,6 +362,7 @@ export const tools = {
   list_drafts: defineTool({
     input: z.object({}).strict(),
     output: z.array(Draft),
+    listed: length,
   }),
   /** Makes a Draft a Recipe like any other, to plan and shop. Refuses a Recipe that is no Draft (`not_found`). */
   accept_draft: defineTool({
@@ -355,11 +374,13 @@ export const tools = {
   list_import_runs: defineTool({
     input: z.object({}).strict(),
     output: z.array(ImportRun),
+    listed: length,
   }),
   /** Recipes imports flagged for a merge or as possible duplicates, newest first. */
   list_import_flags: defineTool({
     input: z.object({}).strict(),
     output: z.array(ImportFlag),
+    listed: length,
   }),
   /** The Week with every Slot, stored or not; see `GetWeekInput`. */
   get_week: defineTool({
@@ -458,12 +479,14 @@ export const tools = {
   build_grocery_list: defineTool({
     input: BuildGroceryListInput,
     output: GroceryList,
+    listed: groceryLines,
     changes: "grocery",
   }),
   /** The Week's Grocery List; null until it is first built. */
   get_grocery_list: defineTool({
     input: GetGroceryListInput,
     output: GroceryList.nullable(),
+    listed: groceryLines,
   }),
   /** Returns the line. Refuses a line that doesn't exist (`not_found`). */
   set_have_tick: defineTool({
@@ -492,6 +515,7 @@ export const tools = {
   list_staples: defineTool({
     input: ListStaplesInput,
     output: z.array(Staple),
+    listed: length,
   }),
   /** The Staples a pantry check-in asks about today; see `dueStaples`. */
   list_due_staples: defineTool({
@@ -640,6 +664,12 @@ export function changeTopicOf(name: ToolName): ChangeTopic | undefined {
 export function confirmationCaseOf(name: ToolName): ConfirmationCase | undefined {
   const definition: ToolDefinition = tools[name];
   return definition.confirm;
+}
+
+/** How many things a successful call to this tool returned for a person to hear; 0 for a tool that lists none. */
+export function thingsListed(name: ToolName, output: unknown): number {
+  const definition: ToolDefinition = tools[name];
+  return (definition.listed as ((output: unknown) => number) | undefined)?.(output) ?? 0;
 }
 
 export function isToolName(name: unknown): name is ToolName {

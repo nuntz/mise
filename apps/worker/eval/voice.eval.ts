@@ -162,8 +162,14 @@ describe("a spoken turn", () => {
       const named = RECIPE_TITLES.filter((title) => answer.includes(title));
       expect(named.length, "names at most three of nine").toBeLessThanOrEqual(3);
       expect(sentences(answer)).toBeLessThanOrEqual(3);
+
+      const more = await say("Yes, go on.");
+
+      const next = RECIPE_TITLES.filter((title) => more.includes(title) && !named.includes(title));
+      expect(next.length, "goes on with others").toBeGreaterThan(0);
+      expect(next.length, "three more at most").toBeLessThanOrEqual(3);
     },
-    2 * TURN_MS,
+    3 * TURN_MS,
   );
 });
 

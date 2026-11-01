@@ -3,6 +3,7 @@ import type { ConfirmationStatus } from "./confirmations";
 import { scaledLines } from "./ingredients";
 import { type Recipe, RecipeId } from "./recipes";
 import type { Staple } from "./staples";
+import { type ToolName, thingsListed } from "./tools";
 import { addDays, LocalDate, SlotRef, weekdayOf } from "./weeks";
 
 /** The longest message a Member can send the agent. */
@@ -162,10 +163,24 @@ const LEAD_THE_CHECK_IN =
 
 /**
  * How to answer a spoken turn, said with the turn itself: the model follows a rule beside the
- * message more closely than one in the system prompt, and read out, a long list is lost.
+ * message more closely than one in the system prompt. A long list is offered by `offerLongList`, beside
+ * the list itself: said here, the model asked whether to go on after every answer, list or not.
  */
-const FOR_THE_EAR =
-  "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on";
+const FOR_THE_EAR = "answer for the ear: one or two plain sentences";
+
+/**
+ * What a spoken turn's agent is told beside a tool's result listing more than three things: said
+ * right after the list, where the model reads it last, it is followed where a rule in the system
+ * prompt or the turn's header was not (#112).
+ */
+export function offerLongList(tool: ToolName, output: unknown): string | undefined {
+  const count = thingsListed(tool, output);
+  if (count <= 3) return undefined;
+  return (
+    `Read aloud, ${count} things are too many to take in. Say there are ${count}, name at most three, and ask ` +
+    "whether to go on. When they ask to go on, name only the next three, and ask again while any are left."
+  );
+}
 
 /** What a turn after an unanswered one says, so that the messages left waiting aren't answered with it. */
 const ONLY_THIS_ONE = "Mise couldn't answer the messages before this one: answer only this message";

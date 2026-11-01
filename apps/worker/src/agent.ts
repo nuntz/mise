@@ -19,6 +19,7 @@ import {
   type Household,
   ItemId,
   localDate,
+  offerLongList,
   type PendingConfirmation,
   type ToolName,
   type ToolResult,
@@ -103,6 +104,8 @@ export type AgentHost = {
    * through, while the conversation answers one of its spoken turns: the step shown, or null.
    */
   showStep(step: number, conversation: ConversationId): Promise<number | null>;
+  /** Whether the conversation is answering a turn spoken in a Voice Session: its answer is read aloud. */
+  answersSpoken(conversation: ConversationId): Promise<boolean>;
 };
 
 /**
@@ -372,7 +375,10 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
         return { output: [{ type: "text", text }], details };
       }
       if (!result.ok) throw new Error(JSON.stringify(result.error));
-      return { output: [{ type: "text", text: JSON.stringify(result.value) }] };
+      const output = [{ type: "text" as const, text: JSON.stringify(result.value) }];
+      const note = offerLongList(name, result.value);
+      if (note && (await host.answersSpoken(api.conversationId))) output.push({ type: "text", text: note });
+      return { output };
     },
   };
 }

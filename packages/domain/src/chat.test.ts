@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ChatWhere, type CheckInStaple, presentTurn } from "./chat";
+import { ChatWhere, type CheckInStaple, offerLongList, presentTurn } from "./chat";
 import { parseIngredient } from "./ingredients";
 import type { ItemId } from "./items";
 
@@ -68,7 +68,7 @@ describe("presentTurn", () => {
 
     expect(presented).toBe(
       "[Robin, speaking on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-11-02; " +
-        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on]\n" +
+        "answer for the ear: one or two plain sentences]\n" +
         "just the two of us Tuesday",
     );
   });
@@ -86,7 +86,7 @@ describe("presentTurn", () => {
       "[Robin, speaking on Friday 2026-10-30, on the Pantry screen, so day names mean the coming days: " +
         "Friday 2026-10-30, Saturday 2026-10-31, Sunday 2026-11-01, Monday 2026-11-02, Tuesday 2026-11-03, " +
         "Wednesday 2026-11-04, Thursday 2026-11-05; " +
-        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on]\n" +
+        "answer for the ear: one or two plain sentences]\n" +
         "move Tuesday's dinner to Wednesday",
     );
   });
@@ -120,7 +120,7 @@ describe("presentTurn", () => {
 
     expect(presented).toBe(
       "[Robin, speaking on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-10-26; " +
-        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on; " +
+        "answer for the ear: one or two plain sentences; " +
         "Mise couldn't answer the messages before this one: answer only this message]\n" +
         "next step",
     );
@@ -145,7 +145,7 @@ describe("presentTurn on the Pantry screen", () => {
       "[Robin, speaking on Friday 2026-10-30, on the Pantry screen, so day names mean the coming days: " +
         "Friday 2026-10-30, Saturday 2026-10-31, Sunday 2026-11-01, Monday 2026-11-02, Tuesday 2026-11-03, " +
         "Wednesday 2026-11-04, Thursday 2026-11-05; " +
-        "answer for the ear: one or two plain sentences, naming at most three things, then ask whether to go on; " +
+        "answer for the ear: one or two plain sentences; " +
         "lead the pantry Check-in: ask about the Staples due in card order, up to three at once, never again about one skipped, and record each answer as it comes]\n" +
         "[Staples due for the Check-in, in card order: cumin (Item cumin, stocked when last checked); " +
         "rice (Item rice, low when last checked)]\n" +
@@ -235,5 +235,47 @@ describe("ChatWhere", () => {
     expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1 }).success).toBe(true);
     expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1, step: 0 }).success).toBe(false);
     expect(ChatWhere.safeParse({ screen: "kitchen", week: "2026-10-26" }).success).toBe(false);
+  });
+});
+
+describe("offerLongList", () => {
+  const recipes = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ id: index + 1, title: `Recipe ${index + 1}` }));
+
+  test("tells a spoken answer to offer a list of more than three, not read it out", () => {
+    expect(offerLongList("search_recipes", recipes(9))).toBe(
+      "Read aloud, 9 things are too many to take in. Say there are 9, name at most three, and ask whether " +
+        "to go on. When they ask to go on, name only the next three, and ask again while any are left.",
+    );
+  });
+
+  test("says nothing of the Staples due, which a spoken Check-in asks about three at a time", () => {
+    const staples = ["cumin", "oregano", "paprika", "rice"].map((item) => ({ item, name: item }));
+    expect(offerLongList("list_due_staples", { staples })).toBeUndefined();
+  });
+
+  test("counts a Grocery List's lines, across its Store Sections", () => {
+    const lines = (count: number) => Array.from({ length: count }, (_, index) => ({ name: `line ${index}` }));
+    const list = {
+      startDate: "2026-11-02",
+      sections: [
+        { section: "produce", lines: lines(3) },
+        { section: "dairy", lines: lines(2) },
+      ],
+    };
+    expect(offerLongList("get_grocery_list", list)).toMatch(/^Read aloud, 5 things/);
+    expect(offerLongList("build_grocery_list", list)).toMatch(/^Read aloud, 5 things/);
+  });
+
+  test("says nothing of a Week, whose Slots a question about one day doesn't list", () => {
+    const slots = Array.from({ length: 14 }, (_, index) => ({
+      date: `2026-11-0${(index % 7) + 1}`,
+      kind: "unplanned",
+    }));
+    expect(offerLongList("get_week", { startDate: "2026-11-02", slots })).toBeUndefined();
+  });
+
+  test("says nothing of a list of three or fewer", () => {
+    expect(offerLongList("search_recipes", recipes(3))).toBeUndefined();
   });
 });

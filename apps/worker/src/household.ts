@@ -173,6 +173,7 @@ class HouseholdAgent extends Agent<Env> {
           callTool: (name, input, caller) => this.invokeTool(name, input, caller, "agent"),
           speakerIn: (id) => this.callerAnswered(id),
           showStep: (step, id) => this.showStep(step, id),
+          answersSpoken: (id) => this.answersSpoken(id),
         }),
       );
       return Harness.open(
@@ -342,9 +343,7 @@ class HouseholdAgent extends Agent<Env> {
    * from Kitchen mode.
    */
   private async showStep(step: number, conversation: ConversationId): Promise<number | null> {
-    const answering = await (await this.harness.pi()).conversation(conversation, BACKGROUND_CONTEXT);
-    const turn = answering && (await turnBeingAnswered(answering));
-    if (!turn || !this.spokenTurns.has(turn)) return null;
+    if (!(await this.answersSpoken(conversation))) return null;
     const session = this.voice;
     if (!(session instanceof VoiceSession) || !this.voiceConnection) return null;
     const { where } = session;
@@ -355,6 +354,13 @@ class HouseholdAgent extends Agent<Env> {
     connection.send(JSON.stringify({ type: "mise:show-step", step: shown } satisfies ShowStep));
     session.moveTo({ ...where, step: shown });
     return shown;
+  }
+
+  /** Whether the `conversation` is answering one of the spoken turns. */
+  private async answersSpoken(conversation: ConversationId): Promise<boolean> {
+    const answering = await (await this.harness.pi()).conversation(conversation, BACKGROUND_CONTEXT);
+    const turn = answering && (await turnBeingAnswered(answering));
+    return !!turn && this.spokenTurns.has(turn);
   }
 
   /** What the buttons say of the confirmations held since `turn` that still wait for a tap. */
