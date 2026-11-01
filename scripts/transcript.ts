@@ -248,10 +248,12 @@ function format(log: AgentLog, options: { turns: number; costs: boolean; results
       continue;
     }
     const heard = exchange.delegated ? "handed on with no turn" : `heard "${clip(exchange.heard ?? "", 400)}"`;
+    const at = Date.parse(exchange.at);
+    // Timed, as it follows a turn that may be from another session, hours before.
     between.push({
       kind: "exchange",
-      at: Date.parse(exchange.at),
-      lines: [`  🎙 ${heard} → ${said}${exchange.delegated ? "" : " (not handed on)"}`],
+      at,
+      lines: [`  🎙 ${time(at)} · ${heard} → ${said}${exchange.delegated ? "" : " (not handed on)"}`],
     });
   }
 
