@@ -27,6 +27,7 @@ import { kitchenDisplayHandlers, readKitchenDisplays } from "./kitchenDisplays";
 import { pushHandlers, readPushSubscriptions } from "./pushDevices";
 import { readyMadeHandlers } from "./readyMade";
 import { readRecipes, recipeHandlers } from "./recipes";
+import { whereKeys } from "./sql";
 import { readStaples, stapleHandlers } from "./staples";
 import { readSuggestions, suggestionHandlers } from "./suggestions";
 import { readChatTurns } from "./turns";
@@ -318,15 +319,16 @@ function readMember(sql: SqlStorage, id: MemberId): Member | null {
 
 /** Every Member in the order they were added, or just the one with `id`. */
 export function readMembers(sql: SqlStorage, id?: MemberId): Member[] {
+  const member = whereKeys({ id });
+  const ofMember = whereKeys({ member_id: id });
   const members = sql
-    .exec<MemberRow>("SELECT id, name, email FROM member WHERE ? IS NULL OR id = ? ORDER BY id", id ?? null, id ?? null)
+    .exec<MemberRow>(`SELECT id, name, email FROM member ${member.where} ORDER BY id`, ...member.values)
     .toArray();
   const constraints = sql
     .exec<ConstraintRow>(
       `SELECT member_id, kind, allergen, term FROM member_constraint
-       WHERE ? IS NULL OR member_id = ? ORDER BY member_id, position`,
-      id ?? null,
-      id ?? null,
+       ${ofMember.where} ORDER BY member_id, position`,
+      ...ofMember.values,
     )
     .toArray();
   return members.map((row) =>

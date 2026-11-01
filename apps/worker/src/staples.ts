@@ -13,6 +13,7 @@ import {
 } from "@mise/domain";
 import { readCatalogue } from "./items";
 import { readRecipes } from "./recipes";
+import { whereKeys } from "./sql";
 import { type Handlers, notSetUp, readSettings } from "./tools";
 
 type StapleRow = {
@@ -133,8 +134,9 @@ function writeStaple(sql: SqlStorage, staple: Omit<Staple, "name" | "suggestAlwa
 /** Every Staple, by location then name, or just the Item's; parsed, so bad rows throw. */
 export function readStaples(sql: SqlStorage, item?: ItemId): Staple[] {
   const catalogue = readCatalogue(sql);
+  const staple = whereKeys({ item_id: item });
   return sql
-    .exec<StapleRow>("SELECT * FROM staple WHERE ? IS NULL OR item_id = ?", item ?? null, item ?? null)
+    .exec<StapleRow>(`SELECT * FROM staple ${staple.where}`, ...staple.values)
     .toArray()
     .map((row) => {
       const id = catalogue.knownItemId.parse(row.item_id);

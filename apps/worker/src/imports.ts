@@ -12,6 +12,7 @@ import {
 } from "@mise/domain";
 import { readCatalogue } from "./items";
 import { readRecipe, readRecipes, writeLists } from "./recipes";
+import { whereKeys } from "./sql";
 import type { Handlers } from "./tools";
 
 /**
@@ -356,15 +357,16 @@ export function readRecipeFrom(sql: SqlStorage, source: ImportSource, externalId
 
 /** Import runs, newest first, or just the one with `id`; parsed, so bad rows throw. */
 export function readImportRuns(sql: SqlStorage, id?: number): ImportRun[] {
-  const only = [id ?? null, id ?? null];
+  const ofRun = whereKeys({ run_id: id });
+  const run = whereKeys({ id });
   const errors = sql
     .exec<ErrorRow>(
-      "SELECT run_id, entry, message FROM import_error WHERE ? IS NULL OR run_id = ? ORDER BY run_id, position",
-      ...only,
+      `SELECT run_id, entry, message FROM import_error ${ofRun.where} ORDER BY run_id, position`,
+      ...ofRun.values,
     )
     .toArray();
   return sql
-    .exec<RunRow>("SELECT * FROM import_run WHERE ? IS NULL OR id = ? ORDER BY id DESC", ...only)
+    .exec<RunRow>(`SELECT * FROM import_run ${run.where} ORDER BY id DESC`, ...run.values)
     .toArray()
     .map((row) =>
       ImportRun.parse({

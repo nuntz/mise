@@ -26,6 +26,7 @@ import {
 import { z } from "zod";
 import { readCatalogue } from "./items";
 import { readRecipes } from "./recipes";
+import { whereKeys } from "./sql";
 import { readStaples, restockStaple } from "./staples";
 import { type Handlers, notSetUp, readSettings, type SettingsAndCalendar } from "./tools";
 import { readWeek, storeWeek, weekNamedBy } from "./weeks";
@@ -220,12 +221,12 @@ type BuiltRecord = z.infer<typeof BuiltRecord>;
 
 /** When each Week's Grocery List, or the one starting on `start`, was built and from what; parsed, so bad rows throw. */
 export function readGroceryBuilds(sql: SqlStorage, start?: LocalDate): BuiltRecord[] {
+  const built = whereKeys({ start_date: start }, "grocery_built_at IS NOT NULL");
   return sql
     .exec<{ start_date: string; grocery_built_at: string; grocery_plan_revision: string }>(
       `SELECT start_date, grocery_built_at, grocery_plan_revision FROM week
-       WHERE grocery_built_at IS NOT NULL AND (? IS NULL OR start_date = ?) ORDER BY start_date`,
-      start ?? null,
-      start ?? null,
+       ${built.where} ORDER BY start_date`,
+      ...built.values,
     )
     .toArray()
     .map((row) =>
@@ -292,14 +293,9 @@ function shownLines(
 /** The stored lines of the Week starting on `start`, or of every Week, or just line `id`; parsed, so bad rows throw. */
 export function readGroceryLines(sql: SqlStorage, start?: LocalDate, id?: number): StoredLine[] {
   const itemId = readCatalogue(sql).knownItemId;
+  const line = whereKeys({ start_date: start, id });
   return sql
-    .exec<LineRow>(
-      `SELECT * FROM grocery_line WHERE (? IS NULL OR start_date = ?) AND (? IS NULL OR id = ?) ORDER BY id`,
-      start ?? null,
-      start ?? null,
-      id ?? null,
-      id ?? null,
-    )
+    .exec<LineRow>(`SELECT * FROM grocery_line ${line.where} ORDER BY id`, ...line.values)
     .toArray()
     .map((row) => ({
       id: row.id,

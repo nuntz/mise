@@ -1,5 +1,6 @@
 import { type PushDevice, PushKind, PushSubscriptionJson, type ToolResult } from "@mise/domain";
 import { z } from "zod";
+import { whereKeys } from "./sql";
 import type { Handlers } from "./tools";
 
 type PushTools = "subscribe_push" | "get_push_device" | "unsubscribe_push";
@@ -45,11 +46,11 @@ export const pushHandlers: Pick<Handlers, PushTools> = {
 
 /** Every device subscribed, oldest first, or the one at `endpoint`; parsed, so a bad row throws. */
 export function readPushSubscriptions(sql: SqlStorage, endpoint?: string): PushSubscriptionRecord[] {
+  const subscription = whereKeys({ endpoint });
   return sql
     .exec<SubscriptionRow>(
-      "SELECT * FROM push_subscription WHERE ? IS NULL OR endpoint = ? ORDER BY rowid",
-      endpoint ?? null,
-      endpoint ?? null,
+      `SELECT * FROM push_subscription ${subscription.where} ORDER BY rowid`,
+      ...subscription.values,
     )
     .toArray()
     .map((row) =>

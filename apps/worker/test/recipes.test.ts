@@ -1,6 +1,8 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { Recipe, ToolResult } from "@mise/domain";
 import { describe, expect, onTestFinished, test } from "vitest";
+import { countRows } from "../src/metering";
 
 function freshHousehold() {
   return env.Household.getByName(crypto.randomUUID());
@@ -228,6 +230,70 @@ describe("a Recipe's effective Allergens", () => {
     const updated = await household.callTool("update_recipe", { id: 1, ingredients: ["1 tbsp tahini", "1 lemon"] });
 
     expect(updated).toMatchObject({ ok: true, value: { allergens: { kind: "known", allergens: ["sesame"] } } });
+  });
+});
+
+describe("reading one Recipe", () => {
+  /** A Recipe of ten Ingredients the catalogue already has, so adding it adds no Items. */
+  const stew = (title: string) => ({
+    title,
+    baseServings: 4,
+    ingredients: [
+      "1 cup flour",
+      "2 eggs",
+      "1 cup milk",
+      "2 tbsp butter",
+      "1 onion",
+      "2 garlic cloves",
+      "400 g rice",
+      "1 tsp salt",
+      "1 tbsp sugar",
+      "2 tomatoes",
+    ],
+    steps: Array.from({ length: 10 }, (_, step) => `Step ${step + 1}.`),
+    tags: Array.from({ length: 10 }, (_, tag) => `tag ${tag + 1}`),
+  });
+
+  async function planAndCook(household: ReturnType<typeof freshHousehold>, date: string, recipeId: number) {
+    await household.callTool("set_slot", { date, meal: "dinner", kind: "recipe", recipeId });
+    await household.callTool("mark_cooked", { date, meal: "dinner" });
+  }
+
+  /** The Recipe `get_recipe` answered for `id`, and the rows SQLite read to answer it. */
+  async function getRecipeMetered(
+    household: ReturnType<typeof freshHousehold>,
+    id: number,
+  ): Promise<{ recipe: Recipe; read: number }> {
+    return runInDurableObject(household, async (instance) => {
+      let read = 0;
+      const result = await countRows(
+        () => instance.callTool("get_recipe", { id }),
+        (rows) => {
+          read = rows.read;
+        },
+      );
+      return { recipe: recipeOf(result), read };
+    });
+  }
+
+  test("reads as many rows however many Recipes the Household has", async () => {
+    const household = await setUpHousehold();
+    const { id } = recipeOf(await household.callTool("create_recipe", stew("Stew 1")));
+    await planAndCook(household, "2026-01-01", id);
+    const alone = await getRecipeMetered(household, id);
+    expect(alone.recipe).toMatchObject({ id, cookCount: 1 });
+
+    for (let n = 2; n <= 200; n++) {
+      const other = recipeOf(await household.callTool("create_recipe", stew(`Stew ${n}`)));
+      // Some of the others cooked too, on a day of their own.
+      if (n % 10 === 0) await planAndCook(household, `2026-02-${String(n / 10).padStart(2, "0")}`, other.id);
+    }
+
+    const among200 = await getRecipeMetered(household, id);
+    expect(among200.recipe).toMatchObject({ id, cookCount: 1 });
+    // A scan of the 199 others' 30 lines each would read thousands more; 50 is slack for bookkeeping
+    // reads elsewhere in the call, a fraction of even one other Recipe's lines.
+    expect(among200.read).toBeLessThan(alone.read + 50);
   });
 });
 

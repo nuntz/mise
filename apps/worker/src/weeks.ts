@@ -34,6 +34,7 @@ import {
 } from "@mise/domain";
 import { itemNotFound, readCatalogue } from "./items";
 import { readRecipeAllergens, readRecipes, recipeNotFound } from "./recipes";
+import { whereKeys } from "./sql";
 import {
   type ConstraintColumns,
   constraintOf,
@@ -691,14 +692,12 @@ export function readWeek(sql: SqlStorage, span: WeekSpan): Week {
 
 /** What is stored about each Week, or the one starting on `startDate`, beside its Slots; parsed, so bad rows throw. */
 export function readWeekRecords(sql: SqlStorage, startDate?: LocalDate): WeekRecord[] {
-  const only = [startDate ?? null, startDate ?? null];
-  const weeks = sql
-    .exec<WeekRow>("SELECT * FROM week WHERE ? IS NULL OR start_date = ? ORDER BY start_date", ...only)
-    .toArray();
+  const week = whereKeys({ start_date: startDate });
+  const weeks = sql.exec<WeekRow>(`SELECT * FROM week ${week.where} ORDER BY start_date`, ...week.values).toArray();
   const budgets = sql
     .exec<{ start_date: string; weekday: string; minutes: number }>(
-      "SELECT * FROM week_effort_budget WHERE ? IS NULL OR start_date = ? ORDER BY start_date, weekday",
-      ...only,
+      `SELECT * FROM week_effort_budget ${week.where} ORDER BY start_date, weekday`,
+      ...week.values,
     )
     .toArray();
   return weeks.map((row) =>

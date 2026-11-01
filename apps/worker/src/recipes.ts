@@ -11,6 +11,7 @@ import {
   type ToolResult,
 } from "@mise/domain";
 import { readCatalogue } from "./items";
+import { whereKeys } from "./sql";
 import type { Handlers } from "./tools";
 
 type RecipeRow = {
@@ -255,39 +256,41 @@ export function readRecipe(sql: SqlStorage, id: RecipeId): Recipe | null {
 
 /** Every Recipe in the order they were added, or just the one with `id`; parsed, so bad rows throw. */
 export function readRecipes(sql: SqlStorage, id?: RecipeId): Recipe[] {
-  const only = [id ?? null, id ?? null];
-  const rows = sql.exec<RecipeRow>("SELECT * FROM recipe WHERE ? IS NULL OR id = ? ORDER BY id", ...only).toArray();
+  const recipe = whereKeys({ id });
+  const ofRecipe = whereKeys({ recipe_id: id });
+  const rows = sql.exec<RecipeRow>(`SELECT * FROM recipe ${recipe.where} ORDER BY id`, ...recipe.values).toArray();
   const ingredients = groupByRecipe(
     sql
       .exec<IngredientRow>(
         `SELECT recipe_id, raw, amount_min, amount_max, unit, name, note, item_id FROM recipe_ingredient
-         WHERE ? IS NULL OR recipe_id = ? ORDER BY recipe_id, position`,
-        ...only,
+         ${ofRecipe.where} ORDER BY recipe_id, position`,
+        ...ofRecipe.values,
       )
       .toArray(),
   );
   const steps = groupByRecipe(
     sql
       .exec<LineRow>(
-        `SELECT recipe_id, text FROM recipe_step WHERE ? IS NULL OR recipe_id = ? ORDER BY recipe_id, position`,
-        ...only,
+        `SELECT recipe_id, text FROM recipe_step ${ofRecipe.where} ORDER BY recipe_id, position`,
+        ...ofRecipe.values,
       )
       .toArray(),
   );
   const tags = groupByRecipe(
     sql
       .exec<LineRow>(
-        `SELECT recipe_id, tag AS text FROM recipe_tag WHERE ? IS NULL OR recipe_id = ? ORDER BY recipe_id, position`,
-        ...only,
+        `SELECT recipe_id, tag AS text FROM recipe_tag ${ofRecipe.where} ORDER BY recipe_id, position`,
+        ...ofRecipe.values,
       )
       .toArray(),
   );
+  const cookedSlots = whereKeys({ recipe_id: id }, "cooked_at IS NOT NULL");
   const cooked = new Map(
     sql
       .exec<{ recipe_id: number; last_cooked_at: string; cook_count: number }>(
         `SELECT recipe_id, max(date) AS last_cooked_at, count(*) AS cook_count FROM slot
-         WHERE cooked_at IS NOT NULL AND (? IS NULL OR recipe_id = ?) GROUP BY recipe_id`,
-        ...only,
+         ${cookedSlots.where} GROUP BY recipe_id`,
+        ...cookedSlots.values,
       )
       .toArray()
       .map((row) => [row.recipe_id, row]),
