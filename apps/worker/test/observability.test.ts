@@ -1,5 +1,5 @@
 import { channel } from "node:diagnostics_channel";
-import type { ErrorEvent } from "@sentry/cloudflare";
+import { type ErrorEvent, Scope } from "@sentry/cloudflare";
 import { describe, expect, test } from "vitest";
 import {
   piReports,
@@ -124,6 +124,47 @@ describe("Sentry scrubbing", () => {
       expect(scrubSpan(span).name).toBe("fetch /cal/[token].ics: 500");
     });
 
+    test("is redacted alone, leaving the quotes and brackets around it", () => {
+      expect(scrubSpan(feedSpan({ name: `{"url":"/cal/${TOKEN}.ics","status":500}` })).name).toBe(
+        '{"url":"/cal/[token].ics","status":500}',
+      );
+      expect(scrubSpan(feedSpan({ name: `fetch(/cal/${TOKEN}.ics) failed` })).name).toBe(
+        "fetch(/cal/[token].ics) failed",
+      );
+    });
+
+    test("is never sent when a span cannot be scrubbed", () => {
+      const unreadable = {
+        get value(): string {
+          throw new Error("unreadable");
+        },
+      };
+      const span = feedSpan({ name: `GET /cal/${TOKEN}.ics`, attributes: { "url.path": `/cal/${TOKEN}.ics` } });
+      span.links = [{ context: unreadable } as never];
+
+      const scrubbed = scrubSpan(span);
+
+      expect(scrubbed).toMatchObject({ span_id: "1", trace_id: "2", attributes: {} });
+      expect(JSON.stringify(scrubbed)).not.toContain(TOKEN);
+    });
+
+    test("is redacted from an error event holding a cycle, and the SDK's own metadata is left as it is", () => {
+      const scope = new Scope();
+      const data: Record<string, unknown> = { url: `/cal/${TOKEN}.ics` };
+      data.self = data;
+      const event: ErrorEvent = {
+        type: undefined,
+        message: "Something broke",
+        contexts: { feed: data },
+        sdkProcessingMetadata: { capturedSpanScope: scope },
+      };
+
+      const scrubbed = scrubEvent(event);
+
+      expect(scrubbed.contexts?.feed?.url).toBe("/cal/[token].ics");
+      expect(scrubbed.sdkProcessingMetadata?.capturedSpanScope).toBe(scope);
+    });
+
     test("is redacted from an error raised while serving the feed", () => {
       const event: ErrorEvent = {
         type: undefined,
@@ -166,6 +207,8 @@ describe("Sentry scrubbing", () => {
     expect(options).toMatchObject({
       dsn: undefined,
       dataCollection: { userInfo: false, cookies: false, httpBodies: [], genAI: { inputs: false, outputs: false } },
+      // Spans are scrubbed as they stream, whatever SENTRY_TRACE_LIFECYCLE says.
+      traceLifecycle: "stream",
     });
   });
 });

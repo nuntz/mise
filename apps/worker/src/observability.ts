@@ -22,10 +22,10 @@ const REQUEST_ATTRIBUTE = /^(http\.request\.body|http\.query|url\.query)/;
 const URL_ATTRIBUTE = /^(url\.|http\.(url|target)$)/;
 
 /**
- * The Calendar Feed's path, whose token is its only secret (ADR 0019). Tokens are base64url, so
- * the match stops where a query, fragment, colon or space begins and keeps what follows.
+ * The Calendar Feed's token, whose path is its only secret (ADR 0019). Tokens are base64url,
+ * percent-encoded at worst, so the match takes only that and keeps what follows, ".ics" included.
  */
-const FEED_PATH = /\/cal\/[^\s?#:]*/g;
+const FEED_TOKEN = /\/cal\/[A-Za-z0-9_%-]+/g;
 
 /** Sentry for the Worker and the household Durable Object. No DSN, no reporting. */
 export function sentryOptions(env: Env): CloudflareOptions {
@@ -45,6 +45,8 @@ export function sentryOptions(env: Env): CloudflareOptions {
       queues: false,
       stackFrameVariables: false,
     },
+    // Spans are scrubbed only as they stream; the SDK would otherwise take this from SENTRY_TRACE_LIFECYCLE.
+    traceLifecycle: "stream",
     beforeSend: scrubEvent,
     beforeSendSpan: scrubSpan,
   };
@@ -82,6 +84,26 @@ function scrubEventFields<T extends Event>(event: T): T {
 
 /** Strips prompts, model output, tool arguments, request bodies, query strings and the Calendar Feed's token from a span. */
 export function scrubSpan(span: StreamedSpan): StreamedSpan {
+  try {
+    return scrubSpanFields(span);
+  } catch {
+    // Sentry sends a span its callback threw on as it was, so one that can't be scrubbed keeps only its ids and timing.
+    const { trace_id, parent_span_id, span_id, start_timestamp, end_timestamp, status, is_segment } = span;
+    return {
+      trace_id,
+      parent_span_id,
+      span_id,
+      start_timestamp,
+      end_timestamp,
+      status,
+      is_segment,
+      name: "[scrubbed]",
+      attributes: {},
+    };
+  }
+}
+
+function scrubSpanFields(span: StreamedSpan): StreamedSpan {
   const attributes: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(span.attributes)) {
     if (CONTENT_ATTRIBUTE.test(key) || REQUEST_ATTRIBUTE.test(key)) continue;
@@ -97,15 +119,25 @@ function withoutQuery(url: string): string {
 /**
  * Every string in `value` without the Calendar Feed's token. The token can surface in any field
  * Sentry fills from the request (URLs, span and transaction names, tags, trace context), so all of
- * them are searched.
+ * them are searched, except the SDK's own `sdkProcessingMetadata`, which it reads afterwards and
+ * never sends. A value seen before is replaced by what it became, so a cycle stays a cycle.
  */
-function withoutFeedTokens<T>(value: T): T {
-  if (typeof value === "string") return value.replace(FEED_PATH, "/cal/[token].ics") as T;
-  if (Array.isArray(value)) return value.map(withoutFeedTokens) as T;
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutFeedTokens(item)])) as T;
+function withoutFeedTokens<T>(value: T, seen = new Map<object, unknown>()): T {
+  if (typeof value === "string") return value.replace(FEED_TOKEN, "/cal/[token]") as T;
+  if (!value || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value) as T;
+  if (Array.isArray(value)) {
+    const items: unknown[] = [];
+    seen.set(value, items);
+    for (const item of value) items.push(withoutFeedTokens(item, seen));
+    return items as T;
   }
-  return value;
+  const entries: Record<string, unknown> = {};
+  seen.set(value, entries);
+  for (const [key, item] of Object.entries(value)) {
+    entries[key] = key === "sdkProcessingMetadata" ? item : withoutFeedTokens(item, seen);
+  }
+  return entries as T;
 }
 
 type TelemetryContext = NonNullable<HarnessOptions["telemetry"]>;
