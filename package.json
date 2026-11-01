@@ -23,7 +23,10 @@
     "check:web-calls": "bun scripts/check-web-calls.ts",
     "check:export": "bun scripts/check-export.ts",
     "check:stories": "bun scripts/check-story-coverage.ts",
-    "wizard": "bash scripts/setup-deployment.sh"
+    "wizard": "bash scripts/setup-deployment.sh",
+    "ci:summary": "bun scripts/ci-summary.ts",
+    "deployed": "bun scripts/deployed.ts",
+    "transcript": "bun scripts/transcript.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

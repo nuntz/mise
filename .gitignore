@@ -7,3 +7,4 @@ Pulumi.*.yaml
 !Pulumi.example.yaml
 apps/worker/worker-configuration.d.ts
 .claude/worktrees/
+.ci.log
