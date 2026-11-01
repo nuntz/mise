@@ -26,7 +26,8 @@
     "wizard": "bash scripts/setup-deployment.sh",
     "ci:summary": "bun scripts/ci-summary.ts",
     "deployed": "bun scripts/deployed.ts",
-    "transcript": "bun scripts/transcript.ts"
+    "transcript": "bun scripts/transcript.ts",
+    "sentry": "bun scripts/sentry.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
