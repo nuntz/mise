@@ -65,6 +65,7 @@ describe("a Voice Session", () => {
 
     expect(delegated).toMatch(/"No"/);
     expect(delegated).toMatch(/"No, thanks"/);
+    expect(delegated, "an offer GPT-Live spoke is still the agent's question").toMatch(/"Want the rest\?"/);
     expect(kept).toMatch(/thanks you or says goodbye, and answers no question/);
   });
 
