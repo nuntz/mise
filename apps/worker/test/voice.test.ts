@@ -69,6 +69,28 @@ describe("a Voice Session", () => {
     expect(kept).toMatch(/thanks you or says goodbye, and answers no question/);
   });
 
+  // GPT-Live answered "Are you done?" itself and said Mise didn't have the rest of the list (#127).
+  test("tells GPT-Live to delegate a follow-up about what it just spoke for the agent", async () => {
+    const { session } = await robinTalking();
+
+    const [delegated, kept] = session.config.instructions.split("Do not generate");
+
+    expect(delegated).toMatch(/what you just spoke for Mise's agent/);
+    expect(delegated).toMatch(/"Are you done\?"/);
+    expect(delegated).toMatch(/"What about the others\?"/);
+    expect(kept).not.toMatch(/Are you done/);
+  });
+
+  // GPT-Live once spoke "Shall I name the next three?" as "I'll name the next three." (#127)
+  test("tells GPT-Live to keep the agent's question a question and its offer an offer", async () => {
+    const { session } = await robinTalking();
+
+    const speaking = session.config.instructions.split("# Speaking results")[1]?.split("\n# ")[0] ?? "";
+
+    expect(speaking).toMatch(/a question stays a question/i);
+    expect(speaking).toMatch(/never turn .*an offer.* into a statement/i);
+  });
+
   test("tells GPT-Live to say Mise's failure line as it is, never as a request to repeat", async () => {
     const { session } = await robinTalking();
 

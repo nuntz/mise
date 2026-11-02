@@ -1,7 +1,14 @@
 import { env } from "cloudflare:workers";
+import {
+  type AssistantMessage,
+  createModels,
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+} from "@earendil-works/pi-ai";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
-import { afterAll, beforeAll, describe, expect, inject, test, vi } from "vitest";
-import { useAgentModels } from "../src/agent";
+import { afterAll, afterEach, beforeAll, describe, expect, inject, test, vi } from "vitest";
+import { AGENT_MODEL, type AgentModels, useAgentModels } from "../src/agent";
 import { useLive } from "../src/live";
 import { anthropicModels } from "../src/llm";
 import { connectAs } from "../test/connect";
@@ -23,19 +30,47 @@ const ON_THE_PANTRY: ChatWhere = { screen: "pantry" };
 // How long a turn may take: the agent may read the Week and make several calls first.
 const TURN_MS = 90_000;
 
+/** The real model, not a scripted one: the agent's, or the one `MISE_EVAL_MODEL` asks for. */
+function realModels(env: Env): AgentModels {
+  const id = inject("agentModel");
+  return { models: anthropicModels(env.ANTHROPIC_API_KEY), model: id ? { provider: "anthropic", id } : AGENT_MODEL };
+}
+
+/**
+ * The real model, but the first requests of households started from now on get `responses`, one each,
+ * as if it had given them: a history the real model then goes on from. Put back with
+ * `useAgentModels(realModels)`.
+ */
+function answeredFirst(responses: AssistantMessage[]) {
+  useAgentModels((env) => {
+    const real = realModels(env);
+    const faux = fauxProvider({ models: [{ id: "scripted" }] });
+    faux.setResponses(responses);
+    const scripted = createModels();
+    scripted.setProvider(faux.provider);
+    const asking = new Set<PropertyKey>(["stream", "streamSimple", "complete", "completeSimple"]);
+    const models = new Proxy(real.models, {
+      get(target, key) {
+        const answered = faux.getPendingResponseCount() > 0 && asking.has(key);
+        const [owner, model] = answered ? [scripted, faux.getModel()] : [target, undefined];
+        const value = Reflect.get(owner, key);
+        if (typeof value !== "function") return value;
+        return model ? (_: unknown, ...rest: unknown[]) => value.call(owner, model, ...rest) : value.bind(owner);
+      },
+    });
+    return { models, model: real.model };
+  });
+}
+
 beforeAll(() => {
   if (!env.ANTHROPIC_API_KEY) throw new Error("Put ANTHROPIC_API_KEY in apps/worker/.dev.vars to run the eval.");
-  // The real model, not a scripted one: the agent's, or the one asked for.
-  const id = inject("agentModel");
-  useAgentModels(
-    id
-      ? (env) => ({ models: anthropicModels(env.ANTHROPIC_API_KEY), model: { provider: "anthropic", id } })
-      : undefined,
-  );
-  console.log(`Agent model: ${id || "the agent's own"}`);
+  useAgentModels(realModels);
+  console.log(`Agent model: ${inject("agentModel") || "the agent's own"}`);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(FRIDAY_NOON);
 });
+
+afterEach(() => useAgentModels(realModels));
 
 afterAll(() => vi.useRealTimers());
 
@@ -170,6 +205,40 @@ describe("a spoken turn", () => {
       const next = RECIPE_TITLES.filter((title) => more.includes(title) && !named.includes(title));
       expect(next.length, "goes on with others").toBeGreaterThan(0);
       expect(next.length, "three more at most").toBeLessThanOrEqual(3);
+    },
+    3 * TURN_MS,
+  );
+
+  // The agent once copied its own earlier "Want the next three?" after the rule forbade it (#127).
+  test(
+    "a long list ends by saying “more”, even after earlier answers ended with “Want the next three?”",
+    async () => {
+      const [a, b, c, d, e, f] = RECIPE_TITLES;
+      // Looked up, as the agent would, so the history names recipes it was shown.
+      answeredFirst([
+        fauxAssistantMessage(fauxToolCall("search_recipes", { query: "" }), { stopReason: "toolUse" }),
+        fauxAssistantMessage(`We have nine recipes, among them ${a}, ${b} and ${c}. Want the next three?`),
+        fauxAssistantMessage(`Next are ${d}, ${e} and ${f}. Want the next three?`),
+      ]);
+      const { household, say } = await robinTalking(ON_THE_PANTRY);
+      for (const [index, title] of RECIPE_TITLES.slice(1).entries()) {
+        await household.callTool("update_recipe", { id: index + 2, title });
+      }
+      await say("What recipes do we have?");
+      await say("Yes.");
+
+      const answer = await say("What recipes do we have?");
+
+      expect(answer, "says what to say for more").toMatch(/more/i);
+      expect(answer, "asks nothing, not even the offer it made before").not.toContain("?");
+      const named = RECIPE_TITLES.filter((title) => answer.includes(title));
+      expect(named.length, "names some").toBeGreaterThan(0);
+      expect(named.length, "names at most three of nine").toBeLessThanOrEqual(3);
+      const offer = answer.slice(answer.search(/more/i));
+      expect(
+        RECIPE_TITLES.filter((title) => offer.includes(title)),
+        "names none inside the offer",
+      ).toEqual([]);
     },
     3 * TURN_MS,
   );

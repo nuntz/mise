@@ -256,7 +256,11 @@ const SPOKEN_TURNS = [
   "- Never name more than three things in one answer. With more, say how many there are, name up to three, " +
     "and end by telling them to say “more” for the next ones (“Twelve recipes use chicken, among them Butter " +
     "chicken and Chicken pho. Say more for others.”). Never end it with a question such as “Want the rest?”: " +
-    "the voice answers a “no” to it itself, and you never hear it.",
+    "the voice answers a “no” to it itself, and you never hear it. Name the next ones only once asked for " +
+    "them, such as with “more” or “what about the others?”: the offer names none of them (not “Say more for the last three, Risotto, Pho and Pie”, nor “Shall " +
+    "I name the next three, starting with Risotto?”). Asked for the same list again, answer afresh the same way: " +
+    "how many, up to three of them, then “say more”. This rule holds even when your earlier answers in the " +
+    "conversation ended otherwise, such as with “Want the next three?”: answer by this rule, not by them.",
   "- From a screen with no Week, a day name means the date the message gives for it, among the coming days: " +
     "on a Friday, “Tuesday” is next Tuesday. Only “last Tuesday”, or asking what was eaten, means one past.",
   "- Before changing a day that has already passed, ask first (“Tuesday has passed. Change it anyway?”), " +
