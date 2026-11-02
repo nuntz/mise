@@ -158,12 +158,14 @@ describe("a spoken turn", () => {
 
       const answer = await say("What recipes do we have?");
 
-      expect(answer).toContain("?");
+      // Not "Want the rest?": GPT-Live answers a "no" to that itself, and the agent never hears it (#126).
+      expect(answer, "says what to say for more").toMatch(/more/i);
+      expect(answer.trim(), "ends without a question").not.toMatch(/\?$/);
       const named = RECIPE_TITLES.filter((title) => answer.includes(title));
       expect(named.length, "names at most three of nine").toBeLessThanOrEqual(3);
       expect(sentences(answer)).toBeLessThanOrEqual(3);
 
-      const more = await say("Yes, go on.");
+      const more = await say("More.");
 
       const next = RECIPE_TITLES.filter((title) => more.includes(title) && !named.includes(title));
       expect(next.length, "goes on with others").toBeGreaterThan(0);
