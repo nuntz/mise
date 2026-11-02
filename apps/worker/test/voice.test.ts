@@ -58,6 +58,16 @@ describe("a Voice Session", () => {
     expect(delegated).toMatch(/never mind/);
   });
 
+  test("tells GPT-Live to delegate a “no” to the agent's question, bare or with a thanks, as an answer", async () => {
+    const { session } = await robinTalking();
+
+    const [delegated, kept] = session.config.instructions.split("Do not generate");
+
+    expect(delegated).toMatch(/"No"/);
+    expect(delegated).toMatch(/"No, thanks"/);
+    expect(kept).toMatch(/thanks you or says goodbye, and answers no question/);
+  });
+
   test("tells GPT-Live to say Mise's failure line as it is, never as a request to repeat", async () => {
     const { session } = await robinTalking();
 

@@ -196,6 +196,29 @@ describe("a held change in a spoken turn (ADR 0024)", () => {
     },
     4 * TURN_MS,
   );
+
+  // A bare "no" once left the button waiting while the agent said to ignore it (#126).
+  test(
+    "a bare “no” to the button withdraws it, and a tap then runs nothing",
+    async () => {
+      const { household, robin, say } = await robinTalking(ON_THE_PANTRY);
+
+      expect(await say("Delete the Satay recipe.")).toMatch(/tap/i);
+      await say("No.");
+
+      const shown = (await household.conversation()).filter((message) => message.role === "confirmation");
+      expect(shown.length, "held at least once").toBeGreaterThan(0);
+      expect(
+        shown.map((confirmation) => confirmation.status),
+        "every button is withdrawn",
+      ).not.toContain("pending");
+      for (const { id } of shown) {
+        expect(await robin.rpc("confirm", [id]), "a tap runs nothing").toMatchObject({ ok: false });
+      }
+      expect(await household.callTool("get_recipe", { id: 1 }), "the Recipe is kept").toMatchObject({ ok: true });
+    },
+    3 * TURN_MS,
+  );
 });
 
 describe("a spoken turn in Kitchen mode", () => {

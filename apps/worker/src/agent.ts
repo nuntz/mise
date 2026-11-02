@@ -123,8 +123,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "The Household: its settings, Members (with ids and Constraints), default Effort Budgets and Store Sections.",
   get_caller: "Who is speaking: their email, and the Member they sign in as, if any.",
   cancel_confirmation:
-    "Withdraws a button still waiting for the person's tap, when they no longer want it (“never mind”), by the " +
-    "confirmation id the held call gave.",
+    "Withdraws a button still waiting for the person's tap, when they no longer want it (“never mind”, or a " +
+    "plain “no” to it), by the confirmation id the held call gave. Never tell them to ignore a button: withdraw it.",
   update_household_settings: "Changes the Household's settings given: name, timezone, dinner time, week start, units.",
   set_effort_budgets: "Sets the Household's default Effort Budget (cooking minutes) for the weekdays given.",
   add_member: "Adds a Member to the Household, with any Constraints.",
