@@ -66,6 +66,15 @@ describe("callTool", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "unknown_tool" } });
   });
 
+  test("has no lock_slot: Lock is retired, and Keep does what it did (ADR 0030)", async () => {
+    const household = freshHousehold();
+    await household.callTool("setup_household", { name: "The Example Family" });
+
+    const result = await household.callTool("lock_slot", { date: "2026-10-27", meal: "dinner", locked: true });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "unknown_tool" } });
+  });
+
   test("rejects invalid input without changing anything", async () => {
     const household = freshHousehold();
 

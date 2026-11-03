@@ -382,8 +382,6 @@ export function reasonText(
 ): string {
   const list = (parts: string[]) => new Intl.ListFormat(household.locale, { type: "conjunction" }).format(parts);
   switch (reason.kind) {
-    case "locked":
-      return t("reason.locked");
     case "nobody_eating":
       return t("reason.nobodyEating");
     case "leftovers":

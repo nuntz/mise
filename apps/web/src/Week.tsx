@@ -313,7 +313,6 @@ function clearable(slot: Slot): boolean {
   return (
     slot.kind !== "unplanned" ||
     slot.note !== null ||
-    slot.locked ||
     !slot.dinersAreDefault ||
     slot.guests > 0 ||
     slot.guestConstraints.length > 0 ||
@@ -492,10 +491,10 @@ function SlotView(props: {
 }) {
   const meal = () => t(`meal.${props.slot.meal}`);
   const unsafe = () => props.slot.conflicts.find((conflict) => conflict.override === null);
-  const flag = (): Flag | undefined => {
+  // A Conflict nobody has overridden flags the dinner: "Robin · Peanut".
+  const flag = () => {
     const conflict = unsafe();
-    if (conflict) return { kind: "warn", text: conflictChip(conflict, props.household) };
-    return props.slot.locked ? { kind: "lock", text: t("slot.locked") } : undefined;
+    return conflict && conflictChip(conflict, props.household);
   };
   // Under the title, in its text column: who it feeds, what it's cooked for, and its note.
   const meta = () => (
@@ -553,7 +552,7 @@ function SlotView(props: {
                   <Show when={flag()}>
                     {(shown) => (
                       <p class="chips">
-                        <span class={`chip ${FLAG_CLASS[shown().kind].chip}`}>{shown().text}</span>
+                        <span class="chip chip-warn">{shown()}</span>
                       </p>
                     )}
                   </Show>
@@ -574,9 +573,7 @@ function SlotView(props: {
                   )}
                 </Show>
                 <span class={props.today ? "pill pill-today" : "pill"}>{props.day}</span>
-                <Show when={flag()}>
-                  {(shown) => <span class={`pill pill-status ${FLAG_CLASS[shown().kind].pill}`}>{shown().text}</span>}
-                </Show>
+                <Show when={flag()}>{(shown) => <span class="pill pill-status pill-warn">{shown()}</span>}</Show>
               </div>
               <div class="dish">
                 <DishTitle slot={props.slot} onOpen={props.onOpen} />
@@ -787,13 +784,6 @@ function CookedChip() {
   );
 }
 
-/** What a dinner is flagged with: a Conflict nobody has overridden, or that it is Locked. */
-type Flag = { kind: "warn" | "lock"; text: string };
-const FLAG_CLASS = {
-  warn: { pill: "pill-warn", chip: "chip-warn" },
-  lock: { pill: "pill-lock", chip: "chip-plum" },
-} satisfies Record<Flag["kind"], { pill: string; chip: string }>;
-
 /**
  * A Slot with a Recipe, in that Recipe's sheet: marking it cooked; once it is, what ran out, its
  * Ratings and a prompt for one more; and editing it.
@@ -940,7 +930,6 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
   const [guestConstraints, setGuestConstraints] = createSignal<ConstraintDraft[]>(
     constraintDraftsOf(slot.guestConstraints),
   );
-  const [locked, setLocked] = createSignal(slot.locked);
   const [recipes, setRecipes] = createSignal<RecipeSummary[]>([]);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
@@ -1026,7 +1015,6 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         props.client.call("link_leftovers", { ...where, of, ...(overrides.length > 0 && { overrides }) }),
       );
     }
-    if (locked() !== slot.locked) writes.push(() => props.client.call("lock_slot", { ...where, locked: locked() }));
 
     setBusy(true);
     // In order, stopping at the first refusal; what was saved before it stays saved.
@@ -1149,11 +1137,6 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
           <KeepButton client={props.client} slot={props.slot} />
         </div>
       </Show>
-      <label>
-        <input type="checkbox" checked={locked()} onChange={(e) => setLocked(e.currentTarget.checked)} />
-        {t("slot.locked")}
-      </label>
-      <small>{t("slot.lockedHint")}</small>
       <Show when={canHandBack}>
         <button type="button" class="button-row" disabled={busy() || unchanged() !== undefined} onClick={handBack}>
           {t("slot.letMiseChoose")}

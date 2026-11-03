@@ -1,5 +1,5 @@
 import { afterEach, expect, onTestFinished, test } from "vitest";
-import { nameText, setLocale, setPseudoLocale, t } from "../src/messages";
+import { type MessageKey, nameText, setLocale, setPseudoLocale, t } from "../src/messages";
 
 afterEach(() => setPseudoLocale(false));
 
@@ -20,6 +20,13 @@ test("the pseudo-locale leaves what fills a placeholder as it is", () => {
 
 test("off, messages read as written", () => {
   expect(t("recipe.photoAlt", { title: "Pad thai" })).toBe("Photo of Pad thai");
+});
+
+test("Lock is retired (ADR 0030), so no message names it", () => {
+  type AboutLock = Extract<MessageKey, `${string}lock${string}` | `${string}Lock${string}`>;
+  // Checked when the tests are typechecked: true only while no message key mentions Lock.
+  const none: [AboutLock] extends [never] ? true : false = true;
+  expect(none).toBe(true);
 });
 
 test("a name standing alone takes a capital for the Household's locale, and keeps the rest as stored", () => {

@@ -61,7 +61,6 @@ describe("a Week", () => {
       cookFor: 0,
       leftoversOf: null,
       leftovers: [],
-      locked: false,
       conflicts: [],
       reason: null,
       cookedAt: null,
@@ -99,7 +98,6 @@ describe("setting a Slot", () => {
       cookFor: 3,
       leftoversOf: null,
       leftovers: [],
-      locked: false,
       conflicts: [],
       reason: null,
       cookedAt: null,
@@ -161,18 +159,16 @@ describe("setting a Slot", () => {
     );
   });
 
-  test("deleting a Recipe unplans and unlocks the Slots it was in", async () => {
+  test("deleting a Recipe unplans the Slots it was in", async () => {
     const household = await setUpHousehold();
     await household.callTool("create_recipe", pasta);
     await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "recipe", recipeId: 1 });
-    await household.callTool("lock_slot", { date: TUESDAY, meal: "dinner", locked: true });
 
     await household.callTool("delete_recipe", { id: 1, confirm: true });
 
     expect(slotOf(weekOf(await household.callTool("get_week", { date: MONDAY })), TUESDAY, "dinner")).toMatchObject({
       kind: "unplanned",
       recipe: null,
-      locked: false,
     });
   });
 
@@ -297,27 +293,11 @@ describe("Diners and Guests", () => {
   });
 });
 
-describe("Locks", () => {
-  test("a Slot can be Locked and unlocked, and a Locked Slot can still be edited by hand", async () => {
-    const household = await setUpHousehold();
-    await household.callTool("create_recipe", pasta);
-
-    const locked = await household.callTool("lock_slot", { date: TUESDAY, meal: "dinner", locked: true });
-    const edited = await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "recipe", recipeId: 1 });
-    const unlocked = await household.callTool("lock_slot", { date: TUESDAY, meal: "dinner", locked: false });
-
-    expect(locked).toMatchObject({ ok: true, value: { locked: true, kind: "unplanned" } });
-    expect(edited).toMatchObject({ ok: true, value: { locked: true, kind: "recipe" } });
-    expect(unlocked).toMatchObject({ ok: true, value: { locked: false, kind: "recipe" } });
-  });
-});
-
 describe("clearing a Week", () => {
-  test("puts every Slot of that Week back as it started, Locked ones too, and leaves other Weeks alone", async () => {
+  test("puts every Slot of that Week back as it started, the Household's own too, and leaves other Weeks alone", async () => {
     const household = await setUpHousehold();
     await household.callTool("create_recipe", pasta);
     await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "recipe", recipeId: 1 });
-    await household.callTool("lock_slot", { date: TUESDAY, meal: "dinner", locked: true });
     await household.callTool("set_guests", {
       date: "2026-11-01",
       meal: "lunch",
@@ -325,16 +305,12 @@ describe("clearing a Week", () => {
       guestConstraints: [{ kind: "allergy", allergen: "sesame" }],
     });
     await household.callTool("set_diners", { date: MONDAY, diners: [1] });
-    // Unplanned still, but with a note or Locked: clearing resets those too.
+    // Unplanned still, but with a note: clearing resets that too.
     expect(
       await household.callTool("set_slot", { date: "2026-10-28", meal: "dinner", kind: "unplanned", note: "Picnic" }),
     ).toMatchObject({
       ok: true,
       value: { kind: "unplanned", note: "Picnic" },
-    });
-    expect(await household.callTool("lock_slot", { date: "2026-10-29", meal: "lunch", locked: true })).toMatchObject({
-      ok: true,
-      value: { kind: "unplanned", locked: true },
     });
     await household.callTool("set_slot", { date: "2026-11-02", meal: "dinner", kind: "eat_out" });
 

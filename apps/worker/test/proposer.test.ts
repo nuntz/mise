@@ -57,10 +57,9 @@ async function propose(household: TestHousehold, input: Record<string, unknown> 
 }
 
 describe("proposing a Week", () => {
-  test("fills every dinner with a safe Recipe and a reason, keeping Locked Slots and other meals", async () => {
+  test("fills every dinner with a safe Recipe and a reason, keeping the Household's own and other meals", async () => {
     const household = await setUpHousehold();
     await household.callTool("set_slot", { date: WEDNESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
-    await household.callTool("lock_slot", { date: WEDNESDAY, meal: "dinner", locked: true });
     await household.callTool("set_slot", { date: MONDAY, meal: "lunch", kind: "eat_out" });
 
     const week = await propose(household);
@@ -72,9 +71,9 @@ describe("proposing a Week", () => {
       expect(dinner.recipe?.id).not.toBe(SATAY);
       expect(dinner.conflicts).toEqual([]);
     }
-    expect(dinners(week)[2]).toMatchObject({ recipe: { id: 2 }, locked: true, reason: null });
+    expect(dinners(week)[2]).toMatchObject({ recipe: { id: 2 }, reason: null });
     expect(dinners(week)[0]?.reason).toMatchObject({ kind: "chosen", candidates: 11 });
-    // Recipe 2 is Locked on Wednesday, so it isn't proposed again within 2 weeks of it.
+    // Recipe 2 is chosen by hand on Wednesday, so it isn't proposed again within 2 weeks of it.
     expect(dinners(week).filter((dinner) => dinner.recipe?.id === 2)).toHaveLength(1);
     expect(week.slots.find((slot) => slot.date === MONDAY && slot.meal === "lunch")).toMatchObject({
       kind: "eat_out",
@@ -86,7 +85,6 @@ describe("proposing a Week", () => {
   test("gives the same Proposal again for the same Week, and a different one when re-rolled", async () => {
     const household = await setUpHousehold();
     await household.callTool("set_slot", { date: WEDNESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
-    await household.callTool("lock_slot", { date: WEDNESDAY, meal: "dinner", locked: true });
 
     const first = await propose(household);
     const again = await propose(household);
@@ -97,7 +95,7 @@ describe("proposing a Week", () => {
     expect(again.proposalSeed).toBe(first.proposalSeed);
     expect(rerolled.proposalSeed).not.toBe(first.proposalSeed);
     expect(recipes(rerolled)).not.toEqual(recipes(first));
-    expect(dinners(rerolled)[2]).toMatchObject({ recipe: { id: 2 }, locked: true });
+    expect(dinners(rerolled)[2]).toMatchObject({ recipe: { id: 2 }, reason: null });
   });
 
   test("doesn't propose what was planned the Week before", async () => {
@@ -325,6 +323,74 @@ describe("reasons stored before ADR 0030", () => {
       dinners(proposed)[5]?.reason,
       dinners(proposed)[6]?.reason,
     ]);
+  });
+});
+
+describe("Locked dinners before ADR 0030", () => {
+  const TUESDAY = addDays(MONDAY, 1);
+  const THURSDAY = addDays(MONDAY, 3);
+
+  /**
+   * A proposed Week as Lock left it: Monday's Recipe Locked, Wednesday's Leftovers of Tuesday's
+   * Suggestion Locked, and Thursday Locked unplanned; then the migration that retires Lock, and only it.
+   */
+  async function withLocks(household: TestHousehold): Promise<Week> {
+    const proposed = await propose(household);
+    await runInDurableObject(household, async (_household, state) => {
+      const sql = state.storage.sql;
+      sql.exec("ALTER TABLE slot ADD COLUMN locked INTEGER NOT NULL DEFAULT 0");
+      const lock = (date: string) => sql.exec("UPDATE slot SET locked = 1 WHERE date = ? AND meal = 'dinner'", date);
+      const reason = (date: string, reason: object) =>
+        sql.exec("UPDATE slot_reason SET reason = ? WHERE date = ? AND meal = 'dinner'", JSON.stringify(reason), date);
+      lock(MONDAY);
+      reason(MONDAY, { kind: "locked" });
+      sql.exec(
+        `UPDATE slot SET kind = 'leftovers', recipe_id = NULL, leftovers_of_date = ?, leftovers_of_meal = 'dinner'
+         WHERE date = ? AND meal = 'dinner'`,
+        TUESDAY,
+        WEDNESDAY,
+      );
+      reason(WEDNESDAY, { kind: "leftovers", of: TUESDAY });
+      lock(WEDNESDAY);
+      sql.exec("UPDATE slot SET kind = 'unplanned', recipe_id = NULL WHERE date = ? AND meal = 'dinner'", THURSDAY);
+      reason(THURSDAY, { kind: "locked" });
+      lock(THURSDAY);
+      sql.exec("DELETE FROM schema_version WHERE version >= 33");
+      migrate(state.storage, 33);
+    });
+    return proposed;
+  }
+
+  test("a Locked Recipe or Leftovers dinner becomes the Household's own, and a Locked unplanned one plain unplanned", async () => {
+    const household = await setUpHousehold();
+    const proposed = await withLocks(household);
+
+    const week = weekOf(await household.callTool("get_week", { date: MONDAY }));
+
+    expect(dinners(week).slice(0, 4)).toMatchObject([
+      { kind: "recipe", recipe: dinners(proposed)[0]?.recipe, reason: null },
+      // What the Locked Leftovers are of is the Household's own too.
+      { kind: "recipe", recipe: dinners(proposed)[1]?.recipe, leftovers: [{ date: WEDNESDAY }], reason: null },
+      { kind: "leftovers", leftoversOf: { date: TUESDAY }, reason: null },
+      { kind: "unplanned", recipe: null, reason: null },
+    ]);
+    expect(dinners(week)[4]?.reason).toEqual(dinners(proposed)[4]?.reason);
+    expect(dinners(week)[0]).not.toHaveProperty("locked");
+  });
+
+  test("a Re-roll then keeps the formerly Locked Recipe and Leftovers, and fills the formerly Locked unplanned dinner", async () => {
+    const household = await setUpHousehold();
+    const proposed = await withLocks(household);
+
+    for (let roll = 0; roll < 3; roll++) {
+      const week = await propose(household, { reroll: true });
+      expect(dinners(week).slice(0, 3)).toMatchObject([
+        { kind: "recipe", recipe: dinners(proposed)[0]?.recipe, reason: null },
+        { kind: "recipe", recipe: dinners(proposed)[1]?.recipe, reason: null },
+        { kind: "leftovers", leftoversOf: { date: TUESDAY }, reason: null },
+      ]);
+      expect(dinners(week)[3]).toMatchObject({ kind: "recipe", reason: { kind: "chosen" } });
+    }
   });
 });
 

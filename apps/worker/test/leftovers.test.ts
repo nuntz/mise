@@ -129,7 +129,6 @@ describe("Leftovers", () => {
   test("proposing the Week again keeps a Recipe in the Slot that Leftovers linked by hand come from", async () => {
     const household = await setUpHousehold();
     await plan(household, MONDAY, CHILI);
-    await household.callTool("lock_slot", { ...dinner(MONDAY), locked: true });
     await plan(household, TUESDAY, 3);
     succeeded(await household.callTool("link_leftovers", { ...dinner(WEDNESDAY), of: dinner(TUESDAY) }));
     // The rest of the Week eats out, so Tuesday's is the only Rice bowl on the Grocery List.
