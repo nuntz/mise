@@ -457,9 +457,7 @@ details[open] > summary::after {
   padding: var(--space-3) var(--space-4) 0;
 }
 
-/* A control and, while it can't work for a reason outside Mise, that reason under it. In a row of
- * controls, such as the Week's Re-roll and Grocery List, the reason goes under the row instead
- * (`.proposal-notes`), so that one that wraps never stretches the others. */
+/* A control and, while it can't work for a reason outside Mise, that reason under it. */
 .control {
   display: flex;
   flex-direction: column;
@@ -471,7 +469,6 @@ details[open] > summary::after {
   align-items: flex-end;
 }
 
-.actions .control,
 :is(.screen, .stack) > .control {
   align-items: stretch;
 }
@@ -492,8 +489,8 @@ details[open] > summary::after {
   color: var(--ink-muted);
 }
 
-/* Under the Week's Re-roll and Grocery List, out of their row: Re-roll's hint or why it can't, then the
- * Use it up line, all at the left edge. */
+/* Under the Week's Propose or Re-roll: why it can't work, or Re-roll's hint, then the Use it up line, all
+ * at the left edge. */
 .proposal-notes {
   display: flex;
   flex-direction: column;

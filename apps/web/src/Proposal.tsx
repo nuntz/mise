@@ -40,7 +40,6 @@ export function ProposalControls(props: {
   items: Map<ItemId, Item>;
   locale: Locale;
   online: boolean;
-  onGrocery: () => void;
 }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
@@ -151,25 +150,18 @@ export function ProposalControls(props: {
           </div>
         }
       >
-        <div class="actions">
-          <Show when={proposed()} fallback={proposeButton()}>
-            <button
-              type="button"
-              class="button-primary"
-              disabled={disabled() || !canReroll()}
-              aria-describedby={rerollDescribedBy()}
-              onClick={reroll}
-            >
-              <Icon name="refresh" />
-              {t("week.reroll")}
-            </button>
-          </Show>
-          <button type="button" class="button-secondary" onClick={() => props.onGrocery()}>
-            <Icon name="basket" />
-            {t("week.groceryList")}
+        <Show when={proposed()} fallback={proposeButton()}>
+          <button
+            type="button"
+            class="button-primary"
+            disabled={disabled() || !canReroll()}
+            aria-describedby={rerollDescribedBy()}
+            onClick={reroll}
+          >
+            <Icon name="refresh" />
+            {t("week.reroll")}
           </button>
-        </div>
-        {/* Under the row, not in it, so that a reason that wraps never stretches Grocery List. */}
+        </Show>
         <Show when={!props.online || proposed()}>
           <div class="proposal-notes">
             <NeedsConnection id={reasonId} online={props.online} />

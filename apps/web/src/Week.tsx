@@ -70,7 +70,6 @@ export function WeekPage(props: {
   client: MiseClient;
   household: Household;
   online: boolean;
-  onGrocery: () => void;
   onCook: (recipe: RecipeId, servings: number, slot: SlotKey) => void;
   /** Told the start of the Week shown, or undefined while none is. */
   onWeekShown?: (start: LocalDate | undefined) => void;
@@ -213,7 +212,6 @@ export function WeekPage(props: {
                 items={items()}
                 locale={props.household.locale}
                 online={props.online}
-                onGrocery={() => props.onGrocery()}
               />
             </>
           )}

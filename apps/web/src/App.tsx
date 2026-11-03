@@ -285,7 +285,6 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                       client={props.client}
                       household={household()}
                       online={online()}
-                      onGrocery={() => go("grocery")}
                       onCook={cook}
                       onWeekShown={setWeekShown}
                       openNext={openedNextWeek()}

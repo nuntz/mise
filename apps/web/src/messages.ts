@@ -727,7 +727,6 @@ const en = {
   "week.otherMealsLunch": "Breakfast not planned · Lunch: {lunch}",
   "week.otherMealsBoth": "Breakfast: {breakfast} · Lunch: {lunch}",
   "week.nothingPlanned": "{day} · Nothing planned",
-  "week.groceryList": "Grocery List",
   "week.emptyTitle": "Nothing planned yet",
   "week.emptyBody": "Mise can pick dinners that suit everyone who is eating, or you can choose day by day.",
 

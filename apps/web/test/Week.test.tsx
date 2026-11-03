@@ -880,8 +880,8 @@ test("Re-roll is disabled, and says why under it, when every dinner is the House
   expect(description(reroll)).toBe(
     "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
   );
-  // Under Re-roll and Grocery List, not beside Re-roll in their row, and before the Use it up line.
-  expect(reroll.closest(".actions")?.contains(reason)).toBe(false);
+  // Under Re-roll, before the Use it up line.
+  expect(precedes(reroll, reason)).toBe(true);
   expect(precedes(reason, screen.getByRole("button", { name: "Use it up…" }))).toBe(true);
   expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
 });
@@ -892,8 +892,21 @@ test("Re-roll's hint comes under it, before the Use it up line", async () => {
 
   const reroll = await screen.findByRole("button", { name: "Re-roll" });
   const hint = screen.getByText("Re-roll changes Mise's suggestions. Yours stay.");
-  expect(reroll.closest(".actions")?.contains(hint)).toBe(false);
+  expect(precedes(reroll, hint)).toBe(true);
   expect(precedes(hint, screen.getByRole("button", { name: "Use it up…" }))).toBe(true);
+});
+
+test.each<[string, Record<string, Answer>]>([
+  // The fake client's Week: Tuesday's dinner chosen by hand.
+  ["not yet proposed", {}],
+  ["proposed", { get_week: () => ({ ok: true, value: proposedWeek() }) }],
+])("a Week %s offers no Grocery List button: the Groceries tab is the way to the list", async (_, answers) => {
+  const { client } = fakeClient(answers);
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  expect(screen.queryByRole("button", { name: "Grocery List" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Groceries" })).toBeTruthy();
 });
 
 /** Whether `a` comes before `b` in the document. */
