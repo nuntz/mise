@@ -11,11 +11,11 @@ A dinner becomes the Household's own when someone:
 - links Leftovers to it by hand (`link_leftovers`);
 - or cooks it (`mark_cooked`).
 
-Each of these deletes its reason. Editing a Suggestion's note, Diners or Guests does not. Saying who eats a dinner is not choosing it. "Let Mise choose" hands a dinner back: it proposes that one dinner, preferring a Recipe other than the one it had, and marks the Week as not reviewed.
+Each of these deletes its reason. Editing a Suggestion's note, Diners or Guests does not. Saying who eats a dinner is not choosing it. "Let Mise choose" hands a dinner back: it proposes that one dinner, preferring a Recipe other than the one it had, and marks the Week as not reviewed when it changes a dinner.
 
 Lock is retired: `lock_slot`, the Slot's `locked`, and the Proposer's `locked` input all go. A Lock was someone's decision to keep a dinner, so the migration deletes the reason of every Locked dinner, which makes it the Household's own. A Locked unplanned dinner becomes plain unplanned, which a Proposal fills.
 
-The Week stores its **Use it up**, the Items on hand that its Proposals favour Recipes for. Each Week starts with none. `set_use_up` stores them. Once the Week has been proposed, it also proposes the Week again from the same seed, so the plan adjusts to the Items without being reshuffled, and marks the Week as not reviewed. `propose_week` reads the stored Use it up and loses its `useUp` argument. That includes the morning job's Proposal, which therefore uses Items set before it runs. A Re-roll moves to a new seed as before (ADR 0013), but it changes only Suggestions and fills unplanned dinners. When a Re-roll or `set_use_up` changes no dinner, the result says so, rather than returning the same Week as if something had happened.
+The Week stores its **Use it up**, the Items on hand that its Proposals favour Recipes for. Each Week starts with none. `set_use_up` stores them. Once the Week has been proposed, it also proposes the Week again from the same seed, so the plan adjusts to the Items without being reshuffled, and marks the Week as not reviewed when it changes a dinner. `propose_week` reads the stored Use it up and loses its `useUp` argument. That includes the morning job's Proposal, which therefore uses Items set before it runs. A Re-roll moves to a new seed as before (ADR 0013), but it changes only Suggestions and fills unplanned dinners. When a Re-roll or `set_use_up` changes no dinner, the result says so, rather than returning the same Week as if something had happened.
 
 This amends ADR 0013 in three places:
 
