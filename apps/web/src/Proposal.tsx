@@ -5,6 +5,7 @@ import {
   type Item,
   type ItemId,
   type ProposalReason,
+  type ProposedWeek,
   type ReasonFactor,
   type ToolResult,
   WEEKDAYS,
@@ -44,19 +45,34 @@ export function ProposalControls(props: {
   const empty = () =>
     !proposed() && props.week.slots.every((slot) => slot.meal !== "dinner" || slot.kind === "unplanned");
 
-  const run = async (call: () => Promise<ToolResult<unknown>>) => {
+  // What a Re-roll or a Use it up change that left every dinner as it was says about it.
+  const [unchanged, setUnchanged] = createSignal<string>();
+
+  const run = async <T,>(call: () => Promise<ToolResult<T>>, ifUnchanged?: (value: T) => string | undefined) => {
     setBusy(true);
+    setUnchanged(undefined);
     try {
       const result = await call();
       setError(result.ok ? undefined : errorText(result.error, "slot"));
+      if (result.ok) setUnchanged(ifUnchanged?.(result.value));
     } catch {
       setError(t("app.error"));
     }
     setBusy(false);
   };
   const date = () => props.week.startDate;
-  const reroll = () => run(() => props.client.call("propose_week", { date: date(), reroll: true }));
+  const reroll = () =>
+    run(
+      () => props.client.call("propose_week", { date: date(), reroll: true }),
+      ({ changed }) => (changed ? undefined : t("week.nothingToReroll")),
+    );
   const setUseUp = (items: ItemId[]) => props.client.call("set_use_up", { date: date(), items });
+  const changeUseUp = (items: ItemId[]) =>
+    run(
+      () => setUseUp(items),
+      ({ changed }: ProposedWeek) =>
+        changed || items.length === 0 ? undefined : t("useUp.unchanged", { items: items.map(nameOf).join(", ") }),
+    );
   // Proposing stores the Items first, so that the Proposal favours them.
   const proposeWith = (items: ItemId[]) =>
     run(async () => {
@@ -152,6 +168,11 @@ export function ProposalControls(props: {
         <Show when={props.online && proposed()}>
           <small>{t("week.proposeHint")}</small>
         </Show>
+        <Show when={unchanged()}>
+          <p class="meta" role="status">
+            {unchanged()}
+          </p>
+        </Show>
       </Show>
       <Show when={props.online && draft()}>
         {(picked) => (
@@ -172,7 +193,7 @@ export function ProposalControls(props: {
                 onClick={() => {
                   const items = picked();
                   setDraft(undefined);
-                  void (proposed() ? run(() => setUseUp(items)) : proposeWith(items));
+                  void (proposed() ? changeUseUp(items) : proposeWith(items));
                 }}
               >
                 {proposed() ? t("useUp.save") : t("week.propose")}

@@ -247,8 +247,9 @@ describe("letting Mise choose one dinner", () => {
     await household.callTool("set_slot", { date: WEDNESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
     const before = weekOf(await household.callTool("review_week", { date: MONDAY, reviewed: true }));
 
-    const week = weekOf(await household.callTool("propose_dinner", { date: WEDNESDAY }));
+    const { week, changed } = proposedOf(await household.callTool("propose_dinner", { date: WEDNESDAY }));
 
+    expect(changed).toBe(true);
     expect(dinners(week)[2]?.reason).toMatchObject({ kind: "chosen", candidates: expect.any(Number) });
     expect(dinners(week)[2]?.recipe?.id).not.toBe(2);
     expect(dinners(week)[2]?.recipe?.id).not.toBe(SATAY);
@@ -262,14 +263,14 @@ describe("letting Mise choose one dinner", () => {
   test("fills a dinner of a Week never proposed, and stores no seed for it", async () => {
     const household = await setUpHousehold();
 
-    const week = weekOf(await household.callTool("propose_dinner", { date: WEDNESDAY }));
+    const week = proposedOf(await household.callTool("propose_dinner", { date: WEDNESDAY })).week;
 
     expect(dinners(week)[2]).toMatchObject({ kind: "recipe", reason: { kind: "chosen" } });
     expect(dinners(week).filter((dinner) => dinner.kind === "unplanned")).toHaveLength(6);
     expect(week.proposalSeed).toBeNull();
   });
 
-  test("a Recurring Recipe the dinner already had comes back, and the Week stays reviewed", async () => {
+  test("a Recurring Recipe the dinner already had comes back: nothing changed, and the Week stays reviewed", async () => {
     const household = await setUpHousehold();
     await household.callTool("create_recipe", {
       title: "Pizza",
@@ -281,8 +282,9 @@ describe("letting Mise choose one dinner", () => {
     const pizza = dinners(await propose(household))[4]?.recipe?.id;
     await household.callTool("review_week", { date: MONDAY, reviewed: true });
 
-    const week = weekOf(await household.callTool("propose_dinner", { date: FRIDAY }));
+    const { week, changed } = proposedOf(await household.callTool("propose_dinner", { date: FRIDAY }));
 
+    expect(changed).toBe(false);
     expect(dinners(week)[4]).toMatchObject({ recipe: { id: pizza }, reason: { kind: "recurring" } });
     expect(week.reviewed).toBe(true);
   });
@@ -306,8 +308,9 @@ describe("letting Mise choose one dinner", () => {
     await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "leftovers" });
     await household.callTool("link_leftovers", { date: TUESDAY, meal: "dinner", of: { date: MONDAY, meal: "dinner" } });
 
-    const week = weekOf(await household.callTool("propose_dinner", { date: MONDAY }));
+    const { week, changed } = proposedOf(await household.callTool("propose_dinner", { date: MONDAY }));
 
+    expect(changed).toBe(false);
     expect(dinners(week)[0]).toMatchObject({ recipe: { id: rice }, reason: { kind: "chosen", candidates: 1 } });
     expect(dinners(week)[1]).toMatchObject({ kind: "leftovers", leftoversOf: { date: MONDAY }, conflicts: [] });
   });

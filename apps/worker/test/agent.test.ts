@@ -344,7 +344,7 @@ describe("what the agent is told about Use it up", () => {
 });
 
 describe("what the agent is told when nothing changed", () => {
-  test("propose_week and set_use_up say whether a dinner changed, and to tell the person when none did", async () => {
+  test("propose_week, set_use_up and propose_dinner say whether a dinner changed, and what to say when none did", async () => {
     const offered: { name: string; description: string }[][] = [];
     scriptModel((context) => {
       const system = context.messages.find((message) => (message.role as string) === "system") as
@@ -362,6 +362,7 @@ describe("what the agent is told when nothing changed", () => {
     expect(described("propose_week")).toMatch(/Nothing to re-roll: every dinner is yours, or has only one Recipe/);
     expect(described("set_use_up")).toMatch(/`changed: false`/);
     expect(described("set_use_up")).toMatch(/No dinner changed: nothing that fits uses/);
+    expect(described("propose_dinner")).toMatch(/`changed: false`/);
   });
 });
 

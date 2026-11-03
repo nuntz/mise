@@ -459,11 +459,11 @@ export const tools = {
   }),
   /**
    * "Let Mise choose": proposes one dinner again; see `ProposeDinnerInput`. Refuses a dinner already
-   * cooked (`already_cooked`). Returns the Week.
+   * cooked (`already_cooked`). Returns the Week, and whether any dinner changed.
    */
   propose_dinner: defineTool({
     input: ProposeDinnerInput,
-    output: Week,
+    output: ProposedWeek,
     changes: "plan",
   }),
   /**

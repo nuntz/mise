@@ -189,10 +189,10 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   propose_dinner:
     "Hands one dinner back to Mise and proposes it again at once, as for “Let Mise choose Friday” or “pick " +
     "something else for Friday”: it becomes a Suggestion with a reason, with a Recipe other than the one it had " +
-    "when another fits, and every other dinner stays as it is. When it comes back with the Recipe it had and a " +
-    "`recurring` reason, nothing changed: say that dinner is a Recurring Recipe's night, and the Recipe's " +
-    "Recurring rule is what to change to change it. When the reason counts one candidate, say it was the only " +
-    "Recipe that fits.",
+    "when another fits, and every other dinner stays as it is. Returns `{ week, changed }`. With `changed: false` " +
+    "it came back as it was: when its reason is `recurring`, say that dinner is a Recurring Recipe's night, and " +
+    "the Recipe's Recurring rule is what to change to change it; when the reason counts one candidate, say it " +
+    "was the only Recipe that fits.",
   set_use_up:
     "Sets the Week's Use it up, replacing it: the Items on hand (ids from list_items) its Proposals favour " +
     'Recipes for, as in "use up the spinach". Add to `useUp` from get_week to keep what is there; `[]` clears ' +

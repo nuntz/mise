@@ -337,7 +337,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     storeProposal(sql, settings, span, proposal);
     // It is proposed from the Week's seed and choice, so they stay; only a change needs looking over.
     if (proposal.changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
-    return { ok: true, value: readWeek(sql, span) };
+    return { ok: true, value: { week: readWeek(sql, span), changed: proposal.changed } };
   },
 
   set_week_effort_budgets: (sql, input) => {

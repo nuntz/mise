@@ -195,6 +195,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         case "propose_week":
         case "propose_dinner":
         case "set_use_up":
+          return { ok: true, value: { week: thisWeek, changed: true } };
         case "review_week":
         case "set_week_effort_budgets":
           return { ok: true, value: thisWeek };
@@ -1294,6 +1295,50 @@ test("a proposed Week shows why each dinner was chosen, and asks to be reviewed"
   );
 });
 
+test("a Re-roll that changed nothing says so, and one that changed a dinner says nothing", async () => {
+  let changed = false;
+  const { client } = fakeClient({
+    get_week: () => ({ ok: true, value: proposedWeek() }),
+    propose_week: () => ({ ok: true, value: { week: proposedWeek(), changed } }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+
+  expect(
+    await screen.findByText("Nothing to re-roll: every dinner is yours, or has only one Recipe that fits."),
+  ).toBeTruthy();
+  changed = true;
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+  await vi.waitFor(() => expect(screen.queryByText(/Nothing to re-roll/)).toBeNull());
+});
+
+test("saving a Use it up that changed no dinner says nothing that fits uses its Items better", async () => {
+  const { client } = fakeClient({
+    get_week: () => ({ ok: true, value: proposedWeek() }),
+    set_use_up: () => ({
+      ok: true,
+      value: { week: { ...proposedWeek(), useUp: ["spinach", "rice"] }, changed: false },
+    }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(screen.getByRole("button", { name: "Use it up…" }));
+  const useUp = within(screen.getByRole("dialog")).getByRole("form", { name: "Use it up" });
+  const field = within(useUp).getByRole("combobox", { name: "Item on hand" });
+  await user.type(field, "spinach{Enter}");
+  await user.type(field, "Rice{Enter}");
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save" }));
+
+  expect(
+    await screen.findByText("No dinner changed: nothing that fits uses spinach, rice better than what's planned."),
+  ).toBeTruthy();
+});
+
 test("“Let Mise choose” shows in the Slot sheet of the Household's own dinners, and proposes that dinner", async () => {
   const week = proposedWeek();
   const tacos = { id: 3, title: "Tacos", baseServings: 4, photoKey: null };
@@ -1333,7 +1378,7 @@ test("“Let Mise choose” on a Recurring Recipe's night says the rule is what 
   Object.assign(recurring.slots[8] as Slot, { reason: { kind: "recurring", recurrence: { weekday: "wednesday" } } });
   const { client } = fakeClient({
     get_week: () => ({ ok: true, value: week }),
-    propose_dinner: () => ({ ok: true, value: recurring }),
+    propose_dinner: () => ({ ok: true, value: { week: recurring, changed: false } }),
   });
   const user = userEvent.setup();
   render(() => <App client={client} />);

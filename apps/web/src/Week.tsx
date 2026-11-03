@@ -1053,10 +1053,10 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
       const result = await props.client.call("propose_dinner", { date: slot.date });
       setBusy(false);
       if (!result.ok) return setError(errorText(result.error, "slot"));
-      const dinner = result.value.slots.find((other) => other.date === slot.date && other.meal === "dinner");
+      const dinner = result.value.week.slots.find((other) => other.date === slot.date && other.meal === "dinner");
       // A Recurring Recipe's night comes back as it was: its rule, not Mise, decides it.
       const reason = dinner?.reason;
-      if (reason?.kind === "recurring" && dinner?.recipe && dinner.recipe.id === slot.recipe?.id) {
+      if (!result.value.changed && reason?.kind === "recurring" && dinner?.recipe) {
         const title = dinner.recipe.title;
         return setUnchanged(
           reason.recurrence === "weekly"
