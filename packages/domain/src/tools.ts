@@ -72,6 +72,7 @@ import {
   LockSlotInput,
   MarkCookedInput,
   type Meal,
+  ProposeDinnerInput,
   ProposedWeek,
   ProposeWeekInput,
   RateRecipeInput,
@@ -457,6 +458,15 @@ export const tools = {
     changes: "plan",
   }),
   /**
+   * "Let Mise choose": proposes one dinner again; see `ProposeDinnerInput`. Refuses a dinner already
+   * cooked (`already_cooked`). Returns the Week.
+   */
+  propose_dinner: defineTool({
+    input: ProposeDinnerInput,
+    output: Week,
+    changes: "plan",
+  }),
+  /**
    * Stores the Week's Use it up, and proposes the Week again from the same seed if it has been
    * proposed; see `SetUseUpInput`. Refuses an Item that doesn't exist (`not_found`). Returns the Week,
    * and whether any dinner changed.
@@ -659,6 +669,7 @@ export type ToolErrorCode =
   | "no_recipe"
   | "not_yet"
   | "not_cooked"
+  | "already_cooked"
   | "not_built"
   | "not_earlier"
   | "nothing_to_keep"

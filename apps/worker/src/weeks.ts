@@ -12,11 +12,13 @@ import {
   type MemberId,
   Override,
   PLANNED_WEIGHS_FOR_DAYS,
+  type Proposal,
   ProposalChoice,
   ProposalReason,
   type ProposerDinner,
   type ProposerInput,
   type ProposerPeople,
+  proposeDinner,
   proposeWeek,
   Rating,
   type RecipeAllergens,
@@ -109,6 +111,7 @@ type WeekTools =
   | "link_leftovers"
   | "clear_week"
   | "propose_week"
+  | "propose_dinner"
   | "set_use_up"
   | "set_week_effort_budgets"
   | "review_week"
@@ -320,6 +323,23 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
+  propose_dinner: (sql, input) => {
+    const settings = readSettings(sql);
+    if (!settings) return notSetUp();
+    if (readSlot(sql, input.date, "dinner").cookedAt !== null) {
+      return {
+        ok: false,
+        error: { code: "already_cooked", message: `${input.date} dinner is cooked, so Mise can't choose it again` },
+      };
+    }
+    const span = weekOf(input.date, settings);
+    const proposal = proposeDinner(readProposerInput(sql, span, input.date), input.date);
+    storeProposal(sql, settings, span, proposal);
+    // It is proposed from the Week's seed and choice, so they stay; only a change needs looking over.
+    if (proposal.changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    return { ok: true, value: readWeek(sql, span) };
+  },
+
   set_week_effort_budgets: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
@@ -430,6 +450,26 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
  * the Week keeps its seed, choice and reasons. Whether the Week is reviewed is the caller's.
  */
 function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: WeekSpan, reroll: boolean): boolean {
+  const proposerInput = readProposerInput(sql, span);
+  const proposal = reroll ? rerollWeek(proposerInput) : proposeWeek(proposerInput);
+  const changed = changesDinners(proposal, proposerInput.dinners);
+  if (reroll && !changed) return false;
+  storeProposal(sql, settings, span, proposal);
+  sql.exec(
+    "UPDATE week SET proposal_seed = ?, proposal_choice = ? WHERE start_date = ?",
+    proposal.seed,
+    proposal.choice,
+    span.startDate,
+  );
+  return changed;
+}
+
+/**
+ * The Week's dinners as the Proposer finds them, with its Use it up, seed and choice (the first, if never
+ * proposed). Whoever eats the Leftovers linked by hand to the dinner `handedBack` eats its Recipe too, so
+ * they count among who eats it: no Proposal chooses any other such dinner again (ADR 0030).
+ */
+function readProposerInput(sql: SqlStorage, span: WeekSpan, handedBack: LocalDate | null = null): ProposerInput {
   const week = readWeek(sql, span);
   const stored = readWeekRecords(sql, span.startDate)[0];
   const members = readMembers(sql);
@@ -439,24 +479,29 @@ function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: Week
     guests: slot.guests,
     guestConstraints: slot.guestConstraints,
   });
-  const dinners = week.slots.filter((slot) => slot.meal === "dinner");
-  const proposerInput: ProposerInput = {
-    dinners: dinners.map(
-      (slot): ProposerDinner => ({
-        date: slot.date,
-        kind: slot.kind,
-        recipeId: slot.recipe?.id ?? null,
-        locked: slot.locked,
-        cooked: slot.cookedAt !== null,
-        ...people(slot),
-        leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
-        suggestion: slot.reason !== null,
+  return {
+    dinners: week.slots
+      .filter((slot) => slot.meal === "dinner")
+      .map((slot): ProposerDinner => {
         // Those it placed itself, it places again.
-        leftoversLinkedByHand: slot.leftovers.some(
-          (leftovers) => !isProposedLeftovers(readSlot(sql, leftovers.date, leftovers.meal)),
-        ),
+        const linkedByHand = slot.leftovers
+          .map((leftovers) => readSlot(sql, leftovers.date, leftovers.meal))
+          .filter((leftovers) => !isProposedLeftovers(leftovers));
+        const eating = slot.date === handedBack ? [slot, ...linkedByHand].map(people) : [people(slot)];
+        return {
+          date: slot.date,
+          kind: slot.kind,
+          recipeId: slot.recipe?.id ?? null,
+          locked: slot.locked,
+          cooked: slot.cookedAt !== null,
+          diners: [...new Map(eating.flatMap((them) => them.diners).map((diner) => [diner.id, diner])).values()],
+          guests: eating.reduce((sum, them) => sum + them.guests, 0),
+          guestConstraints: eating.flatMap((them) => them.guestConstraints),
+          leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
+          suggestion: slot.reason !== null,
+          leftoversLinkedByHand: linkedByHand.length > 0,
+        };
       }),
-    ),
     recipes: readRecipes(sql).map((recipe) => ({ ...recipe, ratings: ratings.get(recipe.id) ?? [] })),
     history: plannedAround(sql, span),
     effortBudgets: week.effortBudgets,
@@ -464,10 +509,19 @@ function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: Week
     seed: stored?.proposalSeed ?? FIRST_SEED,
     choice: stored?.proposalChoice ?? "best",
   };
-  const proposal = reroll ? rerollWeek(proposerInput) : proposeWeek(proposerInput);
-  const changed = changesDinners(proposal, proposerInput.dinners);
-  if (reroll && !changed) return false;
+}
 
+/**
+ * Writes the dinners a Proposal filled, with their reasons, leaving those it left as they are; the
+ * Week's seed and choice are the caller's to store.
+ */
+function storeProposal(
+  sql: SqlStorage,
+  settings: SettingsAndCalendar,
+  span: WeekSpan,
+  proposal: Pick<Proposal, "dinners">,
+): void {
+  const before = readWeek(sql, span).slots.filter((slot) => slot.meal === "dinner");
   storeWeek(sql, span.startDate);
   for (const dinner of proposal.dinners) {
     const slot = { date: dinner.date, meal: "dinner" } as const;
@@ -487,8 +541,8 @@ function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: Week
     // A Recipe proposed conflicts with nobody, not even whoever eats its Leftovers, so no
     // Override is left to hold.
     writeOverrides(sql, slot, []);
-    const before = dinners.find((other) => other.date === dinner.date);
-    for (const leftovers of before?.leftovers ?? []) writeOverrides(sql, leftovers, []);
+    const was = before.find((other) => other.date === dinner.date);
+    for (const leftovers of was?.leftovers ?? []) writeOverrides(sql, leftovers, []);
     sql.exec(
       "INSERT OR REPLACE INTO slot_reason (date, meal, reason) VALUES (?, ?, ?)",
       dinner.date,
@@ -510,13 +564,6 @@ function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: Week
      WHERE (leftovers_of_date, leftovers_of_meal) IN (${emptied})`,
     ...range,
   );
-  sql.exec(
-    "UPDATE week SET proposal_seed = ?, proposal_choice = ? WHERE start_date = ?",
-    proposal.seed,
-    proposal.choice,
-    span.startDate,
-  );
-  return changed;
 }
 
 function nothingToKeep(message: string): ToolResult<never> {

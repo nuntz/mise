@@ -129,6 +129,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
   4. Score candidates: recency penalty (last N weeks), variety across cuisine/protein within the week, rating (`never` excluded, `again` boosted), the Week's Use it up (Items on hand, stored with the Week), season.
   5. Fill `yieldsLeftovers` consequences.
   Returns plan + a reason for each dinner it filled (so the agent can explain); a dinner with a reason is a Suggestion.
+- **Let Mise choose:** `propose_dinner(date)` hands one dinner back and proposes it at once, by the same rules from the Week's seed and choice (which it doesn't move): a Recurring Recipe due on it is pinned, and otherwise it gets a Recipe other than the one it had when another fits. Every other dinner stays as it is, but for this dinner's own Leftovers, placed or proposed again by the usual rules. The dinner becomes a Suggestion, and the Week is marked not reviewed when the dinner changed.
 - **Use it up:** `set_use_up(date, items)` stores the Week's Use it up, replacing it (`[]` clears it); each Week starts with none. On a proposed Week it proposes again from the same seed and choice, so only Suggestions and unplanned dinners adjust, and a Week it changes is marked not reviewed. Re-roll and the weekly Proposal (§4.9) favour it too.
 - **Allergy safety on manual edits.** Hard constraints apply to every path, not just the proposer: setting a slot to a recipe that conflicts with a diner's hard constraint, or adding a diner whose hard constraint conflicts with the slot's recipe, shows a blocking warning naming the person and the allergen, with explicit override (e.g. "we'll make hers without the nuts"). The agent must surface the same warning and ask before overriding. Conflicts are shown on the week view and in the calendar event description. Recipes with unknown/unreviewed allergen tags are treated as conflicting for the relevant allergen (fail closed) and flagged for review.
 - Re-roll changes only Suggestions and fills unplanned dinners. Choosing a dinner's kind or Recipe by hand, linking Leftovers to it by hand, or marking it cooked, deletes its reason and makes it the Household's own; changing only its note, Diners or Guests leaves a Suggestion a Suggestion. "Mark cooked" updates
@@ -188,7 +189,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ```
 recipes:   search_recipes, get_recipe, create_recipe, create_ready_made_recipe, update_recipe, delete_recipe*, rate_recipe, list_drafts, accept_draft
-plan:      get_week, propose_week, set_use_up, set_slot, lock_slot, keep_slot, set_diners(slot|day), mark_cooked, clear_week*,
+plan:      get_week, propose_week, propose_dinner, set_use_up, set_slot, lock_slot, keep_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
 pantry:    list_staples, list_due_staples, record_staple_status, upsert_staple, remove_staple
