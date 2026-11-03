@@ -129,6 +129,19 @@ describe("Keeping a Suggestion", () => {
     });
   });
 
+  test("is refused on a Suggestion with a Recipe that nobody is eating any more", async () => {
+    const household = await setUpHousehold();
+    await propose(household);
+    // Saying who eats it leaves it a Suggestion, with its Recipe.
+    const nobody = succeeded<Slot[]>(await household.callTool("set_diners", { ...dinner(WEDNESDAY), diners: [] }))[0];
+    expect(nobody).toMatchObject({ kind: "recipe", diners: [], guests: 0, reason: { kind: "chosen" } });
+
+    expect(await household.callTool("keep_slot", dinner(WEDNESDAY))).toMatchObject({
+      ok: false,
+      error: { code: "nothing_to_keep", message: expect.stringContaining("Nobody is eating") },
+    });
+  });
+
   test("is refused on a dinner no Recipe fit", async () => {
     const household = await setUpHousehold();
     // Only Satay is a main dish, and Robin can't eat it.

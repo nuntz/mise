@@ -1387,6 +1387,32 @@ test("a Re-roll that changed nothing says so, and one that changed a dinner says
   await vi.waitFor(() => expect(screen.queryByText(/Nothing to re-roll/)).toBeNull());
 });
 
+test("a Re-roll that changed nothing names a Recurring Recipe's night as “Let Mise choose” does", async () => {
+  const week = proposedWeek();
+  const tacos = { id: 3, title: "Tacos", baseServings: 4, photoKey: null };
+  Object.assign(week.slots[8] as Slot, {
+    kind: "recipe",
+    recipe: tacos,
+    reason: { kind: "recurring", recurrence: { weekday: "wednesday" } },
+  });
+  const { client } = fakeClient({
+    get_week: () => ({ ok: true, value: week }),
+    propose_week: () => ({ ok: true, value: { week, changed: false } }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(screen.getByRole("button", { name: "Re-roll" }));
+
+  expect(
+    await screen.findByText(
+      "Nothing to re-roll: every dinner is yours, or has only one Recipe that fits. " +
+        "Wednesday is a recurring Tacos night: change the rule to change it.",
+    ),
+  ).toBeTruthy();
+});
+
 test("saving a Use it up that changed no dinner says nothing that fits uses its Items better", async () => {
   const { client } = fakeClient({
     get_week: () => ({ ok: true, value: proposedWeek() }),
@@ -1559,6 +1585,34 @@ test("the Slot sheet offers Keep under the same rule, and keeps what was typed",
     expect(writes(calls)).toEqual([{ name: "keep_slot", input: { date: "2026-10-26", meal: "dinner" } }]),
   );
   expect((within(monday).getByRole("textbox", { name: "Note" }) as HTMLInputElement).value).toBe("Make it spicy");
+});
+
+test("keeping a dinner in the Slot sheet offers “Let Mise choose” there at once", async () => {
+  let kept = false;
+  const fake = fakeClient({
+    get_week: () => {
+      const week = suggestionsWeek();
+      if (kept) (week.slots[2] as Slot).reason = null;
+      return { ok: true, value: week };
+    },
+    keep_slot: () => {
+      kept = true;
+      queueMicrotask(() => fake.notify("plan"));
+      return undefined;
+    },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={fake.client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(dinnerOn("Monday, October 26")).getByRole("button", { name: "Curry" }));
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit dinner" }));
+  const monday = within(dinnerOn("Monday, October 26")).getByRole("form", { name: "Dinner" });
+  expect(within(monday).queryByRole("button", { name: "Let Mise choose" })).toBeNull();
+  await user.click(within(monday).getByRole("button", { name: "Keep" }));
+
+  expect(await within(monday).findByRole("button", { name: "Let Mise choose" })).toBeTruthy();
+  expect(within(monday).queryByRole("button", { name: "Keep" })).toBeNull();
 });
 
 test("Effort Budgets are set for this Week, or for every Week", async () => {

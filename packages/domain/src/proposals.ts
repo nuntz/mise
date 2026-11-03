@@ -58,7 +58,6 @@ export type Exclusions = z.infer<typeof Exclusions>;
  */
 export const ProposalReason = z.discriminatedUnion("kind", [
   /** Nobody is eating it, so nothing was planned. */
-
   z.object({ kind: z.literal("nobody_eating") }),
   /** A Recurring Recipe, pinned before anything was chosen. */
   z.object({ kind: z.literal("recurring"), recurrence: Recurrence }),

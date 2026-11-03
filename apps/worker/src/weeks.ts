@@ -3,6 +3,9 @@ import {
   Conflict,
   Constraint,
   currentWeek,
+  isEaten,
+  isKeepable,
+  isSuggestion,
   type LocalDate,
   localDate,
   MEALS,
@@ -141,9 +144,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const refused = editSlot(sql, settings, input, input.overrides, () => {
       // Choosing what it holds by hand makes it the Household's own. A note, Diners or Guests changed
       // on a Suggestion leave it Mise's to change (ADR 0030).
-      if (before.kind !== input.kind || (before.recipe?.id ?? null) !== recipeId) {
-        sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
-      }
+      if (before.kind !== input.kind || (before.recipe?.id ?? null) !== recipeId) makeOwn(sql, input);
       sql.exec(
         "UPDATE slot SET kind = ?, recipe_id = ? WHERE date = ? AND meal = ?",
         input.kind,
@@ -237,10 +238,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     }
     if (ofRecipe && isDraft(sql, ofRecipe.id)) return draftRefused(ofRecipe.id);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
-      // Linked by hand now, so no longer for the reason a Proposal gave; and what they are of is the
-      // Household's own, so that no Proposal changes it (ADR 0030).
-      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
-      if (of) sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", of.date, of.meal);
+      ownLinkedByHand(sql, input, of ?? null);
       sql.exec(
         `UPDATE slot SET kind = 'leftovers', recipe_id = NULL, leftovers_of_date = ?, leftovers_of_meal = ?
          WHERE date = ? AND meal = ?`,
@@ -288,7 +286,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const span = weekNamedBy(settings, input.date);
     const changed = proposeAgain(sql, settings, span, input.reroll);
     // A Re-roll that changes nothing leaves the Week exactly as it was.
-    if (changed || !input.reroll) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    if (changed || !input.reroll) markNotReviewed(sql, span);
     return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
@@ -308,24 +306,19 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const proposed = (readWeekRecords(sql, span.startDate)[0]?.proposalSeed ?? null) !== null;
     // When no dinner changes, the reasons still say what it uses up, but the Week stays reviewed.
     const changed = proposed && proposeAgain(sql, settings, span, false);
-    if (changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    if (changed) markNotReviewed(sql, span);
     return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
   propose_dinner: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
-    if (readSlot(sql, input.date, "dinner").cookedAt !== null) {
-      return {
-        ok: false,
-        error: { code: "already_cooked", message: `${input.date} dinner is cooked, so Mise can't choose it again` },
-      };
-    }
+    if (readSlot(sql, input.date, "dinner").cookedAt !== null) return alreadyCooked(input.date);
     const span = weekOf(input.date, settings);
     const proposal = proposeDinner(readProposerInput(sql, span), input.date);
     storeProposal(sql, settings, span, proposal);
     // It is proposed from the Week's seed and choice, so they stay; only a change needs looking over.
-    if (proposal.changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    if (proposal.changed) markNotReviewed(sql, span);
     return { ok: true, value: { week: readWeek(sql, span), changed: proposal.changed } };
   },
 
@@ -370,7 +363,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     }
     if (input.cooked) {
       // What was eaten is the Household's own, and stays so when unmarked (ADR 0030).
-      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+      makeOwn(sql, input);
       // Marking it again keeps when it was first marked.
       sql.exec(
         "UPDATE slot SET cooked_at = coalesce(cooked_at, ?) WHERE date = ? AND meal = ?",
@@ -387,19 +380,9 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
   keep_slot: (sql, input) => {
     if (!readSettings(sql)) return notSetUp();
     const slot = readSlot(sql, input.date, input.meal);
-    // An unplanned Suggestion ("nobody's eating", "no Recipe fit") is filled by the next Proposal
-    // anyway, so there is nothing to keep (ADR 0030).
-    if (slot.kind !== "recipe" && slot.kind !== "leftovers") {
-      return nothingToKeep(`${input.date} ${input.meal} has no Recipe or Leftovers to keep`);
-    }
-    if (slot.reason === null) {
-      return nothingToKeep(`${input.date} ${input.meal} is already the Household's own: no Proposal changes it`);
-    }
-    sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+    if (!isKeepable(slot)) return nothingToKeep(slot);
     // Leftovers kept are linked by hand, so a Re-roll can't change what they are of either.
-    if (slot.leftoversOf) {
-      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", slot.leftoversOf.date, slot.leftoversOf.meal);
-    }
+    ownLinkedByHand(sql, input, slot.leftoversOf);
     return { ok: true, value: readSlot(sql, input.date, input.meal) };
   },
 
@@ -481,7 +464,7 @@ function readProposerInput(sql: SqlStorage, span: WeekSpan): ProposerInput {
           cooked: slot.cookedAt !== null,
           ...people(slot),
           leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
-          suggestion: slot.reason !== null,
+          suggestion: isSuggestion(slot),
           leftoversLinkedByHand: linkedByHand.map(people),
         };
       }),
@@ -549,8 +532,49 @@ function storeProposal(
   );
 }
 
-function nothingToKeep(message: string): ToolResult<never> {
+/**
+ * Makes the Slot the Household's own: its reason goes, so it is no Suggestion and no Proposal changes it
+ * (ADR 0030).
+ */
+function makeOwn(sql: SqlStorage, { date, meal }: SlotKey): void {
+  sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", date, meal);
+}
+
+/**
+ * Makes Leftovers linked by hand the Household's own, and the dinner they are of too (if any), so that no
+ * Proposal changes what they are of (ADR 0030). For a Slot that isn't Leftovers, `of` is null.
+ */
+function ownLinkedByHand(sql: SqlStorage, leftovers: SlotKey, of: SlotKey | null): void {
+  makeOwn(sql, leftovers);
+  if (of) makeOwn(sql, of);
+}
+
+/** The Week needs looking over again: a Proposal changed it. */
+function markNotReviewed(sql: SqlStorage, span: WeekSpan): void {
+  sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+}
+
+/** Why Keep can do nothing for the Slot: see `isKeepable`. */
+function nothingToKeep(slot: Slot): ToolResult<never> {
+  const where = `${slot.date} ${slot.meal}`;
+  // An unplanned Suggestion ("nobody's eating", "no Recipe fit") is filled by the next Proposal
+  // anyway, so there is nothing to keep (ADR 0030).
+  const message =
+    slot.kind !== "recipe" && slot.kind !== "leftovers"
+      ? `${where} has no Recipe or Leftovers to keep`
+      : !isSuggestion(slot)
+        ? `${where} is already the Household's own: no Proposal changes it`
+        : !isEaten(slot)
+          ? `Nobody is eating ${where}, so there is nothing to keep`
+          : `${where} is cooked: it is already the Household's own`;
   return { ok: false, error: { code: "nothing_to_keep", message } };
+}
+
+function alreadyCooked(date: LocalDate): ToolResult<never> {
+  return {
+    ok: false,
+    error: { code: "already_cooked", message: `${date} dinner is cooked, so Mise can't choose it again` },
+  };
 }
 
 /** Leftovers the latest Proposal placed and nobody has kept or linked by hand since. */

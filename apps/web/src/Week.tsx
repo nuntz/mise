@@ -1,8 +1,10 @@
 import {
   addDays,
   type Conflict,
+  canHandBack,
   type Item,
   type ItemId,
+  isKeepable,
   type LocalDate,
   type Locale,
   localDate,
@@ -44,6 +46,7 @@ import {
   type WeekHousehold as Household,
   ProposalControls,
   reasonText,
+  recurringNightText,
   whoName,
 } from "./Proposal";
 import { RecipeSheet } from "./RecipeSheet";
@@ -208,6 +211,7 @@ export function WeekPage(props: {
                 client={props.client}
                 week={shown()}
                 items={items()}
+                locale={props.household.locale}
                 online={props.online}
                 onGrocery={() => props.onGrocery()}
               />
@@ -594,7 +598,7 @@ function SlotView(props: {
           <div class="slot-reason">
             <p class="meta">{reasonText(reason(), props.household, props.items)}</p>
             {/* While its form is open, the form's Keep is the one. */}
-            <Show when={!props.readOnly && !props.editing && keepable(props.slot)}>
+            <Show when={!props.readOnly && !props.editing && isKeepable(props.slot)}>
               <KeepButton client={props.client} slot={props.slot} />
             </Show>
           </div>
@@ -655,19 +659,6 @@ function SlotView(props: {
         />
       </Show>
     </section>
-  );
-}
-
-/**
- * Whether Keep can do something for the Slot: a Suggestion with a Recipe or Leftovers that is still to
- * eat, by someone. An unplanned one is filled by the next Proposal anyway (ADR 0030).
- */
-function keepable(slot: Slot): boolean {
-  return (
-    slot.reason !== null &&
-    (slot.kind === "recipe" || slot.kind === "leftovers") &&
-    slot.cookedAt === null &&
-    slot.diners.length + slot.guests > 0
   );
 }
 
@@ -1031,8 +1022,6 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
     props.onDone();
   };
 
-  // The Household's own dinner, not cooked, can be handed back to Mise ("Let Mise choose").
-  const canHandBack = slot.meal === "dinner" && slot.reason === null && slot.cookedAt === null;
   const [unchanged, setUnchanged] = createSignal<string>();
   const handBack = async () => {
     setBusy(true);
@@ -1043,18 +1032,8 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
       if (!result.ok) return setError(errorText(result.error, "slot"));
       const dinner = result.value.week.slots.find((other) => other.date === slot.date && other.meal === "dinner");
       // A Recurring Recipe's night comes back as it was: its rule, not Mise, decides it.
-      const reason = dinner?.reason;
-      if (!result.value.changed && reason?.kind === "recurring" && dinner?.recipe) {
-        const title = dinner.recipe.title;
-        return setUnchanged(
-          reason.recurrence === "weekly"
-            ? t("slot.recurringWeekly", { title })
-            : t("slot.recurringNight", {
-                day: formatDate(slot.date, props.household.locale, { weekday: "long" }),
-                title,
-              }),
-        );
-      }
+      const recurring = !result.value.changed && dinner && recurringNightText(dinner, props.household.locale);
+      if (recurring) return setUnchanged(recurring);
       props.onDone();
     } catch {
       setBusy(false);
@@ -1132,12 +1111,13 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         <ConstraintFields constraints={guestConstraints()} onChange={changing(setGuestConstraints)} />
       </fieldset>
       {/* The Slot as the Week now has it: once kept, it has nothing left to keep. What's typed stays. */}
-      <Show when={keepable(props.slot)}>
+      <Show when={isKeepable(props.slot)}>
         <div class="slot-actions">
           <KeepButton client={props.client} slot={props.slot} />
         </div>
       </Show>
-      <Show when={canHandBack}>
+      {/* So is "Let Mise choose": once kept, the dinner can be handed back. */}
+      <Show when={canHandBack(props.slot)}>
         <button type="button" class="button-row" disabled={busy() || unchanged() !== undefined} onClick={handBack}>
           {t("slot.letMiseChoose")}
         </button>

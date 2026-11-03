@@ -4,6 +4,8 @@ import {
   type Household,
   type Item,
   type ItemId,
+  isRerollable,
+  type Locale,
   type ProposalReason,
   type ProposedWeek,
   type ReasonFactor,
@@ -16,6 +18,7 @@ import {
 } from "@mise/domain";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
+import { formatDate } from "./dates";
 import { errorText } from "./errors";
 import { Icon } from "./icons";
 import { itemNamed } from "./items";
@@ -35,6 +38,7 @@ export function ProposalControls(props: {
   client: MiseClient;
   week: Week;
   items: Map<ItemId, Item>;
+  locale: Locale;
   online: boolean;
   onGrocery: () => void;
 }) {
@@ -65,7 +69,14 @@ export function ProposalControls(props: {
   const reroll = () =>
     run(
       () => props.client.call("propose_week", { date: date(), reroll: true }),
-      ({ changed }) => (changed ? undefined : t("week.nothingToReroll")),
+      ({ week, changed }) =>
+        changed
+          ? undefined
+          : // A Recurring Recipe's night stays as its rule has it, as "Let Mise choose" says too.
+            [
+              t("week.nothingToReroll"),
+              ...week.slots.flatMap((slot) => recurringNightText(slot, props.locale) ?? []),
+            ].join(" "),
     );
   const setUseUp = (items: ItemId[]) => props.client.call("set_use_up", { date: date(), items });
   const changeUseUp = (items: ItemId[]) =>
@@ -84,7 +95,7 @@ export function ProposalControls(props: {
   const nameOf = (id: ItemId) => props.items.get(id)?.name ?? id;
   const disabled = () => busy() || !props.online;
   // Re-roll is offered only when it can change a dinner, and says so under it when it can't.
-  const canReroll = () => props.week.slots.some((slot) => slot.meal === "dinner" && rerollable(slot));
+  const canReroll = () => props.week.slots.some((slot) => slot.meal === "dinner" && isRerollable(slot));
   const titleId = createUniqueId();
   // Proposing needs the connection, and offline says so under the control.
   const reasonId = createUniqueId();
@@ -220,15 +231,15 @@ export function ProposalControls(props: {
 }
 
 /**
- * Whether a Re-roll can change the dinner (ADR 0030): a Suggestion, or an unplanned dinner, that someone
- * is eating, or a planned Suggestion nobody is, which it leaves unplanned. The Household's own planned
- * dinners stay as they are, and so does an unplanned one nobody is eating. One where no Recipe fit counts
- * as unplanned: a Recipe added since may fit it.
+ * What to say of a dinner Mise gave a Recurring Recipe, when a Proposal couldn't change it: its rule, not
+ * Mise, decides it. Nothing for any other dinner.
  */
-function rerollable(slot: Slot): boolean {
-  if (slot.cookedAt !== null) return false;
-  if (slot.diners.length + slot.guests === 0) return slot.reason !== null && slot.kind !== "unplanned";
-  return slot.reason !== null || slot.kind === "unplanned";
+export function recurringNightText(slot: Slot, locale: Locale): string | undefined {
+  const { reason, recipe } = slot;
+  if (slot.meal !== "dinner" || reason?.kind !== "recurring" || !recipe) return undefined;
+  return reason.recurrence === "weekly"
+    ? t("slot.recurringWeekly", { title: recipe.title })
+    : t("slot.recurringNight", { day: formatDate(slot.date, locale, { weekday: "long" }), title: recipe.title });
 }
 
 /** Items on hand to use up, picked by name or alias from the Item catalogue. */
@@ -395,7 +406,6 @@ export function whoName(who: ConflictWho, household: Pick<Household, "members">)
 }
 
 /** Why Mise chose a Suggestion as it did, as a sentence. */
-
 export function reasonText(
   reason: ProposalReason,
   household: Pick<Household, "members" | "locale">,

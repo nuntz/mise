@@ -4,7 +4,7 @@ import type { ItemId } from "./items";
 import type { Allergen, Constraint, Member } from "./members";
 import type { Exclusions, ProposalChoice, ProposalReason, Rating, ReasonFactor } from "./proposals";
 import type { Recipe, RecipeId } from "./recipes";
-import { type LocalDate, type SlotKind, weekdayOf } from "./weeks";
+import { isEaten, type LocalDate, type SlotKind, weekdayOf } from "./weeks";
 
 /** Who eats a Slot, as far as Hard Constraints go. */
 export type ProposerPeople = {
@@ -383,7 +383,7 @@ function changesDinners(proposed: ProposedDinner[], dinners: ProposerDinner[]): 
 function settled(dinner: ProposerDinner): ProposedDinner | undefined {
   const own = !dinner.suggestion && dinner.kind !== "unplanned";
   if (dinner.cooked || own) return asItIs(dinner);
-  if (dinner.diners.length + dinner.guests === 0) {
+  if (!isEaten(dinner)) {
     return {
       date: dinner.date,
       kind: "unplanned",
