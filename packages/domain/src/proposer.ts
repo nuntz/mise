@@ -28,10 +28,11 @@ export type ProposerDinner = ProposerPeople & {
    */
   suggestion: boolean;
   /**
-   * Leftovers are linked to it by hand at any meal: it gets no more Leftovers, and none are placed in
-   * it.
+   * Who eats each of its Leftovers linked by hand, at any meal; none when it has none. They eat what it
+   * is cooked, so they count as eating it. A dinner with any gets no more Leftovers, and none are placed
+   * in it.
    */
-  leftoversLinkedByHand: boolean;
+  leftoversLinkedByHand: ProposerPeople[];
 };
 
 /** What the Proposer weighs of a Recipe, with its Ratings, oldest first. */
@@ -76,8 +77,12 @@ export type ProposedDinner = {
   reason: ProposalReason | null;
 };
 
-/** The seed and choice it was made with: given them again, with the same input, it comes out the same. */
-export type Proposal = { seed: number; choice: ProposalChoice; dinners: ProposedDinner[] };
+/**
+ * The seed and choice it was made with: given them again, with the same input, it comes out the same.
+ * `changed` says whether any dinner's kind, Recipe or Leftovers link differs from the dinners it was
+ * given; a reason alone is no change.
+ */
+export type Proposal = { seed: number; choice: ProposalChoice; dinners: ProposedDinner[]; changed: boolean };
 
 /** How far either side of a dinner, in days, a Recipe planned still weighs on what is proposed for it. */
 export const PLANNED_WEIGHS_FOR_DAYS = 42;
@@ -109,9 +114,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Proposes the Week's dinners. Cooked dinners and the Household's own are settled: left as they are,
  * with no reason written, and counted for recency. Recurring Recipes are pinned first.
- * Every Suggestion and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it
- * rules out (unknown Allergens fail closed), not rated "never", not planned within 2 weeks of it and
- * within the day's Effort Budget (an unknown effort passes). Leftovers are still placed after a settled
+ * Every Suggestion and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it, its
+ * Leftovers linked by hand included, rules out (unknown Allergens fail closed), not rated "never", not
+ * planned within 2 weeks of it and within the day's Effort Budget (an unknown effort passes). Leftovers are still placed after a settled
  * dinner not yet cooked. Every Recipe a dinner gets, Recurring, Leftovers or not, is a main dish or of
  * unknown Course (ADR 0022), and no Draft.
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
@@ -119,16 +124,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * A dinner whose Recipe yields Leftovers, and has none linked by hand, gets them in the next dinner
  * within two days that is still to fill, has no Leftovers linked by hand itself and is eaten by the
  * same Diners, if its Recipe is safe for them. A dinner with Leftovers linked by hand is the
- * Household's own (ADR 0030), so no Proposal changes what they are of.
+ * Household's own (ADR 0030) until it is handed back to Mise, so what they are of changes only then.
  * The same input, seed and choice always give the same Proposal.
  */
 export function proposeWeek(input: ProposerInput): Proposal {
   const choice = input.choice ?? "best";
   return propose(input, choice === "best" ? CHOICE_WINDOW : Number.POSITIVE_INFINITY, choice);
 }
-
-/** A re-roll, and whether it changed any dinner's kind, Recipe or Leftovers link (a reason alone is no change). */
-export type Reroll = Proposal & { changed: boolean };
 
 /**
  * Proposes the Week again with a new seed: the next after `input.seed` whose Proposal differs from
@@ -137,25 +139,14 @@ export type Reroll = Proposal & { changed: boolean };
  * `proposeWeek`. When no seed changes a dinner, it is not `changed`: every dinner is left as it is,
  * with no reason written, and the seed and choice stay `input`'s, so the Week can be left untouched.
  */
-export function rerollWeek(input: ProposerInput): Reroll {
+export function rerollWeek(input: ProposerInput): Proposal {
   for (const choice of ["best", "any"] as const) {
     for (let tries = 1; tries <= REROLL_TRIES; tries++) {
       const proposal = proposeWeek({ ...input, seed: input.seed + tries, choice });
-      if (changesDinners(proposal, input.dinners)) return { ...proposal, changed: true };
+      if (proposal.changed) return proposal;
     }
   }
-  return {
-    seed: input.seed,
-    choice: input.choice ?? "best",
-    dinners: input.dinners.map(({ date, kind, recipeId, leftoversOf }) => ({
-      date,
-      kind,
-      recipeId,
-      leftoversOf,
-      reason: null,
-    })),
-    changed: false,
-  };
+  return { seed: input.seed, choice: input.choice ?? "best", dinners: input.dinners.map(asItIs), changed: false };
 }
 
 /** Proposes the Week, choosing for each dinner among the candidates scoring less than `window` below the best. */
@@ -181,11 +172,8 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
     placeLeftovers(input, index, proposed, recipes);
   });
 
-  return { seed: input.seed, choice, dinners: proposed as ProposedDinner[] };
+  return proposal(input, choice, proposed as ProposedDinner[]);
 }
-
-/** A Proposal for one dinner, and whether any dinner's kind, Recipe or Leftovers link differs from the Week as it was. */
-export type DinnerProposal = Proposal & { changed: boolean };
 
 /**
  * Proposes one dinner of the Week again, handed back to Mise ("Let Mise choose"), from the Week's seed
@@ -196,7 +184,7 @@ export type DinnerProposal = Proposal & { changed: boolean };
  * still unplanned, as `proposeWeek` places them. A cooked dinner is left as it is.
  * The same input and date always give the same Proposal.
  */
-export function proposeDinner(given: ProposerInput, date: LocalDate): DinnerProposal {
+export function proposeDinner(given: ProposerInput, date: LocalDate): Proposal {
   const choice = given.choice ?? "best";
   const window = choice === "best" ? CHOICE_WINDOW : Number.POSITIVE_INFINITY;
   const input = { ...given, recipes: given.recipes.filter((recipe) => !recipe.draft) };
@@ -204,13 +192,6 @@ export function proposeDinner(given: ProposerInput, date: LocalDate): DinnerProp
   const recipes = new Map(input.recipes.map((recipe) => [recipe.id, recipe]));
   const target = input.dinners.findIndex((dinner) => dinner.date === date);
   const dinner = input.dinners[target];
-  const asItIs = (other: ProposerDinner): ProposedDinner => ({
-    date: other.date,
-    kind: other.kind,
-    recipeId: other.recipeId,
-    leftoversOf: other.leftoversOf,
-    reason: null,
-  });
   /** Leftovers of this dinner the last Proposal placed, which go with it. */
   const itsLeftovers = (other: ProposerDinner) =>
     other.suggestion && other.kind === "leftovers" && other.leftoversOf === date;
@@ -237,9 +218,12 @@ export function proposeDinner(given: ProposerInput, date: LocalDate): DinnerProp
     });
   }
   const dinners = proposed.map((other, index) => other ?? asItIs(input.dinners[index] as ProposerDinner));
+  return proposal(input, choice, dinners);
+}
 
-  const proposal = { seed: input.seed, choice, dinners };
-  return { ...proposal, changed: changesDinners(proposal, input.dinners) };
+/** The Proposal of `dinners`, made from `input` with its seed and `choice`. */
+function proposal(input: ProposerInput, choice: ProposalChoice, dinners: ProposedDinner[]): Proposal {
+  return { seed: input.seed, choice, dinners, changed: changesDinners(dinners, input.dinners) };
 }
 
 /**
@@ -265,7 +249,7 @@ function pinRecurring(
     const fits = input.dinners.flatMap((dinner, index) =>
       open(index) &&
       canFillDinner(recipe) &&
-      isSafe(recipe, dinner) &&
+      isSafe(recipe, eating(dinner)) &&
       (recurrence === "weekly" || weekdayOf(dinner.date) === recurrence.weekday)
         ? [index]
         : [],
@@ -297,17 +281,19 @@ function chosen(
   avoid: RecipeId | null = null,
 ): ProposedDinner {
   const dinner = input.dinners[index] as ProposerDinner;
+  const people = eating(dinner);
   const budget = budgetOf(input, index);
   const excluded: Exclusions = { conflict: 0, never: 0, course: 0, recent: 0, effort: 0 };
   const candidates: { recipe: ProposerRecipe; score: number; factors: ReasonFactor[] }[] = [];
   for (const recipe of input.recipes) {
     const daysApart = closestPlanned(recipe.id, dinner.date, nearby);
-    if (!isSafe(recipe, dinner)) excluded.conflict++;
+    if (!isSafe(recipe, people)) excluded.conflict++;
     else if (recipe.ratings.includes("never")) excluded.never++;
     else if (!canFillDinner(recipe)) excluded.course++;
     else if (daysApart !== null && daysApart < EXCLUDED_WITHIN_DAYS) excluded.recent++;
     else if (!isWithinBudget(recipe, budget)) excluded.effort++;
-    else candidates.push({ recipe, ...scored(recipe, dinner, daysApart, budget, nearby, recipes, input.useUp) });
+    else
+      candidates.push({ recipe, ...scored(recipe, dinner, people, daysApart, budget, nearby, recipes, input.useUp) });
   }
   candidates.sort((a, b) => b.score - a.score || a.recipe.id - b.recipe.id);
   const others = candidates.filter((candidate) => candidate.recipe.id !== avoid);
@@ -347,7 +333,7 @@ function placeLeftovers(
   const recipeId = proposed[index]?.recipeId;
   const recipe = recipeId == null ? undefined : recipes.get(recipeId);
   // What a dinner already cooked was cooked for is history.
-  if (!recipe?.yieldsLeftovers || source.cooked || source.leftoversLinkedByHand) return;
+  if (!recipe?.yieldsLeftovers || source.cooked || source.leftoversLinkedByHand.length > 0) return;
   // A dessert chosen by hand is no dinner the day after.
   if (!canFillDinner(recipe)) return;
   const diners = dinersKey(source);
@@ -356,7 +342,7 @@ function placeLeftovers(
       other > index &&
       proposed[other] === undefined &&
       // A dinner cooked for Leftovers linked by hand must keep a Recipe of its own.
-      !dinner.leftoversLinkedByHand &&
+      dinner.leftoversLinkedByHand.length === 0 &&
       daysBetween(source.date, dinner.date) <= LEFTOVERS_WITHIN_DAYS &&
       dinersKey(dinner) === diners &&
       isSafe(recipe, dinner),
@@ -380,12 +366,9 @@ function dinersKey(dinner: ProposerDinner): string {
     .join();
 }
 
-/** Whether the Proposal changes any dinner's kind, Recipe or Leftovers link; a reason alone is no change. */
-export function changesDinners(
-  proposal: Proposal,
-  dinners: Pick<ProposerDinner, "kind" | "recipeId" | "leftoversOf">[],
-): boolean {
-  return proposal.dinners.some(
+/** Whether any dinner proposed differs from the one it was in kind, Recipe or Leftovers link; a reason alone is no change. */
+function changesDinners(proposed: ProposedDinner[], dinners: ProposerDinner[]): boolean {
+  return proposed.some(
     (dinner, index) =>
       dinner.kind !== dinners[index]?.kind ||
       dinner.recipeId !== dinners[index]?.recipeId ||
@@ -399,15 +382,7 @@ export function changesDinners(
  */
 function settled(dinner: ProposerDinner): ProposedDinner | undefined {
   const own = !dinner.suggestion && dinner.kind !== "unplanned";
-  if (dinner.cooked || own) {
-    return {
-      date: dinner.date,
-      kind: dinner.kind,
-      recipeId: dinner.recipeId,
-      leftoversOf: dinner.leftoversOf,
-      reason: null,
-    };
-  }
+  if (dinner.cooked || own) return asItIs(dinner);
   if (dinner.diners.length + dinner.guests === 0) {
     return {
       date: dinner.date,
@@ -418,6 +393,27 @@ function settled(dinner: ProposerDinner): ProposedDinner | undefined {
     };
   }
   return undefined;
+}
+
+/** The dinner left as it is, with no reason written, so its reason (or lack of one) stays. */
+function asItIs(dinner: ProposerDinner): ProposedDinner {
+  return {
+    date: dinner.date,
+    kind: dinner.kind,
+    recipeId: dinner.recipeId,
+    leftoversOf: dinner.leftoversOf,
+    reason: null,
+  };
+}
+
+/** Who eats the dinner: its Diners and Guests, and whoever eats its Leftovers linked by hand. */
+function eating(dinner: ProposerDinner): ProposerPeople {
+  const everyone = [dinner, ...dinner.leftoversLinkedByHand];
+  return {
+    diners: [...new Map(everyone.flatMap((them) => them.diners).map((diner) => [diner.id, diner])).values()],
+    guests: everyone.reduce((sum, them) => sum + them.guests, 0),
+    guestConstraints: everyone.flatMap((them) => them.guestConstraints),
+  };
 }
 
 function budgetOf(input: ProposerInput, index: number): number {
@@ -455,6 +451,7 @@ function daysBetween(a: LocalDate, b: LocalDate): number {
 function scored(
   recipe: ProposerRecipe,
   dinner: ProposerDinner,
+  people: ProposerPeople,
   daysApart: number | null,
   budget: number,
   planned: { recipeId: RecipeId; date: LocalDate }[],
@@ -487,7 +484,7 @@ function scored(
     factors.push({ kind: "uses_up", items: usesUp });
   }
 
-  const dislikedBy = whoDislikes(recipe, dinner);
+  const dislikedBy = whoDislikes(recipe, people);
   if (dislikedBy.length > 0) {
     score -= DISLIKE_PENALTY * dislikedBy.length;
     factors.push({ kind: "disliked", by: dislikedBy });
@@ -518,12 +515,12 @@ function sameTag(a: string | null, b: string): boolean {
 }
 
 /**
- * Who eating the dinner has a dislike the Recipe matches: an Allergen it contains (or is known to,
- * when unknown), or a term in its title or an Ingredient line.
+ * Who of `people` has a dislike the Recipe matches: an Allergen it contains (or is known to, when
+ * unknown), or a term in its title or an Ingredient line.
  */
-function whoDislikes(recipe: ProposerRecipe, dinner: ProposerDinner): ConflictWho[] {
-  const eating: [ConflictWho, Constraint[]][] = dinner.diners.map((diner) => [diner.id, diner.constraints]);
-  if (dinner.guests > 0) eating.push(["guests", dinner.guestConstraints]);
+function whoDislikes(recipe: ProposerRecipe, people: ProposerPeople): ConflictWho[] {
+  const eating: [ConflictWho, Constraint[]][] = people.diners.map((diner) => [diner.id, diner.constraints]);
+  if (people.guests > 0) eating.push(["guests", people.guestConstraints]);
   const contained: Allergen[] =
     recipe.allergens.kind === "known" ? recipe.allergens.allergens : recipe.allergens.atLeast;
   const text = [recipe.title, ...recipe.ingredients.map((ingredient) => ingredient.raw)].join("\n").toLowerCase();

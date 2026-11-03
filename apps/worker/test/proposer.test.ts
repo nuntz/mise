@@ -287,30 +287,51 @@ describe("letting Mise choose one dinner", () => {
     expect(week.reviewed).toBe(true);
   });
 
-  test("chooses a Recipe safe for whoever eats the dinner's Leftovers linked by hand", async () => {
+  // Recipes 14 and 15, after the 13 set up.
+  const RICE = 14;
+  /**
+   * Only Alex eats Monday's Rice, but Robin, allergic to peanut, eats its Leftovers on Tuesday, linked
+   * by hand. Monday allows 20 minutes: Rice and Peanut noodles are all that fit.
+   */
+  async function withLeftoversForRobin(): Promise<TestHousehold> {
     const household = await setUpHousehold();
-    const TUESDAY = addDays(MONDAY, 1);
     const quick = { baseServings: 4, effortMinutes: 10 };
-    // Recipes 14 and 15, after the 13 set up.
-    const rice = 14;
     await household.callTool("create_recipe", { title: "Rice", ingredients: ["400 g rice"], ...quick });
     await household.callTool("create_recipe", {
       title: "Peanut noodles",
       ingredients: ["2 tbsp peanut butter"],
       ...quick,
     });
-    // Monday allows 20 minutes: Rice and Peanut noodles are all that fit.
     await household.callTool("set_week_effort_budgets", { date: MONDAY, budgets: { monday: 20 } });
-    // Only Alex eats Monday's Rice, but Robin, allergic to peanut, eats its Leftovers on Tuesday.
-    await household.callTool("set_slot", { date: MONDAY, meal: "dinner", kind: "recipe", recipeId: rice, diners: [2] });
-    await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "leftovers" });
+    await household.callTool("set_slot", { date: MONDAY, meal: "dinner", kind: "recipe", recipeId: RICE, diners: [2] });
+    await household.callTool("set_slot", { date: TUESDAY, meal: "dinner", kind: "leftovers", diners: [1] });
     await household.callTool("link_leftovers", { date: TUESDAY, meal: "dinner", of: { date: MONDAY, meal: "dinner" } });
+    return household;
+  }
+  const TUESDAY = addDays(MONDAY, 1);
+  const leftoversForRobin = { kind: "leftovers", leftoversOf: { date: MONDAY }, diners: [1], conflicts: [] };
+
+  test("chooses a Recipe safe for whoever eats the dinner's Leftovers linked by hand", async () => {
+    const household = await withLeftoversForRobin();
 
     const { week, changed } = proposedOf(await household.callTool("propose_dinner", { date: MONDAY }));
 
     expect(changed).toBe(false);
-    expect(dinners(week)[0]).toMatchObject({ recipe: { id: rice }, reason: { kind: "chosen", candidates: 1 } });
-    expect(dinners(week)[1]).toMatchObject({ kind: "leftovers", leftoversOf: { date: MONDAY }, conflicts: [] });
+    expect(dinners(week)[0]).toMatchObject({ recipe: { id: RICE }, reason: { kind: "chosen", candidates: 1 } });
+    expect(dinners(week)[1]).toMatchObject(leftoversForRobin);
+  });
+
+  test("a dinner handed back stays safe for whoever eats its Leftovers linked by hand through a Re-roll and Use it up", async () => {
+    const household = await withLeftoversForRobin();
+    await household.callTool("propose_dinner", { date: MONDAY });
+
+    const rerolled = await propose(household, { reroll: true });
+    const usingPeanut = proposedOf(await household.callTool("set_use_up", { date: MONDAY, items: ["peanut_butter"] }));
+
+    for (const week of [rerolled, usingPeanut.week]) {
+      expect(dinners(week)[0]).toMatchObject({ recipe: { id: RICE }, reason: { kind: "chosen", candidates: 1 } });
+      expect(dinners(week)[1]).toMatchObject(leftoversForRobin);
+    }
   });
 
   test("refuses a dinner already cooked", async () => {

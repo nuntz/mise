@@ -22,6 +22,8 @@ const robin = { id: 1, constraints: [{ kind: "allergy", allergen: "peanut" }] } 
   "id" | "constraints"
 >;
 const alex = { id: 2, constraints: [] } satisfies Pick<Member, "id" | "constraints">;
+/** Who eats Leftovers only Alex eats. */
+const alexEats = { diners: [alex], guests: 0, guestConstraints: [] };
 
 /** A Recipe of nothing in particular: no Allergens, quick, untagged, never rated. */
 function recipe(id: number, fields: Partial<ProposerRecipe> = {}): ProposerRecipe {
@@ -55,7 +57,7 @@ function dinners(): ProposerDinner[] {
     guestConstraints: [],
     leftoversOf: null,
     suggestion: false,
-    leftoversLinkedByHand: false,
+    leftoversLinkedByHand: [],
   }));
 }
 
@@ -777,7 +779,7 @@ describe("proposeWeek, Leftovers", () => {
 
   test("a dinner with Leftovers linked by hand gets no more Leftovers placed after it", () => {
     const week = dinners();
-    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1, leftoversLinkedByHand: true };
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1, leftoversLinkedByHand: [alexEats] };
     week[2] = { ...(week[2] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY };
 
     const proposal = proposeWeek(input({ dinners: week, recipes: [chili, ...plain] }));
@@ -791,7 +793,7 @@ describe("proposeWeek, Leftovers", () => {
   test("a dinner cooked for Leftovers linked by hand is the Household's own, kept even when no other Recipe fits", () => {
     const mac = recipe(20, { allergens: { kind: "known", allergens: ["milk"] } });
     const week = dinners().slice(0, 2);
-    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 20, leftoversLinkedByHand: true };
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 20, leftoversLinkedByHand: [alexEats] };
     week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY };
     // Nothing is quick enough to be chosen for Monday.
     const effortBudgets = { ...input().effortBudgets, monday: 10 };
@@ -800,6 +802,30 @@ describe("proposeWeek, Leftovers", () => {
       { date: MONDAY, kind: "recipe", recipeId: 20, leftoversOf: null, reason: null },
       { date: addDays(MONDAY, 1), kind: "leftovers", recipeId: null, leftoversOf: MONDAY, reason: null },
     ]);
+  });
+
+  test("whoever eats Leftovers linked by hand to a Suggestion counts as eating it, however it is proposed", () => {
+    const satay = recipe(1, { allergens: { kind: "known", allergens: ["peanut"] } });
+    // Only Alex eats Monday's dinner, handed back to Mise, but Robin, allergic to peanut, eats its
+    // Leftovers on Tuesday.
+    const week = dinners().slice(0, 2);
+    week[0] = {
+      ...(week[0] as ProposerDinner),
+      kind: "recipe",
+      recipeId: 2,
+      diners: [alex],
+      suggestion: true,
+      leftoversLinkedByHand: [{ diners: [robin], guests: 0, guestConstraints: [] }],
+    };
+    week[1] = { ...(week[1] as ProposerDinner), diners: [robin], kind: "leftovers", leftoversOf: MONDAY };
+
+    for (const seed of WEEKS) {
+      const given = input({ dinners: week, recipes: [satay, recipe(2)], seed });
+      for (const proposal of [proposeWeek(given), rerollWeek(given), proposeDinner(given, MONDAY)]) {
+        expect(proposal.dinners[0]).toMatchObject({ recipeId: 2 });
+        expect(proposal.changed).toBe(false);
+      }
+    }
   });
 });
 
