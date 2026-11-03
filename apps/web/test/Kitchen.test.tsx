@@ -108,6 +108,7 @@ function week(): Week {
     effortBudgetOverrides: {},
     proposalSeed: null,
     reviewed: false,
+    useUp: [],
   };
 }
 

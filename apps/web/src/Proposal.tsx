@@ -27,7 +27,7 @@ export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudget
 /**
  * Proposing the Week and re-rolling it, and, while a proposed Week hasn't been looked over, a banner
  * asking for that. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
- * Proposing first offers Use it up; re-rolling sends the Items picked then again.
+ * The Week keeps its Use it up (ADR 0030): proposing first offers it, and under Re-roll it can be changed.
  */
 export function ProposalControls(props: {
   client: MiseClient;
@@ -38,9 +38,7 @@ export function ProposalControls(props: {
 }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
-  // "Use it up" Items aren't stored (ADR 0013): they go with every Proposal asked for from here.
-  const [useUp, setUseUp] = createSignal<ItemId[]>([]);
-  // What the Use it up sheet has picked so far: it becomes `useUp` only on proposing, not on Cancel.
+  // What the Use it up sheet has picked so far: stored only on saving or proposing, not on Cancel.
   const [draft, setDraft] = createSignal<ItemId[]>();
   const proposed = () => props.week.proposalSeed !== null;
   const empty = () =>
@@ -57,15 +55,16 @@ export function ProposalControls(props: {
     setBusy(false);
   };
   const date = () => props.week.startDate;
-  const proposeWeek = (reroll: boolean) =>
-    run(() =>
-      props.client.call("propose_week", {
-        date: date(),
-        ...(reroll ? { reroll } : {}),
-        ...(useUp().length > 0 ? { useUp: useUp() } : {}),
-      }),
-    );
-  const offerUseUp = () => setDraft(useUp());
+  const reroll = () => run(() => props.client.call("propose_week", { date: date(), reroll: true }));
+  const setUseUp = (items: ItemId[]) => props.client.call("set_use_up", { date: date(), items });
+  // Proposing stores the Items first, so that the Proposal favours them.
+  const proposeWith = (items: ItemId[]) =>
+    run(async () => {
+      const stored = await setUseUp(items);
+      return stored.ok ? props.client.call("propose_week", { date: date() }) : stored;
+    });
+  const offerUseUp = () => setDraft(props.week.useUp);
+  const nameOf = (id: ItemId) => props.items.get(id)?.name ?? id;
   const disabled = () => busy() || !props.online;
   const titleId = createUniqueId();
   // Proposing needs the connection, and offline says so under the control.
@@ -124,7 +123,7 @@ export function ProposalControls(props: {
                 class="button-primary"
                 disabled={disabled()}
                 aria-describedby={describedBy()}
-                onClick={() => proposeWeek(true)}
+                onClick={reroll}
               >
                 <Icon name="refresh" />
                 {t("week.reroll")}
@@ -145,7 +144,9 @@ export function ProposalControls(props: {
             aria-describedby={describedBy()}
             onClick={offerUseUp}
           >
-            {t("week.proposeAgain")}
+            {props.week.useUp.length > 0
+              ? t("useUp.change", { items: props.week.useUp.map(nameOf).join(", ") })
+              : t("useUp.none")}
           </button>
         </Show>
         <Show when={props.online && proposed()}>
@@ -169,12 +170,12 @@ export function ProposalControls(props: {
                 class="button-primary"
                 disabled={disabled()}
                 onClick={() => {
-                  setUseUp(picked());
+                  const items = picked();
                   setDraft(undefined);
-                  void proposeWeek(false);
+                  void (proposed() ? run(() => setUseUp(items)) : proposeWith(items));
                 }}
               >
-                {t("week.propose")}
+                {proposed() ? t("useUp.save") : t("week.propose")}
               </button>
               <button type="button" class="button-quiet" onClick={() => setDraft(undefined)}>
                 {t("slot.cancel")}

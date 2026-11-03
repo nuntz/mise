@@ -41,6 +41,7 @@ const SATAY = 1;
 // Monday 26 October 2026 to Sunday 1 November.
 const MONDAY = "2026-10-26";
 const WEDNESDAY = "2026-10-28";
+const FRIDAY = "2026-10-30";
 
 function weekOf(result: ToolResult<unknown>): Week {
   if (!result.ok) throw new Error(`Expected the tool call to succeed: ${result.error.message}`);
@@ -99,14 +100,8 @@ describe("proposing a Week", () => {
     expect(dinners(rerolled)[2]).toMatchObject({ recipe: { id: 2 }, locked: true });
   });
 
-  test("doesn't propose what was planned the Week before, and favours the 'use it up' Items", async () => {
+  test("doesn't propose what was planned the Week before", async () => {
     const household = await setUpHousehold();
-    await household.callTool("create_recipe", {
-      title: "Spinach pie",
-      baseServings: 4,
-      ingredients: ["200 g spinach"],
-      effortMinutes: 30,
-    });
     for (let day = 0; day < 7; day++) {
       await household.callTool("set_slot", {
         date: addDays(MONDAY, day - 7),
@@ -116,16 +111,12 @@ describe("proposing a Week", () => {
       });
     }
 
-    const week = await propose(household, { useUp: ["spinach"] });
+    const week = await propose(household);
 
-    expect(dinners(week)[0]).toMatchObject({
-      recipe: { title: "Spinach pie" },
-      reason: { kind: "chosen", factors: expect.arrayContaining([{ kind: "uses_up", items: ["spinach"] }]) },
-    });
     const planned = dinners(week).map((dinner) => dinner.recipe?.id);
     for (const lastWeek of [2, 3, 4, 5, 6, 7, 8]) expect(planned).not.toContain(lastWeek);
-    // Satay is out, and so are last Week's, so one dinner is left without a Recipe.
-    expect(dinners(week).filter((dinner) => dinner.reason?.kind === "no_candidate")).toHaveLength(1);
+    // Satay is out, and so are last Week's, so two dinners are left without a Recipe.
+    expect(dinners(week).filter((dinner) => dinner.reason?.kind === "no_candidate")).toHaveLength(2);
   });
 
   test("proposes only mains or Recipes of unknown Course, and takes a Course corrected by hand", async () => {
@@ -145,15 +136,6 @@ describe("proposing a Week", () => {
     expect(dinners(after).map((dinner) => dinner.recipe?.id)).toContain(3);
   });
 
-  test("refuses a 'use it up' Item that doesn't exist", async () => {
-    const household = await setUpHousehold();
-
-    expect(await household.callTool("propose_week", { useUp: ["household:99"] })).toMatchObject({
-      ok: false,
-      error: { code: "not_found" },
-    });
-  });
-
   test("changing a proposed Slot's kind by hand drops its reason", async () => {
     const household = await setUpHousehold();
     await propose(household);
@@ -168,7 +150,6 @@ describe("proposing a Week", () => {
 
 describe("the Household's own dinners and Mise's Suggestions", () => {
   const THURSDAY = "2026-10-29";
-  const FRIDAY = "2026-10-30";
 
   test("a Recipe set by hand survives a Re-roll, with no reason", async () => {
     const household = await setUpHousehold();
@@ -259,6 +240,120 @@ describe("reasons stored before ADR 0030", () => {
       dinners(proposed)[5]?.reason,
       dinners(proposed)[6]?.reason,
     ]);
+  });
+});
+
+describe("Use it up", () => {
+  async function withSpinachPie(): Promise<TestHousehold> {
+    const household = await setUpHousehold();
+    await household.callTool("create_recipe", {
+      title: "Spinach pie",
+      baseServings: 4,
+      ingredients: ["200 g spinach"],
+      effortMinutes: 30,
+    });
+    return household;
+  }
+  const usesSpinach = {
+    recipe: { title: "Spinach pie" },
+    reason: { kind: "chosen", factors: expect.arrayContaining([{ kind: "uses_up", items: ["spinach"] }]) },
+  };
+  const usingSpinach = (week: Week) => dinners(week).filter((dinner) => dinner.recipe?.title === "Spinach pie");
+
+  test("on a proposed Week, it proposes again from the same seed, favouring a dinner that uses them", async () => {
+    const household = await withSpinachPie();
+    const before = await propose(household);
+    await household.callTool("set_slot", { date: WEDNESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
+    await household.callTool("set_slot", { date: FRIDAY, meal: "dinner", kind: "eat_out" });
+    await household.callTool("review_week", { date: MONDAY, reviewed: true });
+
+    const week = weekOf(await household.callTool("set_use_up", { date: MONDAY, items: ["spinach"] }));
+
+    expect(week).toMatchObject({ useUp: ["spinach"], proposalSeed: before.proposalSeed, reviewed: false });
+    expect(dinners(week)[0]).toMatchObject(usesSpinach);
+    // The Household's own dinners stay as they are.
+    expect(dinners(week)[2]).toMatchObject({ recipe: { id: 2 }, reason: null });
+    expect(dinners(week)[4]).toMatchObject({ kind: "eat_out", reason: null });
+    expect(weekOf(await household.callTool("get_week", { date: MONDAY }))).toEqual(week);
+  });
+
+  test("a Week no dinner of which changes stays reviewed", async () => {
+    const household = await withSpinachPie();
+    const before = await propose(household);
+    await household.callTool("review_week", { date: MONDAY, reviewed: true });
+
+    // No Recipe uses feta.
+    const week = weekOf(await household.callTool("set_use_up", { date: MONDAY, items: ["feta"] }));
+
+    expect(week).toMatchObject({ useUp: ["feta"], reviewed: true });
+    expect(dinners(week)).toEqual(dinners(before));
+  });
+
+  test("none clears it, and the Week is proposed again without it", async () => {
+    const household = await withSpinachPie();
+    await propose(household);
+    await household.callTool("set_use_up", { date: MONDAY, items: ["spinach"] });
+
+    const week = weekOf(await household.callTool("set_use_up", { date: MONDAY, items: [] }));
+
+    expect(week.useUp).toEqual([]);
+    for (const dinner of dinners(week)) {
+      expect(dinner.reason).not.toMatchObject({ factors: expect.arrayContaining([{ kind: "uses_up" }]) });
+    }
+  });
+
+  test("proposing and re-rolling favour the Use it up stored", async () => {
+    const household = await withSpinachPie();
+    await household.callTool("set_use_up", { date: MONDAY, items: ["spinach"] });
+
+    const proposed = await propose(household);
+    const rerolled = await propose(household, { reroll: true });
+
+    expect(dinners(proposed)[0]).toMatchObject(usesSpinach);
+    expect(rerolled.proposalSeed).not.toBe(proposed.proposalSeed);
+    expect(usingSpinach(rerolled)).toMatchObject([usesSpinach]);
+  });
+
+  test("refuses an Item that doesn't exist", async () => {
+    const household = await setUpHousehold();
+
+    expect(await household.callTool("set_use_up", { date: MONDAY, items: ["household:99"] })).toMatchObject({
+      ok: false,
+      error: { code: "not_found" },
+    });
+    expect(weekOf(await household.callTool("get_week", { date: MONDAY })).useUp).toEqual([]);
+  });
+
+  test("a Household Item deleted is no longer in any Week's Use it up", async () => {
+    const household = await setUpHousehold();
+    const created = (await household.callTool("create_item", {
+      name: "wild garlic",
+      section: "produce",
+      allergens: [],
+      unitFamily: "mass",
+    })) as ToolResult<{ id: string }>;
+    if (!created.ok) throw new Error(created.error.message);
+    const garlic = created.value.id;
+    await household.callTool("set_use_up", { date: MONDAY, items: [garlic, "spinach"] });
+    await household.callTool("set_use_up", { date: addDays(MONDAY, 7), items: [garlic] });
+
+    await runInDurableObject(household, async (_household, state) => {
+      state.storage.sql.exec("DELETE FROM item WHERE id = ?", Number(garlic.slice("household:".length)));
+    });
+
+    expect(weekOf(await household.callTool("get_week", { date: MONDAY })).useUp).toEqual(["spinach"]);
+    expect(weekOf(await household.callTool("get_week", { date: addDays(MONDAY, 7) })).useUp).toEqual([]);
+  });
+
+  test("on a Week not yet proposed, it is only stored, and the next Week starts with none", async () => {
+    const household = await setUpHousehold();
+
+    const week = weekOf(await household.callTool("set_use_up", { date: MONDAY, items: ["spinach", "feta"] }));
+
+    expect(week).toMatchObject({ useUp: ["spinach", "feta"], proposalSeed: null });
+    expect(dinners(week).every((dinner) => dinner.kind === "unplanned")).toBe(true);
+    expect(weekOf(await household.callTool("get_week", { date: WEDNESDAY })).useUp).toEqual(["spinach", "feta"]);
+    expect(weekOf(await household.callTool("get_week", { date: addDays(MONDAY, 7) })).useUp).toEqual([]);
   });
 });
 
