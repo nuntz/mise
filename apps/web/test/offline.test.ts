@@ -89,7 +89,6 @@ function week(startDate: LocalDate, planned: Partial<Slot>[] = []): Week {
           cookFor: 0,
           leftoversOf: null,
           leftovers: [],
-          locked: false,
           conflicts: [],
           reason: null,
           cookedAt: null,

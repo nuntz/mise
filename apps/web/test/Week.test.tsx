@@ -100,7 +100,6 @@ function emptyWeek(startDate: string): Week {
           cookFor: 0,
           leftoversOf: null,
           leftovers: [],
-          locked: false,
           conflicts: [],
           reason: null,
           cookedAt: null,
@@ -164,7 +163,6 @@ function fakeClient(answers: Record<string, Answer> = {}) {
     note: "Use the fresh basil",
     guests: 1,
     servings: 4,
-    locked: true,
   });
   const { client, notify, goOnline, goOffline } = createFakeClient(
     async (name: string, input: Record<string, unknown>) => {
@@ -182,7 +180,6 @@ function fakeClient(answers: Record<string, Answer> = {}) {
           return { ok: true, value: pastaRecipe };
         case "set_slot":
         case "set_guests":
-        case "lock_slot":
           return { ok: true, value: tuesdayDinner };
         case "set_diners":
           return { ok: true, value: [tuesdayDinner] };
@@ -242,7 +239,8 @@ test("the Week opens first: each day's dinner with its photo, breakfast and lunc
   );
   expect(within(dinner).getByText("Serves 4 (Robin, Alex, Sam and 1 Guest); the Recipe makes 4.")).toBeTruthy();
   expect(within(dinner).getByText("Use the fresh basil")).toBeTruthy();
-  expect(within(dinner).getByText("Locked")).toBeTruthy();
+  // Lock is retired (ADR 0030): a dinner is a Suggestion or the Household's own.
+  expect(within(dinner).queryByText("Locked")).toBeNull();
 
   expect(
     within(tuesday).getByRole("button", { name: "Breakfast and lunch not planned" }).getAttribute("aria-expanded"),
@@ -437,7 +435,7 @@ test("a link to next Week, as the weekly proposal's notification gives, opens it
   await screen.findByRole("region", { name: "Monday, October 26" });
 });
 
-test("editing a dinner sends what changed in one change to the Slot, then the Lock", async () => {
+test("editing a dinner sends what changed in one change to the Slot, with no Lock to set", async () => {
   const { client, calls } = fakeClient();
   const user = userEvent.setup();
   render(() => <App client={client} />);
@@ -453,7 +451,7 @@ test("editing a dinner sends what changed in one change to the Slot, then the Lo
   await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
   await user.click(within(form).getByRole("checkbox", { name: "Everyone" }));
   await user.click(within(form).getByRole("checkbox", { name: "Alex" }));
-  await user.click(within(form).getByRole("checkbox", { name: "Locked" }));
+  expect(within(form).queryByRole("checkbox", { name: "Locked" })).toBeNull();
   await user.click(within(form).getByRole("button", { name: "Save" }));
 
   await vi.waitFor(() => expect(within(tuesday).queryByRole("form")).toBeNull());
@@ -469,7 +467,6 @@ test("editing a dinner sends what changed in one change to the Slot, then the Lo
         diners: [1, 3],
       },
     },
-    { name: "lock_slot", input: { date: "2026-10-27", meal: "dinner", locked: false } },
   ]);
 });
 
@@ -577,7 +574,7 @@ test("clearing the Week asks first, in Mise's own sheet", async () => {
   const sheet = screen.getByRole("dialog", { name: "Clear this Week?" });
   expect(
     within(sheet).getByText(
-      "Every Slot of the Week starting Monday, October 26 is emptied for good, Locked ones too; meals already cooked stay.",
+      "Every Slot of the Week starting Monday, October 26 is emptied for good; meals already cooked stay.",
     ),
   ).toBeTruthy();
   await user.click(within(sheet).getByRole("button", { name: "Cancel" }));
@@ -856,6 +853,81 @@ test("offline, proposing says it needs a connection under the control, and its h
     expect(description(control)).toBe("Needs a connection.");
   }
   expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
+});
+
+/** This Week as proposed, with every dinner the Household's own: Pasta, chosen by hand, every day. */
+function ownWeek(): Week {
+  const week = proposedWeek();
+  for (const slot of week.slots.filter((slot) => slot.meal === "dinner")) {
+    Object.assign(slot, {
+      kind: "recipe",
+      recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: "photos/pasta" },
+      reason: null,
+    });
+  }
+  return week;
+}
+
+test("Re-roll is disabled, and says why under it, when every dinner is the Household's own", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: ownWeek() }) });
+  render(() => <App client={client} />);
+
+  const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
+  expect(reroll.disabled).toBe(true);
+  expect(description(reroll)).toBe("Every dinner is yours: Let Mise choose one to re-roll it.");
+  expect(reroll.nextElementSibling?.textContent).toBe("Every dinner is yours: Let Mise choose one to re-roll it.");
+  expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
+});
+
+test("Re-roll is disabled when one dinner has nobody eating and the rest are the Household's own", async () => {
+  const week = ownWeek();
+  Object.assign(week.slots[2] as Slot, {
+    kind: "unplanned",
+    recipe: null,
+    diners: [],
+    dinersAreDefault: false,
+    servings: 0,
+    reason: { kind: "nobody_eating" },
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
+  expect(reroll.disabled).toBe(true);
+  expect(description(reroll)).toBe("Every dinner is yours: Let Mise choose one to re-roll it.");
+});
+
+test.each<[string, Partial<Slot>]>([
+  ["is unplanned", { kind: "unplanned", recipe: null }],
+  [
+    "had no Recipe that fit",
+    {
+      kind: "unplanned",
+      recipe: null,
+      reason: { kind: "no_candidate", excluded: { conflict: 1, never: 0, course: 0, recent: 0, effort: 0 } },
+    },
+  ],
+  ["is a Suggestion", { reason: { kind: "chosen", candidates: 3, factors: [] } }],
+  // A Re-roll leaves it unplanned.
+  [
+    "is a Suggestion nobody is eating any more",
+    { reason: { kind: "chosen", candidates: 3, factors: [] }, diners: [], dinersAreDefault: false, servings: 0 },
+  ],
+])("Re-roll is enabled when one dinner %s and the rest are the Household's own", async (_, tuesday) => {
+  const week = ownWeek();
+  Object.assign(week.slots[5] as Slot, tuesday);
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+
+  const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
+  expect(reroll.disabled).toBe(false);
+  expect(reroll.getAttribute("aria-describedby")).toBeNull();
+  expect(screen.queryByText(/Every dinner is yours/)).toBeNull();
+  await user.click(reroll);
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26", reroll: true } }]),
+  );
 });
 
 test("offline, an empty Week's Propose says it needs a connection", async () => {
@@ -1597,7 +1669,6 @@ test("in the pseudo-locale, a Leftovers, Eat out or Skip dinner's action doesn't
 test("Clear shows when a Week's only changes are on unplanned Slots, or Leftovers linked to one", async () => {
   for (const change of [
     { note: "Picnic" },
-    { locked: true },
     { diners: [1], dinersAreDefault: false, servings: 1 },
     { leftovers: [{ date: "2026-11-02", meal: "lunch" }] },
   ]) {

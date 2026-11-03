@@ -17,7 +17,6 @@ function dinner(date: string, title: string, fields: Partial<Slot> = {}): Slot {
     cookFor: 1,
     leftoversOf: null,
     leftovers: [],
-    locked: false,
     conflicts: [],
     reason: null,
     cookedAt: null,

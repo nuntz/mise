@@ -701,8 +701,7 @@ const en = {
   "week.next": "Next Week",
   "week.clear": "Clear this Week",
   "week.clearTitle": "Clear this Week?",
-  "week.clearLost":
-    "Every Slot of the Week starting {date} is emptied for good, Locked ones too; meals already cooked stay.",
+  "week.clearLost": "Every Slot of the Week starting {date} is emptied for good; meals already cooked stay.",
   "week.dayDiners": "Who's eating today",
   "week.eatingNone": "Nobody eating",
   "week.eatingOne": "1 eating",
@@ -711,6 +710,7 @@ const en = {
   "week.reroll": "Re-roll",
   "week.proposeHint": "Re-roll changes Mise's suggestions. Yours stay.",
   "week.nothingToReroll": "Nothing to re-roll: every dinner is yours, or has only one Recipe that fits.",
+  "week.rerollAllYours": "Every dinner is yours: Let Mise choose one to re-roll it.",
   "week.unreviewed": "This Week was proposed and hasn't been reviewed yet.",
   "week.markReviewed": "Mark as reviewed",
   "week.overline": "Mise · This week",
@@ -747,8 +747,6 @@ const en = {
     "The most minutes of cooking for each day's dinner. Longer Recipes aren't proposed; those with an unknown effort are.",
   "effort.thisWeek": "This Week's Effort Budgets",
   "effort.everyWeek": "Every Week's Effort Budgets",
-
-  "reason.locked": "Locked, so kept as it was.",
 
   "reason.nobodyEating": "Nobody's eating, so nothing was planned.",
   "reason.leftovers": "Leftovers of {day}'s dinner, cooked for both.",
@@ -809,8 +807,6 @@ const en = {
   "slot.everyone": "Everyone",
   "slot.guests": "Guests",
   "slot.guestConstraints": "Guests' Constraints",
-  "slot.locked": "Locked",
-  "slot.lockedHint": "A Locked Slot keeps its Recipe when the Week is proposed again.",
   "slot.letMiseChoose": "Let Mise choose",
   "slot.recurringNight": "{day} is a recurring {title} night: change the rule to change it.",
   "slot.recurringWeekly": "{title} is a Recurring Recipe every week: change the rule to change it.",

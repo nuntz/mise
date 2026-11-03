@@ -65,7 +65,7 @@ Source      { kind: paprika|gdrive|url|tiktok|instagram|screenshot|text|manual, 
 WeekPlan    { id, startDate, slots[], useUp: itemId[], groceryListId?, instacartUrl? }   // useUp: its Use it up (ADR 0030)
 Slot        { date, meal: breakfast|lunch|dinner, kind: recipe|leftovers|eat_out|unplanned|skip,
               recipeId?, leftoversOf?: slotId, diners: memberId[], guests: int, guestConstraints: Constraint[],
-              locked: bool, note?, cookedAt?, ratings: Rating[], overrides: { who: memberId|"guests", allergen, reason }[] }
+              note?, cookedAt?, ratings: Rating[], overrides: { who: memberId|"guests", allergen, reason }[] }
               // servings = diners.length + guests
 Staple      { item, location: pantry|fridge|freezer, checkEvery: days | "every_shop", alwaysBuy: bool,
               status: stocked|low|out, lastChecked, outInARow, qtyPerShop? }   // one per Item (ADR 0017)
@@ -76,7 +76,7 @@ Rating      { slotId, memberId?, value: again|meh|never, note?, at }
 
 Notes
 - **Diners by person, not number.** Enables per-member constraints, "Alex's away Tuesday" (day-level clear), and future calendar input from a coordinator. `guests` remains the numeric fallback. A Slot's Diners are every Member until chosen for that Slot or day; there is no separate default list, so someone who is away is taken off those days.
-- **Locked** slots survive a re-roll. Changing diners never changes the recipe, only the scale.
+- A dinner is a **Suggestion**, which has a reason and a re-roll may change, or **the Household's own**, which survives every re-roll (ADR 0030). Changing diners never changes the recipe, only the scale.
 - **Leftovers** link to their source slot, which is cooked for both (`cookFor`); `yieldsLeftovers` recipes auto-fill the next free dinner within two days for the same diners (ADR 0016).
 - **Breakfast/lunch** exist in the model, default `unplanned`, collapsed in the UI. The proposer only fills dinners.
 
@@ -121,9 +121,9 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 ### 4.3 Weekly plan
 - Week view: dinner row prominent with photo; breakfast/lunch collapsed strip. One or two weeks ahead (`planHorizonWeeks`).
 - Tapping a Slot's Recipe (or the one its Leftovers are of) opens it in a sheet over the Week, read-only: Ingredients scaled to what the Slot is cooked for, steps, notes, Prep-ahead note, and the Slot's Conflicts first; Cook goes to Kitchen mode at the same servings (not from Leftovers).
-- Manual edit: drag/replace recipe, set kind, set diners/guests per slot or per day, lock, note.
+- Manual edit: drag/replace recipe, set kind, set diners/guests per slot or per day, keep a Suggestion, note.
 - **Proposer (deterministic, no LLM):** `propose_week(date?, reroll?)` (ADR 0013, ADR 0030)
-  1. Leave settled dinners as they are, with no reason written: cooked ones, Locked ones, and the Household's own (every dinner that is not a Suggestion, i.e. has no reason, and is not unplanned). They count as history for recency and are never filled, but Leftovers are still placed after a settled Recipe dinner that yields them. Then pin recurring favourites.
+  1. Leave settled dinners as they are, with no reason written: cooked ones and the Household's own (every dinner that is not a Suggestion, i.e. has no reason, and is not unplanned). They count as history for recency and are never filled, but Leftovers are still placed after a settled Recipe dinner that yields them. Then pin recurring favourites.
   2. Apply per-weekday effort budget (default per household, editable per week).
   3. Exclude Recipes whose Course is set and is not `main` (unknown stays a candidate; ADR 0022). Apply constraints for that slot's diners + guests: **hard** constraints (allergy, intolerance, diet) exclude recipes outright; **soft** ones (dislikes) only score down.
   4. Score candidates: recency penalty (last N weeks), variety across cuisine/protein within the week, rating (`never` excluded, `again` boosted), the Week's Use it up (Items on hand, stored with the Week), season.
@@ -189,7 +189,7 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ```
 recipes:   search_recipes, get_recipe, create_recipe, create_ready_made_recipe, update_recipe, delete_recipe*, rate_recipe, list_drafts, accept_draft
-plan:      get_week, propose_week, propose_dinner, set_use_up, set_slot, lock_slot, keep_slot, set_diners(slot|day), mark_cooked, clear_week*,
+plan:      get_week, propose_week, propose_dinner, set_use_up, set_slot, keep_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
 pantry:    list_staples, list_due_staples, record_staple_status, upsert_staple, remove_staple
@@ -228,7 +228,7 @@ notify:    get_push_key, subscribe_push, get_push_device, unsubscribe_push   (a 
 ### Drop 1 — MVP, no LLM (3–4 weeks)
 - Paprika import (idempotent, run log) with photos to R2.
 - Recipe CRUD, search, tags, kitchen mode (basic) — recipe detail and kitchen mode follow the patterns set by the three Drop 0 screens; no separate Claude Design pass unless they drift.
-- Week view with manual editing: kinds, diners/guests per slot and per day, locks.
+- Week view with manual editing: kinds, diners/guests per slot and per day.
 - Deterministic proposer with recency, variety, constraints (hard/soft), effort budget, favourites, leftovers. Allergen lookup table seeded by hand for the Paprika import (LLM-assisted tagging arrives with the normaliser in Drop 2); conflict warnings on manual edits.
 - Grocery list with aggregation, staples (`alwaysBuy`, status), "already have" ticks, store sections, **offline cache**.
 - Pantry check-in as tap-through cards (due logic, adaptive interval).

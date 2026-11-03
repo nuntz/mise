@@ -50,4 +50,5 @@ right alone; check what else can be current when the promise or the history entr
 A tool call runs in one transaction, the only all-or-nothing unit there is. When one write means
 nothing without another (an Item created for the Recipe that names it), one tool does both, its
 handler calling the others' handlers, and the server decides what the browser would otherwise guess
-(#76). Writes that each stand alone, like a Slot's note and its Lock, may be chained from a screen.
+(#76). Writes that each stand alone, like a Slot's change and then its Leftovers link, may be
+chained from a screen.

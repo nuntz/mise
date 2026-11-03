@@ -1294,11 +1294,6 @@ fieldset > .toggle-chip {
   letter-spacing: 0.04em;
 }
 
-.pill-lock {
-  background: var(--plum-soft);
-  color: var(--plum-ink);
-}
-
 .pill-warn {
   background: var(--warn-soft);
   color: var(--warn);

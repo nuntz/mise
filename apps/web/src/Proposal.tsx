@@ -7,6 +7,7 @@ import {
   type ProposalReason,
   type ProposedWeek,
   type ReasonFactor,
+  type Slot,
   type ToolResult,
   WEEKDAYS,
   type Week,
@@ -82,10 +83,14 @@ export function ProposalControls(props: {
   const offerUseUp = () => setDraft(props.week.useUp);
   const nameOf = (id: ItemId) => props.items.get(id)?.name ?? id;
   const disabled = () => busy() || !props.online;
+  // Re-roll is offered only when it can change a dinner, and says so under it when it can't.
+  const canReroll = () => props.week.slots.some((slot) => slot.meal === "dinner" && rerollable(slot));
   const titleId = createUniqueId();
   // Proposing needs the connection, and offline says so under the control.
   const reasonId = createUniqueId();
   const describedBy = () => (props.online ? undefined : reasonId);
+  const allYoursId = createUniqueId();
+  const rerollDescribedBy = () => describedBy() ?? (canReroll() ? undefined : allYoursId);
   const proposeButton = () => (
     <button
       type="button"
@@ -137,8 +142,8 @@ export function ProposalControls(props: {
               <button
                 type="button"
                 class="button-primary"
-                disabled={disabled()}
-                aria-describedby={describedBy()}
+                disabled={disabled() || !canReroll()}
+                aria-describedby={rerollDescribedBy()}
                 onClick={reroll}
               >
                 <Icon name="refresh" />
@@ -146,6 +151,11 @@ export function ProposalControls(props: {
               </button>
             </Show>
             <NeedsConnection id={reasonId} online={props.online} />
+            <Show when={props.online && proposed() && !canReroll()}>
+              <p id={allYoursId} class="control-reason">
+                {t("week.rerollAllYours")}
+              </p>
+            </Show>
           </div>
           <button type="button" class="button-secondary" onClick={() => props.onGrocery()}>
             <Icon name="basket" />
@@ -165,7 +175,7 @@ export function ProposalControls(props: {
               : t("useUp.none")}
           </button>
         </Show>
-        <Show when={props.online && proposed()}>
+        <Show when={props.online && proposed() && canReroll()}>
           <small>{t("week.proposeHint")}</small>
         </Show>
         <Show when={unchanged()}>
@@ -207,6 +217,18 @@ export function ProposalControls(props: {
       </Show>
     </>
   );
+}
+
+/**
+ * Whether a Re-roll can change the dinner (ADR 0030): a Suggestion, or an unplanned dinner, that someone
+ * is eating, or a planned Suggestion nobody is, which it leaves unplanned. The Household's own planned
+ * dinners stay as they are, and so does an unplanned one nobody is eating. One where no Recipe fit counts
+ * as unplanned: a Recipe added since may fit it.
+ */
+function rerollable(slot: Slot): boolean {
+  if (slot.cookedAt !== null) return false;
+  if (slot.diners.length + slot.guests === 0) return slot.reason !== null && slot.kind !== "unplanned";
+  return slot.reason !== null || slot.kind === "unplanned";
 }
 
 /** Items on hand to use up, picked by name or alias from the Item catalogue. */
@@ -381,8 +403,6 @@ export function reasonText(
 ): string {
   const list = (parts: string[]) => new Intl.ListFormat(household.locale, { type: "conjunction" }).format(parts);
   switch (reason.kind) {
-    case "locked":
-      return t("reason.locked");
     case "nobody_eating":
       return t("reason.nobodyEating");
     case "leftovers":
