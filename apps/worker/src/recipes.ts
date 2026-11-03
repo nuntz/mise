@@ -131,8 +131,8 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
       sql.exec(`DELETE FROM ${table} WHERE recipe_id = ?`, recipe.id);
     }
     sql.exec("DELETE FROM import_flag WHERE recipe_id = ?1 OR duplicate_of = ?1", recipe.id);
-    // Slots planned with it are unplanned again, and no longer Locked: there is no Recipe to keep,
-    // nor any Conflict to override, nor a reason it was proposed, nor cooking to rate.
+    // Slots planned with it are unplanned again: there is no Recipe to keep, nor any Conflict to
+    // override, nor a reason it was proposed, nor cooking to rate.
     for (const table of ["slot_override", "slot_reason", "slot_rating"]) {
       sql.exec(
         `DELETE FROM ${table} WHERE (date, meal) IN (SELECT date, meal FROM slot WHERE recipe_id = ?)`,
@@ -151,10 +151,7 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
        WHERE (leftovers_of_date, leftovers_of_meal) IN (SELECT date, meal FROM slot WHERE recipe_id = ?)`,
       recipe.id,
     );
-    sql.exec(
-      "UPDATE slot SET kind = 'unplanned', recipe_id = NULL, locked = 0, cooked_at = NULL WHERE recipe_id = ?",
-      recipe.id,
-    );
+    sql.exec("UPDATE slot SET kind = 'unplanned', recipe_id = NULL, cooked_at = NULL WHERE recipe_id = ?", recipe.id);
     sql.exec("DELETE FROM recipe WHERE id = ?", recipe.id);
     return { ok: true, value: recipe };
   },

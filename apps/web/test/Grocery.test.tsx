@@ -271,7 +271,6 @@ test("a Household and Week saved before week starts could change still open the 
           cookFor: 0,
           leftoversOf: null,
           leftovers: [],
-          locked: false,
           conflicts: [],
           reason: null,
           cookedAt: null,

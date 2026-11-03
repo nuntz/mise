@@ -157,7 +157,7 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   list_import_flags: "Recipes an import flagged for a merge or as a possible duplicate.",
   get_week:
     "The Week containing `date` (YYYY-MM-DD), or this Week without one: every breakfast, lunch and dinner, " +
-    "with its Recipe, Diners, Guests, Conflicts and whether it is Locked. A dinner with a `reason` is Mise's " +
+    "with its Recipe, Diners, Guests and Conflicts. A dinner with a `reason` is Mise's " +
     "Suggestion, which a Re-roll may change, and the reason says why Mise chose it; a dinner without one is the " +
     "Household's own: chosen, changed or cooked by someone, and no Proposal changes it.",
   set_slot:
@@ -177,9 +177,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. Both become the " +
     "Household's own, so a Re-roll keeps them. `overrides` as for set_slot.",
   check_slot_constraints: "What Conflicts a change to a Slot would bring, without making it.",
-  lock_slot: "Locks a Slot so proposing the Week again keeps it, or unlocks it.",
   clear_week:
-    "Puts every Slot of the Week back as it starts, Locked ones too, but not cooked ones, once the person taps " +
+    "Puts every Slot of the Week back as it starts, the Household's own too, but not cooked ones, once the person taps " +
     "to confirm; pass `confirm: true`.",
   propose_week:
     "Fills the Week's unplanned dinners and Mise's Suggestions, each with a reason, and leaves the Household's own " +

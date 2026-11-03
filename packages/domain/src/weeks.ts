@@ -180,7 +180,6 @@ export const Slot = z.object({
   leftoversOf: z.object({ date: LocalDate, meal: Meal, recipe: SlotRecipe.nullable() }).nullable(),
   /** The Slots linked as its Leftovers, by date and meal. */
   leftovers: z.array(z.object({ date: LocalDate, meal: Meal })),
-  locked: z.boolean(),
   /**
    * Every Conflict of its Recipe, or for Leftovers of the Recipe they were cooked from, with a Hard
    * Constraint of someone eating it, overridden or not.
@@ -247,7 +246,7 @@ const SlotChange = {
  * to the Slot they were cooked for while the kind stays "leftovers"; `link_leftovers` links them.
  * The note is kept
  * when left out and cleared by null. Diners and Guests can be set in the same change, so that their
- * Conflicts are checked once, against the Slot as it ends up; the Lock is left as it is.
+ * Conflicts are checked once, against the Slot as it ends up.
  */
 export const SetSlotInput = z.discriminatedUnion("kind", [
   z.object({ ...SlotChange, kind: z.literal("recipe"), recipeId: RecipeId }).strict(),
@@ -300,8 +299,6 @@ export const CheckSlotConstraintsInput = z
 export const LinkLeftoversInput = z
   .object({ ...SlotRef, of: z.object(SlotRef).strict().nullable(), overrides: Overrides.optional() })
   .strict();
-
-export const LockSlotInput = z.object({ ...SlotRef, locked: z.boolean() }).strict();
 
 /** Keeps a Suggestion: the dinner becomes the Household's own, which no Proposal changes (ADR 0030). */
 export const KeepSlotInput = z.object(SlotRef).strict();

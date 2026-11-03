@@ -18,7 +18,6 @@ export type ProposerDinner = ProposerPeople & {
   date: LocalDate;
   kind: SlotKind;
   recipeId: RecipeId | null;
-  locked: boolean;
   /** Marked cooked: what was eaten stays as it was. */
   cooked: boolean;
   /** The dinner it is Leftovers of, when it is linked to one. */
@@ -29,8 +28,8 @@ export type ProposerDinner = ProposerPeople & {
    */
   suggestion: boolean;
   /**
-   * Leftovers are linked to it by hand, or Locked, at any meal: it gets no more Leftovers, and none are
-   * placed in it.
+   * Leftovers are linked to it by hand at any meal: it gets no more Leftovers, and none are placed in
+   * it.
    */
   leftoversLinkedByHand: boolean;
 };
@@ -108,8 +107,8 @@ const REROLL_TRIES = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Proposes the Week's dinners. Locked Slots, cooked dinners and the Household's own are settled: left
- * as they are, with no reason written, and counted for recency. Recurring Recipes are pinned first.
+ * Proposes the Week's dinners. Cooked dinners and the Household's own are settled: left as they are,
+ * with no reason written, and counted for recency. Recurring Recipes are pinned first.
  * Every Suggestion and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it
  * rules out (unknown Allergens fail closed), not rated "never", not planned within 2 weeks of it and
  * within the day's Effort Budget (an unknown effort passes). Leftovers are still placed after a settled
@@ -257,7 +256,7 @@ function placeLeftovers(
   const recipe = recipeId == null ? undefined : recipes.get(recipeId);
   // What a dinner already cooked was cooked for is history.
   if (!recipe?.yieldsLeftovers || source.cooked || source.leftoversLinkedByHand) return;
-  // A dessert Locked by hand is no dinner the day after.
+  // A dessert chosen by hand is no dinner the day after.
   if (!canFillDinner(recipe)) return;
   const diners = dinersKey(source);
   const at = input.dinners.findIndex(
@@ -304,7 +303,7 @@ function isUnchanged(proposal: Proposal, dinners: ProposerDinner[]): boolean {
  */
 function settled(dinner: ProposerDinner): ProposedDinner | undefined {
   const own = !dinner.suggestion && dinner.kind !== "unplanned";
-  if (dinner.cooked || dinner.locked || own) {
+  if (dinner.cooked || own) {
     return {
       date: dinner.date,
       kind: dinner.kind,

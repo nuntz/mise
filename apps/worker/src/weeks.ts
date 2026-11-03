@@ -56,7 +56,6 @@ type SlotRow = {
   note: string | null;
   diners_chosen: number;
   guests: number;
-  locked: number;
   cooked_at: string | null;
   leftovers_of_date: string | null;
   leftovers_of_meal: string | null;
@@ -103,7 +102,6 @@ type WeekTools =
   | "set_diners"
   | "set_guests"
   | "check_slot_constraints"
-  | "lock_slot"
   | "link_leftovers"
   | "clear_week"
   | "propose_week"
@@ -218,14 +216,6 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     };
   },
 
-  lock_slot: (sql, input) => {
-    const settings = readSettings(sql);
-    if (!settings) return notSetUp();
-    storeSlot(sql, settings, input.date, input.meal);
-    sql.exec("UPDATE slot SET locked = ? WHERE date = ? AND meal = ?", Number(input.locked), input.date, input.meal);
-    return { ok: true, value: readSlot(sql, input.date, input.meal) };
-  },
-
   link_leftovers: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
@@ -310,7 +300,6 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
           date: slot.date,
           kind: slot.kind,
           recipeId: slot.recipe?.id ?? null,
-          locked: slot.locked,
           cooked: slot.cookedAt !== null,
           ...people(slot),
           leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
@@ -489,9 +478,9 @@ function nothingToKeep(message: string): ToolResult<never> {
   return { ok: false, error: { code: "nothing_to_keep", message } };
 }
 
-/** Leftovers the latest Proposal placed and nobody has Locked or linked by hand since. */
+/** Leftovers the latest Proposal placed and nobody has kept or linked by hand since. */
 function isProposedLeftovers(slot: Slot): boolean {
-  return slot.kind === "leftovers" && slot.reason?.kind === "leftovers" && !slot.locked;
+  return slot.kind === "leftovers" && slot.reason?.kind === "leftovers";
 }
 
 /** The Recipe eaten at the Slot: its own, or for Leftovers the one they were cooked from. */
@@ -645,8 +634,8 @@ function unknownMember(sql: SqlStorage, diners: MemberId[] | null | undefined): 
 function storeSlot(sql: SqlStorage, settings: SettingsAndCalendar, date: LocalDate, meal: Meal): void {
   storeWeek(sql, weekOf(date, settings).startDate);
   sql.exec(
-    `INSERT OR IGNORE INTO slot (date, meal, kind, diners_chosen, guests, locked)
-     VALUES (?, ?, 'unplanned', 0, 0, 0)`,
+    `INSERT OR IGNORE INTO slot (date, meal, kind, diners_chosen, guests)
+     VALUES (?, ?, 'unplanned', 0, 0)`,
     date,
     meal,
   );
@@ -766,7 +755,6 @@ function unplannedSlot(date: LocalDate, meal: Meal, diners: MemberId[]): Slot {
     cookFor: 0,
     leftoversOf: null,
     leftovers: [],
-    locked: false,
     conflicts: [],
     reason: null,
     cookedAt: null,
@@ -913,7 +901,6 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
                       },
               },
         leftovers: leftovers.map((other) => ({ date: other.date, meal: other.meal })),
-        locked: row.locked === 1,
         conflicts: conflicts.map((conflict) => ({
           ...conflict,
           override:

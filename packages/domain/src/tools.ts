@@ -69,7 +69,6 @@ import {
   KeepSlotInput,
   LinkLeftoversInput,
   type LocalDate,
-  LockSlotInput,
   MarkCookedInput,
   type Meal,
   ProposeWeekInput,
@@ -428,15 +427,9 @@ export const tools = {
     input: CheckSlotConstraintsInput,
     output: z.array(SlotConflict),
   }),
-  /** A Locked Slot keeps its Recipe when the Week is proposed again; it can still be edited by hand. */
-  lock_slot: defineTool({
-    input: LockSlotInput,
-    output: Slot,
-    changes: "plan",
-  }),
   /**
-   * Requires `confirm: true`. Puts every Slot of the Week back as it starts, Locked ones too, but
-   * leaves cooked ones as they were; returns the Week.
+   * Requires `confirm: true`. Puts every Slot of the Week back as it starts, the Household's own too,
+   * but leaves cooked ones as they were; returns the Week.
    */
   clear_week: defineTool({
     input: ClearWeekInput,
@@ -445,8 +438,8 @@ export const tools = {
     confirm: "always",
   }),
   /**
-   * Fills the Week's unplanned dinners and Suggestions, with a reason for each, and leaves Locked
-   * dinners and the Household's own as they are; see `ProposeWeekInput`. Returns the Week.
+   * Fills the Week's unplanned dinners and Suggestions, with a reason for each, and leaves the
+   * Household's own as they are; see `ProposeWeekInput`. Returns the Week.
 
    */
   propose_week: defineTool({

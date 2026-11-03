@@ -254,7 +254,6 @@ describe("what the agent is told", () => {
       "set_slot",
       "set_diners",
       "set_guests",
-      "lock_slot",
       "keep_slot",
       "search_recipes",
       "get_recipe",
@@ -287,6 +286,8 @@ describe("what the agent is told", () => {
       "create_item",
       "update_item",
       "resolve_ingredient",
+      // Retired: Keep does what Lock did (ADR 0030).
+      "lock_slot",
     ]) {
       expect(tools).not.toContain(tool);
     }

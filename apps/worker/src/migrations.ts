@@ -533,6 +533,22 @@ const migrations: { version: number; statements: string[] }[] = [
                AND json_extract(placed.reason, '$.kind') = 'leftovers'))`,
     ],
   },
+  {
+    version: 32,
+    statements: [
+      // Lock is retired (ADR 0030). A Lock was someone's decision to keep a dinner, so a Locked dinner
+      // loses its reason and becomes the Household's own; so does the dinner Locked Leftovers are of.
+      // A Locked unplanned dinner is left plain unplanned, which a Proposal fills. A "locked" reason
+      // left on a dinner unlocked since goes too: the kind no longer exists.
+      `DELETE FROM slot_reason
+       WHERE json_extract(reason, '$.kind') = 'locked'
+         OR (date, meal) IN (SELECT date, meal FROM slot WHERE locked = 1)
+         OR (date, meal) IN (
+           SELECT leftovers_of_date, leftovers_of_meal FROM slot
+           WHERE locked = 1 AND leftovers_of_date IS NOT NULL)`,
+      "ALTER TABLE slot DROP COLUMN locked",
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */
