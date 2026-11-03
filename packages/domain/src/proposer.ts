@@ -29,10 +29,10 @@ export type ProposerDinner = ProposerPeople & {
    */
   suggestion: boolean;
   /**
-   * Who eats the Slots kept as its Leftovers, at any meal: those linked by hand or Locked. Its Recipe
-   * must be safe for them too, and it gets no more Leftovers.
+   * Leftovers are linked to it by hand, or Locked, at any meal: it gets no more Leftovers, and none are
+   * placed in it.
    */
-  keptLeftovers: ProposerPeople[];
+  leftoversLinkedByHand: boolean;
 };
 
 /** What the Proposer weighs of a Recipe, with its Ratings, oldest first. */
@@ -112,15 +112,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * as they are, with no reason written, and counted for recency. Recurring Recipes are pinned first.
  * Every Suggestion and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it
  * rules out (unknown Allergens fail closed), not rated "never", not planned within 2 weeks of it and
- * within the day's Effort Budget (an unknown effort passes), and safe too for whoever eats its
- * Leftovers kept by hand. Leftovers are still placed after a settled dinner not yet cooked. Every Recipe a dinner
- * gets, Recurring, Leftovers or not, is a main dish or of unknown Course (ADR 0022), and no Draft.
+ * within the day's Effort Budget (an unknown effort passes). Leftovers are still placed after a settled
+ * dinner not yet cooked. Every Recipe a dinner gets, Recurring, Leftovers or not, is a main dish or of
+ * unknown Course (ADR 0022), and no Draft.
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
- * A dinner whose Recipe yields Leftovers, and has none kept, gets them in the next dinner within two
- * days that is still to fill, has no Leftovers kept itself and is eaten by the same Diners, if its
- * Recipe is safe for them. A dinner with Leftovers kept that no Recipe can be chosen for keeps the one
- * it has, if it is safe for them all (ADR 0016).
+ * A dinner whose Recipe yields Leftovers, and has none linked by hand, gets them in the next dinner
+ * within two days that is still to fill, has no Leftovers linked by hand itself and is eaten by the
+ * same Diners, if its Recipe is safe for them. A dinner with Leftovers linked by hand is the
+ * Household's own (ADR 0030), so no Proposal changes what they are of.
  * The same input, seed and choice always give the same Proposal.
  */
 export function proposeWeek(input: ProposerInput): Proposal {
@@ -172,7 +172,7 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
     const fits = input.dinners.flatMap((dinner, index) =>
       open(index) &&
       canFillDinner(recipe) &&
-      isSafeFor(recipe, dinner) &&
+      isSafe(recipe, dinner) &&
       (recurrence === "weekly" || weekdayOf(dinner.date) === recurrence.weekday)
         ? [index]
         : [],
@@ -191,11 +191,7 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
 
   // In date order, so that a dinner's Leftovers are placed before the dinners after it are chosen.
   input.dinners.forEach((_, index) => {
-    if (open(index)) {
-      proposed[index] = chosen(input, index, planned(), recipes, window, random);
-      if (proposed[index]?.kind === "unplanned")
-        proposed[index] = keptForLeftovers(input, index, recipes) ?? proposed[index];
-    }
+    if (open(index)) proposed[index] = chosen(input, index, planned(), recipes, window, random);
     placeLeftovers(input, index, proposed, recipes);
   });
 
@@ -217,7 +213,7 @@ function chosen(
   const candidates: { recipe: ProposerRecipe; score: number; factors: ReasonFactor[] }[] = [];
   for (const recipe of input.recipes) {
     const daysApart = closestPlanned(recipe.id, dinner.date, nearby);
-    if (!isSafeFor(recipe, dinner)) excluded.conflict++;
+    if (!isSafe(recipe, dinner)) excluded.conflict++;
     else if (recipe.ratings.includes("never")) excluded.never++;
     else if (!canFillDinner(recipe)) excluded.course++;
     else if (daysApart !== null && daysApart < EXCLUDED_WITHIN_DAYS) excluded.recent++;
@@ -246,25 +242,9 @@ function chosen(
 }
 
 /**
- * The dinner at `index` as it is, when no Recipe could be chosen for it but Leftovers linked by hand
- * are cooked from its Recipe and no Hard Constraint of anyone eating either rules that Recipe out (ADR
- * 0016); undefined otherwise.
- */
-function keptForLeftovers(
-  input: ProposerInput,
-  index: number,
-  recipes: Map<RecipeId, ProposerRecipe>,
-): ProposedDinner | undefined {
-  const dinner = input.dinners[index] as ProposerDinner;
-  const recipe = dinner.recipeId == null ? undefined : recipes.get(dinner.recipeId);
-  if (dinner.keptLeftovers.length === 0 || !recipe || !isSafeFor(recipe, dinner)) return undefined;
-  return { date: dinner.date, kind: "recipe", recipeId: recipe.id, leftoversOf: null, reason: null };
-}
-
-/**
- * Places the Leftovers of the dinner at `index`, if its Recipe yields them, it is not cooked yet and it has none kept: in
- * the first dinner within two days after it that is still to fill and cooked for no Leftovers of its own, eaten by the
- * same Diners, whose Guests (if any) its Recipe is safe for.
+ * Places the Leftovers of the dinner at `index`, if its Recipe yields them, it is not cooked yet and it has none linked
+ * by hand: in the first dinner within two days after it that is still to fill and has no Leftovers linked to it by hand,
+ * eaten by the same Diners, whose Guests (if any) its Recipe is safe for.
  */
 function placeLeftovers(
   input: ProposerInput,
@@ -276,7 +256,7 @@ function placeLeftovers(
   const recipeId = proposed[index]?.recipeId;
   const recipe = recipeId == null ? undefined : recipes.get(recipeId);
   // What a dinner already cooked was cooked for is history.
-  if (!recipe?.yieldsLeftovers || source.cooked || source.keptLeftovers.length > 0) return;
+  if (!recipe?.yieldsLeftovers || source.cooked || source.leftoversLinkedByHand) return;
   // A dessert Locked by hand is no dinner the day after.
   if (!canFillDinner(recipe)) return;
   const diners = dinersKey(source);
@@ -285,7 +265,7 @@ function placeLeftovers(
       other > index &&
       proposed[other] === undefined &&
       // A dinner cooked for Leftovers linked by hand must keep a Recipe of its own.
-      dinner.keptLeftovers.length === 0 &&
+      !dinner.leftoversLinkedByHand &&
       daysBetween(source.date, dinner.date) <= LEFTOVERS_WITHIN_DAYS &&
       dinersKey(dinner) === diners &&
       isSafe(recipe, dinner),
@@ -352,11 +332,6 @@ function budgetOf(input: ProposerInput, index: number): number {
 /** No Hard Constraint of anyone eating the Slot conflicts with the Recipe, not even an Override could. */
 function isSafe(recipe: ProposerRecipe, people: ProposerPeople): boolean {
   return slotConflicts({ allergens: recipe.allergens, ...people }).length === 0;
-}
-
-/** The Recipe is safe for the dinner and for whoever eats its Leftovers kept by hand. */
-function isSafeFor(recipe: ProposerRecipe, dinner: ProposerDinner): boolean {
-  return isSafe(recipe, dinner) && dinner.keptLeftovers.every((leftovers) => isSafe(recipe, leftovers));
 }
 
 /** A main dish, or a Recipe whose Course is unknown: what a dinner can be filled with. */

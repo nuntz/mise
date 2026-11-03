@@ -414,7 +414,8 @@ export const tools = {
   }),
   /**
    * Refuses a Slot to link to that is not earlier (`not_earlier`), holds no Recipe (`no_recipe`) or a
-   * Draft (`draft_recipe`), and new Conflicts as `set_slot` does. Returns the Slot.
+   * Draft (`draft_recipe`), and new Conflicts as `set_slot` does. Both Slots become the Household's own
+   * (ADR 0030): their reasons go. Returns the Slot.
    */
   link_leftovers: defineTool({
     input: LinkLeftoversInput,

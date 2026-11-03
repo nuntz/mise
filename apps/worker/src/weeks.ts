@@ -242,8 +242,10 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     }
     if (ofRecipe && isDraft(sql, ofRecipe.id)) return draftRefused(ofRecipe.id);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
-      // Linked by hand now, so no longer for the reason a Proposal gave.
+      // Linked by hand now, so no longer for the reason a Proposal gave; and what they are of is the
+      // Household's own, so that no Proposal changes it (ADR 0030).
       sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+      if (of) sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", of.date, of.meal);
       sql.exec(
         `UPDATE slot SET kind = 'leftovers', recipe_id = NULL, leftovers_of_date = ?, leftovers_of_meal = ?
          WHERE date = ? AND meal = ?`,
@@ -314,10 +316,9 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
           leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
           suggestion: slot.reason !== null,
           // Those it placed itself, it places again.
-          keptLeftovers: slot.leftovers
-            .map((leftovers) => readSlot(sql, leftovers.date, leftovers.meal))
-            .filter((leftovers) => !isProposedLeftovers(leftovers))
-            .map(people),
+          leftoversLinkedByHand: slot.leftovers.some(
+            (leftovers) => !isProposedLeftovers(readSlot(sql, leftovers.date, leftovers.meal)),
+          ),
         }),
       ),
       recipes: readRecipes(sql).map((recipe) => ({ ...recipe, ratings: ratings.get(recipe.id) ?? [] })),
