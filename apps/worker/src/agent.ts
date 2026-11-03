@@ -174,8 +174,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Sets how many Guests eat a Slot, and their Constraints (kept when left out). Refused if it would bring a " +
     "Conflict; `overrides` as for set_slot. Removing a Hard Constraint of theirs waits for the person's tap.",
   link_leftovers:
-    "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. `overrides` as " +
-    "for set_slot.",
+    "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. Both become the " +
+    "Household's own, so a Re-roll keeps them. `overrides` as for set_slot.",
   check_slot_constraints: "What Conflicts a change to a Slot would bring, without making it.",
   lock_slot: "Locks a Slot so proposing the Week again keeps it, or unlocks it.",
   clear_week:

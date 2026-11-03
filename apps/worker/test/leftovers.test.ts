@@ -1,6 +1,8 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { GroceryList, Slot, ToolResult, Week } from "@mise/domain";
 import { describe, expect, test } from "vitest";
+import { migrate } from "../src/migrations";
 
 /**
  * A Household of Robin (allergic to peanut) and Alex, whose Weeks start on Monday. Recipe 1 is Chili,
@@ -46,6 +48,8 @@ const SATAY = 2;
 const MONDAY = "2026-10-26";
 const TUESDAY = "2026-10-27";
 const WEDNESDAY = "2026-10-28";
+const THURSDAY = "2026-10-29";
+const SATURDAY = "2026-10-31";
 const dinner = (date: string) => ({ date, meal: "dinner" }) as const;
 
 function succeeded<T>(outcome: unknown): T {
@@ -173,6 +177,31 @@ describe("Leftovers", () => {
     });
   });
 
+  test("linking Leftovers by hand to a dinner Mise chose makes it the Household's own, which a Re-roll keeps", async () => {
+    const household = await setUpHousehold();
+    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const chosen = slotOf(proposed, THURSDAY);
+    expect(chosen.reason).toMatchObject({ kind: "chosen" });
+
+    succeeded(await household.callTool("link_leftovers", { ...dinner(SATURDAY), of: dinner(THURSDAY) }));
+
+    expect(slotOf(await week(household), THURSDAY)).toMatchObject({ recipe: chosen.recipe, reason: null });
+    for (let roll = 0; roll < 3; roll++) {
+      const rerolled = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll: true }));
+      expect(slotOf(rerolled, THURSDAY)).toMatchObject({
+        kind: "recipe",
+        recipe: chosen.recipe,
+        leftovers: [dinner(SATURDAY)],
+        reason: null,
+      });
+      expect(slotOf(rerolled, SATURDAY)).toMatchObject({
+        kind: "leftovers",
+        leftoversOf: dinner(THURSDAY),
+        reason: null,
+      });
+    }
+  });
+
   test("Leftovers link only to an earlier Slot that holds a Recipe", async () => {
     const household = await setUpHousehold();
     await plan(household, TUESDAY, CHILI);
@@ -224,5 +253,33 @@ describe("Leftovers", () => {
     const next = succeeded<Week>(await household.callTool("get_week", { date: nextMonday }));
     expect(slotOf(next, nextMonday)).toMatchObject({ kind: "leftovers", leftoversOf: null });
     expect(slotOf(await week(household), sunday)).toMatchObject({ cookFor: 2, leftovers: [] });
+  });
+});
+
+describe("Leftovers linked by hand before ADR 0030", () => {
+  test("the dinner they are of loses its reason, and Leftovers Mise placed leave theirs alone", async () => {
+    const household = await setUpHousehold();
+    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    succeeded(await household.callTool("link_leftovers", { ...dinner(SATURDAY), of: dinner(THURSDAY) }));
+    // As linking by hand left it before: Thursday still a Suggestion.
+    await runInDurableObject(household, async (_household, state) => {
+      const sql = state.storage.sql;
+      sql.exec(
+        "INSERT INTO slot_reason (date, meal, reason) VALUES (?, 'dinner', ?)",
+        THURSDAY,
+        JSON.stringify(slotOf(proposed, THURSDAY).reason),
+      );
+      sql.exec("DELETE FROM schema_version WHERE version >= 31");
+      // Migration 31 again, and only it.
+      migrate(state.storage, 31);
+    });
+
+    const after = await week(household);
+
+    expect(slotOf(after, THURSDAY)).toMatchObject({ recipe: slotOf(proposed, THURSDAY).recipe, reason: null });
+    // Monday's Chili, with the Leftovers Mise placed on Tuesday, is still Mise's Suggestion.
+    expect(slotOf(after, MONDAY)).toMatchObject({ recipe: { id: CHILI }, leftovers: [dinner(TUESDAY)] });
+    expect(slotOf(after, MONDAY).reason).toEqual(slotOf(proposed, MONDAY).reason);
+    expect(slotOf(after, MONDAY).reason).not.toBeNull();
   });
 });
