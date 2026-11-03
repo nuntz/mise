@@ -520,6 +520,22 @@ const migrations: { version: number; statements: string[] }[] = [
   {
     version: 31,
     statements: [
+      // A dinner with Leftovers linked to it by hand is the Household's own (ADR 0030), so it loses
+      // the reason a Proposal gave it. Leftovers a Proposal placed keep their "leftovers" reason, and
+      // leave the dinner they are of a Suggestion.
+      `DELETE FROM slot_reason
+       WHERE (date, meal) IN (
+         SELECT leftovers_of_date, leftovers_of_meal FROM slot AS leftovers
+         WHERE leftovers_of_date IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM slot_reason AS placed
+             WHERE placed.date = leftovers.date AND placed.meal = leftovers.meal
+               AND json_extract(placed.reason, '$.kind') = 'leftovers'))`,
+    ],
+  },
+  {
+    version: 32,
+    statements: [
       // A Week's Use it up (ADR 0030): the Items on hand its Proposals favour, in the order they were set.
       `CREATE TABLE week_use_up (
         start_date TEXT NOT NULL REFERENCES week (start_date),

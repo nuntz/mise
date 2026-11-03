@@ -66,6 +66,7 @@ import {
   CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
+  KeepSlotInput,
   LinkLeftoversInput,
   type LocalDate,
   LockSlotInput,
@@ -414,7 +415,8 @@ export const tools = {
   }),
   /**
    * Refuses a Slot to link to that is not earlier (`not_earlier`), holds no Recipe (`no_recipe`) or a
-   * Draft (`draft_recipe`), and new Conflicts as `set_slot` does. Returns the Slot.
+   * Draft (`draft_recipe`), and new Conflicts as `set_slot` does. Both Slots become the Household's own
+   * (ADR 0030): their reasons go. Returns the Slot.
    */
   link_leftovers: defineTool({
     input: LinkLeftoversInput,
@@ -477,6 +479,16 @@ export const tools = {
   /** Refuses a Slot without a Recipe (`no_recipe`), or dated after today (`not_yet`). Returns the Slot. */
   mark_cooked: defineTool({
     input: MarkCookedInput,
+    output: Slot,
+    changes: "plan",
+  }),
+  /**
+   * Makes a Suggestion the Household's own by deleting its reason. Leftovers Mise placed become
+   * Leftovers linked by hand, and the dinner they are of the Household's own too. Refuses a dinner
+   * that is no Suggestion or holds no Recipe or Leftovers (`nothing_to_keep`). Returns the Slot.
+   */
+  keep_slot: defineTool({
+    input: KeepSlotInput,
     output: Slot,
     changes: "plan",
   }),
@@ -647,6 +659,7 @@ export type ToolErrorCode =
   | "not_cooked"
   | "not_built"
   | "not_earlier"
+  | "nothing_to_keep"
   | "draft_recipe"
   | "model_failed"
   | "not_configured"

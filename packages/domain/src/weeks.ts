@@ -305,6 +305,9 @@ export const LinkLeftoversInput = z
 
 export const LockSlotInput = z.object({ ...SlotRef, locked: z.boolean() }).strict();
 
+/** Keeps a Suggestion: the dinner becomes the Household's own, which no Proposal changes (ADR 0030). */
+export const KeepSlotInput = z.object(SlotRef).strict();
+
 /** Clearing is destructive, so the caller must say they confirmed it. */
 export const ClearWeekInput = z.object({ date: LocalDate, confirm: z.literal(true) }).strict();
 

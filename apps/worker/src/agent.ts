@@ -174,8 +174,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Sets how many Guests eat a Slot, and their Constraints (kept when left out). Refused if it would bring a " +
     "Conflict; `overrides` as for set_slot. Removing a Hard Constraint of theirs waits for the person's tap.",
   link_leftovers:
-    "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. `overrides` as " +
-    "for set_slot.",
+    "Makes a Slot Leftovers of an earlier Slot that holds a Recipe, which is then cooked for both. Both become the " +
+    "Household's own, so a Re-roll keeps them. `overrides` as for set_slot.",
   check_slot_constraints: "What Conflicts a change to a Slot would bring, without making it.",
   lock_slot: "Locks a Slot so proposing the Week again keeps it, or unlocks it.",
   clear_week:
@@ -194,6 +194,10 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
   review_week: "Marks the Week as looked over since it was proposed, or not.",
   mark_cooked: "Marks a Slot cooked, today or earlier.",
+  keep_slot:
+    "Keeps one of Mise's Suggestions (“keep Wednesday”): the dinner becomes the Household's own, loses its " +
+    "reason, and no Re-roll changes it. Keeping Leftovers Mise placed keeps the dinner they are of too. " +
+    "Refused with `nothing_to_keep` for a dinner already the Household's own, or with no Recipe or Leftovers.",
   rate_recipe: "Rates a cooked Slot's Recipe for the Member speaking.",
   set_store_section_order: "Puts the Store Sections given first, in the order the Household walks its store.",
   get_calendar_token: "The calendar feed's token, for the feed's address; null until one is made on the screen.",
