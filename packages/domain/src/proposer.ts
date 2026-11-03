@@ -150,7 +150,6 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
   const input = { ...given, recipes: given.recipes.filter((recipe) => !recipe.draft) };
   const random = seededRandom(input.seed);
   const recipes = new Map(input.recipes.map((recipe) => [recipe.id, recipe]));
-  const weekDates = new Set(input.dinners.map((dinner) => dinner.date));
   const proposed: (ProposedDinner | undefined)[] = input.dinners.map(settled);
   const planned = () => [
     ...input.history,
@@ -160,8 +159,92 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
   ];
   const open = (index: number) => proposed[index] === undefined;
 
-  // Recurring Recipes come first, those for a weekday before those for any day of the Week. One rated
-  // "never" is ruled out of a Proposal like any other Recipe (ADR 0014).
+  pinRecurring(input, proposed, open, planned, random);
+
+  // In date order, so that a dinner's Leftovers are placed before the dinners after it are chosen.
+  input.dinners.forEach((_, index) => {
+    if (open(index)) {
+      proposed[index] = chosen(input, index, planned(), recipes, window, random);
+      if (proposed[index]?.kind === "unplanned")
+        proposed[index] = keptForLeftovers(input, index, recipes) ?? proposed[index];
+    }
+    placeLeftovers(input, index, proposed, recipes);
+  });
+
+  return { seed: input.seed, choice, dinners: proposed as ProposedDinner[] };
+}
+
+/** A Proposal for one dinner, and whether any dinner's kind, Recipe or Leftovers link differs from the Week as it was. */
+export type DinnerProposal = Proposal & { changed: boolean };
+
+/**
+ * Proposes one dinner of the Week again, handed back to Mise ("Let Mise choose"), from the Week's seed
+ * and choice, by the rules of `proposeWeek`: a Recurring Recipe due on it is pinned to it, and otherwise
+ * it gets a Recipe other than the one it had, if another fits. Every other dinner counts for recency and
+ * is left as it is, with no reason written, but for the Leftovers of this one: those the last Proposal
+ * placed are proposed again with it, and its Recipe's go in the next dinner within two days that is
+ * still unplanned, as `proposeWeek` places them. A cooked dinner is left as it is.
+ * The same input and date always give the same Proposal.
+ */
+export function proposeDinner(given: ProposerInput, date: LocalDate): DinnerProposal {
+  const choice = given.choice ?? "best";
+  const window = choice === "best" ? CHOICE_WINDOW : Number.POSITIVE_INFINITY;
+  const input = { ...given, recipes: given.recipes.filter((recipe) => !recipe.draft) };
+  const random = seededRandom(input.seed);
+  const recipes = new Map(input.recipes.map((recipe) => [recipe.id, recipe]));
+  const target = input.dinners.findIndex((dinner) => dinner.date === date);
+  const dinner = input.dinners[target];
+  const asItIs = (other: ProposerDinner): ProposedDinner => ({
+    date: other.date,
+    kind: other.kind,
+    recipeId: other.recipeId,
+    leftoversOf: other.leftoversOf,
+    reason: null,
+  });
+  /** Leftovers of this dinner the last Proposal placed, which go with it. */
+  const itsLeftovers = (other: ProposerDinner) =>
+    other.suggestion && !other.locked && other.kind === "leftovers" && other.leftoversOf === date;
+  // Another dinner still unplanned is open to this one's Leftovers, but is not filled itself.
+  const proposed: (ProposedDinner | undefined)[] = input.dinners.map((other, index) =>
+    index === target || itsLeftovers(other) || (other.kind === "unplanned" && settled(other) === undefined)
+      ? undefined
+      : asItIs(other),
+  );
+  const planned = () => [
+    ...input.history,
+    ...proposed.flatMap((other) => (other?.recipeId != null ? [{ recipeId: other.recipeId, date: other.date }] : [])),
+  ];
+
+  if (dinner) {
+    if (dinner.cooked) proposed[target] = asItIs(dinner);
+    else proposed[target] = settled({ ...dinner, kind: "unplanned", locked: false, suggestion: true });
+    pinRecurring(input, proposed, (index) => index === target && proposed[index] === undefined, planned, random);
+    proposed[target] ??= chosen(input, target, planned(), recipes, window, random, dinner.recipeId);
+    placeLeftovers(input, target, proposed, recipes);
+    input.dinners.forEach((other, index) => {
+      if (proposed[index] === undefined && itsLeftovers(other))
+        proposed[index] = chosen(input, index, planned(), recipes, window, random);
+    });
+  }
+  const dinners = proposed.map((other, index) => other ?? asItIs(input.dinners[index] as ProposerDinner));
+
+  const proposal = { seed: input.seed, choice, dinners };
+  return { ...proposal, changed: !isUnchanged(proposal, input.dinners) };
+}
+
+/**
+ * Pins Recurring Recipes into the dinners `open` allows, those for a weekday before those for any day of
+ * the Week, unless the Week already plans them. One rated "never" is ruled out of a Proposal like any
+ * other Recipe (ADR 0014).
+ */
+function pinRecurring(
+  input: ProposerInput,
+  proposed: (ProposedDinner | undefined)[],
+  open: (index: number) => boolean,
+  planned: () => { recipeId: RecipeId; date: LocalDate }[],
+  random: () => number,
+): void {
+  const weekDates = new Set(input.dinners.map((dinner) => dinner.date));
   const recurring = input.recipes
     .filter((recipe) => recipe.recurring !== null && !recipe.ratings.includes("never"))
     .sort((a, b) => Number(a.recurring === "weekly") - Number(b.recurring === "weekly") || a.id - b.id);
@@ -188,21 +271,12 @@ function propose(given: ProposerInput, window: number, choice: ProposalChoice): 
       reason: { kind: "recurring", recurrence },
     };
   }
-
-  // In date order, so that a dinner's Leftovers are placed before the dinners after it are chosen.
-  input.dinners.forEach((_, index) => {
-    if (open(index)) {
-      proposed[index] = chosen(input, index, planned(), recipes, window, random);
-      if (proposed[index]?.kind === "unplanned")
-        proposed[index] = keptForLeftovers(input, index, recipes) ?? proposed[index];
-    }
-    placeLeftovers(input, index, proposed, recipes);
-  });
-
-  return { seed: input.seed, choice, dinners: proposed as ProposedDinner[] };
 }
 
-/** The Recipe chosen for the dinner at `index`, or none when no Recipe passes every rule. */
+/**
+ * The Recipe chosen for the dinner at `index`, or none when no Recipe passes every rule; never `avoid`
+ * when another passes them.
+ */
 function chosen(
   input: ProposerInput,
   index: number,
@@ -210,6 +284,7 @@ function chosen(
   recipes: Map<RecipeId, ProposerRecipe>,
   window: number,
   random: () => number,
+  avoid: RecipeId | null = null,
 ): ProposedDinner {
   const dinner = input.dinners[index] as ProposerDinner;
   const budget = budgetOf(input, index);
@@ -225,8 +300,10 @@ function chosen(
     else candidates.push({ recipe, ...scored(recipe, dinner, daysApart, budget, nearby, recipes, input.useUp) });
   }
   candidates.sort((a, b) => b.score - a.score || a.recipe.id - b.recipe.id);
-  const best = candidates[0]?.score ?? 0;
-  const choices = candidates.filter((candidate) => candidate.score > best - window).slice(0, MOST_CHOICES);
+  const others = candidates.filter((candidate) => candidate.recipe.id !== avoid);
+  const from = others.length > 0 ? others : candidates;
+  const best = from[0]?.score ?? 0;
+  const choices = from.filter((candidate) => candidate.score > best - window).slice(0, MOST_CHOICES);
   const choice = pick(choices, random);
   return choice
     ? {

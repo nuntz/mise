@@ -185,6 +185,13 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Fills the Week's unplanned dinners and Mise's Suggestions, each with a reason, and leaves the Household's own " +
     "dinners as they are. `reroll: true` proposes again differently; `useUp` lists Item ids on hand, to favour " +
     "Recipes that use them.",
+  propose_dinner:
+    "Hands one dinner back to Mise and proposes it again at once, as for “Let Mise choose Friday” or “pick " +
+    "something else for Friday”: it becomes a Suggestion with a reason, with a Recipe other than the one it had " +
+    "when another fits, and every other dinner stays as it is. When it comes back with the Recipe it had and a " +
+    "`recurring` reason, nothing changed: say that dinner is a Recurring Recipe's night, and the Recipe's " +
+    "Recurring rule is what to change to change it. When the reason counts one candidate, say it was the only " +
+    "Recipe that fits.",
 
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
   review_week: "Marks the Week as looked over since it was proposed, or not.",

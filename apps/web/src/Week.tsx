@@ -998,6 +998,37 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
     props.onDone();
   };
 
+  // The Household's own dinner, not cooked, can be handed back to Mise ("Let Mise choose").
+  const canHandBack = slot.meal === "dinner" && slot.reason === null && slot.cookedAt === null;
+  const [unchanged, setUnchanged] = createSignal<string>();
+  const handBack = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await props.client.call("propose_dinner", { date: slot.date });
+      setBusy(false);
+      if (!result.ok) return setError(errorText(result.error, "slot"));
+      const dinner = result.value.slots.find((other) => other.date === slot.date && other.meal === "dinner");
+      // A Recurring Recipe's night comes back as it was: its rule, not Mise, decides it.
+      const reason = dinner?.reason;
+      if (reason?.kind === "recurring" && dinner?.recipe && dinner.recipe.id === slot.recipe?.id) {
+        const title = dinner.recipe.title;
+        return setUnchanged(
+          reason.recurrence === "weekly"
+            ? t("slot.recurringWeekly", { title })
+            : t("slot.recurringNight", {
+                day: formatDate(slot.date, props.household.locale, { weekday: "long" }),
+                title,
+              }),
+        );
+      }
+      props.onDone();
+    } catch {
+      setBusy(false);
+      setError(t("app.error"));
+    }
+  };
+
   const recipeTitle = () =>
     kind() === "leftovers"
       ? (chosenLink()?.recipe?.title ?? "")
@@ -1072,6 +1103,16 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         {t("slot.locked")}
       </label>
       <small>{t("slot.lockedHint")}</small>
+      <Show when={canHandBack}>
+        <button type="button" class="button-row" disabled={busy() || unchanged() !== undefined} onClick={handBack}>
+          {t("slot.letMiseChoose")}
+        </button>
+        <Show when={unchanged()}>
+          <p class="meta" role="status">
+            {unchanged()}
+          </p>
+        </Show>
+      </Show>
       <ConflictOverrides
         household={props.household}
         conflicts={refused()}

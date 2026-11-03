@@ -71,6 +71,7 @@ import {
   LockSlotInput,
   MarkCookedInput,
   type Meal,
+  ProposeDinnerInput,
   ProposeWeekInput,
   RateRecipeInput,
   ReviewWeekInput,
@@ -452,6 +453,15 @@ export const tools = {
     output: Week,
     changes: "plan",
   }),
+  /**
+   * "Let Mise choose": proposes one dinner again; see `ProposeDinnerInput`. Refuses a dinner already
+   * cooked (`already_cooked`). Returns the Week.
+   */
+  propose_dinner: defineTool({
+    input: ProposeDinnerInput,
+    output: Week,
+    changes: "plan",
+  }),
   /** Returns the Week, with its Effort Budgets as they now are. */
   set_week_effort_budgets: defineTool({
     input: SetWeekEffortBudgetsInput,
@@ -635,6 +645,7 @@ export type ToolErrorCode =
   | "no_recipe"
   | "not_yet"
   | "not_cooked"
+  | "already_cooked"
   | "not_built"
   | "not_earlier"
   | "draft_recipe"
