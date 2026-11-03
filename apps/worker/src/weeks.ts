@@ -245,8 +245,10 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     }
     if (ofRecipe && isDraft(sql, ofRecipe.id)) return draftRefused(ofRecipe.id);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
-      // Linked by hand now, so no longer for the reason a Proposal gave.
+      // Linked by hand now, so no longer for the reason a Proposal gave; and what they are of is the
+      // Household's own, so that no Proposal changes it (ADR 0030).
       sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+      if (of) sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", of.date, of.meal);
       sql.exec(
         `UPDATE slot SET kind = 'leftovers', recipe_id = NULL, leftovers_of_date = ?, leftovers_of_meal = ?
          WHERE date = ? AND meal = ?`,
@@ -317,7 +319,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
       };
     }
     const span = weekOf(input.date, settings);
-    const proposal = proposeDinner(readProposerInput(sql, span, []), input.date);
+    const proposal = proposeDinner(readProposerInput(sql, span, [], input.date), input.date);
     storeProposal(sql, settings, span, proposal);
     // It is proposed from the Week's seed and choice, so they stay; only a change needs looking over.
     if (proposal.changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
@@ -409,8 +411,17 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
   },
 };
 
-/** The Week's dinners as the Proposer finds them, with its seed and choice (the first, if never proposed). */
-function readProposerInput(sql: SqlStorage, span: WeekSpan, useUp: ItemId[]): ProposerInput {
+/**
+ * The Week's dinners as the Proposer finds them, with its seed and choice (the first, if never proposed).
+ * Whoever eats the Leftovers linked by hand to the dinner `handedBack` eats its Recipe too, so they count
+ * among who eats it: no Proposal chooses any other such dinner again (ADR 0030).
+ */
+function readProposerInput(
+  sql: SqlStorage,
+  span: WeekSpan,
+  useUp: ItemId[],
+  handedBack: LocalDate | null = null,
+): ProposerInput {
   const week = readWeek(sql, span);
   const stored = readWeekRecords(sql, span.startDate)[0];
   const members = readMembers(sql);
@@ -423,23 +434,26 @@ function readProposerInput(sql: SqlStorage, span: WeekSpan, useUp: ItemId[]): Pr
   return {
     dinners: week.slots
       .filter((slot) => slot.meal === "dinner")
-      .map(
-        (slot): ProposerDinner => ({
+      .map((slot): ProposerDinner => {
+        // Those it placed itself, it places again.
+        const linkedByHand = slot.leftovers
+          .map((leftovers) => readSlot(sql, leftovers.date, leftovers.meal))
+          .filter((leftovers) => !isProposedLeftovers(leftovers));
+        const eating = slot.date === handedBack ? [slot, ...linkedByHand].map(people) : [people(slot)];
+        return {
           date: slot.date,
           kind: slot.kind,
           recipeId: slot.recipe?.id ?? null,
           locked: slot.locked,
           cooked: slot.cookedAt !== null,
-          ...people(slot),
+          diners: [...new Map(eating.flatMap((them) => them.diners).map((diner) => [diner.id, diner])).values()],
+          guests: eating.reduce((sum, them) => sum + them.guests, 0),
+          guestConstraints: eating.flatMap((them) => them.guestConstraints),
           leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
           suggestion: slot.reason !== null,
-          // Those it placed itself, it places again.
-          keptLeftovers: slot.leftovers
-            .map((leftovers) => readSlot(sql, leftovers.date, leftovers.meal))
-            .filter((leftovers) => !isProposedLeftovers(leftovers))
-            .map(people),
-        }),
-      ),
+          leftoversLinkedByHand: linkedByHand.length > 0,
+        };
+      }),
     recipes: readRecipes(sql).map((recipe) => ({ ...recipe, ratings: ratings.get(recipe.id) ?? [] })),
     history: plannedAround(sql, span),
     effortBudgets: week.effortBudgets,
