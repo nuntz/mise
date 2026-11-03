@@ -3,7 +3,6 @@ import {
   Conflict,
   Constraint,
   currentWeek,
-  type ItemId,
   type LocalDate,
   localDate,
   MEALS,
@@ -85,6 +84,7 @@ const WeekRecord = Week.pick({
   effortBudgetOverrides: true,
   proposalSeed: true,
   reviewed: true,
+  useUp: true,
 }).extend({ proposalChoice: ProposalChoice.nullable() });
 type WeekRecord = ReturnType<typeof WeekRecord.parse>;
 
@@ -111,9 +111,11 @@ type WeekTools =
   | "clear_week"
   | "propose_week"
   | "propose_dinner"
+  | "set_use_up"
   | "set_week_effort_budgets"
   | "review_week"
   | "mark_cooked"
+  | "keep_slot"
   | "rate_recipe";
 
 /** The seed a Week is first proposed with. */
@@ -293,19 +295,29 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
   propose_week: (sql, input) => {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
-    const catalogue = readCatalogue(sql);
-    const unknownItem = input.useUp.find((id) => !catalogue.item(id));
-    if (unknownItem) return itemNotFound(unknownItem);
     const span = weekNamedBy(settings, input.date);
-    const proposerInput = readProposerInput(sql, span, input.useUp);
-    const proposal = input.reroll ? rerollWeek(proposerInput) : proposeWeek(proposerInput);
-    storeProposal(sql, settings, span, proposal);
-    sql.exec(
-      "UPDATE week SET proposal_seed = ?, proposal_choice = ?, reviewed = 0 WHERE start_date = ?",
-      proposal.seed,
-      proposal.choice,
-      span.startDate,
-    );
+    proposeAgain(sql, settings, span, input.reroll);
+    sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    return { ok: true, value: readWeek(sql, span) };
+  },
+
+  set_use_up: (sql, input) => {
+    const settings = readSettings(sql);
+    if (!settings) return notSetUp();
+    const catalogue = readCatalogue(sql);
+    const unknownItem = input.items.find((id) => !catalogue.item(id));
+    if (unknownItem) return itemNotFound(unknownItem);
+    const span = weekOf(input.date, settings);
+    storeWeek(sql, span.startDate);
+    sql.exec("DELETE FROM week_use_up WHERE start_date = ?", span.startDate);
+    for (const item of input.items) {
+      sql.exec("INSERT INTO week_use_up (start_date, item_id) VALUES (?, ?)", span.startDate, item);
+    }
+    // A Week not yet proposed favours them once it is.
+    const proposed = (readWeekRecords(sql, span.startDate)[0]?.proposalSeed ?? null) !== null;
+    if (proposed && proposeAgain(sql, settings, span, false)) {
+      sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    }
     return { ok: true, value: readWeek(sql, span) };
   },
 
@@ -319,7 +331,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
       };
     }
     const span = weekOf(input.date, settings);
-    const proposal = proposeDinner(readProposerInput(sql, span, [], input.date), input.date);
+    const proposal = proposeDinner(readProposerInput(sql, span, input.date), input.date);
     storeProposal(sql, settings, span, proposal);
     // It is proposed from the Week's seed and choice, so they stay; only a change needs looking over.
     if (proposal.changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
@@ -381,6 +393,25 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     return { ok: true, value: readSlot(sql, input.date, input.meal) };
   },
 
+  keep_slot: (sql, input) => {
+    if (!readSettings(sql)) return notSetUp();
+    const slot = readSlot(sql, input.date, input.meal);
+    // An unplanned Suggestion ("nobody's eating", "no Recipe fit") is filled by the next Proposal
+    // anyway, so there is nothing to keep (ADR 0030).
+    if (slot.kind !== "recipe" && slot.kind !== "leftovers") {
+      return nothingToKeep(`${input.date} ${input.meal} has no Recipe or Leftovers to keep`);
+    }
+    if (slot.reason === null) {
+      return nothingToKeep(`${input.date} ${input.meal} is already the Household's own: no Proposal changes it`);
+    }
+    sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+    // Leftovers kept are linked by hand, so a Re-roll can't change what they are of either.
+    if (slot.leftoversOf) {
+      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", slot.leftoversOf.date, slot.leftoversOf.meal);
+    }
+    return { ok: true, value: readSlot(sql, input.date, input.meal) };
+  },
+
   rate_recipe: (sql, input, { caller }) => {
     if (!readSettings(sql)) return notSetUp();
     if (readSlot(sql, input.date, input.meal).cookedAt === null) {
@@ -412,16 +443,33 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
 };
 
 /**
- * The Week's dinners as the Proposer finds them, with its seed and choice (the first, if never proposed).
- * Whoever eats the Leftovers linked by hand to the dinner `handedBack` eats its Recipe too, so they count
- * among who eats it: no Proposal chooses any other such dinner again (ADR 0030).
+ * Proposes the Week's dinners from its stored seed and choice, or re-rolls them to a new seed, with its
+ * stored Use it up; returns whether any dinner changed. Whether the Week is reviewed is the caller's.
  */
-function readProposerInput(
-  sql: SqlStorage,
-  span: WeekSpan,
-  useUp: ItemId[],
-  handedBack: LocalDate | null = null,
-): ProposerInput {
+function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: WeekSpan, reroll: boolean): boolean {
+  const proposerInput = readProposerInput(sql, span);
+  const proposal = reroll ? rerollWeek(proposerInput) : proposeWeek(proposerInput);
+  storeProposal(sql, settings, span, proposal);
+  sql.exec(
+    "UPDATE week SET proposal_seed = ?, proposal_choice = ? WHERE start_date = ?",
+    proposal.seed,
+    proposal.choice,
+    span.startDate,
+  );
+  return proposal.dinners.some((dinner, index) => {
+    const before = proposerInput.dinners[index];
+    return (
+      dinner.kind !== before?.kind || dinner.recipeId !== before.recipeId || dinner.leftoversOf !== before.leftoversOf
+    );
+  });
+}
+
+/**
+ * The Week's dinners as the Proposer finds them, with its Use it up, seed and choice (the first, if never
+ * proposed). Whoever eats the Leftovers linked by hand to the dinner `handedBack` eats its Recipe too, so
+ * they count among who eats it: no Proposal chooses any other such dinner again (ADR 0030).
+ */
+function readProposerInput(sql: SqlStorage, span: WeekSpan, handedBack: LocalDate | null = null): ProposerInput {
   const week = readWeek(sql, span);
   const stored = readWeekRecords(sql, span.startDate)[0];
   const members = readMembers(sql);
@@ -457,7 +505,7 @@ function readProposerInput(
     recipes: readRecipes(sql).map((recipe) => ({ ...recipe, ratings: ratings.get(recipe.id) ?? [] })),
     history: plannedAround(sql, span),
     effortBudgets: week.effortBudgets,
-    useUp,
+    useUp: week.useUp,
     seed: stored?.proposalSeed ?? FIRST_SEED,
     choice: stored?.proposalChoice ?? "best",
   };
@@ -516,6 +564,10 @@ function storeProposal(
      WHERE (leftovers_of_date, leftovers_of_meal) IN (${emptied})`,
     ...range,
   );
+}
+
+function nothingToKeep(message: string): ToolResult<never> {
+  return { ok: false, error: { code: "nothing_to_keep", message } };
 }
 
 /** Leftovers the latest Proposal placed and nobody has Locked or linked by hand since. */
@@ -747,6 +799,7 @@ export function readWeek(sql: SqlStorage, span: WeekSpan): Week {
     effortBudgetOverrides: overrides,
     proposalSeed: record?.proposalSeed ?? null,
     reviewed: record?.reviewed ?? false,
+    useUp: record?.useUp ?? [],
   };
 }
 
@@ -757,6 +810,12 @@ export function readWeekRecords(sql: SqlStorage, startDate?: LocalDate): WeekRec
   const budgets = sql
     .exec<{ start_date: string; weekday: string; minutes: number }>(
       `SELECT * FROM week_effort_budget ${week.where} ORDER BY start_date, weekday`,
+      ...week.values,
+    )
+    .toArray();
+  const useUp = sql
+    .exec<{ start_date: string; item_id: string }>(
+      `SELECT start_date, item_id FROM week_use_up ${week.where} ORDER BY rowid`,
       ...week.values,
     )
     .toArray();
@@ -771,6 +830,7 @@ export function readWeekRecords(sql: SqlStorage, startDate?: LocalDate): WeekRec
       proposalSeed: row.proposal_seed,
       proposalChoice: row.proposal_choice,
       reviewed: row.reviewed === 1,
+      useUp: useUp.filter((item) => item.start_date === row.start_date).map((item) => item.item_id),
     }),
   );
 }

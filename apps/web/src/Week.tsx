@@ -471,7 +471,7 @@ function Day(props: {
 /**
  * A Slot as the Week shows it, with one action by where it stands: nothing chosen, Choose; Leftovers,
  * a meal out or no meal, Change; a Recipe to cook, Cook; cooked, Rate it; rated, none. The rest is in
- * its Recipe's sheet.
+ * its Recipe's sheet. A Suggestion that can be kept also has Keep, beside its reason line.
  */
 function SlotView(props: {
   client: MiseClient;
@@ -593,7 +593,15 @@ function SlotView(props: {
       </Show>
       <Show when={!props.prominent}>{meta()}</Show>
       <Show when={props.slot.reason}>
-        {(reason) => <p class="meta">{reasonText(reason(), props.household, props.items)}</p>}
+        {(reason) => (
+          <div class="slot-reason">
+            <p class="meta">{reasonText(reason(), props.household, props.items)}</p>
+            {/* While its form is open, the form's Keep is the one. */}
+            <Show when={!props.readOnly && !props.editing && keepable(props.slot)}>
+              <KeepButton client={props.client} slot={props.slot} />
+            </Show>
+          </div>
+        )}
       </Show>
       <SlotConflicts household={props.household} slot={props.slot} />
       <Show
@@ -650,6 +658,43 @@ function SlotView(props: {
         />
       </Show>
     </section>
+  );
+}
+
+/**
+ * Whether Keep can do something for the Slot: a Suggestion with a Recipe or Leftovers that is still to
+ * eat, by someone. An unplanned one is filled by the next Proposal anyway (ADR 0030).
+ */
+function keepable(slot: Slot): boolean {
+  return (
+    slot.reason !== null &&
+    (slot.kind === "recipe" || slot.kind === "leftovers") &&
+    slot.cookedAt === null &&
+    slot.diners.length + slot.guests > 0
+  );
+}
+
+/** Keeps a Suggestion at once, making it the Household's own; the Week refetches without its reason. */
+function KeepButton(props: { client: MiseClient; slot: Slot }) {
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const keep = async () => {
+    setBusy(true);
+    const where = { date: props.slot.date, meal: props.slot.meal };
+    setError((await outcomeOf(() => props.client.call("keep_slot", where))).failure);
+    setBusy(false);
+  };
+  return (
+    <>
+      <button type="button" class="button-link" disabled={busy()} onClick={keep}>
+        {t("slot.keep")}
+      </button>
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </>
   );
 }
 
@@ -1098,6 +1143,12 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         <legend>{t("slot.guestConstraints")}</legend>
         <ConstraintFields constraints={guestConstraints()} onChange={changing(setGuestConstraints)} />
       </fieldset>
+      {/* The Slot as the Week now has it: once kept, it has nothing left to keep. What's typed stays. */}
+      <Show when={keepable(props.slot)}>
+        <div class="slot-actions">
+          <KeepButton client={props.client} slot={props.slot} />
+        </div>
+      </Show>
       <label>
         <input type="checkbox" checked={locked()} onChange={(e) => setLocked(e.currentTarget.checked)} />
         {t("slot.locked")}

@@ -62,7 +62,7 @@ Recipe      { id, title, lang, baseServings, ingredients[], steps[], tags[], eff
               draft: bool }   // a Draft Recipe is never proposed, planned or shopped until accepted
 Suggestion  { ingredient, item? | newItem?: { name, allergens: Allergen[] }, at }   // LLM-made; changes nothing until accepted (ADR 0023)
 Source      { kind: paprika|gdrive|url|tiktok|instagram|screenshot|text|manual, externalId?, externalRevision?, url?, author?, importedAt, confidence? }
-WeekPlan    { id, startDate, slots[], groceryListId?, instacartUrl? }
+WeekPlan    { id, startDate, slots[], useUp: itemId[], groceryListId?, instacartUrl? }   // useUp: its Use it up (ADR 0030)
 Slot        { date, meal: breakfast|lunch|dinner, kind: recipe|leftovers|eat_out|unplanned|skip,
               recipeId?, leftoversOf?: slotId, diners: memberId[], guests: int, guestConstraints: Constraint[],
               locked: bool, note?, cookedAt?, ratings: Rating[], overrides: { who: memberId|"guests", allergen, reason }[] }
@@ -122,14 +122,15 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 - Week view: dinner row prominent with photo; breakfast/lunch collapsed strip. One or two weeks ahead (`planHorizonWeeks`).
 - Tapping a Slot's Recipe (or the one its Leftovers are of) opens it in a sheet over the Week, read-only: Ingredients scaled to what the Slot is cooked for, steps, notes, Prep-ahead note, and the Slot's Conflicts first; Cook goes to Kitchen mode at the same servings (not from Leftovers).
 - Manual edit: drag/replace recipe, set kind, set diners/guests per slot or per day, lock, note.
-- **Proposer (deterministic, no LLM):** `propose_week(date?, useUp?, reroll?)` (ADR 0013, ADR 0030)
+- **Proposer (deterministic, no LLM):** `propose_week(date?, reroll?)` (ADR 0013, ADR 0030)
   1. Leave settled dinners as they are, with no reason written: cooked ones, Locked ones, and the Household's own (every dinner that is not a Suggestion, i.e. has no reason, and is not unplanned). They count as history for recency and are never filled, but Leftovers are still placed after a settled Recipe dinner that yields them. Then pin recurring favourites.
   2. Apply per-weekday effort budget (default per household, editable per week).
   3. Exclude Recipes whose Course is set and is not `main` (unknown stays a candidate; ADR 0022). Apply constraints for that slot's diners + guests: **hard** constraints (allergy, intolerance, diet) exclude recipes outright; **soft** ones (dislikes) only score down.
-  4. Score candidates: recency penalty (last N weeks), variety across cuisine/protein within the week, rating (`never` excluded, `again` boosted), use-up hints (ingredients the user said are on hand), season.
+  4. Score candidates: recency penalty (last N weeks), variety across cuisine/protein within the week, rating (`never` excluded, `again` boosted), the Week's Use it up (Items on hand, stored with the Week), season.
   5. Fill `yieldsLeftovers` consequences.
   Returns plan + a reason for each dinner it filled (so the agent can explain); a dinner with a reason is a Suggestion.
 - **Let Mise choose:** `propose_dinner(date)` hands one dinner back and proposes it at once, by the same rules from the Week's seed and choice (which it doesn't move): a Recurring Recipe due on it is pinned, and otherwise it gets a Recipe other than the one it had when another fits. Every other dinner stays as it is, but for this dinner's own Leftovers, placed or proposed again by the usual rules. The dinner becomes a Suggestion, and the Week is marked not reviewed when the dinner changed.
+- **Use it up:** `set_use_up(date, items)` stores the Week's Use it up, replacing it (`[]` clears it); each Week starts with none. On a proposed Week it proposes again from the same seed and choice, so only Suggestions and unplanned dinners adjust, and a Week it changes is marked not reviewed. Re-roll and the weekly Proposal (§4.9) favour it too.
 - **Allergy safety on manual edits.** Hard constraints apply to every path, not just the proposer: setting a slot to a recipe that conflicts with a diner's hard constraint, or adding a diner whose hard constraint conflicts with the slot's recipe, shows a blocking warning naming the person and the allergen, with explicit override (e.g. "we'll make hers without the nuts"). The agent must surface the same warning and ask before overriding. Conflicts are shown on the week view and in the calendar event description. Recipes with unknown/unreviewed allergen tags are treated as conflicting for the relevant allergen (fail closed) and flagged for review.
 - Re-roll changes only Suggestions and fills unplanned dinners. Choosing a dinner's kind or Recipe by hand, linking Leftovers to it by hand, or marking it cooked, deletes its reason and makes it the Household's own; changing only its note, Diners or Guests leaves a Suggestion a Suggestion. "Mark cooked" updates
  `lastCookedAt`, `cookCount`, prompts for rating and "anything run out?".
@@ -181,14 +182,14 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 
 ### 4.9 Notifications
 - Web push only (installed PWA; no email fallback): weekly plan proposed, pantry check due, prep-ahead reminder (day before), something waiting on the review screen, Drive sync flagged a conflict. Each device opts in, with a toggle per kind; no per-Member routing.
-- Weekly proposal: two days before the next Week starts, at 08:00 in the Household's timezone, a household alarm runs `propose_week` for that Week if none of its dinners are planned yet (it never re-rolls one someone started), then pushes "next week is proposed, review it". The day follows the Household's Weeks as they are that morning, so a new week start moves it (ADR 0021). The same morning pushes the pantry check if Staples are due; every morning pushes tomorrow's dinner's Prep-ahead note.
+- Weekly proposal: two days before the next Week starts, at 08:00 in the Household's timezone, a household alarm runs `propose_week` for that Week, with any Use it up already set, if none of its dinners are planned yet (it never re-rolls one someone started), then pushes "next week is proposed, review it". The day follows the Household's Weeks as they are that morning, so a new week start moves it (ADR 0021). The same morning pushes the pantry check if Staples are due; every morning pushes tomorrow's dinner's Prep-ahead note.
 - Pushes are sent from the household with VAPID and encrypted per device (ADR 0025); the devices are in the export.
 
 ## 5. Tool catalogue (shared by PWA, agent, and future integrations)
 
 ```
 recipes:   search_recipes, get_recipe, create_recipe, create_ready_made_recipe, update_recipe, delete_recipe*, rate_recipe, list_drafts, accept_draft
-plan:      get_week, propose_week, propose_dinner, set_slot, lock_slot, set_diners(slot|day), mark_cooked, clear_week*,
+plan:      get_week, propose_week, propose_dinner, set_use_up, set_slot, lock_slot, keep_slot, set_diners(slot|day), mark_cooked, clear_week*,
            set_week_effort_budgets, review_week
 grocery:   build_grocery_list, get_grocery_list, set_have_tick, add_grocery_line, send_to_instacart
 pantry:    list_staples, list_due_staples, record_staple_status, upsert_staple, remove_staple

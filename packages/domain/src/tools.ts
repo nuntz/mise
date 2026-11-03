@@ -66,6 +66,7 @@ import {
   CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
+  KeepSlotInput,
   LinkLeftoversInput,
   type LocalDate,
   LockSlotInput,
@@ -78,6 +79,7 @@ import {
   SetDinersInput,
   SetGuestsInput,
   SetSlotInput,
+  SetUseUpInput,
   SetWeekEffortBudgetsInput,
   Slot,
   Week,
@@ -463,6 +465,15 @@ export const tools = {
     output: Week,
     changes: "plan",
   }),
+  /**
+   * Stores the Week's Use it up, and proposes the Week again from the same seed if it has been
+   * proposed; see `SetUseUpInput`. Refuses an Item that doesn't exist (`not_found`). Returns the Week.
+   */
+  set_use_up: defineTool({
+    input: SetUseUpInput,
+    output: Week,
+    changes: "plan",
+  }),
   /** Returns the Week, with its Effort Budgets as they now are. */
   set_week_effort_budgets: defineTool({
     input: SetWeekEffortBudgetsInput,
@@ -478,6 +489,16 @@ export const tools = {
   /** Refuses a Slot without a Recipe (`no_recipe`), or dated after today (`not_yet`). Returns the Slot. */
   mark_cooked: defineTool({
     input: MarkCookedInput,
+    output: Slot,
+    changes: "plan",
+  }),
+  /**
+   * Makes a Suggestion the Household's own by deleting its reason. Leftovers Mise placed become
+   * Leftovers linked by hand, and the dinner they are of the Household's own too. Refuses a dinner
+   * that is no Suggestion or holds no Recipe or Leftovers (`nothing_to_keep`). Returns the Slot.
+   */
+  keep_slot: defineTool({
+    input: KeepSlotInput,
     output: Slot,
     changes: "plan",
   }),
@@ -649,6 +670,7 @@ export type ToolErrorCode =
   | "already_cooked"
   | "not_built"
   | "not_earlier"
+  | "nothing_to_keep"
   | "draft_recipe"
   | "model_failed"
   | "not_configured"

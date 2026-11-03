@@ -183,8 +183,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "to confirm; pass `confirm: true`.",
   propose_week:
     "Fills the Week's unplanned dinners and Mise's Suggestions, each with a reason, and leaves the Household's own " +
-    "dinners as they are. `reroll: true` proposes again differently; `useUp` lists Item ids on hand, to favour " +
-    "Recipes that use them.",
+    "dinners as they are, favouring Recipes that use the Week's Use it up. `reroll: true` proposes again " +
+    "differently.",
   propose_dinner:
     "Hands one dinner back to Mise and proposes it again at once, as for “Let Mise choose Friday” or “pick " +
     "something else for Friday”: it becomes a Suggestion with a reason, with a Recipe other than the one it had " +
@@ -192,10 +192,19 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "`recurring` reason, nothing changed: say that dinner is a Recurring Recipe's night, and the Recipe's " +
     "Recurring rule is what to change to change it. When the reason counts one candidate, say it was the only " +
     "Recipe that fits.",
+  set_use_up:
+    "Sets the Week's Use it up, replacing it: the Items on hand (ids from list_items) its Proposals favour " +
+    'Recipes for, as in "use up the spinach". Add to `useUp` from get_week to keep what is there; `[]` clears ' +
+    "it. A Week already proposed is proposed again from the same seed, so only Mise's Suggestions and unplanned " +
+    "dinners can change.",
 
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
   review_week: "Marks the Week as looked over since it was proposed, or not.",
   mark_cooked: "Marks a Slot cooked, today or earlier.",
+  keep_slot:
+    "Keeps one of Mise's Suggestions (“keep Wednesday”): the dinner becomes the Household's own, loses its " +
+    "reason, and no Re-roll changes it. Keeping Leftovers Mise placed keeps the dinner they are of too. " +
+    "Refused with `nothing_to_keep` for a dinner already the Household's own, or with no Recipe or Leftovers.",
   rate_recipe: "Rates a cooked Slot's Recipe for the Member speaking.",
   set_store_section_order: "Puts the Store Sections given first, in the order the Household walks its store.",
   get_calendar_token: "The calendar feed's token, for the feed's address; null until one is made on the screen.",

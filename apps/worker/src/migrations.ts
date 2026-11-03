@@ -533,6 +533,22 @@ const migrations: { version: number; statements: string[] }[] = [
                AND json_extract(placed.reason, '$.kind') = 'leftovers'))`,
     ],
   },
+  {
+    version: 32,
+    statements: [
+      // A Week's Use it up (ADR 0030): the Items on hand its Proposals favour, in the order they were set.
+      `CREATE TABLE week_use_up (
+        start_date TEXT NOT NULL REFERENCES week (start_date),
+        item_id TEXT NOT NULL,
+        PRIMARY KEY (start_date, item_id)
+      )`,
+      // item_id names a shipped Item or a Household one, so no foreign key can follow a Household Item
+      // that is deleted; this does: what no longer exists is not on hand.
+      `CREATE TRIGGER item_deleted_leaves_use_up AFTER DELETE ON item BEGIN
+        DELETE FROM week_use_up WHERE item_id = 'household:' || OLD.id;
+      END`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

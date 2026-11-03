@@ -252,10 +252,12 @@ describe("what the agent is told", () => {
       "get_week",
       "propose_week",
       "propose_dinner",
+      "set_use_up",
       "set_slot",
       "set_diners",
       "set_guests",
       "lock_slot",
+      "keep_slot",
       "search_recipes",
       "get_recipe",
       "list_items",
@@ -315,6 +317,29 @@ describe("what the agent is told about Suggestions", () => {
     expect(described("propose_dinner")).toMatch(/Let Mise choose Friday/);
     expect(described("propose_dinner")).toMatch(/pick something else for Friday/);
     expect(described("propose_dinner")).toMatch(/Recurring/);
+    expect(described("keep_slot")).toMatch(/“keep Wednesday”/);
+  });
+});
+
+describe("what the agent is told about Use it up", () => {
+  test("the Week keeps it: set_use_up sets it, and propose_week takes no Items", async () => {
+    const offered: { name: string; description: string; parameters: { properties?: object } }[][] = [];
+    scriptModel((context) => {
+      const system = context.messages.find((message) => (message.role as string) === "system") as
+        | { toolsAdded?: (typeof offered)[number] }
+        | undefined;
+      offered.push(system?.toolsAdded ?? []);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    const tool = (name: string) => offered[0]?.find((offer) => offer.name === name);
+    expect(tool("set_use_up")?.description).toMatch(/use up the spinach/);
+    expect(Object.keys(tool("set_use_up")?.parameters.properties ?? {})).toEqual(["date", "items"]);
+    expect(tool("propose_week")?.description).toMatch(/Use it up/);
+    expect(Object.keys(tool("propose_week")?.parameters.properties ?? {})).not.toContain("useUp");
   });
 });
 
@@ -458,32 +483,32 @@ describe("typical turns", () => {
     expect(await dinnerOn(household, THURSDAY)).toMatchObject({ recipe: { id: 3 }, reason: null });
   });
 
-  test("“re-propose the week but keep Tuesday” locks Tuesday and proposes the rest again", async () => {
+  test("“re-roll the week but keep Tuesday” keeps Tuesday and re-rolls the rest", async () => {
     scriptModel(
       caller([
-        ["lock_slot", { date: TUESDAY, meal: "dinner", locked: true }],
+        ["keep_slot", { date: TUESDAY, meal: "dinner" }],
         ["propose_week", { date: MONDAY, reroll: true }],
       ]),
     );
-    // Proposed rather than set by hand, which proposing again would keep anyway.
+    // A Suggestion rather than set by hand, which a Re-roll would leave anyway.
     const household = await familyHousehold();
     await household.callTool("propose_week", { date: MONDAY });
     const proposed = (await dinnerOn(household, TUESDAY))?.recipe?.id;
 
-    const reply = await household.chat("Re-propose the week but keep Tuesday", ON_THE_WEEK);
+    const reply = await household.chat("Re-roll the week but keep Tuesday", ON_THE_WEEK);
 
     expect(reply).toMatchObject({ ok: true });
     const dinners = (await weekOf(household, MONDAY)).slots.filter((slot) => slot.meal === "dinner");
-    expect(dinners.find((slot) => slot.date === TUESDAY)).toMatchObject({ recipe: { id: proposed }, locked: true });
+    expect(dinners.find((slot) => slot.date === TUESDAY)).toMatchObject({ recipe: { id: proposed }, reason: null });
     expect(dinners.filter((slot) => slot.recipe !== null)).toHaveLength(7);
   });
 
-  test("keeping Tuesday holds when the lock and the Proposal come in one round", async () => {
+  test("keeping Tuesday holds when the Keep and the Re-roll come in one round", async () => {
     scriptModel((context) => {
       if (context.messages.at(-1)?.role === "toolResult") return fauxAssistantMessage("Done.");
       return fauxAssistantMessage(
         [
-          fauxToolCall("lock_slot", { date: TUESDAY, meal: "dinner", locked: true }),
+          fauxToolCall("keep_slot", { date: TUESDAY, meal: "dinner" }),
           fauxToolCall("propose_week", { date: MONDAY, reroll: true }),
         ],
         { stopReason: "toolUse" },
@@ -493,9 +518,30 @@ describe("typical turns", () => {
     await household.callTool("propose_week", { date: MONDAY });
     const proposed = (await dinnerOn(household, TUESDAY))?.recipe?.id;
 
-    expect(await household.chat("Re-propose the week but keep Tuesday", ON_THE_WEEK)).toMatchObject({ ok: true });
+    expect(await household.chat("Re-roll the week but keep Tuesday", ON_THE_WEEK)).toMatchObject({ ok: true });
 
-    expect(await dinnerOn(household, TUESDAY)).toMatchObject({ recipe: { id: proposed }, locked: true });
+    expect(await dinnerOn(household, TUESDAY)).toMatchObject({ recipe: { id: proposed }, reason: null });
+  });
+
+  test("“use up the spinach” sets the Week's Use it up, and the Week adjusts", async () => {
+    scriptModel(caller([["set_use_up", { date: MONDAY, items: ["spinach"] }]]));
+    const household = await familyHousehold();
+    await household.callTool("create_recipe", {
+      title: "Spinach pie",
+      baseServings: 4,
+      ingredients: ["200 g spinach"],
+      effortMinutes: 30,
+    });
+    await household.callTool("propose_week", { date: MONDAY });
+
+    expect(await household.chat("Use up the spinach this week", ON_THE_WEEK)).toMatchObject({ ok: true });
+
+    const week = await weekOf(household, MONDAY);
+    expect(week.useUp).toEqual(["spinach"]);
+    expect(week.slots.find((slot) => slot.date === MONDAY && slot.meal === "dinner")).toMatchObject({
+      recipe: { title: "Spinach pie" },
+      reason: { factors: expect.arrayContaining([{ kind: "uses_up", items: ["spinach"] }]) },
+    });
   });
 
   test("“just the two of us Friday” sets Friday's Diners", async () => {

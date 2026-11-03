@@ -112,6 +112,7 @@ function emptyWeek(startDate: string): Week {
     effortBudgetOverrides: {},
     proposalSeed: null,
     reviewed: false,
+    useUp: [],
   };
 }
 
@@ -187,11 +188,13 @@ function fakeClient(answers: Record<string, Answer> = {}) {
           return { ok: true, value: [tuesdayDinner] };
         case "mark_cooked":
         case "rate_recipe":
+        case "keep_slot":
           return { ok: true, value: tuesdayDinner };
         case "list_items":
           return { ok: true, value: ITEMS };
         case "propose_week":
         case "propose_dinner":
+        case "set_use_up":
         case "review_week":
         case "set_week_effort_budgets":
           return { ok: true, value: thisWeek };
@@ -815,7 +818,12 @@ test("a Week not yet proposed can be proposed, with nothing to re-roll yet", asy
     within(screen.getByRole("dialog", { name: "Use it up" })).getByRole("button", { name: "Propose dinners" }),
   );
 
-  await vi.waitFor(() => expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26" } }]));
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      { name: "set_use_up", input: { date: "2026-10-26", items: [] } },
+      { name: "propose_week", input: { date: "2026-10-26" } },
+    ]),
+  );
 });
 
 test("an empty Week offers Propose, without Use it up, and has nothing to clear", async () => {
@@ -841,8 +849,8 @@ test("offline, proposing says it needs a connection under the control, and its h
 
   goOffline();
 
-  const again = screen.getByRole("button", { name: "Propose again" }) as HTMLButtonElement;
-  for (const control of [reroll, again]) {
+  const useUp = screen.getByRole("button", { name: "Use it up…" }) as HTMLButtonElement;
+  for (const control of [reroll, useUp]) {
     expect(control.disabled).toBe(true);
     expect(description(control)).toBe("Needs a connection.");
   }
@@ -865,22 +873,25 @@ test("offline, an empty Week's Propose says it needs a connection", async () => 
   expect(propose.nextElementSibling?.textContent).toBe("Needs a connection.");
 });
 
-test("Use it up is offered on proposing, and its Items go with the Proposal and the re-rolls after it", async () => {
-  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+test("the Week's Use it up shows under Re-roll, and changing it stores it; Re-roll sends no Items", async () => {
+  const { client, calls } = fakeClient({
+    get_week: () => ({ ok: true, value: { ...proposedWeek(), useUp: ["spinach"] } }),
+  });
   const user = userEvent.setup();
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
   expect(screen.queryByRole("form", { name: "Use it up" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Propose again" })).toBeNull();
 
-  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.click(screen.getByRole("button", { name: "Use it up: spinach · Change" }));
   const sheet = screen.getByRole("dialog", { name: "Use it up" });
   // The sheet takes the focus, not its field, so a phone doesn't open the keyboard and its suggestions.
   await vi.waitFor(() => expect(document.activeElement).toBe(sheet));
   const useUp = within(sheet).getByRole("form", { name: "Use it up" });
   const field = within(useUp).getByRole("combobox", { name: "Item on hand" });
+  await user.type(field, "Rice{Enter}");
   await user.type(field, "baby spinach");
   await user.click(within(useUp).getByRole("button", { name: "Add" }));
-  await user.type(field, "Rice{Enter}");
   // Not an Item: nothing is added, and the form says why.
   await user.type(field, "moon cheese{Enter}");
   expect(within(useUp).getByRole("alert").textContent).toBe("No Item is called “moon cheese”.");
@@ -890,30 +901,62 @@ test("Use it up is offered on proposing, and its Items go with the Proposal and 
       .getAllByRole("listitem")
       .map((item) => item.textContent),
   ).toEqual([expect.stringContaining("spinach"), expect.stringContaining("rice")]);
-  await user.click(within(useUp).getByRole("button", { name: "Remove rice" }));
-  await user.click(within(sheet).getByRole("button", { name: "Propose dinners" }));
+  await user.click(within(sheet).getByRole("button", { name: "Save" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Re-roll" }));
 
-  // Cancelled, nothing is proposed and nothing picked changes; asked again, the Items picked are still there.
-  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  // Cancelled or escaped, nothing is stored; opened again, it shows the Week's Use it up.
+  await user.click(screen.getByRole("button", { name: "Use it up: spinach · Change" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove spinach" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog")).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Re-roll" }));
-  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.click(screen.getByRole("button", { name: "Use it up: spinach · Change" }));
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Propose again" }));
+  await user.click(screen.getByRole("button", { name: "Use it up: spinach · Change" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove spinach" }));
-  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Propose dinners" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save" }));
 
   await vi.waitFor(() =>
     expect(writes(calls)).toEqual([
-      { name: "propose_week", input: { date: "2026-10-26", useUp: ["spinach"] } },
-      { name: "propose_week", input: { date: "2026-10-26", reroll: true, useUp: ["spinach"] } },
-      { name: "propose_week", input: { date: "2026-10-26", reroll: true, useUp: ["spinach"] } },
-      { name: "propose_week", input: { date: "2026-10-26" } },
+      { name: "set_use_up", input: { date: "2026-10-26", items: ["spinach", "rice"] } },
+      { name: "propose_week", input: { date: "2026-10-26", reroll: true } },
+      { name: "set_use_up", input: { date: "2026-10-26", items: [] } },
+    ]),
+  );
+});
+
+test("a Week with no Use it up says so under Re-roll, and names its Items once it has some", async () => {
+  const { client } = fakeClient({
+    get_week: () => ({ ok: true, value: { ...proposedWeek(), useUp: ["spinach", "rice"] } }),
+  });
+  render(() => <App client={client} />);
+
+  expect(await screen.findByRole("button", { name: "Use it up: spinach, rice · Change" })).toBeTruthy();
+  cleanup();
+
+  const { client: other } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  render(() => <App client={other} />);
+  expect(await screen.findByRole("button", { name: "Use it up…" })).toBeTruthy();
+});
+
+test("“Propose dinners” stores the Items picked, then proposes", async () => {
+  const { client, calls } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByText("Nothing planned yet");
+
+  await user.click(screen.getByRole("button", { name: "Propose dinners" }));
+  const sheet = screen.getByRole("dialog", { name: "Use it up" });
+  await user.type(within(sheet).getByRole("combobox", { name: "Item on hand" }), "spinach{Enter}");
+  await user.click(within(sheet).getByRole("button", { name: "Propose dinners" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      { name: "set_use_up", input: { date: "2026-11-02", items: ["spinach"] } },
+      { name: "propose_week", input: { date: "2026-11-02" } },
     ]),
   );
 });
@@ -1322,6 +1365,83 @@ test("only Mise's Suggestions show a reason line; the Household's own dinners sh
     const dinner = within(screen.getByRole("region", { name: day })).getByRole("region", { name: "Dinner" });
     expect(within(dinner).queryByText(/Chosen from|kept as it was|No Recipe fits/)).toBeNull();
   }
+});
+
+/**
+ * The proposed Week with more Suggestions: Leftovers of Monday's on Wednesday, Curry cooked on Thursday
+ * as an earlier Proposer left it, and Curry for nobody on Friday.
+ */
+function suggestionsWeek(): Week {
+  const week = proposedWeek();
+  const curry = (week.slots[2] as Slot).recipe;
+  const chosen = (week.slots[2] as Slot).reason;
+  Object.assign(week.slots[8] as Slot, {
+    kind: "leftovers",
+    leftoversOf: { date: "2026-10-26", meal: "dinner", recipe: curry },
+    reason: { kind: "leftovers", of: "2026-10-26" },
+  });
+  Object.assign(week.slots[11] as Slot, {
+    kind: "recipe",
+    recipe: curry,
+    reason: chosen,
+    cookedAt: "2026-10-30T02:00:00.000Z",
+  });
+  Object.assign(week.slots[14] as Slot, { kind: "recipe", recipe: curry, reason: chosen, diners: [], servings: 0 });
+  return week;
+}
+
+const dinnerOn = (day: string) =>
+  within(screen.getByRole("region", { name: day })).getByRole("region", { name: "Dinner" });
+
+test("Keep sits beside the reason line of a Suggestion with a Recipe or Leftovers, and keeps it", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: suggestionsWeek() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  expect(within(dinnerOn("Wednesday, October 28")).getByRole("button", { name: "Keep" })).toBeTruthy();
+  // No Recipe fit Tuesday's, so the next Proposal fills it anyway.
+  expect(within(dinnerOn("Tuesday, October 27")).queryByRole("button", { name: "Keep" })).toBeNull();
+  await user.click(within(dinnerOn("Monday, October 26")).getByRole("button", { name: "Keep" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([{ name: "keep_slot", input: { date: "2026-10-26", meal: "dinner" } }]),
+  );
+});
+
+test("Keep is absent on a cooked dinner and on one nobody is eating", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: suggestionsWeek() }) });
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  for (const day of ["Thursday, October 29", "Friday, October 30"]) {
+    expect(within(dinnerOn(day)).queryByRole("button", { name: "Keep" })).toBeNull();
+  }
+});
+
+test("the Slot sheet offers Keep under the same rule, and keeps what was typed", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: suggestionsWeek() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(dinnerOn("Tuesday, October 27")).getByRole("button", { name: "Choose a dinner" }));
+  const tuesday = within(dinnerOn("Tuesday, October 27")).getByRole("form", { name: "Dinner" });
+  expect(within(tuesday).queryByRole("button", { name: "Keep" })).toBeNull();
+  await user.click(within(tuesday).getByRole("button", { name: "Cancel" }));
+
+  await user.click(within(dinnerOn("Monday, October 26")).getByRole("button", { name: "Curry" }));
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit dinner" }));
+  const monday = within(dinnerOn("Monday, October 26")).getByRole("form", { name: "Dinner" });
+  // One Keep while the sheet is open: the sheet's.
+  expect(within(dinnerOn("Monday, October 26")).getAllByRole("button", { name: "Keep" })).toHaveLength(1);
+  await user.type(within(monday).getByRole("textbox", { name: "Note" }), "Make it spicy");
+  await user.click(within(monday).getByRole("button", { name: "Keep" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([{ name: "keep_slot", input: { date: "2026-10-26", meal: "dinner" } }]),
+  );
+  expect((within(monday).getByRole("textbox", { name: "Note" }) as HTMLInputElement).value).toBe("Make it spicy");
 });
 
 test("Effort Budgets are set for this Week, or for every Week", async () => {

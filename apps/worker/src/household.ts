@@ -198,8 +198,8 @@ class HouseholdAgent extends Agent<Env> {
             // One queued turn per run, so that a run's tools find its own speaker (`turnBeingAnswered`).
             followUpMode: "one-at-a-time",
             compaction: agentCompaction(this.models),
-            // A round's tool calls run in the order the model made them: a Slot locked before the Week is
-            // proposed again is kept. They are quick calls to this household, so nothing is lost.
+            // A round's tool calls run in the order the model made them: a dinner kept before a Re-roll
+            // stays. They are quick calls to this household, so nothing is lost.
             toolExecution: "sequential",
           },
           // Runs and model requests are traced, and pi's own failures reported, without what anyone said.

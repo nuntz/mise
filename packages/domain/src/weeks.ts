@@ -213,6 +213,8 @@ export const Week = z.object({
   proposalSeed: z.number().int().nonnegative().nullable(),
   /** Whether someone has looked the Week over since it was last proposed. */
   reviewed: z.boolean(),
+  /** Its Use it up: the Items on hand that its Proposals favour Recipes for, as last set; none to start with. */
+  useUp: z.array(ItemId),
 });
 export type Week = z.infer<typeof Week>;
 
@@ -303,24 +305,35 @@ export const LinkLeftoversInput = z
 
 export const LockSlotInput = z.object({ ...SlotRef, locked: z.boolean() }).strict();
 
+/** Keeps a Suggestion: the dinner becomes the Household's own, which no Proposal changes (ADR 0030). */
+export const KeepSlotInput = z.object(SlotRef).strict();
+
 /** Clearing is destructive, so the caller must say they confirmed it. */
 export const ClearWeekInput = z.object({ date: LocalDate, confirm: z.literal(true) }).strict();
 
 /**
- * Proposes the Week's dinners (see `proposeWeek`). The same Week, unchanged, gets the same Proposal
- * from the seed it was last proposed with; a re-roll moves on to a new seed and a different Proposal.
- * Either way the Week is marked as not reviewed.
+ * Proposes the Week's dinners (see `proposeWeek`), favouring Recipes that use its stored Use it up. The
+ * same Week, unchanged, gets the same Proposal from the seed it was last proposed with; a re-roll moves
+ * on to a new seed and a different Proposal. Either way the Week is marked as not reviewed.
  */
 export const ProposeWeekInput = z
   .object({
     date: LocalDate.optional(),
-    /** Items on hand: Recipes that use them are favoured. */
-    useUp: z
+    reroll: z.boolean().default(false),
+  })
+  .strict();
+
+/**
+ * Stores the Week's Use it up, replacing what it had; none clears it. A Week already proposed is
+ * proposed again from the same seed, so that only its Suggestions and unplanned dinners adjust.
+ */
+export const SetUseUpInput = z
+  .object({
+    date: LocalDate,
+    items: z
       .array(ItemId)
       .max(50)
-      .default([])
       .transform((items) => [...new Set(items)]),
-    reroll: z.boolean().default(false),
   })
   .strict();
 
