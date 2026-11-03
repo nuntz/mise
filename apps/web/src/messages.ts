@@ -710,6 +710,7 @@ const en = {
   "week.propose": "Propose dinners",
   "week.reroll": "Re-roll",
   "week.proposeHint": "Re-roll changes Mise's suggestions. Yours stay.",
+  "week.rerollAllYours": "Every dinner is yours: Let Mise choose one to re-roll it.",
   "week.unreviewed": "This Week was proposed and hasn't been reviewed yet.",
   "week.markReviewed": "Mark as reviewed",
   "week.overline": "Mise · This week",
