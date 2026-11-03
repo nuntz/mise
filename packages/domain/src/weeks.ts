@@ -334,6 +334,14 @@ export const SetUseUpInput = z
   })
   .strict();
 
+/**
+ * Hands a dinner back to Mise ("Let Mise choose") and proposes it again at once (see `proposeDinner`),
+ * from the seed and choice the Week was last proposed with, which stay as they are. The dinner becomes a
+ * Suggestion with its reason; every other dinner is left as it is. The Week is marked as not reviewed
+ * when the dinner changed.
+ */
+export const ProposeDinnerInput = z.object({ date: LocalDate }).strict();
+
 /** Overrides the Effort Budgets of the weekdays given for one Week; null goes back to the Household's. */
 export const SetWeekEffortBudgetsInput = z
   .object({ date: LocalDate, budgets: z.partialRecord(Weekday, Minutes.nullable()) })

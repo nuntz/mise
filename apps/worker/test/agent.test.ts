@@ -251,6 +251,7 @@ describe("what the agent is told", () => {
       "get_caller",
       "get_week",
       "propose_week",
+      "propose_dinner",
       "set_use_up",
       "set_slot",
       "set_diners",
@@ -314,6 +315,9 @@ describe("what the agent is told about Suggestions", () => {
     expect(described("get_week")).toMatch(/without one is the Household's own/);
     expect(described("propose_week")).toMatch(/leaves the Household's own dinners as they are/);
     expect(described("propose_week")).not.toMatch(/decided by hand/);
+    expect(described("propose_dinner")).toMatch(/Let Mise choose Friday/);
+    expect(described("propose_dinner")).toMatch(/pick something else for Friday/);
+    expect(described("propose_dinner")).toMatch(/Recurring/);
     expect(described("keep_slot")).toMatch(/“keep Wednesday”/);
   });
 });
@@ -467,6 +471,19 @@ describe("who is speaking", () => {
 });
 
 describe("typical turns", () => {
+  test("“pick something else for Friday” proposes Friday's dinner again and leaves the rest", async () => {
+    scriptModel(caller([["propose_dinner", { date: FRIDAY }]]));
+    const household = await familyHousehold();
+    await household.callTool("set_slot", { date: FRIDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
+    await household.callTool("set_slot", { date: THURSDAY, meal: "dinner", kind: "recipe", recipeId: 3 });
+
+    expect(await household.chat("Pick something else for Friday", ON_THE_WEEK)).toMatchObject({ ok: true });
+
+    expect(await dinnerOn(household, FRIDAY)).toMatchObject({ kind: "recipe", reason: { kind: "chosen" } });
+    expect((await dinnerOn(household, FRIDAY))?.recipe?.id).not.toBe(2);
+    expect(await dinnerOn(household, THURSDAY)).toMatchObject({ recipe: { id: 3 }, reason: null });
+  });
+
   test("“re-roll the week but keep Tuesday” keeps Tuesday and re-rolls the rest", async () => {
     scriptModel(
       caller([

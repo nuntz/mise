@@ -190,6 +190,7 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         case "list_items":
           return { ok: true, value: ITEMS };
         case "propose_week":
+        case "propose_dinner":
         case "set_use_up":
         case "review_week":
         case "set_week_effort_budgets":
@@ -1287,6 +1288,61 @@ test("a proposed Week shows why each dinner was chosen, and asks to be reviewed"
       { name: "propose_week", input: { date: "2026-10-26", reroll: true } },
       { name: "review_week", input: { date: "2026-10-26", reviewed: true } },
     ]),
+  );
+});
+
+test("“Let Mise choose” shows in the Slot sheet of the Household's own dinners, and proposes that dinner", async () => {
+  const week = proposedWeek();
+  const tacos = { id: 3, title: "Tacos", baseServings: 4, photoKey: null };
+  Object.assign(week.slots[8] as Slot, { kind: "recipe", recipe: tacos });
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+
+  const editDinner = async (day: HTMLElement, title: string) => {
+    await user.click(within(day).getByRole("button", { name: title }));
+    await user.click(
+      // The fake client's Recipe is always Pasta, whichever is opened.
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit dinner" }),
+    );
+    return within(day).getByRole("form", { name: "Dinner" });
+  };
+
+  // Monday's dinner is Mise's Suggestion: there is nothing to hand back.
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  const suggestion = await editDinner(monday, "Curry");
+  expect(within(suggestion).queryByRole("button", { name: "Let Mise choose" })).toBeNull();
+  await user.click(within(suggestion).getByRole("button", { name: "Cancel" }));
+
+  const wednesday = screen.getByRole("region", { name: "Wednesday, October 28" });
+  const own = await editDinner(wednesday, "Tacos");
+  await user.click(within(own).getByRole("button", { name: "Let Mise choose" }));
+
+  await vi.waitFor(() => expect(within(wednesday).queryByRole("form")).toBeNull());
+  expect(writes(calls)).toEqual([{ name: "propose_dinner", input: { date: "2026-10-28" } }]);
+});
+
+test("“Let Mise choose” on a Recurring Recipe's night says the rule is what to change", async () => {
+  const week = proposedWeek();
+  const tacos = { id: 3, title: "Tacos", baseServings: 4, photoKey: null };
+  Object.assign(week.slots[8] as Slot, { kind: "recipe", recipe: tacos });
+  const recurring = structuredClone(week);
+  Object.assign(recurring.slots[8] as Slot, { reason: { kind: "recurring", recurrence: { weekday: "wednesday" } } });
+  const { client } = fakeClient({
+    get_week: () => ({ ok: true, value: week }),
+    propose_dinner: () => ({ ok: true, value: recurring }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const wednesday = await screen.findByRole("region", { name: "Wednesday, October 28" });
+
+  await user.click(within(wednesday).getByRole("button", { name: "Tacos" }));
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit dinner" }));
+  const form = within(wednesday).getByRole("form", { name: "Dinner" });
+  await user.click(within(form).getByRole("button", { name: "Let Mise choose" }));
+
+  expect((await within(form).findByRole("status")).textContent).toBe(
+    "Wednesday is a recurring Tacos night: change the rule to change it.",
   );
 });
 
