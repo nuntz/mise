@@ -874,10 +874,32 @@ test("Re-roll is disabled, and says why under it, when every dinner is the House
 
   const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
   expect(reroll.disabled).toBe(true);
-  expect(description(reroll)).toBe("Every dinner is yours: Let Mise choose one to re-roll it.");
-  expect(reroll.nextElementSibling?.textContent).toBe("Every dinner is yours: Let Mise choose one to re-roll it.");
+  const reason = screen.getByText(
+    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
+  );
+  expect(description(reroll)).toBe(
+    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
+  );
+  // Under Re-roll and Grocery List, not beside Re-roll in their row, and before the Use it up line.
+  expect(reroll.closest(".actions")?.contains(reason)).toBe(false);
+  expect(precedes(reason, screen.getByRole("button", { name: "Use it up…" }))).toBe(true);
   expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
 });
+
+test("Re-roll's hint comes under it, before the Use it up line", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  render(() => <App client={client} />);
+
+  const reroll = await screen.findByRole("button", { name: "Re-roll" });
+  const hint = screen.getByText("Re-roll changes Mise's suggestions. Yours stay.");
+  expect(reroll.closest(".actions")?.contains(hint)).toBe(false);
+  expect(precedes(hint, screen.getByRole("button", { name: "Use it up…" }))).toBe(true);
+});
+
+/** Whether `a` comes before `b` in the document. */
+function precedes(a: Node, b: Node): boolean {
+  return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
 
 test("Re-roll is disabled when one dinner has nobody eating and the rest are the Household's own", async () => {
   const week = ownWeek();
@@ -894,7 +916,9 @@ test("Re-roll is disabled when one dinner has nobody eating and the rest are the
 
   const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
   expect(reroll.disabled).toBe(true);
-  expect(description(reroll)).toBe("Every dinner is yours: Let Mise choose one to re-roll it.");
+  expect(description(reroll)).toBe(
+    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
+  );
 });
 
 test.each<[string, Partial<Slot>]>([
@@ -1379,9 +1403,9 @@ test("a Re-roll that changed nothing says so, and one that changed a dinner says
 
   await user.click(screen.getByRole("button", { name: "Re-roll" }));
 
-  expect(
-    await screen.findByText("Nothing to re-roll: every dinner is yours, or has only one Recipe that fits."),
-  ).toBeTruthy();
+  const note = await screen.findByText("Nothing to re-roll: every dinner is yours, or has only one Recipe that fits.");
+  expect(note.getAttribute("role")).toBe("status");
+  expect(note.classList).toContain("banner-plum");
   changed = true;
   await user.click(screen.getByRole("button", { name: "Re-roll" }));
   await vi.waitFor(() => expect(screen.queryByText(/Nothing to re-roll/)).toBeNull());
@@ -1432,9 +1456,37 @@ test("saving a Use it up that changed no dinner says nothing that fits uses its 
   await user.type(field, "Rice{Enter}");
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save" }));
 
-  expect(
-    await screen.findByText("No dinner changed: nothing that fits uses spinach, rice better than what's planned."),
-  ).toBeTruthy();
+  const note = await screen.findByText(
+    "No dinner changed: nothing that fits uses spinach and rice better than what's planned.",
+  );
+  expect(note.getAttribute("role")).toBe("status");
+  // The answer to the Save just tapped, not standing copy: a tinted note.
+  expect(note.classList).toContain("banner-plum");
+});
+
+test("the Slot sheet's Recipe list shows the dinner's Recipe once the Recipes arrive", async () => {
+  let arrive = () => {};
+  const recipes = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  const { client } = fakeClient({
+    get_week: () => ({ ok: true, value: proposedWeek() }),
+    search_recipes: async () => {
+      await recipes;
+      return { ok: true, value: [pasta, curry] };
+    },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(within(dinnerOn("Monday, October 26")).getByRole("button", { name: "Curry" }));
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit dinner" }));
+  const form = within(dinnerOn("Monday, October 26")).getByRole("form", { name: "Dinner" });
+  arrive();
+
+  const list = (await within(form).findByRole("option", { name: "Curry" })).closest("select") as HTMLSelectElement;
+  expect(list.selectedOptions[0]?.textContent).toBe("Curry");
 });
 
 test("“Let Mise choose” shows in the Slot sheet of the Household's own dinners, and proposes that dinner", async () => {

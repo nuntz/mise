@@ -83,7 +83,11 @@ export function ProposalControls(props: {
     run(
       () => setUseUp(items),
       ({ changed }: ProposedWeek) =>
-        changed || items.length === 0 ? undefined : t("useUp.unchanged", { items: items.map(nameOf).join(", ") }),
+        changed || items.length === 0
+          ? undefined
+          : t("useUp.unchanged", {
+              items: new Intl.ListFormat(props.locale, { type: "conjunction" }).format(items.map(nameOf)),
+            }),
     );
   // Proposing stores the Items first, so that the Proposal favours them.
   const proposeWith = (items: ItemId[]) =>
@@ -148,49 +152,57 @@ export function ProposalControls(props: {
         }
       >
         <div class="actions">
-          <div class="control">
-            <Show when={proposed()} fallback={proposeButton()}>
-              <button
-                type="button"
-                class="button-primary"
-                disabled={disabled() || !canReroll()}
-                aria-describedby={rerollDescribedBy()}
-                onClick={reroll}
-              >
-                <Icon name="refresh" />
-                {t("week.reroll")}
-              </button>
-            </Show>
-            <NeedsConnection id={reasonId} online={props.online} />
-            <Show when={props.online && proposed() && !canReroll()}>
-              <p id={allYoursId} class="control-reason">
-                {t("week.rerollAllYours")}
-              </p>
-            </Show>
-          </div>
+          <Show when={proposed()} fallback={proposeButton()}>
+            <button
+              type="button"
+              class="button-primary"
+              disabled={disabled() || !canReroll()}
+              aria-describedby={rerollDescribedBy()}
+              onClick={reroll}
+            >
+              <Icon name="refresh" />
+              {t("week.reroll")}
+            </button>
+          </Show>
           <button type="button" class="button-secondary" onClick={() => props.onGrocery()}>
             <Icon name="basket" />
             {t("week.groceryList")}
           </button>
         </div>
-        <Show when={proposed()}>
-          <button
-            type="button"
-            class="button-link"
-            disabled={disabled()}
-            aria-describedby={describedBy()}
-            onClick={offerUseUp}
-          >
-            {props.week.useUp.length > 0
-              ? t("useUp.change", { items: props.week.useUp.map(nameOf).join(", ") })
-              : t("useUp.none")}
-          </button>
+        {/* Under the row, not in it, so that a reason that wraps never stretches Grocery List. */}
+        <Show when={!props.online || proposed()}>
+          <div class="proposal-notes">
+            <NeedsConnection id={reasonId} online={props.online} />
+            <Show when={props.online && proposed()}>
+              <Show
+                when={canReroll()}
+                fallback={
+                  <p id={allYoursId} class="control-reason">
+                    {t("week.rerollAllYours")}
+                  </p>
+                }
+              >
+                <small>{t("week.proposeHint")}</small>
+              </Show>
+            </Show>
+            <Show when={proposed()}>
+              <button
+                type="button"
+                class="button-link"
+                disabled={disabled()}
+                aria-describedby={describedBy()}
+                onClick={offerUseUp}
+              >
+                {props.week.useUp.length > 0
+                  ? t("useUp.change", { items: props.week.useUp.map(nameOf).join(", ") })
+                  : t("useUp.none")}
+              </button>
+            </Show>
+          </div>
         </Show>
-        <Show when={props.online && proposed() && canReroll()}>
-          <small>{t("week.proposeHint")}</small>
-        </Show>
+        {/* The answer to what was just tapped, not standing copy. */}
         <Show when={unchanged()}>
-          <p class="meta" role="status">
+          <p class="banner banner-plum" role="status">
             {unchanged()}
           </p>
         </Show>

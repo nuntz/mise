@@ -599,7 +599,7 @@ function SlotView(props: {
             <p class="meta">{reasonText(reason(), props.household, props.items)}</p>
             {/* While its form is open, the form's Keep is the one. */}
             <Show when={!props.readOnly && !props.editing && isKeepable(props.slot)}>
-              <KeepButton client={props.client} slot={props.slot} />
+              <KeepButton client={props.client} slot={props.slot} class="button-link" />
             </Show>
           </div>
         )}
@@ -662,8 +662,11 @@ function SlotView(props: {
   );
 }
 
-/** Keeps a Suggestion at once, making it the Household's own; the Week refetches without its reason. */
-function KeepButton(props: { client: MiseClient; slot: Slot }) {
+/**
+ * Keeps a Suggestion at once, making it the Household's own; the Week refetches without its reason. A
+ * link under the card's reason line, or a row in the Slot form, as "Let Mise choose" is there.
+ */
+function KeepButton(props: { client: MiseClient; slot: Slot; class: "button-link" | "button-row" }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const keep = async () => {
@@ -674,7 +677,7 @@ function KeepButton(props: { client: MiseClient; slot: Slot }) {
   };
   return (
     <>
-      <button type="button" class="button-link" disabled={busy()} onClick={keep}>
+      <button type="button" class={props.class} disabled={busy()} onClick={keep}>
         {t("slot.keep")}
       </button>
       <Show when={error()}>
@@ -1058,6 +1061,26 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
           {error()}
         </p>
       </Show>
+      {/* What acts at once, Keep or "Let Mise choose", set apart from the fields that wait for Save. Both go
+          by the Slot as the Week now has it: once kept, it has nothing left to keep and can be handed back.
+          What's typed stays. */}
+      <Show when={isKeepable(props.slot) || canHandBack(props.slot)}>
+        <div class="slot-form-now">
+          <Show when={isKeepable(props.slot)}>
+            <KeepButton client={props.client} slot={props.slot} class="button-row" />
+          </Show>
+          <Show when={canHandBack(props.slot)}>
+            <button type="button" class="button-row" disabled={busy() || unchanged() !== undefined} onClick={handBack}>
+              {t("slot.letMiseChoose")}
+            </button>
+            <Show when={unchanged()}>
+              <p class="banner banner-plum" role="status">
+                {unchanged()}
+              </p>
+            </Show>
+          </Show>
+        </div>
+      </Show>
       <label>
         {t("slot.kind")}
         <select value={kind()} onChange={(e) => changing(setKind)(e.currentTarget.value as SlotKind)}>
@@ -1067,9 +1090,18 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
       <Show when={kind() === "recipe"}>
         <label>
           {t("slot.recipe")}
-          <select value={recipeId()} onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
-            <option value="">{t("slot.chooseRecipe")}</option>
-            <For each={recipes()}>{(recipe) => <option value={String(recipe.id)}>{recipe.title}</option>}</For>
+          <select onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
+            <option value="" selected={recipeId() === ""}>
+              {t("slot.chooseRecipe")}
+            </option>
+            {/* Selected option by option: the Recipes arrive after the list is drawn. */}
+            <For each={recipes()}>
+              {(recipe) => (
+                <option value={String(recipe.id)} selected={recipeId() === String(recipe.id)}>
+                  {recipe.title}
+                </option>
+              )}
+            </For>
           </select>
         </label>
       </Show>
@@ -1110,23 +1142,6 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
         <legend>{t("slot.guestConstraints")}</legend>
         <ConstraintFields constraints={guestConstraints()} onChange={changing(setGuestConstraints)} />
       </fieldset>
-      {/* The Slot as the Week now has it: once kept, it has nothing left to keep. What's typed stays. */}
-      <Show when={isKeepable(props.slot)}>
-        <div class="slot-actions">
-          <KeepButton client={props.client} slot={props.slot} />
-        </div>
-      </Show>
-      {/* So is "Let Mise choose": once kept, the dinner can be handed back. */}
-      <Show when={canHandBack(props.slot)}>
-        <button type="button" class="button-row" disabled={busy() || unchanged() !== undefined} onClick={handBack}>
-          {t("slot.letMiseChoose")}
-        </button>
-        <Show when={unchanged()}>
-          <p class="meta" role="status">
-            {unchanged()}
-          </p>
-        </Show>
-      </Show>
       <ConflictOverrides
         household={props.household}
         conflicts={refused()}

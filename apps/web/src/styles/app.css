@@ -457,7 +457,9 @@ details[open] > summary::after {
   padding: var(--space-3) var(--space-4) 0;
 }
 
-/* A control and, while it can't work for a reason outside Mise, that reason under it. */
+/* A control and, while it can't work for a reason outside Mise, that reason under it. In a row of
+ * controls, such as the Week's Re-roll and Grocery List, the reason goes under the row instead
+ * (`.proposal-notes`), so that one that wraps never stretches the others. */
 .control {
   display: flex;
   flex-direction: column;
@@ -488,6 +490,20 @@ details[open] > summary::after {
   margin: 0;
   font: var(--type-meta);
   color: var(--ink-muted);
+}
+
+/* Under the Week's Re-roll and Grocery List, out of their row: Re-roll's hint or why it can't, then the
+ * Use it up line, all at the left edge. */
+.proposal-notes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.proposal-notes .button-link {
+  justify-content: flex-start;
+  text-align: start;
 }
 
 .app-header-note {
@@ -1436,22 +1452,27 @@ fieldset > .toggle-chip {
   min-height: var(--touch-min);
 }
 
-/* A Suggestion's grey reason line, with Keep at its end; a refusal of Keep wraps below both. */
+/* A Suggestion's grey reason line at the card's full width, Keep under it at the left edge, and a refusal
+ * of Keep below both. */
 .slot-reason {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.slot-reason .meta {
-  flex: 1 1 0;
-  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
 }
 
 .slot-reason .banner {
-  flex-basis: 100%;
+  align-self: stretch;
+}
+
+/* What a Slot form does at once, Keep or "Let Mise choose", as full-width rows above its fields, ruled off
+ * from them and from Save and Cancel, which wait. */
+.slot-form-now {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline) solid var(--line);
 }
 
 .slot-form {

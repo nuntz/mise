@@ -109,7 +109,9 @@ async function seed(): Promise<Map<string, number>> {
  * What the screens past the Week need to show more than their empty states: a Recipe with
  * Unresolved Ingredients and, given a model, Suggestions for them, a Recipe to tag, a link-only
  * Draft to review, Staples due and run low, a Grocery List, a calendar link and a Kitchen Display;
- * and next Week, a Ready-made dish after a Monday of Leftovers whose form reaches back into this Week.
+ * this Week proposed with every dinner the Household's own, so Re-roll is disabled and says why; and
+ * next Week, a Ready-made dish after a Monday of Leftovers whose form reaches back into this Week, then
+ * Mise's Suggestions for the rest, using up broccoli and apples.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -168,6 +170,11 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
     kind: "recipe",
     recipeId: readyMade.id,
   });
+  // Proposing a Week chosen entirely by hand changes no dinner; looked over, it shows no banner.
+  await call(agent, "propose_week", { date: thisWeek.startDate });
+  await call(agent, "review_week", { date: thisWeek.startDate, reviewed: true });
+  await call(agent, "set_use_up", { date: next, items: ["broccoli", "apple"] });
+  await call(agent, "propose_week", { date: next });
 }
 
 /** The Ready-made dish seeded, whose product the add-dish form then finds already an Item. */
@@ -244,6 +251,19 @@ function screens(ids: Map<string, number>): Screen[] {
   const productField = (page: Page) => page.locator("form label").nth(1);
   // Next Week's Monday, of Leftovers, and its Slot form.
   const nextMonday = (page: Page) => page.locator("section.day").first().locator("section.slot").first();
+  // A dinner with a Recipe, opened, and its sheet's last row: Edit, after Mark as cooked.
+  const editDinner = (slot: (page: Page) => Locator) => async (page: Page) => {
+    await slot(page).locator(".dish-open").first().click();
+    await page.locator(".sheet button.button-row").last().click();
+  };
+  // The first of next Week's Suggestions that Keep is offered for, and the first with a Recipe, by its photo.
+  const keepable = (page: Page) => page.locator("section.slot:has(.slot-reason .button-link)").first();
+  const keepableRecipe = (page: Page) =>
+    page.locator("section.slot:has(.slot-reason .button-link):has(.photo)").first();
+  const slotForm = (page: Page) => page.locator(".slot-form");
+  // The Week's controls, from its title down.
+  const weekControls = (page: Page) => page.locator(".page-header .page-heading");
+  const openUseUp = (page: Page) => page.locator(".proposal-notes .button-link").click();
   return [
     { name: "week" },
     { name: "week-dinner", open: (page) => page.locator(".dish-open").first().click(), overlay: true },
@@ -316,6 +336,26 @@ function screens(ids: Map<string, number>): Screen[] {
         });
       },
       focus: (page) => page.locator(".slot-form label:has(select option[value*='/'])"),
+    },
+    { name: "week-kept", focus: weekControls },
+    {
+      name: "week-kept-form",
+      open: editDinner((page) => page.locator("section.slot").first()),
+      focus: slotForm,
+    },
+    { name: "week-next-keep", path: "/?week=next", focus: keepable },
+    { name: "week-next-suggestion-form", path: "/?week=next", open: editDinner(keepableRecipe), focus: slotForm },
+    { name: "week-next-use-up", path: "/?week=next", open: openUseUp, overlay: true },
+    {
+      name: "week-next-use-up-unchanged",
+      path: "/?week=next",
+      // Saved as it was, the Use it up changes no dinner.
+      open: async (page) => {
+        await openUseUp(page);
+        await page.locator(".sheet .button-primary").click();
+        await page.locator(".page-header p.banner-plum").waitFor();
+      },
+      focus: weekControls,
     },
     { name: "grocery", open: nav(2) },
     { name: "pantry", path: "/?pantry" },

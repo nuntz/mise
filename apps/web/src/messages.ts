@@ -710,7 +710,8 @@ const en = {
   "week.reroll": "Re-roll",
   "week.proposeHint": "Re-roll changes Mise's suggestions. Yours stay.",
   "week.nothingToReroll": "Nothing to re-roll: every dinner is yours, or has only one Recipe that fits.",
-  "week.rerollAllYours": "Every dinner is yours: Let Mise choose one to re-roll it.",
+  "week.rerollAllYours":
+    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
   "week.unreviewed": "This Week was proposed and hasn't been reviewed yet.",
   "week.markReviewed": "Mark as reviewed",
   "week.overline": "Mise · This week",
