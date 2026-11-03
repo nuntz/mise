@@ -836,7 +836,7 @@ test("offline, proposing says it needs a connection under the control, and its h
   const { client, goOffline } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   render(() => <App client={client} />);
   const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
-  expect(screen.getByText(/Fills the dinners that aren't Locked/)).toBeTruthy();
+  expect(screen.getByText("Re-roll changes Mise's suggestions. Yours stay.")).toBeTruthy();
 
   goOffline();
 
@@ -845,7 +845,7 @@ test("offline, proposing says it needs a connection under the control, and its h
     expect(control.disabled).toBe(true);
     expect(description(control)).toBe("Needs a connection.");
   }
-  expect(screen.queryByText(/Fills the dinners that aren't Locked/)).toBeNull();
+  expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
 });
 
 test("offline, an empty Week's Propose says it needs a connection", async () => {
@@ -1248,6 +1248,24 @@ test("a proposed Week shows why each dinner was chosen, and asks to be reviewed"
       { name: "review_week", input: { date: "2026-10-26", reviewed: true } },
     ]),
   );
+});
+
+test("only Mise's Suggestions show a reason line; the Household's own dinners show none", async () => {
+  const week = proposedWeek();
+  const tacos = { id: 3, title: "Tacos", baseServings: 4, photoKey: null };
+  // Wednesday chosen by hand, Thursday cooked, Friday eating out: no reason, so no line.
+  Object.assign(week.slots[8] as Slot, { kind: "recipe", recipe: tacos });
+  Object.assign(week.slots[11] as Slot, { kind: "recipe", recipe: tacos, cookedAt: "2026-10-30T02:00:00.000Z" });
+  Object.assign(week.slots[14] as Slot, { kind: "eat_out" });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  expect(within(monday).getByText(/^Chosen from 12 Recipes that fit/)).toBeTruthy();
+  for (const day of ["Wednesday, October 28", "Thursday, October 29", "Friday, October 30"]) {
+    const dinner = within(screen.getByRole("region", { name: day })).getByRole("region", { name: "Dinner" });
+    expect(within(dinner).queryByText(/Chosen from|kept as it was|No Recipe fits/)).toBeNull();
+  }
 });
 
 test("Effort Budgets are set for this Week, or for every Week", async () => {

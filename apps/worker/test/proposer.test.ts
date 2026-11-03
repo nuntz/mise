@@ -1,6 +1,8 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { addDays, type Slot, type ToolResult, type Week } from "@mise/domain";
 import { describe, expect, test } from "vitest";
+import { migrate } from "../src/migrations";
 
 /**
  * A Household of Robin (allergic to peanut), Alex and Sam, Members 1, 2 and 3, whose Weeks start on
@@ -69,7 +71,7 @@ describe("proposing a Week", () => {
       expect(dinner.recipe?.id).not.toBe(SATAY);
       expect(dinner.conflicts).toEqual([]);
     }
-    expect(dinners(week)[2]).toMatchObject({ recipe: { id: 2 }, locked: true, reason: { kind: "locked" } });
+    expect(dinners(week)[2]).toMatchObject({ recipe: { id: 2 }, locked: true, reason: null });
     expect(dinners(week)[0]?.reason).toMatchObject({ kind: "chosen", candidates: 11 });
     // Recipe 2 is Locked on Wednesday, so it isn't proposed again within 2 weeks of it.
     expect(dinners(week).filter((dinner) => dinner.recipe?.id === 2)).toHaveLength(1);
@@ -152,7 +154,7 @@ describe("proposing a Week", () => {
     });
   });
 
-  test("editing a proposed Slot by hand drops its reason", async () => {
+  test("changing a proposed Slot's kind by hand drops its reason", async () => {
     const household = await setUpHousehold();
     await propose(household);
 
@@ -161,6 +163,102 @@ describe("proposing a Week", () => {
     const week = weekOf(await household.callTool("get_week", { date: MONDAY }));
     expect(dinners(week)[0]).toMatchObject({ kind: "eat_out", reason: null });
     expect(dinners(week)[1]?.reason).toMatchObject({ kind: "chosen" });
+  });
+});
+
+describe("the Household's own dinners and Mise's Suggestions", () => {
+  const THURSDAY = "2026-10-29";
+  const FRIDAY = "2026-10-30";
+
+  test("a Recipe set by hand survives a Re-roll, with no reason", async () => {
+    const household = await setUpHousehold();
+    await propose(household);
+    await household.callTool("set_slot", { date: WEDNESDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
+
+    for (let roll = 0; roll < 3; roll++) {
+      const week = await propose(household, { reroll: true });
+      expect(dinners(week)[2]).toMatchObject({ recipe: { id: 2 }, reason: null });
+      expect(dinners(week).filter((dinner) => dinner.recipe?.id === 2)).toHaveLength(1);
+    }
+  });
+
+  test("Leftovers, eating out and no meal set by hand survive a Re-roll", async () => {
+    const household = await setUpHousehold();
+    await propose(household);
+    await household.callTool("set_slot", { date: WEDNESDAY, meal: "dinner", kind: "leftovers" });
+    await household.callTool("set_slot", { date: THURSDAY, meal: "dinner", kind: "eat_out" });
+    await household.callTool("set_slot", { date: FRIDAY, meal: "dinner", kind: "skip" });
+
+    const week = await propose(household, { reroll: true });
+
+    expect(dinners(week).slice(2, 5)).toMatchObject([
+      { kind: "leftovers", reason: null },
+      { kind: "eat_out", reason: null },
+      { kind: "skip", reason: null },
+    ]);
+  });
+
+  test("changing only a Suggestion's note or Diners keeps it a Suggestion", async () => {
+    const household = await setUpHousehold();
+    const proposed = dinners(await propose(household))[0] as Slot;
+
+    await household.callTool("set_slot", {
+      date: MONDAY,
+      meal: "dinner",
+      kind: "recipe",
+      recipeId: proposed.recipe?.id,
+      note: "Make it spicy",
+      diners: [1, 2],
+    });
+
+    const week = weekOf(await household.callTool("get_week", { date: MONDAY }));
+    expect(dinners(week)[0]).toMatchObject({ note: "Make it spicy", diners: [1, 2], reason: proposed.reason });
+  });
+
+  test("changing a Suggestion's Recipe makes it the Household's own", async () => {
+    const household = await setUpHousehold();
+    const proposed = dinners(await propose(household))[0] as Slot;
+    const other = proposed.recipe?.id === 2 ? 3 : 2;
+
+    await household.callTool("set_slot", { date: MONDAY, meal: "dinner", kind: "recipe", recipeId: other });
+
+    const week = weekOf(await household.callTool("get_week", { date: MONDAY }));
+    expect(dinners(week)[0]).toMatchObject({ recipe: { id: other }, reason: null });
+  });
+});
+
+describe("reasons stored before ADR 0030", () => {
+  test("a dinner kept by rule or cooked loses its reason, and a Suggestion keeps its own", async () => {
+    const household = await setUpHousehold();
+    const proposed = await propose(household);
+    // As an earlier Proposer stored them: a reason for dinners it kept, and a cooked Suggestion.
+    await runInDurableObject(household, async (_household, state) => {
+      const sql = state.storage.sql;
+      const reason = (date: string, kind: string) =>
+        sql.exec("UPDATE slot_reason SET reason = ? WHERE date = ? AND meal = 'dinner'", `{"kind":"${kind}"}`, date);
+      reason(addDays(MONDAY, 1), "kept");
+      reason(addDays(MONDAY, 2), "cooked");
+      sql.exec("UPDATE slot SET cooked_at = '2026-10-28T19:00:00.000Z' WHERE date = ? AND meal = 'dinner'", WEDNESDAY);
+      sql.exec(
+        "UPDATE slot SET cooked_at = '2026-10-29T19:00:00.000Z' WHERE date = ? AND meal = 'dinner'",
+        addDays(MONDAY, 3),
+      );
+      sql.exec("DELETE FROM schema_version WHERE version >= 30");
+      // Migration 30 again, and only it.
+      migrate(state.storage, 30);
+    });
+
+    const week = weekOf(await household.callTool("get_week", { date: MONDAY }));
+
+    expect(dinners(week).map((dinner) => dinner.reason)).toEqual([
+      dinners(proposed)[0]?.reason,
+      null,
+      null,
+      null,
+      dinners(proposed)[4]?.reason,
+      dinners(proposed)[5]?.reason,
+      dinners(proposed)[6]?.reason,
+    ]);
   });
 });
 

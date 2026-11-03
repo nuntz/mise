@@ -186,8 +186,12 @@ export const Slot = z.object({
    * Constraint of someone eating it, overridden or not.
    */
   conflicts: z.array(SlotConflict),
-  /** Why the latest Proposal left it as it did; null once edited by hand, or if never proposed. */
+  /**
+   * Why Mise chose it, set exactly when it is a Suggestion, which a Proposal may change. Null for the
+   * Household's own (chosen, changed or cooked by hand) and for a Slot never proposed (ADR 0030).
+   */
   reason: ProposalReason.nullable(),
+
   /** When it was marked cooked; null until it is. Only a Slot with a Recipe can be. */
   cookedAt: z.iso.datetime().nullable(),
   /** The Ratings it was given once cooked, oldest first: one per Member, and any no Member gave. */

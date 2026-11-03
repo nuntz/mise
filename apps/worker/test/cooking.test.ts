@@ -192,6 +192,27 @@ describe("rating a cooked Slot", () => {
   });
 });
 
+describe("cooking a Suggestion makes it the Household's own", () => {
+  test("marking it cooked deletes its reason, and unmarking doesn't bring it back", async () => {
+    const household = await setUpHousehold();
+    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const monday = proposed.slots.find((slot) => slot.date === MONDAY && slot.meal === "dinner");
+    expect(monday?.reason).not.toBeNull();
+
+    expect(succeeded(await household.callTool("mark_cooked", dinner(MONDAY)))).toMatchObject({ reason: null });
+    expect(succeeded(await household.callTool("mark_cooked", { ...dinner(MONDAY), cooked: false }))).toMatchObject({
+      cookedAt: null,
+      reason: null,
+    });
+
+    const rerolled = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll: true }));
+    expect(rerolled.slots.find((slot) => slot.date === MONDAY && slot.meal === "dinner")).toMatchObject({
+      recipe: { id: monday?.recipe?.id },
+      reason: null,
+    });
+  });
+});
+
 describe("cooking and Ratings feed the Proposer", () => {
   test("a cooked dinner is kept; a Recipe rated never is not proposed again", async () => {
     const household = await setUpHousehold();
@@ -204,7 +225,7 @@ describe("cooking and Ratings feed the Proposer", () => {
     const next = succeeded<Week>(await household.callTool("propose_week", { date: "2026-12-07" }));
 
     const dinners = (of: Week) => of.slots.filter((slot) => slot.meal === "dinner");
-    expect(dinners(week)[0]).toMatchObject({ recipe: { id: TACOS }, reason: { kind: "cooked" } });
+    expect(dinners(week)[0]).toMatchObject({ recipe: { id: TACOS }, reason: null });
     expect(dinners(week)[0]?.cookedAt).not.toBeNull();
     expect(dinners(next).map((slot) => slot.recipe?.id)).not.toContain(TACOS);
   });

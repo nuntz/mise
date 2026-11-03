@@ -54,7 +54,7 @@ function dinners(): ProposerDinner[] {
     guests: 0,
     guestConstraints: [],
     leftoversOf: null,
-    leftoversProposed: false,
+    suggestion: false,
     keptLeftovers: [],
   }));
 }
@@ -108,7 +108,8 @@ const SOME_COURSES = ["main", "main", null, null, null, "side", "dessert", "drin
 
 /**
  * A random Week: Members with random Hard Constraints and dislikes, Recipes with random Allergens
- * (some unknown), efforts, tags, Courses and Ratings, dinners some Locked or decided by hand, and history.
+ * (some unknown), efforts, tags, Courses and Ratings, dinners some Locked, some the Household's own, some
+ * Suggestions, and history.
  */
 function randomWeek(seed: number): ProposerInput {
   const random = generator(seed);
@@ -150,7 +151,8 @@ function randomWeek(seed: number): ProposerInput {
       guestConstraints: guests > 0 ? constraints() : [],
       ...(roll < 0.15 && { kind: "recipe", recipeId: planned.id, locked: true }),
       ...(roll >= 0.15 && roll < 0.25 && { kind: random.one(["leftovers", "eat_out", "skip"] as const) }),
-      ...(roll >= 0.25 && roll < 0.35 && { kind: "recipe", recipeId: planned.id }),
+      ...(roll >= 0.25 && roll < 0.3 && { kind: "recipe", recipeId: planned.id }),
+      ...(roll >= 0.3 && roll < 0.35 && { kind: "recipe", recipeId: planned.id, suggestion: true }),
       ...(roll >= 0.35 && roll < 0.45 && { kind: "recipe", recipeId: planned.id, cooked: true }),
     };
   });
@@ -165,7 +167,7 @@ const WEEKS = Array.from({ length: 300 }, (_, index) => index + 1);
 
 /** The dinners a Proposal filled itself, not those it kept. */
 function filled(proposal: Proposal) {
-  return proposal.dinners.filter((dinner) => dinner.reason.kind === "chosen" || dinner.reason.kind === "recurring");
+  return proposal.dinners.filter((dinner) => dinner.reason?.kind === "chosen" || dinner.reason?.kind === "recurring");
 }
 
 describe("proposeWeek, over random Weeks", () => {
@@ -180,13 +182,14 @@ describe("proposeWeek, over random Weeks", () => {
     }
   });
 
-  test("keeps Locked Slots, cooked dinners, and those decided as Leftovers, eating out or no meal", () => {
+  test("keeps Locked Slots, cooked dinners, and the Household's own, with no reason written for them", () => {
     for (const seed of WEEKS) {
       const week = randomWeek(seed);
       const proposal = proposeWeek(week);
       week.dinners.forEach((before, index) => {
-        if (!before.locked && !before.cooked && !["leftovers", "eat_out", "skip"].includes(before.kind)) return;
-        expect(proposal.dinners[index]).toMatchObject({ kind: before.kind, recipeId: before.recipeId });
+        const own = !before.suggestion && before.kind !== "unplanned";
+        if (!before.locked && !before.cooked && !own) return;
+        expect(proposal.dinners[index]).toMatchObject({ kind: before.kind, recipeId: before.recipeId, reason: null });
       });
     }
   });
@@ -195,7 +198,7 @@ describe("proposeWeek, over random Weeks", () => {
     for (const seed of WEEKS) {
       const week = randomWeek(seed);
       const proposal = proposeWeek(week);
-      for (const dinner of proposal.dinners.filter((other) => other.reason.kind === "leftovers")) {
+      for (const dinner of proposal.dinners.filter((other) => other.reason?.kind === "leftovers")) {
         const at = week.dinners.find((other) => other.date === dinner.date) as ProposerDinner;
         const source = week.dinners.find((other) => other.date === dinner.leftoversOf) as ProposerDinner;
         const cooked = proposal.dinners.find((other) => other.date === dinner.leftoversOf);
@@ -236,7 +239,7 @@ describe("proposeWeek, over random Weeks", () => {
           dinner.recipeId === null ? [] : [{ recipeId: dinner.recipeId, date: dinner.date }],
         ),
       ];
-      for (const dinner of proposal.dinners.filter((other) => other.reason.kind === "chosen")) {
+      for (const dinner of proposal.dinners.filter((other) => other.reason?.kind === "chosen")) {
         const chosen = week.recipes.find((other) => other.id === dinner.recipeId) as ProposerRecipe;
         expect(chosen.effortMinutes ?? 0).toBeLessThanOrEqual(week.effortBudgets[weekdayOf(dinner.date)]);
         for (const other of planned) {
@@ -259,7 +262,7 @@ describe("proposeWeek, over random Weeks", () => {
     }
   });
 
-  test("a re-roll differs from the Week as it was proposed, and keeps its Locked Slots", () => {
+  test("a re-roll differs from the Week as it was proposed, and keeps Locked Slots and the Household's own", () => {
     for (const seed of WEEKS) {
       const week = randomWeek(seed);
       const first = proposeWeek(week);
@@ -268,11 +271,12 @@ describe("proposeWeek, over random Weeks", () => {
         kind: first.dinners[index]?.kind ?? dinner.kind,
         recipeId: first.dinners[index]?.recipeId ?? null,
         leftoversOf: first.dinners[index]?.leftoversOf ?? null,
-        leftoversProposed: first.dinners[index]?.reason.kind === "leftovers",
+        // What it filled is Mise's Suggestion; what it left alone stays as it was.
+        suggestion: first.dinners[index]?.reason ? true : dinner.suggestion,
       }));
       // Only a Week with room to choose can come out differently.
       const roomToChoose = first.dinners.some(
-        (dinner) => dinner.reason.kind === "chosen" && dinner.reason.candidates > 1,
+        (dinner) => dinner.reason?.kind === "chosen" && dinner.reason.candidates > 1,
       );
       if (!roomToChoose) continue;
 
@@ -281,7 +285,8 @@ describe("proposeWeek, over random Weeks", () => {
       expect(rerolled.seed).not.toBe(first.seed);
       expect(rerolled.dinners.map((dinner) => dinner.recipeId)).not.toEqual(first.dinners.map((d) => d.recipeId));
       week.dinners.forEach((before, index) => {
-        if (before.locked) expect(rerolled.dinners[index]?.recipeId).toBe(before.recipeId);
+        const own = !before.suggestion && before.kind !== "unplanned";
+        if (before.locked || own) expect(rerolled.dinners[index]?.recipeId).toBe(before.recipeId);
       });
     }
   });
@@ -396,8 +401,8 @@ describe("proposeWeek, rule by rule", () => {
     const proposal = proposeWeek(input({ dinners: week, recipes: [tacoTuesday, pizza, ...input().recipes.slice(2)] }));
 
     expect(proposal.dinners.map((dinner) => dinner.recipeId).filter((id) => id === 1 || id === 2)).toEqual([1, 2]);
-    expect(proposal.dinners[1]).toMatchObject({ recipeId: 1, reason: { kind: "cooked" } });
-    expect(proposal.dinners[4]).toMatchObject({ recipeId: 2, reason: { kind: "locked" } });
+    expect(proposal.dinners[1]).toMatchObject({ recipeId: 1, reason: null });
+    expect(proposal.dinners[4]).toMatchObject({ recipeId: 2, reason: null });
   });
 
   test("a dinner left unplanned when its only Recipe is Recurring and rated never counts it as never", () => {
@@ -552,7 +557,7 @@ describe("proposeWeek, rule by rule", () => {
     expect(asProposed.dinners[0]?.recipeId).toBe(1);
 
     const rerolled = rerollWeek(
-      input({ dinners: [{ ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1 }], recipes }),
+      input({ dinners: [{ ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1, suggestion: true }], recipes }),
     );
 
     expect(rerolled).toMatchObject({ choice: "any", dinners: [{ recipeId: 2 }] });
@@ -572,6 +577,87 @@ describe("proposeWeek, rule by rule", () => {
       leftoversOf: null,
       reason: { kind: "nobody_eating" },
     });
+  });
+});
+
+describe("proposeWeek, the Household's own dinners", () => {
+  const chili = recipe(1, { yieldsLeftovers: true });
+  const plain = Array.from({ length: 10 }, (_, index) => recipe(index + 2));
+
+  test("a Recipe dinner with no reason is settled: kept as it is, and counted for recency", () => {
+    const week = dinners();
+    week[2] = { ...(week[2] as ProposerDinner), kind: "recipe", recipeId: 5 };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: plain }));
+
+    expect(proposal.dinners[2]).toEqual({
+      date: addDays(MONDAY, 2),
+      kind: "recipe",
+      recipeId: 5,
+      leftoversOf: null,
+      reason: null,
+    });
+    expect(proposal.dinners.filter((dinner) => dinner.recipeId === 5)).toHaveLength(1);
+    expect(rerollWeek(input({ dinners: week, recipes: plain })).dinners[2]).toMatchObject({ recipeId: 5 });
+  });
+
+  test("a Suggestion with a Recipe is proposed again", () => {
+    const week = dinners();
+    week[2] = { ...(week[2] as ProposerDinner), kind: "recipe", recipeId: 5, suggestion: true };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: plain }));
+
+    expect(proposal.dinners[2]?.reason).toMatchObject({ kind: "chosen" });
+  });
+
+  test("Leftovers are still placed after a settled Recipe dinner that yields them", () => {
+    const week = dinners();
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1 };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: [chili, ...plain] }));
+
+    expect(proposal.dinners[0]).toMatchObject({ recipeId: 1, reason: null });
+    expect(proposal.dinners[1]).toMatchObject({
+      kind: "leftovers",
+      leftoversOf: MONDAY,
+      reason: { kind: "leftovers", of: MONDAY },
+    });
+  });
+
+  test("the dinner after a settled one isn't filled with its Leftovers twice", () => {
+    const week = dinners();
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 1 };
+    // Placed by the last Proposal, so a Suggestion.
+    week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY, suggestion: true };
+
+    for (const proposal of [
+      proposeWeek(input({ dinners: week, recipes: [chili, ...plain] })),
+      rerollWeek(input({ dinners: week, recipes: [chili, ...plain] })),
+    ]) {
+      expect(proposal.dinners.filter((dinner) => dinner.leftoversOf === MONDAY)).toHaveLength(1);
+    }
+  });
+
+  test("it writes no reason for the dinners it leaves alone", () => {
+    const week = dinners();
+    week[0] = { ...(week[0] as ProposerDinner), kind: "recipe", recipeId: 2, cooked: true };
+    week[1] = { ...(week[1] as ProposerDinner), kind: "recipe", recipeId: 3, locked: true };
+    week[2] = { ...(week[2] as ProposerDinner), kind: "recipe", recipeId: 4 };
+    week[3] = { ...(week[3] as ProposerDinner), kind: "eat_out" };
+    week[4] = { ...(week[4] as ProposerDinner), kind: "skip" };
+    week[5] = { ...(week[5] as ProposerDinner), kind: "leftovers", leftoversOf: addDays(MONDAY, 2) };
+
+    const proposal = proposeWeek(input({ dinners: week, recipes: plain }));
+
+    expect(proposal.dinners.map((dinner) => dinner.reason)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      expect.objectContaining({ kind: "chosen" }),
+    ]);
   });
 });
 
@@ -615,7 +701,7 @@ describe("proposeWeek, Leftovers", () => {
 
     const proposal = proposeWeek(input({ dinners: week, recipes: [cake, ...plain] }));
 
-    expect(proposal.dinners[0]).toMatchObject({ recipeId: 1, reason: { kind: "locked" } });
+    expect(proposal.dinners[0]).toMatchObject({ recipeId: 1, reason: null });
     expect(proposal.dinners.map((dinner) => dinner.kind)).not.toContain("leftovers");
   });
 
@@ -630,7 +716,7 @@ describe("proposeWeek, Leftovers", () => {
 
   test("Leftovers it placed before are proposed again; those linked by hand are kept", () => {
     const week = dinners();
-    week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY, leftoversProposed: true };
+    week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY, suggestion: true };
     week[3] = { ...(week[3] as ProposerDinner), kind: "leftovers", leftoversOf: addDays(MONDAY, 2) };
 
     const proposal = proposeWeek(input({ dinners: week, recipes: plain }));
@@ -646,6 +732,7 @@ describe("proposeWeek, Leftovers", () => {
       ...(week[1] as ProposerDinner),
       kind: "recipe",
       recipeId: 2,
+      suggestion: true,
       keptLeftovers: [{ diners: [robin, alex], guests: 0, guestConstraints: [] }],
     };
     week[2] = { ...(week[2] as ProposerDinner), kind: "leftovers", leftoversOf: addDays(MONDAY, 1) };
@@ -664,6 +751,7 @@ describe("proposeWeek, Leftovers", () => {
       ...(week[0] as ProposerDinner),
       kind: "recipe",
       recipeId: 20,
+      suggestion: true,
       keptLeftovers: [{ diners: [robin, alex], guests: 0, guestConstraints: [] }],
     };
     week[1] = { ...(week[1] as ProposerDinner), kind: "leftovers", leftoversOf: MONDAY };
@@ -675,7 +763,7 @@ describe("proposeWeek, Leftovers", () => {
       kind: "recipe",
       recipeId: 20,
       leftoversOf: null,
-      reason: { kind: "kept" },
+      reason: null,
     });
 
     // Unless a Guest eating its Leftovers is allergic to it.

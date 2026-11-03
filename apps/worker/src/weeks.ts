@@ -133,9 +133,13 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     if (recipeId !== null && isDraft(sql, recipeId)) return draftRefused(recipeId);
     const unknown = unknownMember(sql, input.diners);
     if (unknown !== undefined) return memberNotFound(unknown);
+    const before = readSlot(sql, input.date, input.meal);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
-      // Set by hand now, so no longer for the reason a Proposal gave.
-      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+      // Choosing what it holds by hand makes it the Household's own. A note, Diners or Guests changed
+      // on a Suggestion leave it Mise's to change (ADR 0030).
+      if (before.kind !== input.kind || (before.recipe?.id ?? null) !== recipeId) {
+        sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+      }
       sql.exec(
         "UPDATE slot SET kind = ?, recipe_id = ? WHERE date = ? AND meal = ?",
         input.kind,
@@ -307,7 +311,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
           cooked: slot.cookedAt !== null,
           ...people(slot),
           leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
-          leftoversProposed: isProposedLeftovers(slot),
+          suggestion: slot.reason !== null,
           // Those it placed itself, it places again.
           keptLeftovers: slot.leftovers
             .map((leftovers) => readSlot(sql, leftovers.date, leftovers.meal))
@@ -328,23 +332,23 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     for (const dinner of proposal.dinners) {
       const slot = { date: dinner.date, meal: "dinner" } as const;
       storeSlot(sql, settings, dinner.date, "dinner");
-      if (!["locked", "cooked", "kept"].includes(dinner.reason.kind)) {
-        sql.exec(
-          `UPDATE slot SET kind = ?, recipe_id = ?, leftovers_of_date = ?, leftovers_of_meal = ?
-           WHERE date = ? AND meal = ?`,
-          dinner.kind,
-          dinner.recipeId,
-          dinner.leftoversOf,
-          dinner.leftoversOf === null ? null : "dinner",
-          dinner.date,
-          "dinner",
-        );
-        // A Recipe proposed conflicts with nobody, not even whoever eats its Leftovers, so no
-        // Override is left to hold.
-        writeOverrides(sql, slot, []);
-        const before = dinners.find((other) => other.date === dinner.date);
-        for (const leftovers of before?.leftovers ?? []) writeOverrides(sql, leftovers, []);
-      }
+      // A dinner it left as it is keeps its reason, or its lack of one.
+      if (dinner.reason === null) continue;
+      sql.exec(
+        `UPDATE slot SET kind = ?, recipe_id = ?, leftovers_of_date = ?, leftovers_of_meal = ?
+         WHERE date = ? AND meal = ?`,
+        dinner.kind,
+        dinner.recipeId,
+        dinner.leftoversOf,
+        dinner.leftoversOf === null ? null : "dinner",
+        dinner.date,
+        "dinner",
+      );
+      // A Recipe proposed conflicts with nobody, not even whoever eats its Leftovers, so no
+      // Override is left to hold.
+      writeOverrides(sql, slot, []);
+      const before = dinners.find((other) => other.date === dinner.date);
+      for (const leftovers of before?.leftovers ?? []) writeOverrides(sql, leftovers, []);
       sql.exec(
         "INSERT OR REPLACE INTO slot_reason (date, meal, reason) VALUES (?, ?, ?)",
         dinner.date,
@@ -415,6 +419,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
       return { ok: false, error: { code: "not_yet", message: `${input.date} is after today, so not cooked yet` } };
     }
     if (input.cooked) {
+      // What was eaten is the Household's own, and stays so when unmarked (ADR 0030).
+      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
       // Marking it again keeps when it was first marked.
       sql.exec(
         "UPDATE slot SET cooked_at = coalesce(cooked_at, ?) WHERE date = ? AND meal = ?",

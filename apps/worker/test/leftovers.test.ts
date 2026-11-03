@@ -144,7 +144,7 @@ describe("Leftovers", () => {
     expect(rice?.amounts[0]?.amount.min).toBe(400);
   });
 
-  test("proposing the Week again unlinks Leftovers whose Slot keeps no Recipe they are safe to eat", async () => {
+  test("proposing the Week again keeps a Recipe chosen by hand, and the Leftovers linked to it with their Override", async () => {
     const household = await setUpHousehold();
     succeeded(
       await household.callTool("set_slot", { ...dinner(TUESDAY), kind: "recipe", recipeId: SATAY, diners: [2] }),
@@ -156,13 +156,21 @@ describe("Leftovers", () => {
         overrides: [{ who: 1, allergen: "peanut", reason: "Robin's bowl without the sauce" }],
       }),
     );
-    // Nothing is quick enough to be chosen for Tuesday, and Satay is not safe for Robin.
-    succeeded(await household.callTool("set_week_effort_budgets", { date: MONDAY, budgets: { tuesday: 10 } }));
 
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll: true }));
 
-    expect(slotOf(proposed, TUESDAY)).toMatchObject({ kind: "unplanned", recipe: null, leftovers: [] });
-    expect(slotOf(proposed, WEDNESDAY)).toMatchObject({ kind: "leftovers", leftoversOf: null, conflicts: [] });
+    // Chosen by hand, so the Household's own: no Proposal changes it (ADR 0030).
+    expect(slotOf(proposed, TUESDAY)).toMatchObject({
+      kind: "recipe",
+      recipe: { id: SATAY },
+      leftovers: [dinner(WEDNESDAY)],
+      reason: null,
+    });
+    expect(slotOf(proposed, WEDNESDAY)).toMatchObject({
+      kind: "leftovers",
+      leftoversOf: dinner(TUESDAY),
+      conflicts: [expect.objectContaining({ who: 1, allergen: "peanut", override: "Robin's bowl without the sauce" })],
+    });
   });
 
   test("Leftovers link only to an earlier Slot that holds a Recipe", async () => {

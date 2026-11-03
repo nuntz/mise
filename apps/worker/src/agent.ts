@@ -157,7 +157,9 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   list_import_flags: "Recipes an import flagged for a merge or as a possible duplicate.",
   get_week:
     "The Week containing `date` (YYYY-MM-DD), or this Week without one: every breakfast, lunch and dinner, " +
-    "with its Recipe, Diners, Guests, Conflicts, whether it is Locked, and the Proposer's `reason` for a proposed one.",
+    "with its Recipe, Diners, Guests, Conflicts and whether it is Locked. A dinner with a `reason` is Mise's " +
+    "Suggestion, which a Re-roll may change, and the reason says why Mise chose it; a dinner without one is the " +
+    "Household's own: chosen, changed or cooked by someone, and no Proposal changes it.",
   set_slot:
     "Sets what a Slot is, at breakfast, lunch or dinner: a Recipe (not a Draft, `recipeId` with kind `recipe`), " +
     "leftovers, eating out, unplanned or skipped. Moving a dinner to another day takes two calls: " +
@@ -180,8 +182,10 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Puts every Slot of the Week back as it starts, Locked ones too, but not cooked ones, once the person taps " +
     "to confirm; pass `confirm: true`.",
   propose_week:
-    "Fills the Week's dinners that aren't Locked or decided by hand, each with a reason. `reroll: true` proposes " +
-    "again differently; `useUp` lists Item ids on hand, to favour Recipes that use them.",
+    "Fills the Week's unplanned dinners and Mise's Suggestions, each with a reason, and leaves the Household's own " +
+    "dinners as they are. `reroll: true` proposes again differently; `useUp` lists Item ids on hand, to favour " +
+    "Recipes that use them.",
+
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
   review_week: "Marks the Week as looked over since it was proposed, or not.",
   mark_cooked: "Marks a Slot cooked, today or earlier.",

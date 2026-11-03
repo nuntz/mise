@@ -122,15 +122,16 @@ Web Share Target is not used: iOS does not support it, while a pasted link and a
 - Week view: dinner row prominent with photo; breakfast/lunch collapsed strip. One or two weeks ahead (`planHorizonWeeks`).
 - Tapping a Slot's Recipe (or the one its Leftovers are of) opens it in a sheet over the Week, read-only: Ingredients scaled to what the Slot is cooked for, steps, notes, Prep-ahead note, and the Slot's Conflicts first; Cook goes to Kitchen mode at the same servings (not from Leftovers).
 - Manual edit: drag/replace recipe, set kind, set diners/guests per slot or per day, lock, note.
-- **Proposer (deterministic, no LLM):** `propose_week(date?, useUp?, reroll?)` (ADR 0013)
-  1. Pin recurring favourites and locked slots.
+- **Proposer (deterministic, no LLM):** `propose_week(date?, useUp?, reroll?)` (ADR 0013, ADR 0030)
+  1. Leave settled dinners as they are, with no reason written: cooked ones, Locked ones, and the Household's own (every dinner that is not a Suggestion, i.e. has no reason, and is not unplanned). They count as history for recency and are never filled, but Leftovers are still placed after a settled Recipe dinner that yields them. Then pin recurring favourites.
   2. Apply per-weekday effort budget (default per household, editable per week).
   3. Exclude Recipes whose Course is set and is not `main` (unknown stays a candidate; ADR 0022). Apply constraints for that slot's diners + guests: **hard** constraints (allergy, intolerance, diet) exclude recipes outright; **soft** ones (dislikes) only score down.
   4. Score candidates: recency penalty (last N weeks), variety across cuisine/protein within the week, rating (`never` excluded, `again` boosted), use-up hints (ingredients the user said are on hand), season.
   5. Fill `yieldsLeftovers` consequences.
-  Returns plan + per-slot rationale (so the agent can explain).
+  Returns plan + a reason for each dinner it filled (so the agent can explain); a dinner with a reason is a Suggestion.
 - **Allergy safety on manual edits.** Hard constraints apply to every path, not just the proposer: setting a slot to a recipe that conflicts with a diner's hard constraint, or adding a diner whose hard constraint conflicts with the slot's recipe, shows a blocking warning naming the person and the allergen, with explicit override (e.g. "we'll make hers without the nuts"). The agent must surface the same warning and ask before overriding. Conflicts are shown on the week view and in the calendar event description. Recipes with unknown/unreviewed allergen tags are treated as conflicting for the relevant allergen (fail closed) and flagged for review.
-- Re-roll respects locks. "Mark cooked" updates `lastCookedAt`, `cookCount`, prompts for rating and "anything run out?".
+- Re-roll changes only Suggestions and fills unplanned dinners. Choosing a dinner's kind or Recipe by hand, or marking it cooked, deletes its reason and makes it the Household's own; changing only its note, Diners or Guests leaves a Suggestion a Suggestion. "Mark cooked" updates
+ `lastCookedAt`, `cookCount`, prompts for rating and "anything run out?".
 - Weekly nudge, two days before the Week starts: "next week is proposed, review it" by web push (§4.9).
 
 ### 4.4 Grocery list

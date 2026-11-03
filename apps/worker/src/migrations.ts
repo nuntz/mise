@@ -506,6 +506,17 @@ const migrations: { version: number; statements: string[] }[] = [
       )`,
     ],
   },
+  {
+    version: 30,
+    statements: [
+      // A dinner is a Suggestion exactly when it has a reason (ADR 0030). The reasons an earlier
+      // Proposer wrote for dinners it kept ("kept", "cooked") go, and so does a cooked dinner's:
+      // what was eaten is the Household's own.
+      `DELETE FROM slot_reason
+       WHERE json_extract(reason, '$.kind') IN ('kept', 'cooked')
+         OR (date, meal) IN (SELECT date, meal FROM slot WHERE cooked_at IS NOT NULL)`,
+    ],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

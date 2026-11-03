@@ -51,15 +51,16 @@ export const Exclusions = z.object({
 });
 export type Exclusions = z.infer<typeof Exclusions>;
 
-/** Why a Proposal left a dinner as it did, so that it can be explained. */
+/**
+ * Why Mise chose a dinner as it did, so that it can be explained. A dinner has one exactly when it is a
+ * Suggestion; the Proposer writes none for a dinner it leaves as it is (ADR 0030). Migration 30
+ * deleted the "kept" and "cooked" reasons an earlier Proposer stored.
+ */
 export const ProposalReason = z.discriminatedUnion("kind", [
-  /** A Locked Slot: kept as it was. */
+  /** A Locked Slot: kept as it was. Stored by an earlier Proposer; no longer written. */
   z.object({ kind: z.literal("locked") }),
-  /** Already cooked: kept as it was. */
-  z.object({ kind: z.literal("cooked") }),
-  /** Leftovers, eating out or no meal, decided by hand: kept as it was. Leftovers a Proposal placed aren't kept. */
-  z.object({ kind: z.literal("kept") }),
   /** Nobody is eating it, so nothing was planned. */
+
   z.object({ kind: z.literal("nobody_eating") }),
   /** A Recurring Recipe, pinned before anything was chosen. */
   z.object({ kind: z.literal("recurring"), recurrence: Recurrence }),

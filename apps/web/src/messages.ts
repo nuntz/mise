@@ -709,7 +709,7 @@ const en = {
   "week.eating": "{count} eating",
   "week.propose": "Propose dinners",
   "week.reroll": "Re-roll",
-  "week.proposeHint": "Fills the dinners that aren't Locked or decided by hand. Re-roll for a different Proposal.",
+  "week.proposeHint": "Re-roll changes Mise's suggestions. Yours stay.",
   "week.unreviewed": "This Week was proposed and hasn't been reviewed yet.",
   "week.markReviewed": "Mark as reviewed",
   "week.overline": "Mise · This week",
@@ -745,8 +745,7 @@ const en = {
   "effort.everyWeek": "Every Week's Effort Budgets",
 
   "reason.locked": "Locked, so kept as it was.",
-  "reason.kept": "Decided by hand, so kept as it was.",
-  "reason.cooked": "Already cooked, so kept as it was.",
+
   "reason.nobodyEating": "Nobody's eating, so nothing was planned.",
   "reason.leftovers": "Leftovers of {day}'s dinner, cooked for both.",
   "reason.recurringWeekly": "A Recurring Recipe, every week.",

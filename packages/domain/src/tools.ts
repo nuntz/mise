@@ -443,8 +443,9 @@ export const tools = {
     confirm: "always",
   }),
   /**
-   * Fills the Week's dinners that aren't Locked or decided by hand, with a reason for each; see
-   * `ProposeWeekInput`. Returns the Week.
+   * Fills the Week's unplanned dinners and Suggestions, with a reason for each, and leaves Locked
+   * dinners and the Household's own as they are; see `ProposeWeekInput`. Returns the Week.
+
    */
   propose_week: defineTool({
     input: ProposeWeekInput,

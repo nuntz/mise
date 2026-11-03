@@ -23,8 +23,11 @@ export type ProposerDinner = ProposerPeople & {
   cooked: boolean;
   /** The dinner it is Leftovers of, when it is linked to one. */
   leftoversOf: LocalDate | null;
-  /** Leftovers the latest Proposal placed, not decided by hand: proposed again like any other dinner. */
-  leftoversProposed: boolean;
+  /**
+   * Mise's Suggestion: it has a reason, so a Proposal may change it. Every other dinner but an
+   * unplanned one is the Household's own, which no Proposal changes (ADR 0030).
+   */
+  suggestion: boolean;
   /**
    * Who eats the Slots kept as its Leftovers, at any meal: those linked by hand or Locked. Its Recipe
    * must be safe for them too, and it gets no more Leftovers.
@@ -70,7 +73,8 @@ export type ProposedDinner = {
   recipeId: RecipeId | null;
   /** The dinner it is Leftovers of, when it is linked to one. */
   leftoversOf: LocalDate | null;
-  reason: ProposalReason;
+  /** Why it was filled as it was; null for a dinner left as it is, whose reason (or lack of one) stays. */
+  reason: ProposalReason | null;
 };
 
 /** The seed and choice it was made with: given them again, with the same input, it comes out the same. */
@@ -101,17 +105,15 @@ const LEFTOVERS_WITHIN_DAYS = 2;
 /** How many seeds a re-roll tries for a Proposal that differs from the Week as it is. */
 const REROLL_TRIES = 50;
 
-/** Kinds of Slot decided by hand that a Proposal never replaces: they hold no Recipe to choose. */
-const KEPT_KINDS: readonly SlotKind[] = ["leftovers", "eat_out", "skip"];
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Proposes the Week's dinners. Locked Slots, cooked dinners, and dinners decided by hand as Leftovers,
- * eating out or no meal, are kept. Recurring Recipes are pinned first. Every other dinner gets a
- * Recipe that no Hard Constraint of anyone eating it rules out (unknown Allergens fail closed), not
- * rated "never", not planned within 2 weeks of it and within the day's Effort Budget (an unknown
- * effort passes), and safe too for whoever eats its Leftovers kept by hand. Every Recipe a dinner
+ * Proposes the Week's dinners. Locked Slots, cooked dinners and the Household's own are settled: left
+ * as they are, with no reason written, and counted for recency. Recurring Recipes are pinned first.
+ * Every Suggestion and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it
+ * rules out (unknown Allergens fail closed), not rated "never", not planned within 2 weeks of it and
+ * within the day's Effort Budget (an unknown effort passes), and safe too for whoever eats its
+ * Leftovers kept by hand. Leftovers are still placed after a settled dinner not yet cooked. Every Recipe a dinner
  * gets, Recurring, Leftovers or not, is a main dish or of unknown Course (ADR 0022), and no Draft.
  * Among those, it is chosen with the seed from the best scoring, for recency, variety, Ratings,
  * Imported Preference, dislikes and "use it up" Items (or from any of them, for the choice "any").
@@ -129,7 +131,7 @@ export function proposeWeek(input: ProposerInput): Proposal {
 /**
  * Proposes the Week again with a new seed: the next after `input.seed` whose Proposal differs from
  * the dinners as they are, if one of the next few does. When the best-scoring Recipes leave no other
- * choice, it chooses from every Recipe that passes the rules instead. Locked Slots are kept, as by
+ * choice, it chooses from every Recipe that passes the rules instead. Settled dinners are kept, as by
  * `proposeWeek`.
  */
 export function rerollWeek(input: ProposerInput): Proposal {
@@ -256,7 +258,7 @@ function keptForLeftovers(
   const dinner = input.dinners[index] as ProposerDinner;
   const recipe = dinner.recipeId == null ? undefined : recipes.get(dinner.recipeId);
   if (dinner.keptLeftovers.length === 0 || !recipe || !isSafeFor(recipe, dinner)) return undefined;
-  return { date: dinner.date, kind: "recipe", recipeId: recipe.id, leftoversOf: null, reason: { kind: "kept" } };
+  return { date: dinner.date, kind: "recipe", recipeId: recipe.id, leftoversOf: null, reason: null };
 }
 
 /**
@@ -316,19 +318,20 @@ function isUnchanged(proposal: Proposal, dinners: ProposerDinner[]): boolean {
   );
 }
 
-/** A dinner the Proposal leaves as it is, with why; undefined for one it fills. */
+/**
+ * A dinner the Proposal leaves as it is, with no reason written; one it leaves unplanned because nobody
+ * is eating it; undefined for one it fills.
+ */
 function settled(dinner: ProposerDinner): ProposedDinner | undefined {
-  const as = (reason: ProposalReason): ProposedDinner => ({
-    date: dinner.date,
-    kind: dinner.kind,
-    recipeId: dinner.recipeId,
-    leftoversOf: dinner.leftoversOf,
-    reason,
-  });
-  if (dinner.cooked) return as({ kind: "cooked" });
-  if (dinner.locked) return as({ kind: "locked" });
-  if (KEPT_KINDS.includes(dinner.kind) && !(dinner.kind === "leftovers" && dinner.leftoversProposed)) {
-    return as({ kind: "kept" });
+  const own = !dinner.suggestion && dinner.kind !== "unplanned";
+  if (dinner.cooked || dinner.locked || own) {
+    return {
+      date: dinner.date,
+      kind: dinner.kind,
+      recipeId: dinner.recipeId,
+      leftoversOf: dinner.leftoversOf,
+      reason: null,
+    };
   }
   if (dinner.diners.length + dinner.guests === 0) {
     return {

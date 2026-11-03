@@ -148,7 +148,7 @@ export function ProposalControls(props: {
             {t("week.proposeAgain")}
           </button>
         </Show>
-        <Show when={props.online}>
+        <Show when={props.online && proposed()}>
           <small>{t("week.proposeHint")}</small>
         </Show>
       </Show>
@@ -350,7 +350,8 @@ export function whoName(who: ConflictWho, household: Pick<Household, "members">)
   return household.members.find((member) => member.id === who)?.name ?? String(who);
 }
 
-/** Why the latest Proposal left a Slot as it did, as a sentence. */
+/** Why Mise chose a Suggestion as it did, as a sentence. */
+
 export function reasonText(
   reason: ProposalReason,
   household: Pick<Household, "members" | "locale">,
@@ -360,10 +361,6 @@ export function reasonText(
   switch (reason.kind) {
     case "locked":
       return t("reason.locked");
-    case "cooked":
-      return t("reason.cooked");
-    case "kept":
-      return t("reason.kept");
     case "nobody_eating":
       return t("reason.nobodyEating");
     case "leftovers":
