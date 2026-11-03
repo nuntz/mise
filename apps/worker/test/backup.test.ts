@@ -64,6 +64,7 @@ describe("export and restore", () => {
       }),
       await original.callTool("set_effort_budgets", { budgets: { monday: 30 } }),
       await original.callTool("set_week_effort_budgets", { date: "2026-11-02", budgets: { friday: 15 } }),
+      await original.callTool("set_use_up", { date: "2026-11-02", items: ["spinach", "egg"] }),
       await original.callTool("propose_week", { date: "2026-11-02" }),
       await original.callTool("review_week", { date: "2026-11-02", reviewed: true }),
       // A dinner already eaten, cooked and rated.
@@ -115,6 +116,9 @@ describe("export and restore", () => {
     expect(await fresh.callTool("get_week", { date: "2026-11-02" })).toEqual(
       await original.callTool("get_week", { date: "2026-11-02" }),
     );
+    expect(await fresh.callTool("get_week", { date: "2026-11-02" })).toMatchObject({
+      value: { useUp: ["spinach", "egg"] },
+    });
     expect(await fresh.callTool("get_household", {})).toEqual(await original.callTool("get_household", {}));
     expect(await fresh.callTool("list_staples", {})).toEqual(await original.callTool("list_staples", {}));
   });
@@ -235,7 +239,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 32,
+      schemaVersion: 33,
       tables: {
         calendar_token: [],
         chat_turn: [],
@@ -287,6 +291,7 @@ describe("export and restore", () => {
         week: [],
         week_effort_budget: [],
         week_start_change: [],
+        week_use_up: [],
         store_section: [],
         grocery_line: [],
         staple: [],

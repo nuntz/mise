@@ -281,6 +281,7 @@ test("a Household and Week saved before week starts could change still open the 
       effortBudgetOverrides: {},
       proposalSeed: null,
       reviewed: false,
+      useUp: [],
     }),
   );
   localStorage.setItem("mise.groceryLists", JSON.stringify({ [thisWeek]: list }));

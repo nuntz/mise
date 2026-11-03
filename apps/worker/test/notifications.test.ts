@@ -148,11 +148,31 @@ describe("the week Mise proposes itself", () => {
     expect(service.received(notTold.endpoint)).toEqual([]);
   });
 
+  test("the Week it proposes favours the Use it up set beforehand", async () => {
+    const household = await setUpHousehold();
+    await household.callTool("create_recipe", {
+      title: "Spinach pie",
+      baseServings: 4,
+      ingredients: ["200 g spinach"],
+    });
+    await household.callTool("set_use_up", { date: NEXT_MONDAY, items: ["spinach"] });
+
+    await morningOf(household, SATURDAY);
+
+    const week = value<Week>(await household.callTool("get_week", { date: NEXT_MONDAY }));
+    expect(week).toMatchObject({ useUp: ["spinach"], proposalSeed: expect.any(Number) });
+    expect(dinners(week)[0]).toMatchObject({
+      recipe: { title: "Spinach pie" },
+      reason: { factors: expect.arrayContaining([{ kind: "uses_up", items: ["spinach"] }]) },
+    });
+  });
+
   test("a Week someone has started is never proposed again", async () => {
     const household = await setUpHousehold();
     const device = await subscribed(household);
-    // One dinner decided by hand, even as eating out, starts the Week.
+    // One dinner decided by hand, even as eating out, starts the Week; a Use it up set doesn't propose it.
     await household.callTool("set_slot", { date: "2026-11-04", meal: "dinner", kind: "eat_out" });
+    await household.callTool("set_use_up", { date: NEXT_MONDAY, items: ["spinach"] });
     const before = value<Week>(await household.callTool("get_week", { date: NEXT_MONDAY }));
 
     await morningOf(household, SATURDAY);

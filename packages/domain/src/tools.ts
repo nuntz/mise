@@ -77,6 +77,7 @@ import {
   SetDinersInput,
   SetGuestsInput,
   SetSlotInput,
+  SetUseUpInput,
   SetWeekEffortBudgetsInput,
   Slot,
   Week,
@@ -444,6 +445,15 @@ export const tools = {
    */
   propose_week: defineTool({
     input: ProposeWeekInput,
+    output: Week,
+    changes: "plan",
+  }),
+  /**
+   * Stores the Week's Use it up, and proposes the Week again from the same seed if it has been
+   * proposed; see `SetUseUpInput`. Refuses an Item that doesn't exist (`not_found`). Returns the Week.
+   */
+  set_use_up: defineTool({
+    input: SetUseUpInput,
     output: Week,
     changes: "plan",
   }),
