@@ -189,6 +189,10 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
   review_week: "Marks the Week as looked over since it was proposed, or not.",
   mark_cooked: "Marks a Slot cooked, today or earlier.",
+  keep_slot:
+    "Keeps one of Mise's Suggestions (“keep Wednesday”): the dinner becomes the Household's own, loses its " +
+    "reason, and no Re-roll changes it. Keeping Leftovers Mise placed keeps the dinner they are of too. " +
+    "Refused with `nothing_to_keep` for a dinner already the Household's own, or with no Recipe or Leftovers.",
   rate_recipe: "Rates a cooked Slot's Recipe for the Member speaking.",
   set_store_section_order: "Puts the Store Sections given first, in the order the Household walks its store.",
   get_calendar_token: "The calendar feed's token, for the feed's address; null until one is made on the screen.",

@@ -110,6 +110,7 @@ type WeekTools =
   | "set_week_effort_budgets"
   | "review_week"
   | "mark_cooked"
+  | "keep_slot"
   | "rate_recipe";
 
 /** The seed a Week is first proposed with. */
@@ -434,6 +435,25 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     return { ok: true, value: readSlot(sql, input.date, input.meal) };
   },
 
+  keep_slot: (sql, input) => {
+    if (!readSettings(sql)) return notSetUp();
+    const slot = readSlot(sql, input.date, input.meal);
+    // An unplanned Suggestion ("nobody's eating", "no Recipe fit") is filled by the next Proposal
+    // anyway, so there is nothing to keep (ADR 0030).
+    if (slot.kind !== "recipe" && slot.kind !== "leftovers") {
+      return nothingToKeep(`${input.date} ${input.meal} has no Recipe or Leftovers to keep`);
+    }
+    if (slot.reason === null) {
+      return nothingToKeep(`${input.date} ${input.meal} is already the Household's own: no Proposal changes it`);
+    }
+    sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", input.date, input.meal);
+    // Leftovers kept are linked by hand, so a Re-roll can't change what they are of either.
+    if (slot.leftoversOf) {
+      sql.exec("DELETE FROM slot_reason WHERE date = ? AND meal = ?", slot.leftoversOf.date, slot.leftoversOf.meal);
+    }
+    return { ok: true, value: readSlot(sql, input.date, input.meal) };
+  },
+
   rate_recipe: (sql, input, { caller }) => {
     if (!readSettings(sql)) return notSetUp();
     if (readSlot(sql, input.date, input.meal).cookedAt === null) {
@@ -463,6 +483,10 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     return { ok: true, value: readSlot(sql, input.date, input.meal) };
   },
 };
+
+function nothingToKeep(message: string): ToolResult<never> {
+  return { ok: false, error: { code: "nothing_to_keep", message } };
+}
 
 /** Leftovers the latest Proposal placed and nobody has Locked or linked by hand since. */
 function isProposedLeftovers(slot: Slot): boolean {

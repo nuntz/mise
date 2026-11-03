@@ -791,6 +791,7 @@ const en = {
   "slot.change.breakfast": "Change breakfast",
   "slot.change.lunch": "Change lunch",
   "slot.change.dinner": "Change dinner",
+  "slot.keep": "Keep",
   "slot.kind": "What",
   "slot.recipe": "Recipe",
   "slot.chooseRecipe": "Choose a Recipe",

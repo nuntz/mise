@@ -66,6 +66,7 @@ import {
   CheckSlotConstraintsInput,
   ClearWeekInput,
   GetWeekInput,
+  KeepSlotInput,
   LinkLeftoversInput,
   type LocalDate,
   LockSlotInput,
@@ -470,6 +471,16 @@ export const tools = {
     output: Slot,
     changes: "plan",
   }),
+  /**
+   * Makes a Suggestion the Household's own by deleting its reason. Leftovers Mise placed become
+   * Leftovers linked by hand, and the dinner they are of the Household's own too. Refuses a dinner
+   * that is no Suggestion or holds no Recipe or Leftovers (`nothing_to_keep`). Returns the Slot.
+   */
+  keep_slot: defineTool({
+    input: KeepSlotInput,
+    output: Slot,
+    changes: "plan",
+  }),
   /** Refuses a Slot not marked cooked (`not_cooked`). Returns the Slot. */
   rate_recipe: defineTool({
     input: RateRecipeInput,
@@ -637,6 +648,7 @@ export type ToolErrorCode =
   | "not_cooked"
   | "not_built"
   | "not_earlier"
+  | "nothing_to_keep"
   | "draft_recipe"
   | "model_failed"
   | "not_configured"
