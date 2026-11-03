@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { Recipe, Slot, ToolResult, Week } from "@mise/domain";
+import type { ProposedWeek, Recipe, Slot, ToolResult, Week } from "@mise/domain";
 import { describe, expect, test } from "vitest";
 import { CALLER_HEADER } from "../src/identity";
 
@@ -195,7 +195,7 @@ describe("rating a cooked Slot", () => {
 describe("cooking a Suggestion makes it the Household's own", () => {
   test("marking it cooked deletes its reason, and unmarking doesn't bring it back", async () => {
     const household = await setUpHousehold();
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     const monday = proposed.slots.find((slot) => slot.date === MONDAY && slot.meal === "dinner");
     expect(monday?.reason).not.toBeNull();
 
@@ -205,7 +205,9 @@ describe("cooking a Suggestion makes it the Household's own", () => {
       reason: null,
     });
 
-    const rerolled = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll: true }));
+    const rerolled = succeeded<ProposedWeek>(
+      await household.callTool("propose_week", { date: MONDAY, reroll: true }),
+    ).week;
     expect(rerolled.slots.find((slot) => slot.date === MONDAY && slot.meal === "dinner")).toMatchObject({
       recipe: { id: monday?.recipe?.id },
       reason: null,
@@ -221,8 +223,8 @@ describe("cooking and Ratings feed the Proposer", () => {
     await planAndCook(household, MONDAY, TACOS);
     await household.callTool("rate_recipe", { ...dinner(MONDAY), rating: "never" });
 
-    const week = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
-    const next = succeeded<Week>(await household.callTool("propose_week", { date: "2026-12-07" }));
+    const week = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
+    const next = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: "2026-12-07" })).week;
 
     const dinners = (of: Week) => of.slots.filter((slot) => slot.meal === "dinner");
     expect(dinners(week)[0]).toMatchObject({ recipe: { id: TACOS }, reason: null });

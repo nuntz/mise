@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { GroceryList, Item, Recipe, Slot, ToolResult, Week } from "@mise/domain";
+import type { GroceryList, Item, ProposedWeek, Recipe, Slot, ToolResult, Week } from "@mise/domain";
 import { describe, expect, test } from "vitest";
 
 type Member = { name: string; constraints?: { kind: "allergy"; allergen: string }[] };
@@ -102,7 +102,7 @@ describe("a Ready-made dish", () => {
       ok: false,
       error: { code: "constraint_conflict", conflicts: [{ who: 1, allergen: "milk", cause: "contains" }] },
     });
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     const dinners = proposed.slots.filter((slot) => slot.meal === "dinner");
     expect(dinners.some((slot) => slot.recipe !== null)).toBe(true);
     expect(dinners.map((slot) => slot.recipe?.id)).not.toContain(LASAGNA);
@@ -114,7 +114,7 @@ describe("a Ready-made dish", () => {
       recurring: { weekday: "monday" },
     });
 
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
 
     expect(slotOf(proposed, MONDAY)).toMatchObject({
       recipe: { id: LASAGNA },

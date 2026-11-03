@@ -339,6 +339,28 @@ describe("what the agent is told about Use it up", () => {
   });
 });
 
+describe("what the agent is told when nothing changed", () => {
+  test("propose_week and set_use_up say whether a dinner changed, and to tell the person when none did", async () => {
+    const offered: { name: string; description: string }[][] = [];
+    scriptModel((context) => {
+      const system = context.messages.find((message) => (message.role as string) === "system") as
+        | { toolsAdded?: (typeof offered)[number] }
+        | undefined;
+      offered.push(system?.toolsAdded ?? []);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    const described = (name: string) => offered[0]?.find((tool) => tool.name === name)?.description ?? "";
+    expect(described("propose_week")).toMatch(/`changed: false`/);
+    expect(described("propose_week")).toMatch(/Nothing to re-roll: every dinner is yours, or has only one Recipe/);
+    expect(described("set_use_up")).toMatch(/`changed: false`/);
+    expect(described("set_use_up")).toMatch(/No dinner changed: nothing that fits uses/);
+  });
+});
+
 describe("what the agent is offered, as Anthropic takes it", () => {
   // Anthropic takes a tool's input as one object, and pi-ai sends only the root's `properties` and
   // `required`: a schema of alternatives at the root reaches the model as a tool without parameters.

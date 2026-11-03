@@ -218,6 +218,14 @@ export const Week = z.object({
 });
 export type Week = z.infer<typeof Week>;
 
+/**
+ * The Week a Proposal left, and whether it changed any dinner's kind, Recipe or Leftovers link. A
+ * reason alone is no change. One that changed nothing says so, rather than returning the same Week
+ * as if something had happened (ADR 0030).
+ */
+export const ProposedWeek = z.object({ week: Week, changed: z.boolean() });
+export type ProposedWeek = z.infer<typeof ProposedWeek>;
+
 /** A Week is named by any date in it; without one, the Week the Household is in today. */
 export const GetWeekInput = z.object({ date: LocalDate.optional() }).strict();
 
@@ -314,7 +322,8 @@ export const ClearWeekInput = z.object({ date: LocalDate, confirm: z.literal(tru
 /**
  * Proposes the Week's dinners (see `proposeWeek`), favouring Recipes that use its stored Use it up. The
  * same Week, unchanged, gets the same Proposal from the seed it was last proposed with; a re-roll moves
- * on to a new seed and a different Proposal. Either way the Week is marked as not reviewed.
+ * on to a new seed and a different Proposal. Either way the Week is marked as not reviewed, except by
+ * a re-roll that changes no dinner, which leaves the Week exactly as it was, seed and reasons included.
  */
 export const ProposeWeekInput = z
   .object({
@@ -325,7 +334,9 @@ export const ProposeWeekInput = z
 
 /**
  * Stores the Week's Use it up, replacing what it had; none clears it. A Week already proposed is
- * proposed again from the same seed, so that only its Suggestions and unplanned dinners adjust.
+ * proposed again from the same seed, so that only its Suggestions and unplanned dinners adjust, and is
+ * marked as not reviewed if a dinner changed. When none did, its reasons are still written again (so
+ * that a dinner can say it uses up spinach), but it stays reviewed.
  */
 export const SetUseUpInput = z
   .object({

@@ -72,6 +72,7 @@ import {
   LockSlotInput,
   MarkCookedInput,
   type Meal,
+  ProposedWeek,
   ProposeWeekInput,
   RateRecipeInput,
   ReviewWeekInput,
@@ -447,21 +448,22 @@ export const tools = {
   }),
   /**
    * Fills the Week's unplanned dinners and Suggestions, with a reason for each, and leaves Locked
-   * dinners and the Household's own as they are; see `ProposeWeekInput`. Returns the Week.
-
+   * dinners and the Household's own as they are; see `ProposeWeekInput`. Returns the Week, and whether
+   * any dinner changed.
    */
   propose_week: defineTool({
     input: ProposeWeekInput,
-    output: Week,
+    output: ProposedWeek,
     changes: "plan",
   }),
   /**
    * Stores the Week's Use it up, and proposes the Week again from the same seed if it has been
-   * proposed; see `SetUseUpInput`. Refuses an Item that doesn't exist (`not_found`). Returns the Week.
+   * proposed; see `SetUseUpInput`. Refuses an Item that doesn't exist (`not_found`). Returns the Week,
+   * and whether any dinner changed.
    */
   set_use_up: defineTool({
     input: SetUseUpInput,
-    output: Week,
+    output: ProposedWeek,
     changes: "plan",
   }),
   /** Returns the Week, with its Effort Budgets as they now are. */

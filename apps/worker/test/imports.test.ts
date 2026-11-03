@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { ImportRun, Recipe, ToolResult, Week } from "@mise/domain";
+import type { ImportRun, ProposedWeek, Recipe, ToolResult } from "@mise/domain";
 import { describe, expect, onTestFinished, test } from "vitest";
 import { paprikaExport, SAMPLE_JPEG, SAMPLE_PAPRIKA_RECIPES, utf8 } from "../../../fixtures/paprika";
 import sampleExport from "../../../fixtures/sample.paprikarecipes";
@@ -115,7 +115,7 @@ describe("proposing from an import", () => {
     await importFile(household, sampleExport);
     const byTitle = new Map((await recipes(household)).map((recipe) => [recipe.title, recipe.id]));
 
-    const week = succeeded<Week>(await household.callTool("propose_week", { date: "2026-10-26" }));
+    const week = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: "2026-10-26" })).week;
 
     const dinners = week.slots.filter((slot) => slot.meal === "dinner");
     expect(dinners.map((dinner) => dinner.recipe?.id)).toContain(byTitle.get("Weeknight Dal"));

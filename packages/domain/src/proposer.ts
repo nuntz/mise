@@ -128,20 +128,35 @@ export function proposeWeek(input: ProposerInput): Proposal {
   return propose(input, choice === "best" ? CHOICE_WINDOW : Number.POSITIVE_INFINITY, choice);
 }
 
+/** A re-roll, and whether it changed any dinner's kind, Recipe or Leftovers link (a reason alone is no change). */
+export type Reroll = Proposal & { changed: boolean };
+
 /**
  * Proposes the Week again with a new seed: the next after `input.seed` whose Proposal differs from
  * the dinners as they are, if one of the next few does. When the best-scoring Recipes leave no other
  * choice, it chooses from every Recipe that passes the rules instead. Settled dinners are kept, as by
- * `proposeWeek`.
+ * `proposeWeek`. When no seed changes a dinner, it is not `changed`: every dinner is left as it is,
+ * with no reason written, and the seed and choice stay `input`'s, so the Week can be left untouched.
  */
-export function rerollWeek(input: ProposerInput): Proposal {
+export function rerollWeek(input: ProposerInput): Reroll {
   for (const choice of ["best", "any"] as const) {
     for (let tries = 1; tries <= REROLL_TRIES; tries++) {
       const proposal = proposeWeek({ ...input, seed: input.seed + tries, choice });
-      if (!isUnchanged(proposal, input.dinners)) return proposal;
+      if (changesDinners(proposal, input.dinners)) return { ...proposal, changed: true };
     }
   }
-  return proposeWeek({ ...input, seed: input.seed + 1, choice: "best" });
+  return {
+    seed: input.seed,
+    choice: input.choice ?? "best",
+    dinners: input.dinners.map(({ date, kind, recipeId, leftoversOf }) => ({
+      date,
+      kind,
+      recipeId,
+      leftoversOf,
+      reason: null,
+    })),
+    changed: false,
+  };
 }
 
 /** Proposes the Week, choosing for each dinner among the candidates scoring less than `window` below the best. */
@@ -289,12 +304,16 @@ function dinersKey(dinner: ProposerDinner): string {
     .join();
 }
 
-function isUnchanged(proposal: Proposal, dinners: ProposerDinner[]): boolean {
-  return proposal.dinners.every(
+/** Whether the Proposal changes any dinner's kind, Recipe or Leftovers link; a reason alone is no change. */
+export function changesDinners(
+  proposal: Proposal,
+  dinners: Pick<ProposerDinner, "kind" | "recipeId" | "leftoversOf">[],
+): boolean {
+  return proposal.dinners.some(
     (dinner, index) =>
-      dinner.kind === dinners[index]?.kind &&
-      dinner.recipeId === dinners[index]?.recipeId &&
-      dinner.leftoversOf === dinners[index]?.leftoversOf,
+      dinner.kind !== dinners[index]?.kind ||
+      dinner.recipeId !== dinners[index]?.recipeId ||
+      dinner.leftoversOf !== dinners[index]?.leftoversOf,
   );
 }
 

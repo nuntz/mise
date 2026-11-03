@@ -2,6 +2,7 @@ import {
   addDays,
   Conflict,
   Constraint,
+  changesDinners,
   currentWeek,
   type LocalDate,
   localDate,
@@ -293,9 +294,10 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const settings = readSettings(sql);
     if (!settings) return notSetUp();
     const span = weekNamedBy(settings, input.date);
-    proposeAgain(sql, settings, span, input.reroll);
-    sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
-    return { ok: true, value: readWeek(sql, span) };
+    const changed = proposeAgain(sql, settings, span, input.reroll);
+    // A Re-roll that changes nothing leaves the Week exactly as it was.
+    if (changed || !input.reroll) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
   set_use_up: (sql, input) => {
@@ -312,10 +314,10 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     }
     // A Week not yet proposed favours them once it is.
     const proposed = (readWeekRecords(sql, span.startDate)[0]?.proposalSeed ?? null) !== null;
-    if (proposed && proposeAgain(sql, settings, span, false)) {
-      sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
-    }
-    return { ok: true, value: readWeek(sql, span) };
+    // When no dinner changes, the reasons still say what it uses up, but the Week stays reviewed.
+    const changed = proposed && proposeAgain(sql, settings, span, false);
+    if (changed) sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
+    return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
   set_week_effort_budgets: (sql, input) => {
@@ -424,7 +426,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
 
 /**
  * Proposes the Week's dinners from its stored seed and choice, or re-rolls them to a new seed, with its
- * stored Use it up; returns whether any dinner changed. Whether the Week is reviewed is the caller's.
+ * stored Use it up; returns whether any dinner changed. A re-roll that changes none writes nothing, so
+ * the Week keeps its seed, choice and reasons. Whether the Week is reviewed is the caller's.
  */
 function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: WeekSpan, reroll: boolean): boolean {
   const week = readWeek(sql, span);
@@ -462,6 +465,8 @@ function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: Week
     choice: stored?.proposalChoice ?? "best",
   };
   const proposal = reroll ? rerollWeek(proposerInput) : proposeWeek(proposerInput);
+  const changed = changesDinners(proposal, proposerInput.dinners);
+  if (reroll && !changed) return false;
 
   storeWeek(sql, span.startDate);
   for (const dinner of proposal.dinners) {
@@ -511,12 +516,7 @@ function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: Week
     proposal.choice,
     span.startDate,
   );
-  return proposal.dinners.some((dinner, index) => {
-    const before = proposerInput.dinners[index];
-    return (
-      dinner.kind !== before?.kind || dinner.recipeId !== before.recipeId || dinner.leftoversOf !== before.leftoversOf
-    );
-  });
+  return changed;
 }
 
 function nothingToKeep(message: string): ToolResult<never> {

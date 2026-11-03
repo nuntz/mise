@@ -1145,7 +1145,7 @@ class HouseholdAgent extends Agent<Env> {
       const week = handlers.get_week(sql, { date: start }, context);
       if (!week.ok || isStarted(week.value)) return null;
       const proposed = handlers.propose_week(sql, ProposeWeekInput.parse({ date: start }), context);
-      return proposed.ok ? { week: proposed.value, revision: this.bumpRevision() } : null;
+      return proposed.ok ? { week: proposed.value.week, revision: this.bumpRevision() } : null;
     });
     if (!outcome) return null;
     this.notify("plan", outcome.revision);

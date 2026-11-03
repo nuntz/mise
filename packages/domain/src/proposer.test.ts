@@ -561,9 +561,10 @@ describe("proposeWeek, rule by rule", () => {
     );
 
     expect(rerolled).toMatchObject({ choice: "any", dinners: [{ recipeId: 2 }] });
-    expect(proposeWeek(input({ dinners: week, recipes, seed: rerolled.seed, choice: rerolled.choice }))).toEqual(
-      rerolled,
-    );
+    expect({
+      ...proposeWeek(input({ dinners: week, recipes, seed: rerolled.seed, choice: rerolled.choice })),
+      changed: true,
+    }).toEqual(rerolled);
   });
 
   test("a dinner nobody is eating is left unplanned", () => {
@@ -658,6 +659,56 @@ describe("proposeWeek, the Household's own dinners", () => {
       null,
       expect.objectContaining({ kind: "chosen" }),
     ]);
+  });
+});
+
+describe("rerollWeek, whether anything changed", () => {
+  const plain = Array.from({ length: 10 }, (_, index) => recipe(index + 1));
+  /** The Week as the Household made it: every dinner its own, with no reason. */
+  function ownWeek(): ProposerDinner[] {
+    return dinners().map((dinner, day) => ({ ...dinner, kind: "recipe", recipeId: day + 1 }));
+  }
+
+  test("a re-roll that changes a dinner says so, with the new seed", () => {
+    const week = ownWeek();
+    week[3] = { ...(week[3] as ProposerDinner), suggestion: true };
+
+    const rerolled = rerollWeek(input({ dinners: week, recipes: plain, seed: 4 }));
+
+    expect(rerolled.changed).toBe(true);
+    expect(rerolled.seed).not.toBe(4);
+    expect(rerolled.dinners[3]?.recipeId).not.toBe(4);
+  });
+
+  test("when every dinner is the Household's own, nothing changes, and the seed and choice stay as they were", () => {
+    const week = ownWeek();
+
+    const rerolled = rerollWeek(input({ dinners: week, recipes: plain, seed: 4, choice: "any" }));
+
+    expect(rerolled).toEqual({
+      changed: false,
+      seed: 4,
+      choice: "any",
+      dinners: week.map((dinner) => ({
+        date: dinner.date,
+        kind: "recipe",
+        recipeId: dinner.recipeId,
+        leftoversOf: null,
+        reason: null,
+      })),
+    });
+  });
+
+  test("when the only Suggestion has only one Recipe that fits, nothing changes, and the seed stays", () => {
+    const week = ownWeek();
+    week[3] = { ...(week[3] as ProposerDinner), recipeId: 11, suggestion: true };
+    // Every other Recipe is planned this Week, so too recent for Thursday.
+    const recipes = [...plain.filter((other) => other.id <= 7 && other.id !== 4), recipe(11)];
+
+    const rerolled = rerollWeek(input({ dinners: week, recipes, seed: 4 }));
+
+    expect(rerolled).toMatchObject({ changed: false, seed: 4, choice: "best" });
+    expect(rerolled.dinners.map((dinner) => dinner.recipeId)).toEqual([1, 2, 3, 11, 5, 6, 7]);
   });
 });
 

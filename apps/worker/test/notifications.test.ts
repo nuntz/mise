@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { PushDevice, PushKey, PushKind, Slot, ToolResult, Week } from "@mise/domain";
+import type { ProposedWeek, PushDevice, PushKey, PushKind, Slot, ToolResult, Week } from "@mise/domain";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { usePush, webPush } from "../src/push";
 import { type Device, newDevice, pretendPushService, subscriptionOf, vapidKey } from "./pushService";
@@ -183,7 +183,9 @@ describe("the week Mise proposes itself", () => {
 
   test("a Week already proposed is not rolled again", async () => {
     const household = await setUpHousehold();
-    const proposed = value<Week>(await household.callTool("propose_week", { date: NEXT_MONDAY, reroll: true }));
+    const proposed = value<ProposedWeek>(
+      await household.callTool("propose_week", { date: NEXT_MONDAY, reroll: true }),
+    ).week;
 
     await morningOf(household, SATURDAY);
 

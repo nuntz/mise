@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { Slot, ToolResult, Week } from "@mise/domain";
+import type { ProposedWeek, Slot, ToolResult, Week } from "@mise/domain";
 import { describe, expect, test } from "vitest";
 
 /**
@@ -50,7 +50,7 @@ function slotOf(week: Week, date: string): Slot {
 }
 
 async function propose(household: TestHousehold, reroll = false): Promise<Week> {
-  return succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll }));
+  return succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY, reroll })).week;
 }
 
 describe("Keeping a Suggestion", () => {

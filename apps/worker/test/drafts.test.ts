@@ -5,6 +5,7 @@ import {
   FakeLlm,
   type GroceryList,
   type ImportFlag,
+  type ProposedWeek,
   type Recipe,
   type RecipeReading,
   type RecipeSummary,
@@ -239,7 +240,7 @@ describe("Drafts", () => {
     expect(
       await household.callTool("set_slot", { ...dinner(MONDAY), kind: "recipe", recipeId: draft.id }),
     ).toMatchObject({ ok: false, error: { code: "draft_recipe" } });
-    const week = succeeded<ToolOutput<"propose_week">>(await household.callTool("propose_week", { date: MONDAY }));
+    const week = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     expect(week.slots.some((slot) => slot.recipe?.id === draft.id)).toBe(false);
   });
 

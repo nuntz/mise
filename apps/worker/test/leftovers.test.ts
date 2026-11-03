@@ -1,6 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import type { GroceryList, Slot, ToolResult, Week } from "@mise/domain";
+import type { GroceryList, ProposedWeek, Slot, ToolResult, Week } from "@mise/domain";
 import { describe, expect, test } from "vitest";
 import { migrate } from "../src/migrations";
 
@@ -81,7 +81,7 @@ describe("Leftovers", () => {
   test("the Proposer cooks a Recipe that yields them for the next dinner too, and the list buys for both", async () => {
     const household = await setUpHousehold();
 
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
 
     expect(slotOf(proposed, MONDAY)).toMatchObject({
       recipe: { id: CHILI },
@@ -99,7 +99,7 @@ describe("Leftovers", () => {
     expect(await beefBought(household)).toBe(400);
 
     // Proposed again, the Leftovers are placed again rather than kept as if decided by hand.
-    const again = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const again = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     expect(again.slots).toEqual(proposed.slots);
   });
 
@@ -137,7 +137,7 @@ describe("Leftovers", () => {
       succeeded(await household.callTool("set_slot", { ...dinner(date), kind: "eat_out" }));
     }
 
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
 
     expect(slotOf(proposed, TUESDAY)).toMatchObject({ kind: "recipe", cookFor: 4, leftovers: [dinner(WEDNESDAY)] });
     expect(slotOf(proposed, TUESDAY).recipe).not.toBeNull();
@@ -161,7 +161,9 @@ describe("Leftovers", () => {
       }),
     );
 
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll: true }));
+    const proposed = succeeded<ProposedWeek>(
+      await household.callTool("propose_week", { date: MONDAY, reroll: true }),
+    ).week;
 
     // Chosen by hand, so the Household's own: no Proposal changes it (ADR 0030).
     expect(slotOf(proposed, TUESDAY)).toMatchObject({
@@ -179,7 +181,7 @@ describe("Leftovers", () => {
 
   test("linking Leftovers by hand to a dinner Mise chose makes it the Household's own, which a Re-roll keeps", async () => {
     const household = await setUpHousehold();
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     const chosen = slotOf(proposed, THURSDAY);
     expect(chosen.reason).toMatchObject({ kind: "chosen" });
 
@@ -187,7 +189,9 @@ describe("Leftovers", () => {
 
     expect(slotOf(await week(household), THURSDAY)).toMatchObject({ recipe: chosen.recipe, reason: null });
     for (let roll = 0; roll < 3; roll++) {
-      const rerolled = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY, reroll: true }));
+      const rerolled = succeeded<ProposedWeek>(
+        await household.callTool("propose_week", { date: MONDAY, reroll: true }),
+      ).week;
       expect(slotOf(rerolled, THURSDAY)).toMatchObject({
         kind: "recipe",
         recipe: chosen.recipe,
@@ -259,7 +263,7 @@ describe("Leftovers", () => {
 describe("Leftovers linked by hand before ADR 0030", () => {
   test("the dinner they are of loses its reason, and Leftovers Mise placed leave theirs alone", async () => {
     const household = await setUpHousehold();
-    const proposed = succeeded<Week>(await household.callTool("propose_week", { date: MONDAY }));
+    const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     succeeded(await household.callTool("link_leftovers", { ...dinner(SATURDAY), of: dinner(THURSDAY) }));
     // As linking by hand left it before: Thursday still a Suggestion.
     await runInDurableObject(household, async (_household, state) => {
