@@ -19,6 +19,10 @@ Issues and specs live in GitHub Issues on nuntz/mise, managed via the `gh` CLI. 
 
 Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
 
+### Agent briefs
+
+Wording a brief or ticket decides for a screen: see `docs/agents/agent-briefs.md`.
+
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

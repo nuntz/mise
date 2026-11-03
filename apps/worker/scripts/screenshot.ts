@@ -4,10 +4,13 @@
  * docs/screenshots/. Nothing is committed: look the images over, then commit the ones to keep.
  * With `--screens`, saves every screen instead, as a phone shows it a screenful at a time, in
  * daylight, kitchen mode and the pseudo-locale, to dist/screens/ (never committed), for a design review.
- * `--only week,import` takes just the screens whose names contain one of those words. Each screen
+ * `--only week,import` takes just the screens whose names contain one of those words, and `--variants
+ * daylight` just those variants, to retake a screen quickly while working on it. Each screen
  * records the web source it was taken from, and `--check` lists the screens taken before the source
  * last changed, or never taken, without starting anything.
- * Usage: bun run screenshot [--screens [--only <words>] | --check].
+ * A screen that fails is skipped in the variants after it, and the run ends listing every failure and
+ * exiting 1.
+ * Usage: bun run screenshot [--screens [--only <words>] [--variants <names>] | --check].
  * Needs Playwright's Chromium once: bunx playwright install chromium.
  */
 import { createHash } from "node:crypto";
@@ -28,8 +31,12 @@ const repo = join(import.meta.dir, "../../..");
 const out = join(repo, "docs/screenshots");
 const screensOut = join(repo, "dist/screens");
 const everyScreen = process.argv.includes("--screens");
-const onlyIndex = process.argv.indexOf("--only");
-const only = onlyIndex >= 0 ? (process.argv[onlyIndex + 1] ?? "").split(",").filter(Boolean) : [];
+/** The comma-separated values after `flag`, or none. */
+function listArg(flag: string): string[] {
+  const index = process.argv.indexOf(flag);
+  return index >= 0 ? (process.argv[index + 1] ?? "").split(",").filter(Boolean) : [];
+}
+const only = listArg("--only");
 const wanted = (name: string) => only.length === 0 || only.some((word) => name.includes(word));
 
 /** Which web source each screen was last taken from, by screen name. */
@@ -402,6 +409,12 @@ const VARIANTS = [
   { name: "pseudo", query: "pseudo", kitchen: false },
 ];
 
+/** The variants to take: those `--variants` names, or all three. */
+const variantNames = listArg("--variants");
+const unknownVariant = variantNames.find((name) => !VARIANTS.some((variant) => variant.name === name));
+if (unknownVariant) throw new Error(`No variant ${unknownVariant}: ${VARIANTS.map((v) => v.name).join(", ")}`);
+const variants = VARIANTS.filter((variant) => variantNames.length === 0 || variantNames.includes(variant.name));
+
 /** A phone in daylight, kept in kitchen mode for that variant as the Household page's switch keeps it. */
 async function phone(browser: Browser, variant: (typeof VARIANTS)[number]) {
   const context = await browser.newContext({ ...devices["iPhone 15"], colorScheme: "light" });
@@ -450,14 +463,18 @@ async function capture(page: Page, screen: Screen, query: string, base: string) 
   }
 }
 
-async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>) {
+/** Saves every wanted screen in each variant taken; returns the ones not saved, as "variant/screen: error". */
+async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>): Promise<string[]> {
   const taken = await readTaken();
   const source = webSource();
-  for (const variant of VARIANTS) {
+  const failures: string[] = [];
+  // A screen that failed once fails the same way in every variant: its wait would only time out again.
+  const failed = new Set<string>();
+  for (const variant of variants) {
     const dir = join(screensOut, variant.name);
     await mkdir(dir, { recursive: true });
     for (const [index, screen] of screens(ids).entries()) {
-      if (!wanted(screen.name)) continue;
+      if (!wanted(screen.name) || failed.has(screen.name)) continue;
       const context = await phone(browser, variant);
       const page = await context.newPage();
       const base = join(dir, `${String(index + 1).padStart(2, "0")}-${screen.name}`);
@@ -465,14 +482,17 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
         await capture(page, screen, variant.query, base);
         taken[`${variant.name}/${screen.name}`] = source;
       } catch (error) {
-        console.warn(`${variant.name}/${screen.name} not saved: ${error}`);
+        failed.add(screen.name);
+        failures.push(`${variant.name}/${screen.name}: ${error}`);
       } finally {
         await context.close();
       }
     }
   }
   await Bun.write(takenFile, JSON.stringify(taken, null, 2));
-  console.log(`Saved ${only.length > 0 ? `the screens matching ${only.join(", ")}` : "every screen"} to ${screensOut}`);
+  const which = only.length > 0 ? `the screens matching ${only.join(", ")}` : "every screen";
+  console.log(`Saved ${failures.length > 0 ? `the rest of ${which}` : which} to ${screensOut}`);
+  return failures;
 }
 
 /** Lists the screens taken from older web source than now, or never taken, and fails if there are any. */
@@ -497,7 +517,7 @@ async function checkScreens() {
 async function screenshotSetup(browser: Browser) {
   if (!wanted("setup")) return;
   const taken = await readTaken();
-  for (const variant of VARIANTS) {
+  for (const variant of variants) {
     await mkdir(join(screensOut, variant.name), { recursive: true });
     const context = await phone(browser, variant);
     await capture(
@@ -534,13 +554,14 @@ const worker = Bun.spawn(
   ],
   { cwd: join(import.meta.dir, ".."), stdout: "ignore", stderr: "inherit" },
 );
+let failures: string[] = [];
 try {
   await waitForWorker();
   const browser = await chromium.launch();
   try {
     if (everyScreen) await screenshotSetup(browser);
     const ids = await seed();
-    if (everyScreen) await screenshotEveryScreen(browser, ids);
+    if (everyScreen) failures = await screenshotEveryScreen(browser, ids);
     else await screenshot(browser);
   } finally {
     await browser.close();
@@ -549,4 +570,9 @@ try {
   worker.kill();
   await worker.exited;
   await rm(store, { recursive: true, force: true });
+}
+if (failures.length > 0) {
+  console.error(`Not saved (${failures.length}):`);
+  for (const failure of failures) console.error(`  ${failure}`);
+  process.exit(1);
 }
