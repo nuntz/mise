@@ -123,9 +123,6 @@ _Avoid_: Clash, warning
 A reason, recorded on a Slot, for planning it despite one Conflict ("we'll make hers without the nuts"); it holds only while the Slot keeps its Recipe.
 _Avoid_: Exception, waiver
 
-**Locked Slot**:
-A Slot whose Recipe survives a re-proposal.
-
 **Recurring Recipe**:
 A Recipe explicitly pinned to come back every week or on a given weekday.
 _Avoid_: Favourite (when meaning pinned)
@@ -143,9 +140,21 @@ A Slot filled by food already cooked. When it names the earlier Slot it comes fr
 **Proposal**:
 A suggested set of Recipes for a Week's dinners, with a reason for each choice.
 
+**Suggestion**:
+A dinner Mise chose, which a later Proposal may change; every other dinner is the Household's own and stays.
+_Avoid_: Mise's pick, proposed dinner
+
+**Keep**:
+Making a Suggestion the Household's own, so no Proposal changes it.
+_Avoid_: Lock, pin, hold
+
 **Re-roll**:
-Proposing a Week again from a new seed, for a different Proposal that keeps its Locked Slots.
-_Avoid_: Shuffle, regenerate
+Proposing a Week again from a new seed, for different Suggestions; the Household's own dinners stay.
+_Avoid_: Shuffle, regenerate, re-proposal
+
+**Use it up**:
+The Items on hand that a Week's Proposals favour Recipes for.
+_Avoid_: On hand, pantry, leftovers
 
 **Prep-ahead note**:
 What a Recipe needs doing the day before, such as soaking beans; the Calendar Feed shows it as its own event that day.

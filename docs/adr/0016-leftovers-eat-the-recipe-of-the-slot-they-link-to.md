@@ -11,3 +11,7 @@ The Proposer places Leftovers for a Recipe that yields them, unless that dinner 
 - The Proposer still chooses a new Recipe for an unlocked dinner whose Leftovers were linked by hand, as long as it is safe for whoever eats them; Locking the dinner keeps it. Only when nothing else can be chosen does it keep its Recipe unlocked.
 - The Proposer only places Leftovers at dinners within the Week. Leftovers at lunch, or in the next Week, are linked by hand.
 - A dinner's reason "leftovers" is how Mise tells Leftovers it placed from those linked by hand, so any edit by hand that clears the reason (as `set_slot` and `link_leftovers` do) makes them kept.
+
+## Amended by ADR 0030
+
+A dinner whose Leftovers were linked by hand is the Household's own, so the Proposer no longer chooses it again; Leftovers the Proposer placed are kept with Keep, not Lock.

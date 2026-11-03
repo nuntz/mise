@@ -13,3 +13,7 @@ Each dinner's reason is structured data (`ProposalReason`): the rule that kept i
 - The seed and choice are the only state a Proposal leaves besides the Slots and reasons. Restoring an export and proposing again gives the same plan.
 - "Use it up" Items are an input to one call and are not stored: a re-roll without them may favour other Recipes.
 - Once cooking and Ratings are recorded, they replace "planned" as history and feed the Ratings the Proposer already weighs, without changing its interface. (ADR 0014 records them; planned dinners still count as history, and cooked dinners are kept.)
+
+## Amended by ADR 0030
+
+A dinner chosen by hand is no longer chosen again, Use it up is stored on the Week, and Lock is retired: a dinner is a Suggestion or the Household's own.
