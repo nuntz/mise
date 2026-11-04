@@ -78,7 +78,7 @@ An Ingredient not yet matched to an Item; its Allergens are unknown and treated 
 
 **Suggestion**:
 An LLM's guess at the Item an Unresolved Ingredient refers to: an existing Item, or a new one with its Allergens. It changes nothing until a person accepts it.
-_Avoid_: Proposal (that is a Week's), tag
+_Avoid_: Proposal (that is a Week's), tag, guess
 
 **Draft Recipe**:
 An imported Recipe kept but not yet accepted by a person, because an LLM read it from an unreliable source (a video's caption, a screenshot, pasted text, a web page without recipe data), or because nothing could be read at its link (a Link-only Draft). It is never proposed, planned or shopped until accepted, and can be discarded.
@@ -138,18 +138,18 @@ The most cooking time the Household wants to spend on a given weekday's dinner.
 A Slot filled by food already cooked. When it names the earlier Slot it comes from, that Slot is cooked for both; otherwise it comes from food not planned in Mise, such as a batch in the freezer.
 
 **Proposal**:
-A suggested set of Recipes for a Week's dinners, with a reason for each choice.
+The Recipes Mise chooses for a Week's pencilled and unplanned dinners, with a reason for each choice.
 
-**Suggestion**:
+**Pencilled dinner**:
 A dinner Mise chose, which a later Proposal may change; every other dinner is the Household's own and stays.
-_Avoid_: Mise's pick, proposed dinner
+_Avoid_: Suggestion (that is an Unresolved Ingredient's), Mise's pick, proposed dinner, tentative dinner
 
 **Keep**:
-Making a Suggestion the Household's own, so no Proposal changes it.
+Making a pencilled dinner the Household's own, so no Proposal changes it.
 _Avoid_: Lock, pin, hold
 
 **Re-roll**:
-Proposing a Week again from a new seed, for different Suggestions; the Household's own dinners stay.
+Proposing a Week again from a new seed, for different pencilled dinners; the Household's own dinners stay.
 _Avoid_: Shuffle, regenerate, re-proposal
 
 **Use it up**:

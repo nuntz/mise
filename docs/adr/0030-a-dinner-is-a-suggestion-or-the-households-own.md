@@ -47,3 +47,7 @@ It amends ADR 0016 in two:
 ## Amended by ADR 0031
 
 A Week has no reviewed state: nothing marks it reviewed or not reviewed, and a Suggestion's grey line is the only sign of what Mise chose and no one has settled.
+
+## Renamed
+
+A Suggestion in this ADR is now a **pencilled dinner**, so that Suggestion names only an LLM's guess at an Unresolved Ingredient's Item (ADR 0023). The decision is unchanged.
