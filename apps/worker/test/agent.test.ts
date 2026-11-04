@@ -296,8 +296,8 @@ describe("what the agent is told", () => {
   });
 });
 
-describe("what the agent is told about Suggestions", () => {
-  test("a dinner with a reason is Mise's Suggestion, and a Re-roll leaves the Household's own", async () => {
+describe("what the agent is told about pencilled dinners", () => {
+  test("a dinner with a reason is pencilled, and a Re-roll leaves the Household's own", async () => {
     const offered: { name: string; description: string }[][] = [];
     scriptModel((context) => {
       const system = context.messages.find((message) => (message.role as string) === "system") as
@@ -311,7 +311,7 @@ describe("what the agent is told about Suggestions", () => {
     await household.chat("Hello", ON_THE_WEEK);
 
     const described = (name: string) => offered[0]?.find((tool) => tool.name === name)?.description ?? "";
-    expect(described("get_week")).toMatch(/with a `reason` is Mise's Suggestion/);
+    expect(described("get_week")).toMatch(/with a `reason` is pencilled/);
     expect(described("get_week")).toMatch(/without one is the Household's own/);
     expect(described("propose_week")).toMatch(/leaves the Household's own dinners as they are/);
     expect(described("propose_week")).not.toMatch(/decided by hand/);
@@ -319,6 +319,11 @@ describe("what the agent is told about Suggestions", () => {
     expect(described("propose_dinner")).toMatch(/pick something else for Friday/);
     expect(described("propose_dinner")).toMatch(/Recurring/);
     expect(described("keep_slot")).toMatch(/“keep Wednesday”/);
+    for (const name of ["get_week", "propose_week", "propose_dinner", "set_use_up", "keep_slot"]) {
+      expect(described(name)).not.toMatch(/suggestion/i);
+    }
+    expect(described("propose_week")).toMatch(/pencilled dinners/);
+    expect(described("keep_slot")).toMatch(/Keeps a pencilled dinner/);
   });
 });
 
@@ -514,7 +519,7 @@ describe("typical turns", () => {
         ["propose_week", { date: MONDAY, reroll: true }],
       ]),
     );
-    // A Suggestion rather than set by hand, which a Re-roll would leave anyway.
+    // Pencilled rather than set by hand, which a Re-roll would leave anyway.
     const household = await familyHousehold();
     await household.callTool("propose_week", { date: MONDAY });
     const proposed = (await dinnerOn(household, TUESDAY))?.recipe?.id;

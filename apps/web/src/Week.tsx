@@ -472,7 +472,7 @@ function Day(props: {
 /**
  * A Slot as the Week shows it, with one action by where it stands: nothing chosen, Choose; Leftovers,
  * a meal out or no meal, Change; a Recipe to cook, Cook; cooked, Rate it; rated, none. The rest is in
- * its Recipe's sheet. A Suggestion that can be kept also has Keep, beside its reason line.
+ * its Recipe's sheet. A pencilled dinner that can be kept also has Keep, beside its reason line.
  */
 function SlotView(props: {
   client: MiseClient;
@@ -661,7 +661,7 @@ function SlotView(props: {
 }
 
 /**
- * Keeps a Suggestion at once, making it the Household's own; the Week refetches without its reason. A
+ * Keeps a pencilled dinner at once, making it the Household's own; the Week refetches without its reason. A
  * link under the card's reason line, or a row in the Slot form, as "Let Mise choose" is there.
  */
 function KeepButton(props: { client: MiseClient; slot: Slot; class: "button-link" | "button-row" }) {

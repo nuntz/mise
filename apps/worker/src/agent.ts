@@ -157,8 +157,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   list_import_flags: "Recipes an import flagged for a merge or as a possible duplicate.",
   get_week:
     "The Week containing `date` (YYYY-MM-DD), or this Week without one: every breakfast, lunch and dinner, " +
-    "with its Recipe, Diners, Guests and Conflicts. A dinner with a `reason` is Mise's " +
-    "Suggestion, which a Re-roll may change, and the reason says why Mise chose it; a dinner without one is the " +
+    "with its Recipe, Diners, Guests and Conflicts. A dinner with a `reason` is pencilled: " +
+    "a Re-roll may change it, and the reason says why Mise chose it; a dinner without one is the " +
     "Household's own: chosen, changed or cooked by someone, and no Proposal changes it.",
   set_slot:
     "Sets what a Slot is, at breakfast, lunch or dinner: a Recipe (not a Draft, `recipeId` with kind `recipe`), " +
@@ -181,7 +181,7 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Puts every Slot of the Week back as it starts, the Household's own too, but not cooked ones, once the person taps " +
     "to confirm; pass `confirm: true`.",
   propose_week:
-    "Fills the Week's unplanned dinners and Mise's Suggestions, each with a reason, and leaves the Household's own " +
+    "Fills the Week's unplanned and pencilled dinners, each with a reason, and leaves the Household's own " +
     "dinners as they are, favouring Recipes that use the Week's Use it up. `reroll: true` proposes again " +
     "differently. Returns `{ week, changed }`; a Re-roll with `changed: false` left the Week exactly as it was, " +
     "so tell the person “Nothing to re-roll: every dinner is yours, or has only one Recipe that fits.”, and for " +
@@ -189,7 +189,7 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "rule is what to change to change it.",
   propose_dinner:
     "Hands one dinner back to Mise and proposes it again at once, as for “Let Mise choose Friday” or “pick " +
-    "something else for Friday”: it becomes a Suggestion with a reason, with a Recipe other than the one it had " +
+    "something else for Friday”: it becomes a pencilled dinner with a reason, with a Recipe other than the one it had " +
     "when another fits, and every other dinner stays as it is. Returns `{ week, changed }`. With `changed: false` " +
     "it came back as it was: when its reason is `recurring`, say that dinner is a Recurring Recipe's night, and " +
     "the Recipe's Recurring rule is what to change to change it; when the reason counts one candidate, say it " +
@@ -197,13 +197,13 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   set_use_up:
     "Sets the Week's Use it up, replacing it: the Items on hand (ids from list_items) its Proposals favour " +
     'Recipes for, as in "use up the spinach". Add to `useUp` from get_week to keep what is there; `[]` clears ' +
-    "it. A Week already proposed is proposed again from the same seed, so only Mise's Suggestions and unplanned " +
+    "it. A Week already proposed is proposed again from the same seed, so only pencilled and unplanned " +
     "dinners can change. Returns `{ week, changed }`; with `changed: false` on a proposed Week, the Items are " +
     "stored but tell the person “No dinner changed: nothing that fits uses <the Items> better than what's planned.”",
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
   mark_cooked: "Marks a Slot cooked, today or earlier.",
   keep_slot:
-    "Keeps one of Mise's Suggestions (“keep Wednesday”): the dinner becomes the Household's own, loses its " +
+    "Keeps a pencilled dinner (“keep Wednesday”): the dinner becomes the Household's own, loses its " +
     "reason, and no Re-roll changes it. Keeping Leftovers Mise placed keeps the dinner they are of too. " +
     "Refused with `nothing_to_keep` for a dinner already the Household's own, or with no Recipe or Leftovers.",
   rate_recipe: "Rates a cooked Slot's Recipe for the Member speaking.",

@@ -396,7 +396,7 @@ export function whoName(who: ConflictWho, household: Pick<Household, "members">)
   return household.members.find((member) => member.id === who)?.name ?? String(who);
 }
 
-/** Why Mise chose a Suggestion as it did, as a sentence. */
+/** Why Mise chose a pencilled dinner as it did, as a sentence. */
 export function reasonText(
   reason: ProposalReason,
   household: Pick<Household, "members" | "locale">,

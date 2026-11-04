@@ -5,7 +5,7 @@ import {
   currentWeek,
   isEaten,
   isKeepable,
-  isSuggestion,
+  isPencilled,
   type LocalDate,
   localDate,
   MEALS,
@@ -141,7 +141,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const before = readSlot(sql, input.date, input.meal);
     const refused = editSlot(sql, settings, input, input.overrides, () => {
       // Choosing what it holds by hand makes it the Household's own. A note, Diners or Guests changed
-      // on a Suggestion leave it Mise's to change (ADR 0030).
+      // on a pencilled dinner leave it Mise's to change (ADR 0030).
       if (before.kind !== input.kind || (before.recipe?.id ?? null) !== recipeId) makeOwn(sql, input);
       sql.exec(
         "UPDATE slot SET kind = ?, recipe_id = ? WHERE date = ? AND meal = ?",
@@ -449,7 +449,7 @@ function readProposerInput(sql: SqlStorage, span: WeekSpan): ProposerInput {
           cooked: slot.cookedAt !== null,
           ...people(slot),
           leftoversOf: slot.leftoversOf?.meal === "dinner" ? slot.leftoversOf.date : null,
-          suggestion: isSuggestion(slot),
+          pencilled: isPencilled(slot),
           leftoversLinkedByHand: linkedByHand.map(people),
         };
       }),
@@ -518,7 +518,7 @@ function storeProposal(
 }
 
 /**
- * Makes the Slot the Household's own: its reason goes, so it is no Suggestion and no Proposal changes it
+ * Makes the Slot the Household's own: its reason goes, so it is not pencilled and no Proposal changes it
  * (ADR 0030).
  */
 function makeOwn(sql: SqlStorage, { date, meal }: SlotKey): void {
@@ -537,12 +537,12 @@ function ownLinkedByHand(sql: SqlStorage, leftovers: SlotKey, of: SlotKey | null
 /** Why Keep can do nothing for the Slot: see `isKeepable`. */
 function nothingToKeep(slot: Slot): ToolResult<never> {
   const where = `${slot.date} ${slot.meal}`;
-  // An unplanned Suggestion ("nobody's eating", "no Recipe fit") is filled by the next Proposal
+  // An unplanned pencilled dinner ("nobody's eating", "no Recipe fit") is filled by the next Proposal
   // anyway, so there is nothing to keep (ADR 0030).
   const message =
     slot.kind !== "recipe" && slot.kind !== "leftovers"
       ? `${where} has no Recipe or Leftovers to keep`
-      : !isSuggestion(slot)
+      : !isPencilled(slot)
         ? `${where} is already the Household's own: no Proposal changes it`
         : !isEaten(slot)
           ? `Nobody is eating ${where}, so there is nothing to keep`

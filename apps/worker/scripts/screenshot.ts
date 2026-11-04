@@ -118,7 +118,7 @@ async function seed(): Promise<Map<string, number>> {
  * Draft to review, Staples due and run low, a Grocery List, a calendar link and a Kitchen Display;
  * this Week proposed with every dinner the Household's own, so Re-roll is disabled and says why; and
  * next Week, a Ready-made dish after a Monday of Leftovers whose form reaches back into this Week, then
- * Mise's Suggestions for the rest, using up broccoli and apples.
+ * pencilled dinners for the rest, using up broccoli and apples.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -262,7 +262,7 @@ function screens(ids: Map<string, number>): Screen[] {
     await slot(page).locator(".dish-open").first().click();
     await page.locator(".sheet button.button-row").last().click();
   };
-  // The first of next Week's Suggestions that Keep is offered for, and the first with a Recipe, by its photo.
+  // The first of next Week's pencilled dinners that Keep is offered for, and the first with a Recipe, by its photo.
   const keepable = (page: Page) => page.locator("section.slot:has(.slot-reason .button-link)").first();
   const keepableRecipe = (page: Page) =>
     page.locator("section.slot:has(.slot-reason .button-link):has(.photo)").first();
@@ -350,7 +350,7 @@ function screens(ids: Map<string, number>): Screen[] {
       focus: slotForm,
     },
     { name: "week-next-keep", path: "/?week=next", focus: keepable },
-    { name: "week-next-suggestion-form", path: "/?week=next", open: editDinner(keepableRecipe), focus: slotForm },
+    { name: "week-next-pencilled-form", path: "/?week=next", open: editDinner(keepableRecipe), focus: slotForm },
     { name: "week-next-use-up", path: "/?week=next", open: openUseUp, overlay: true },
     {
       name: "week-next-use-up-unchanged",

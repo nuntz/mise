@@ -264,7 +264,7 @@ describe("Leftovers linked by hand before ADR 0030", () => {
     const household = await setUpHousehold();
     const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;
     succeeded(await household.callTool("link_leftovers", { ...dinner(SATURDAY), of: dinner(THURSDAY) }));
-    // As linking by hand left it before: Thursday still a Suggestion.
+    // As linking by hand left it before: Thursday still pencilled.
     await runInDurableObject(household, async (_household, state) => {
       const sql = state.storage.sql;
       sql.exec(
@@ -280,7 +280,7 @@ describe("Leftovers linked by hand before ADR 0030", () => {
     const after = await week(household);
 
     expect(slotOf(after, THURSDAY)).toMatchObject({ recipe: slotOf(proposed, THURSDAY).recipe, reason: null });
-    // Monday's Chili, with the Leftovers Mise placed on Tuesday, is still Mise's Suggestion.
+    // Monday's Chili, with the Leftovers Mise placed on Tuesday, is still pencilled.
     expect(slotOf(after, MONDAY)).toMatchObject({ recipe: { id: CHILI }, leftovers: [dinner(TUESDAY)] });
     expect(slotOf(after, MONDAY).reason).toEqual(slotOf(proposed, MONDAY).reason);
     expect(slotOf(after, MONDAY).reason).not.toBeNull();

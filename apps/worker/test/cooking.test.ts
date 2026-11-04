@@ -192,7 +192,7 @@ describe("rating a cooked Slot", () => {
   });
 });
 
-describe("cooking a Suggestion makes it the Household's own", () => {
+describe("cooking a pencilled dinner makes it the Household's own", () => {
   test("marking it cooked deletes its reason, and unmarking doesn't bring it back", async () => {
     const household = await setUpHousehold();
     const proposed = succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY })).week;

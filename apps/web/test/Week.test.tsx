@@ -236,7 +236,7 @@ test("the Week opens first: each day's dinner with its photo, breakfast and lunc
   );
   expect(within(dinner).getByText("Serves 4 (Robin, Alex, Sam and 1 Guest); the Recipe makes 4.")).toBeTruthy();
   expect(within(dinner).getByText("Use the fresh basil")).toBeTruthy();
-  // Lock is retired (ADR 0030): a dinner is a Suggestion or the Household's own.
+  // Lock is retired (ADR 0030): a dinner is pencilled or the Household's own.
   expect(within(dinner).queryByText("Locked")).toBeNull();
 
   expect(
@@ -840,7 +840,7 @@ test("offline, proposing says it needs a connection under the control, and its h
   const { client, goOffline } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   render(() => <App client={client} />);
   const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
-  expect(screen.getByText("Re-roll changes Mise's suggestions. Yours stay.")).toBeTruthy();
+  expect(screen.getByText("Re-roll changes the dinners Mise chose. Yours stay.")).toBeTruthy();
 
   goOffline();
 
@@ -849,7 +849,7 @@ test("offline, proposing says it needs a connection under the control, and its h
     expect(control.disabled).toBe(true);
     expect(description(control)).toBe("Needs a connection.");
   }
-  expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
+  expect(screen.queryByText(/Re-roll changes the dinners Mise chose/)).toBeNull();
 });
 
 /** This Week as proposed, with every dinner the Household's own: Pasta, chosen by hand, every day. */
@@ -880,7 +880,7 @@ test("Re-roll is disabled, and says why under it, when every dinner is the House
   // Under Re-roll, before the Use it up line.
   expect(precedes(reroll, reason)).toBe(true);
   expect(precedes(reason, screen.getByRole("button", { name: "Use it up…" }))).toBe(true);
-  expect(screen.queryByText(/Re-roll changes Mise's suggestions/)).toBeNull();
+  expect(screen.queryByText(/Re-roll changes the dinners Mise chose/)).toBeNull();
 });
 
 test("Re-roll's hint comes under it, before the Use it up line", async () => {
@@ -888,7 +888,7 @@ test("Re-roll's hint comes under it, before the Use it up line", async () => {
   render(() => <App client={client} />);
 
   const reroll = await screen.findByRole("button", { name: "Re-roll" });
-  const hint = screen.getByText("Re-roll changes Mise's suggestions. Yours stay.");
+  const hint = screen.getByText("Re-roll changes the dinners Mise chose. Yours stay.");
   expect(precedes(reroll, hint)).toBe(true);
   expect(precedes(hint, screen.getByRole("button", { name: "Use it up…" }))).toBe(true);
 });
@@ -941,10 +941,10 @@ test.each<[string, Partial<Slot>]>([
       reason: { kind: "no_candidate", excluded: { conflict: 1, never: 0, course: 0, recent: 0, effort: 0 } },
     },
   ],
-  ["is a Suggestion", { reason: { kind: "chosen", candidates: 3, factors: [] } }],
+  ["is pencilled", { reason: { kind: "chosen", candidates: 3, factors: [] } }],
   // A Re-roll leaves it unplanned.
   [
-    "is a Suggestion nobody is eating any more",
+    "is pencilled and nobody is eating it any more",
     { reason: { kind: "chosen", candidates: 3, factors: [] }, diners: [], dinersAreDefault: false, servings: 0 },
   ],
 ])("Re-roll is enabled when one dinner %s and the rest are the Household's own", async (_, tuesday) => {
@@ -992,7 +992,7 @@ test("the Week's Use it up shows under Re-roll, and changing it stores it; Re-ro
 
   await user.click(screen.getByRole("button", { name: "Use it up: spinach · Change" }));
   const sheet = screen.getByRole("dialog", { name: "Use it up" });
-  // The sheet takes the focus, not its field, so a phone doesn't open the keyboard and its suggestions.
+  // The sheet takes the focus, not its field, so a phone doesn't open the keyboard and its predictive text.
   await vi.waitFor(() => expect(document.activeElement).toBe(sheet));
   const useUp = within(sheet).getByRole("form", { name: "Use it up" });
   const field = within(useUp).getByRole("combobox", { name: "Item on hand" });
@@ -1513,11 +1513,11 @@ test("“Let Mise choose” shows in the Slot sheet of the Household's own dinne
     return within(day).getByRole("form", { name: "Dinner" });
   };
 
-  // Monday's dinner is Mise's Suggestion: there is nothing to hand back.
+  // Monday's dinner is pencilled: there is nothing to hand back.
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
-  const suggestion = await editDinner(monday, "Curry");
-  expect(within(suggestion).queryByRole("button", { name: "Let Mise choose" })).toBeNull();
-  await user.click(within(suggestion).getByRole("button", { name: "Cancel" }));
+  const pencilled = await editDinner(monday, "Curry");
+  expect(within(pencilled).queryByRole("button", { name: "Let Mise choose" })).toBeNull();
+  await user.click(within(pencilled).getByRole("button", { name: "Cancel" }));
 
   const wednesday = screen.getByRole("region", { name: "Wednesday, October 28" });
   const own = await editDinner(wednesday, "Tacos");
@@ -1551,7 +1551,7 @@ test("“Let Mise choose” on a Recurring Recipe's night says the rule is what 
   );
 });
 
-test("only Mise's Suggestions show a reason line; the Household's own dinners show none", async () => {
+test("only pencilled dinners show a reason line; the Household's own dinners show none", async () => {
   const week = proposedWeek();
   const tacos = { id: 3, title: "Tacos", baseServings: 4, photoKey: null };
   // Wednesday chosen by hand, Thursday cooked, Friday eating out: no reason, so no line.
@@ -1570,10 +1570,10 @@ test("only Mise's Suggestions show a reason line; the Household's own dinners sh
 });
 
 /**
- * The proposed Week with more Suggestions: Leftovers of Monday's on Wednesday, Curry cooked on Thursday
+ * The proposed Week with more pencilled dinners: Leftovers of Monday's on Wednesday, Curry cooked on Thursday
  * as an earlier Proposer left it, and Curry for nobody on Friday.
  */
-function suggestionsWeek(): Week {
+function pencilledWeek(): Week {
   const week = proposedWeek();
   const curry = (week.slots[2] as Slot).recipe;
   const chosen = (week.slots[2] as Slot).reason;
@@ -1595,8 +1595,8 @@ function suggestionsWeek(): Week {
 const dinnerOn = (day: string) =>
   within(screen.getByRole("region", { name: day })).getByRole("region", { name: "Dinner" });
 
-test("Keep sits beside the reason line of a Suggestion with a Recipe or Leftovers, and keeps it", async () => {
-  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: suggestionsWeek() }) });
+test("Keep sits beside the reason line of a pencilled dinner with a Recipe or Leftovers, and keeps it", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: pencilledWeek() }) });
   const user = userEvent.setup();
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
@@ -1612,7 +1612,7 @@ test("Keep sits beside the reason line of a Suggestion with a Recipe or Leftover
 });
 
 test("Keep is absent on a cooked dinner and on one nobody is eating", async () => {
-  const { client } = fakeClient({ get_week: () => ({ ok: true, value: suggestionsWeek() }) });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: pencilledWeek() }) });
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
 
@@ -1622,7 +1622,7 @@ test("Keep is absent on a cooked dinner and on one nobody is eating", async () =
 });
 
 test("the Slot sheet offers Keep under the same rule, and keeps what was typed", async () => {
-  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: suggestionsWeek() }) });
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: pencilledWeek() }) });
   const user = userEvent.setup();
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
@@ -1650,7 +1650,7 @@ test("keeping a dinner in the Slot sheet offers “Let Mise choose” there at o
   let kept = false;
   const fake = fakeClient({
     get_week: () => {
-      const week = suggestionsWeek();
+      const week = pencilledWeek();
       if (kept) (week.slots[2] as Slot).reason = null;
       return { ok: true, value: week };
     },

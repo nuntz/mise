@@ -52,8 +52,8 @@ export const Exclusions = z.object({
 export type Exclusions = z.infer<typeof Exclusions>;
 
 /**
- * Why Mise chose a dinner as it did, so that it can be explained. A dinner has one exactly when it is a
- * Suggestion; the Proposer writes none for a dinner it leaves as it is (ADR 0030). Migrations 30
+ * Why Mise chose a dinner as it did, so that it can be explained. A dinner has one exactly when it is
+ * pencilled; the Proposer writes none for a dinner it leaves as it is (ADR 0030). Migrations 30
  * and 33 deleted the "kept", "cooked" and "locked" reasons an earlier Proposer stored.
  */
 export const ProposalReason = z.discriminatedUnion("kind", [

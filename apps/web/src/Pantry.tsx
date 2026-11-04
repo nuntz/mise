@@ -378,12 +378,12 @@ function CheckIn(props: {
           >
             {(staple) => (
               <div class="stack">
-                <section class="check-card suggest-card" aria-labelledby="suggestion-title">
-                  <p class="overline">{t("pantry.suggestion")}</p>
-                  <h2 id="suggestion-title" class="check-card-title">
-                    {t("pantry.suggestTitle", { name: staple().name })}
+                <section class="check-card always-buy-card" aria-labelledby="always-buy-title">
+                  <p class="overline">{t("pantry.alwaysBuyCard.overline")}</p>
+                  <h2 id="always-buy-title" class="check-card-title">
+                    {t("pantry.alwaysBuyCard.title", { name: staple().name })}
                   </h2>
-                  <p>{t("pantry.suggestAlwaysBuy", { name: staple().name })}</p>
+                  <p>{t("pantry.alwaysBuyCard.question", { name: staple().name })}</p>
                 </section>
                 <div class="control">
                   <button

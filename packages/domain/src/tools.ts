@@ -440,7 +440,7 @@ export const tools = {
     confirm: "always",
   }),
   /**
-   * Fills the Week's unplanned dinners and Suggestions, with a reason for each, and leaves the
+   * Fills the Week's unplanned and pencilled dinners, with a reason for each, and leaves the
    * Household's own as they are; see `ProposeWeekInput`. Returns the Week, and whether any dinner changed.
    */
   propose_week: defineTool({
@@ -480,9 +480,9 @@ export const tools = {
     changes: "plan",
   }),
   /**
-   * Makes a Suggestion the Household's own by deleting its reason. Leftovers Mise placed become
+   * Makes a pencilled dinner the Household's own by deleting its reason. Leftovers Mise placed become
    * Leftovers linked by hand, and the dinner they are of the Household's own too. Refuses a dinner
-   * that is no Suggestion or holds no Recipe or Leftovers (`nothing_to_keep`). Returns the Slot.
+   * that is not pencilled or holds no Recipe or Leftovers (`nothing_to_keep`). Returns the Slot.
    */
   keep_slot: defineTool({
     input: KeepSlotInput,

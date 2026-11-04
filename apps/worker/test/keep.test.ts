@@ -53,7 +53,7 @@ async function propose(household: TestHousehold, reroll = false): Promise<Week> 
   return succeeded<ProposedWeek>(await household.callTool("propose_week", { date: MONDAY, reroll })).week;
 }
 
-describe("Keeping a Suggestion", () => {
+describe("Keeping a pencilled dinner", () => {
   test("deletes its reason, so the dinner is the Household's own", async () => {
     const household = await setUpHousehold();
     const proposed = slotOf(await propose(household), WEDNESDAY);
@@ -129,10 +129,10 @@ describe("Keeping a Suggestion", () => {
     });
   });
 
-  test("is refused on a Suggestion with a Recipe that nobody is eating any more", async () => {
+  test("is refused on a pencilled dinner with a Recipe that nobody is eating any more", async () => {
     const household = await setUpHousehold();
     await propose(household);
-    // Saying who eats it leaves it a Suggestion, with its Recipe.
+    // Saying who eats it leaves it pencilled, with its Recipe.
     const nobody = succeeded<Slot[]>(await household.callTool("set_diners", { ...dinner(WEDNESDAY), diners: [] }))[0];
     expect(nobody).toMatchObject({ kind: "recipe", diners: [], guests: 0, reason: { kind: "chosen" } });
 

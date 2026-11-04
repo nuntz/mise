@@ -1449,7 +1449,7 @@ fieldset > .toggle-chip {
   min-height: var(--touch-min);
 }
 
-/* A Suggestion's grey reason line at the card's full width, Keep under it at the left edge, and a refusal
+/* A pencilled dinner's grey reason line at the card's full width, Keep under it at the left edge, and a refusal
  * of Keep below both. */
 .slot-reason {
   display: flex;
@@ -1791,14 +1791,14 @@ fieldset > .toggle-chip {
   color: var(--ink-muted);
 }
 
-.suggest-card {
+.always-buy-card {
   border: 0;
   background: var(--plum-soft);
   color: var(--plum-ink);
 }
 
-.suggest-card .overline,
-.suggest-card p {
+.always-buy-card .overline,
+.always-buy-card p {
   color: var(--plum-ink);
 }
 

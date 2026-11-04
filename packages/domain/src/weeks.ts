@@ -186,7 +186,7 @@ export const Slot = z.object({
    */
   conflicts: z.array(SlotConflict),
   /**
-   * Why Mise chose it, set exactly when it is a Suggestion, which a Proposal may change. Null for the
+   * Why Mise chose it, set exactly when it is pencilled, which a Proposal may change. Null for the
    * Household's own (chosen, changed or cooked by hand) and for a Slot never proposed (ADR 0030).
    */
   reason: ProposalReason.nullable(),
@@ -197,8 +197,8 @@ export const Slot = z.object({
 });
 export type Slot = z.infer<typeof Slot>;
 
-/** Whether the Slot is a Suggestion: Mise chose it, so a Proposal may change it (ADR 0030). */
-export function isSuggestion(slot: Pick<Slot, "reason">): boolean {
+/** Whether the Slot is a pencilled dinner: Mise chose it, so a Proposal may change it (ADR 0030). */
+export function isPencilled(slot: Pick<Slot, "reason">): boolean {
   return slot.reason !== null;
 }
 
@@ -208,12 +208,12 @@ export function isEaten(people: { diners: readonly unknown[]; guests: number }):
 }
 
 /**
- * Whether Keep can do something for the Slot: a Suggestion with a Recipe or Leftovers that is still to
+ * Whether Keep can do something for the Slot: a pencilled dinner with a Recipe or Leftovers that is still to
  * eat, by someone. An unplanned one is filled by the next Proposal anyway (ADR 0030).
  */
 export function isKeepable(slot: Slot): boolean {
   return (
-    isSuggestion(slot) &&
+    isPencilled(slot) &&
     (slot.kind === "recipe" || slot.kind === "leftovers") &&
     slot.cookedAt === null &&
     isEaten(slot)
@@ -222,19 +222,19 @@ export function isKeepable(slot: Slot): boolean {
 
 /** Whether the Slot can be handed back to Mise ("Let Mise choose"): a dinner of the Household's own, not cooked. */
 export function canHandBack(slot: Slot): boolean {
-  return slot.meal === "dinner" && !isSuggestion(slot) && slot.cookedAt === null;
+  return slot.meal === "dinner" && !isPencilled(slot) && slot.cookedAt === null;
 }
 
 /**
- * Whether a Re-roll could change the dinner (ADR 0030): a Suggestion, or an unplanned dinner, that someone
- * is eating, or a planned Suggestion nobody is, which it leaves unplanned. The Household's own planned
+ * Whether a Re-roll could change the dinner (ADR 0030): a pencilled dinner, or an unplanned one, that someone
+ * is eating, or a planned pencilled dinner nobody is, which it leaves unplanned. The Household's own planned
  * dinners stay as they are, and so does an unplanned one nobody is eating. One where no Recipe fit counts
  * as unplanned: a Recipe added since may fit it.
  */
 export function isRerollable(slot: Slot): boolean {
   if (slot.cookedAt !== null) return false;
-  if (!isEaten(slot)) return isSuggestion(slot) && slot.kind !== "unplanned";
-  return isSuggestion(slot) || slot.kind === "unplanned";
+  if (!isEaten(slot)) return isPencilled(slot) && slot.kind !== "unplanned";
+  return isPencilled(slot) || slot.kind === "unplanned";
 }
 
 export const Week = z.object({
@@ -347,7 +347,7 @@ export const LinkLeftoversInput = z
   .object({ ...SlotRef, of: z.object(SlotRef).strict().nullable(), overrides: Overrides.optional() })
   .strict();
 
-/** Keeps a Suggestion: the dinner becomes the Household's own, which no Proposal changes (ADR 0030). */
+/** Keeps a pencilled dinner: it becomes the Household's own, which no Proposal changes (ADR 0030). */
 export const KeepSlotInput = z.object(SlotRef).strict();
 
 /** Clearing is destructive, so the caller must say they confirmed it. */
@@ -368,7 +368,7 @@ export const ProposeWeekInput = z
 
 /**
  * Stores the Week's Use it up, replacing what it had; none clears it. A Week already proposed is
- * proposed again from the same seed, so that only its Suggestions and unplanned dinners adjust. When no
+ * proposed again from the same seed, so that only its pencilled and unplanned dinners adjust. When no
  * dinner changed, its reasons are still written again, so that a dinner can say it uses up spinach.
  */
 export const SetUseUpInput = z
@@ -383,8 +383,8 @@ export const SetUseUpInput = z
 
 /**
  * Hands a dinner back to Mise ("Let Mise choose") and proposes it again at once (see `proposeDinner`),
- * from the seed and choice the Week was last proposed with, which stay as they are. The dinner becomes a
- * Suggestion with its reason; every other dinner is left as it is.
+ * from the seed and choice the Week was last proposed with, which stay as they are. The dinner becomes
+ * pencilled, with its reason; every other dinner is left as it is.
  */
 export const ProposeDinnerInput = z.object({ date: LocalDate }).strict();
 

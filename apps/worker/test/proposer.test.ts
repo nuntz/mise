@@ -174,7 +174,7 @@ describe("proposing a Week", () => {
   });
 });
 
-describe("the Household's own dinners and Mise's Suggestions", () => {
+describe("the Household's own dinners and pencilled dinners", () => {
   const THURSDAY = "2026-10-29";
 
   test("a Recipe set by hand survives a Re-roll, with no reason", async () => {
@@ -205,7 +205,7 @@ describe("the Household's own dinners and Mise's Suggestions", () => {
     ]);
   });
 
-  test("changing only a Suggestion's note or Diners keeps it a Suggestion", async () => {
+  test("changing only a pencilled dinner's note or Diners keeps it pencilled", async () => {
     const household = await setUpHousehold();
     const proposed = dinners(await propose(household))[0] as Slot;
 
@@ -222,7 +222,7 @@ describe("the Household's own dinners and Mise's Suggestions", () => {
     expect(dinners(week)[0]).toMatchObject({ note: "Make it spicy", diners: [1, 2], reason: proposed.reason });
   });
 
-  test("changing a Suggestion's Recipe makes it the Household's own", async () => {
+  test("changing a pencilled dinner's Recipe makes it the Household's own", async () => {
     const household = await setUpHousehold();
     const proposed = dinners(await propose(household))[0] as Slot;
     const other = proposed.recipe?.id === 2 ? 3 : 2;
@@ -341,10 +341,10 @@ describe("letting Mise choose one dinner", () => {
 });
 
 describe("reasons stored before ADR 0030", () => {
-  test("a dinner kept by rule or cooked loses its reason, and a Suggestion keeps its own", async () => {
+  test("a dinner kept by rule or cooked loses its reason, and a pencilled dinner keeps its own", async () => {
     const household = await setUpHousehold();
     const proposed = await propose(household);
-    // As an earlier Proposer stored them: a reason for dinners it kept, and a cooked Suggestion.
+    // As an earlier Proposer stored them: a reason for dinners it kept, and a cooked pencilled dinner.
     await runInDurableObject(household, async (_household, state) => {
       const sql = state.storage.sql;
       const reason = (date: string, kind: string) =>
@@ -381,7 +381,7 @@ describe("Locked dinners before ADR 0030", () => {
 
   /**
    * A proposed Week as Lock left it: Monday's Recipe Locked, Wednesday's Leftovers of Tuesday's
-   * Suggestion Locked, and Thursday Locked unplanned; then the migration that retires Lock, and only it.
+   * pencilled dinner Locked, and Thursday Locked unplanned; then the migration that retires Lock, and only it.
    */
   async function withLocks(household: TestHousehold): Promise<Week> {
     const proposed = await propose(household);

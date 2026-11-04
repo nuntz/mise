@@ -23,10 +23,10 @@ export type ProposerDinner = ProposerPeople & {
   /** The dinner it is Leftovers of, when it is linked to one. */
   leftoversOf: LocalDate | null;
   /**
-   * Mise's Suggestion: it has a reason, so a Proposal may change it. Every other dinner but an
+   * A pencilled dinner: it has a reason, so a Proposal may change it. Every other dinner but an
    * unplanned one is the Household's own, which no Proposal changes (ADR 0030).
    */
-  suggestion: boolean;
+  pencilled: boolean;
   /**
    * Who eats each of its Leftovers linked by hand, at any meal; none when it has none. They eat what it
    * is cooked, so they count as eating it. A dinner with any gets no more Leftovers, and none are placed
@@ -114,7 +114,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Proposes the Week's dinners. Cooked dinners and the Household's own are settled: left as they are,
  * with no reason written, and counted for recency. Recurring Recipes are pinned first.
- * Every Suggestion and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it, its
+ * Every pencilled and unplanned dinner gets a Recipe that no Hard Constraint of anyone eating it, its
  * Leftovers linked by hand included, rules out (unknown Allergens fail closed), not rated "never", not
  * planned within 2 weeks of it and within the day's Effort Budget (an unknown effort passes). Leftovers are still placed after a settled
  * dinner not yet cooked. Every Recipe a dinner gets, Recurring, Leftovers or not, is a main dish or of
@@ -194,7 +194,7 @@ export function proposeDinner(given: ProposerInput, date: LocalDate): Proposal {
   const dinner = input.dinners[target];
   /** Leftovers of this dinner the last Proposal placed, which go with it. */
   const itsLeftovers = (other: ProposerDinner) =>
-    other.suggestion && other.kind === "leftovers" && other.leftoversOf === date;
+    other.pencilled && other.kind === "leftovers" && other.leftoversOf === date;
   // Another dinner still unplanned is open to this one's Leftovers, but is not filled itself.
   const proposed: (ProposedDinner | undefined)[] = input.dinners.map((other, index) =>
     index === target || itsLeftovers(other) || (other.kind === "unplanned" && settled(other) === undefined)
@@ -208,7 +208,7 @@ export function proposeDinner(given: ProposerInput, date: LocalDate): Proposal {
 
   if (dinner) {
     if (dinner.cooked) proposed[target] = asItIs(dinner);
-    else proposed[target] = settled({ ...dinner, kind: "unplanned", suggestion: true });
+    else proposed[target] = settled({ ...dinner, kind: "unplanned", pencilled: true });
     pinRecurring(input, proposed, (index) => index === target && proposed[index] === undefined, planned, random);
     proposed[target] ??= chosen(input, target, planned(), recipes, window, random, dinner.recipeId);
     placeLeftovers(input, target, proposed, recipes);
@@ -381,7 +381,7 @@ function changesDinners(proposed: ProposedDinner[], dinners: ProposerDinner[]): 
  * is eating it; undefined for one it fills.
  */
 function settled(dinner: ProposerDinner): ProposedDinner | undefined {
-  const own = !dinner.suggestion && dinner.kind !== "unplanned";
+  const own = !dinner.pencilled && dinner.kind !== "unplanned";
   if (dinner.cooked || own) return asItIs(dinner);
   if (!isEaten(dinner)) {
     return {

@@ -509,7 +509,7 @@ const migrations: { version: number; statements: string[] }[] = [
   {
     version: 30,
     statements: [
-      // A dinner is a Suggestion exactly when it has a reason (ADR 0030). The reasons an earlier
+      // A dinner is pencilled exactly when it has a reason (ADR 0030). The reasons an earlier
       // Proposer wrote for dinners it kept ("kept", "cooked") go, and so does a cooked dinner's:
       // what was eaten is the Household's own.
       `DELETE FROM slot_reason
@@ -522,7 +522,7 @@ const migrations: { version: number; statements: string[] }[] = [
     statements: [
       // A dinner with Leftovers linked to it by hand is the Household's own (ADR 0030), so it loses
       // the reason a Proposal gave it. Leftovers a Proposal placed keep their "leftovers" reason, and
-      // leave the dinner they are of a Suggestion.
+      // the dinner they are of stays pencilled.
       `DELETE FROM slot_reason
        WHERE (date, meal) IN (
          SELECT leftovers_of_date, leftovers_of_meal FROM slot AS leftovers

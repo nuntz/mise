@@ -203,7 +203,9 @@ test("a Staple out three times in a row is suggested for always buying", async (
   await user.click(within(screen.getByRole("group", { name: "Rice" })).getByRole("button", { name: "Low" }));
   await user.click(within(await screen.findByRole("group", { name: "Egg" })).getByRole("button", { name: "Out" }));
 
-  expect(await screen.findByText("egg has run out three checks in a row. Always buy it?")).toBeTruthy();
+  const card = await screen.findByRole("region", { name: "egg keeps running out" });
+  expect(within(card).getByText("Always-buy").className).toBe("overline");
+  expect(within(card).getByText("egg has run out three checks in a row. Always buy it?")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Always buy egg" }));
 
   expect(writes(calls).at(-1)).toEqual({ name: "upsert_staple", input: { item: "egg", alwaysBuy: true } });
