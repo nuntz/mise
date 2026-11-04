@@ -203,9 +203,7 @@ async function screenshot(browser: Browser) {
   await firstDinner.waitFor();
   // Fonts and the Week's last fetch settle.
   await page.waitForLoadState("networkidle");
-  // The dinners, not the controls above them: Monday's photo at the top of the screen.
-  const box = await firstDinner.boundingBox();
-  if (box) await page.evaluate((y) => window.scrollTo(0, y), box.y - 210);
+  // From the top: the Week's title and controls are short enough to show with its first dinners.
   await page.screenshot({ path: join(out, "week-phone.png") });
   console.log(`Saved ${join(out, "week-phone.png")}`);
 }
@@ -257,24 +255,37 @@ function screens(ids: Map<string, number>): Screen[] {
   const productField = (page: Page) => page.locator("form label").nth(1);
   // Next Week's Monday, of Leftovers, and its Slot form.
   const nextMonday = (page: Page) => page.locator("section.day").first().locator("section.slot").first();
-  // A dinner with a Recipe, opened, and its sheet's last row: Edit, after Mark as cooked.
+  // A dinner with a Recipe, opened, and its sheet's last row: Edit, after Keep and Mark as cooked.
   const editDinner = (slot: (page: Page) => Locator) => async (page: Page) => {
     await slot(page).locator(".dish-open").first().click();
     await page.locator(".sheet button.button-row").last().click();
   };
-  // The first of next Week's pencilled dinners that Keep is offered for, and the first with a Recipe, by its photo.
-  const keepable = (page: Page) => page.locator("section.slot:has(.slot-reason .button-link)").first();
+  // The first of next Week's pencilled dinners that Keep is offered for, and the first with a Recipe, by its Cook.
+  const keepable = (page: Page) => page.locator("section.slot:has(.chip-plum):has(.slot-actions .button-row)").first();
   const keepableRecipe = (page: Page) =>
-    page.locator("section.slot:has(.slot-reason .button-link):has(.photo)").first();
-  const slotForm = (page: Page) => page.locator(".slot-form");
+    page.locator("section.slot:has(.chip-plum):has(.slot-actions .button-row):has(.button-primary)").first();
+  // A dinner marked Ready-made: the chip beside its day that is neither Pencilled nor a Conflict.
+  const readyMade = (page: Page) =>
+    page.locator("section.slot:has(.slot-day .chip:not(.chip-plum):not(.chip-warn))").first();
   // The Week's controls, from its title down.
-  const weekControls = (page: Page) => page.locator(".page-header .page-heading");
-  const openUseUp = (page: Page) => page.locator(".proposal-notes .button-link").click();
+  const weekControls = (page: Page) => page.locator(".week-screen .page-header");
+  const openUseUp = (page: Page) => page.locator(".proposal-use-up").click();
   return [
     { name: "week" },
     { name: "week-dinner", open: (page) => page.locator(".dish-open").first().click(), overlay: true },
     { name: "week-next", path: "/?week=next" },
     { name: "week-offline", open: (page) => page.context().setOffline(true) },
+    {
+      name: "week-day-open",
+      // The first day's breakfast and lunch unfolded, from the top of that day.
+      open: (page) => page.locator("section.day .strip-plan").first().click(),
+      focus: (page) => page.locator("section.day").first(),
+    },
+    {
+      name: "week-effort",
+      open: (page) => page.locator(".effort-budgets > summary").click(),
+      focus: (page) => page.locator(".effort-budgets"),
+    },
     { name: "ran-out", open: header(0), overlay: true },
     { name: "chat", open: header(1), overlay: true },
     { name: "recipes", open: nav(1) },
@@ -320,19 +331,20 @@ function screens(ids: Map<string, number>): Screen[] {
     {
       name: "week-next-ready-made",
       path: "/?week=next",
-      focus: (page) => page.locator(".dish-card:has(.chips)").first(),
+      focus: readyMade,
     },
     {
       name: "week-next-ready-made-sheet",
       path: "/?week=next",
-      open: (page) => page.locator(".dish-card .dish-open").first().click(),
+      open: (page) => readyMade(page).locator(".dish-open").click(),
       overlay: true,
     },
     {
       name: "week-next-leftovers-of",
       path: "/?week=next",
       open: async (page) => {
-        await nextMonday(page).locator("button.button-row").click();
+        // Change dinner, after Keep when the Leftovers are pencilled.
+        await nextMonday(page).locator("button.button-row").last().click();
         // Its meals from the Week before arrive a moment after the form opens.
         const list = page.locator(".slot-form select").filter({ has: page.locator('option[value*="/"]') });
         await list.waitFor();
@@ -341,16 +353,16 @@ function screens(ids: Map<string, number>): Screen[] {
           select.size = select.options.length;
         });
       },
-      focus: (page) => page.locator(".slot-form label:has(select option[value*='/'])"),
+      overlay: true,
     },
     { name: "week-kept", focus: weekControls },
     {
       name: "week-kept-form",
       open: editDinner((page) => page.locator("section.slot").first()),
-      focus: slotForm,
+      overlay: true,
     },
     { name: "week-next-keep", path: "/?week=next", focus: keepable },
-    { name: "week-next-pencilled-form", path: "/?week=next", open: editDinner(keepableRecipe), focus: slotForm },
+    { name: "week-next-pencilled-form", path: "/?week=next", open: editDinner(keepableRecipe), overlay: true },
     { name: "week-next-use-up", path: "/?week=next", open: openUseUp, overlay: true },
     {
       name: "week-next-use-up-unchanged",

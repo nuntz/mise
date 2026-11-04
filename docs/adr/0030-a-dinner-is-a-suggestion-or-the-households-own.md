@@ -51,3 +51,7 @@ A Week has no reviewed state: nothing marks it reviewed or not reviewed, and a S
 ## Renamed
 
 A Suggestion in this ADR is now a **pencilled dinner**, so that Suggestion names only an LLM's guess at an Unresolved Ingredient's Item (ADR 0023). The decision is unchanged.
+
+## Amended by ADR 0032
+
+A pencilled dinner is marked on the Week by a Pencilled chip and an italic name, not by its reason's grey line. The reason is in the dinner's Recipe sheet, or on the card when it has no Recipe to open.

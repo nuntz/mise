@@ -31,13 +31,14 @@ export function Chat(props: {
       <div class="control">
         <button
           type="button"
-          class="button-row"
+          class="icon-button"
+          aria-label={t("chat.action")}
+          title={t("chat.action")}
           disabled={!props.online}
           aria-describedby={props.online ? undefined : reasonId}
           onClick={() => setOpen(true)}
         >
           <Icon name="chat" />
-          {t("chat.action")}
         </button>
         <NeedsConnection id={reasonId} online={props.online} />
       </div>

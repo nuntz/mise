@@ -8,7 +8,8 @@ criterion the implementer must meet word for word, so the wording has to hold up
   in the Slot form.
 - **Every kind of Slot the wording reaches** (`SLOT_KINDS`). Each kind shows different controls: a
   Recipe dinner's card shows Cook and its sheet shows "Edit dinner"; Leftovers, Eating out and No meal
-  show "Change dinner" on the card; Nothing planned shows "Choose a dinner". Wording that tells someone
-  what to tap covers each kind it can reach, or says which kinds it is for.
+  show "Change dinner" on the card; Nothing planned shows "Choose a dinner". A pencilled Recipe or
+  Leftovers dinner also shows Keep on the card, and its reason and Keep in its sheet (ADR 0032). Wording
+  that tells someone what to tap covers each kind it can reach, or says which kinds it is for.
 - **English only.** The pseudo-locale is generated from the English messages (`pseudoText` in
   `messages.ts`), so a change to a message changes it there too.
