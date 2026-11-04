@@ -1197,23 +1197,28 @@ fieldset > .toggle-chip {
 }
 
 /* On the Week, the app's two actions sit at the end of the title's line, so the days start higher. Not
- * while a banner comes first on the page, or while either action says why it can't work or what it did:
- * then they have their own line. */
-.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) {
+ * while a banner comes first, above the page or on it, or while either action says why it can't work or
+ * what it did: then they have their own line. */
+.app:has(.page > .week-screen:first-child):not(
+  :has(> .banner-top, .app-header :is(.control-reason, .app-header-note))
+) {
   position: relative;
 }
 
-.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) .app-header {
+.app:has(.page > .week-screen:first-child):not(:has(> .banner-top, .app-header :is(.control-reason, .app-header-note)))
+  .app-header {
   position: absolute;
   top: 0;
   right: 0;
 }
 
-.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) .page {
+.app:has(.page > .week-screen:first-child):not(:has(> .banner-top, .app-header :is(.control-reason, .app-header-note)))
+  .page {
   padding-top: var(--space-3);
 }
 
-.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) .week-title {
+.app:has(.page > .week-screen:first-child):not(:has(> .banner-top, .app-header :is(.control-reason, .app-header-note)))
+  .week-title {
   padding-inline-end: calc(2 * var(--touch-min) + var(--space-3) + var(--space-2));
 }
 

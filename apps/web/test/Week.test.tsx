@@ -233,8 +233,9 @@ test("the Week opens first: each day's dinner as a compact card with its photo, 
   expect(within(dinner).getByRole("heading", { name: "Pasta" })).toBeTruthy();
   // The photo is the card's thumb, which the title names: the title opens the Recipe.
   expect(dinner.querySelector(".thumb img")?.getAttribute("src")).toBe("/photos/1?v=photos/pasta");
-  // Who of the Household is eating is the day's strip; the card says what the Guest makes it.
-  expect(within(dinner).getByText("For 4; the Recipe makes 4.")).toBeTruthy();
+  // Who of the Household is eating is the day's strip, which doesn't count Guests: the card does.
+  expect(within(dinner).getByText("With 1 Guest.")).toBeTruthy();
+  expect(within(dinner).queryByText(/the Recipe makes/)).toBeNull();
   expect(within(tuesday).getByRole("button", { name: "3 eating" })).toBeTruthy();
   expect(within(dinner).getByText("Use the fresh basil")).toBeTruthy();
   // Lock is retired (ADR 0030): a dinner is pencilled or the Household's own.
@@ -1727,10 +1728,51 @@ test("Effort Budgets are set for this Week and for every Week in one grid, with 
 
   await vi.waitFor(() =>
     expect(writes(calls)).toEqual([
-      { name: "set_week_effort_budgets", input: { date: "2026-10-26", budgets: { monday: null, friday: 20 } } },
       { name: "set_effort_budgets", input: { budgets: { saturday: 150 } } },
+      { name: "set_week_effort_budgets", input: { date: "2026-10-26", budgets: { monday: null, friday: 20 } } },
     ]),
   );
+});
+
+test("a budget set to the same for this Week and every Week is no override for this Week", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+
+  await user.click(screen.getByRole("heading", { level: 2, name: "Effort Budgets" }));
+  const form = screen.getByRole("form", { name: "Effort Budgets" });
+  for (const row of ["This Week", "Every Week"]) {
+    const monday = within(within(form).getByRole("group", { name: row })).getByRole("spinbutton", { name: "Monday" });
+    await user.clear(monday);
+    await user.type(monday, "60");
+  }
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([
+      { name: "set_effort_budgets", input: { budgets: { monday: 60 } } },
+      { name: "set_week_effort_budgets", input: { date: "2026-10-26", budgets: { monday: null } } },
+    ]),
+  );
+});
+
+test("Effort Budgets run in the Week's own order of days, as the day rail does", async () => {
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2026-10-25") }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Sunday, October 25" });
+
+  await user.click(screen.getByRole("heading", { level: 2, name: "Effort Budgets" }));
+  const thisWeek = within(screen.getByRole("form", { name: "Effort Budgets" })).getByRole("group", {
+    name: "This Week",
+  });
+  expect(
+    within(thisWeek)
+      .getAllByRole("spinbutton")
+      .map((cell) => cell.getAttribute("aria-label")),
+  ).toEqual(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+  expect(document.querySelector(".budget-days")?.textContent).toBe("SMTWTFS");
 });
 
 /** This Week's dinners in each state: Monday unplanned, Tuesday planned, Wednesday cooked, Thursday rated. */
@@ -2368,7 +2410,10 @@ test("back online on next Week as kept, it stays shown until it has loaded again
 });
 
 test("the Week's dates are its title, with no overline, and the day rail marks the pencilled dinners' days", async () => {
-  const { client } = fakeClient({ get_week: () => ({ ok: true, value: pencilledWeek() }) });
+  const week = pencilledWeek();
+  // Nobody is eating Saturday's, so Mise planned nothing a Re-roll would change.
+  Object.assign(week.slots[17] as Slot, { diners: [], servings: 0, reason: { kind: "nobody_eating" } });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
 
@@ -2379,14 +2424,18 @@ test("the Week's dates are its title, with no overline, and the day rail marks t
     .getAllByRole("button")
     .filter((day) => day.querySelector(".day-rail-dot-on"))
     .map((day) => day.getAttribute("aria-label"));
-  // Every dinner Mise chose and no one has settled; the weekend's are the Household's own.
+  // Every dinner a Re-roll could change; Sunday's is the Household's own.
   expect(marked).toEqual([
     "Jump to Monday, October 26",
     "Jump to Tuesday, October 27",
     "Jump to Wednesday, October 28",
-    "Jump to Thursday, October 29",
     "Jump to Friday, October 30",
   ]);
+  // Pencilled, but cooked on Thursday and left unplanned on Saturday: the chip would promise a Re-roll changes them.
+  for (const day of ["Thursday, October 29", "Saturday, October 31"]) {
+    expect(within(dinnerOn(day)).queryByText("Pencilled")).toBeNull();
+    expect(within(dinnerOn(day)).getByRole("heading").classList).not.toContain("dish-title-pencilled");
+  }
 });
 
 test("the Slot form is a sheet: Guests step either side, their Constraints show once there are Guests, and Escape closes it", async () => {
@@ -2398,6 +2447,10 @@ test("the Slot form is a sheet: Guests step either side, their Constraints show 
   await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
   const sheet = screen.getByRole("dialog", { name: "Edit dinner" });
   const form = within(sheet).getByRole("form", { name: "Dinner" });
+  // It opens on its first field, What, and only its foot says Cancel.
+  await vi.waitFor(() => expect(document.activeElement).toBe(within(form).getByRole("combobox", { name: "What" })));
+  expect(within(sheet).getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+  expect(within(sheet).getByRole("button", { name: "Close" })).toBeTruthy();
   expect(within(form).queryByRole("group", { name: "Guests' Constraints" })).toBeNull();
   expect((within(form).getByRole("button", { name: "One Guest fewer" }) as HTMLButtonElement).disabled).toBe(true);
   await user.click(within(form).getByRole("button", { name: "One Guest more" }));
@@ -2445,4 +2498,26 @@ test("breakfast and lunch unfold to a line each: the meal, what's planned and it
   expect(breakfast.textContent).toBe("BreakfastNothing plannedChoose a breakfast");
   // A line, with no thumb.
   expect(breakfast.querySelector(".thumb")).toBeNull();
+});
+
+test("a cooked breakfast says so on its line, offline too, where it can't be rated", async () => {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[3] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T15:00:00.000Z",
+  });
+  const { client, goOffline } = fakeClient({ get_week: () => ({ ok: true, value: week }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+
+  await user.click(within(tuesday).getByRole("button", { name: /^Breakfast: Pasta/ }));
+  const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
+  expect(within(breakfast).getByText("Cooked")).toBeTruthy();
+  expect(within(breakfast).getByRole("button", { name: "Rate it" })).toBeTruthy();
+
+  goOffline();
+  await vi.waitFor(() => expect(within(breakfast).queryByRole("button", { name: "Rate it" })).toBeNull());
+  expect(within(breakfast).getByText("Cooked")).toBeTruthy();
 });

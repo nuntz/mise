@@ -22,6 +22,8 @@ export function Chat(props: {
   where: () => ChatWhere;
   voice?: OpenVoice;
   household?: Household | null;
+  /** Just its icon, named for screen readers: the Week puts it at the end of its title's line. */
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = createSignal(false);
   const reasonId = createUniqueId();
@@ -31,14 +33,15 @@ export function Chat(props: {
       <div class="control">
         <button
           type="button"
-          class="icon-button"
-          aria-label={t("chat.action")}
-          title={t("chat.action")}
+          class={props.iconOnly ? "icon-button" : "button-row"}
+          aria-label={props.iconOnly ? t("chat.action") : undefined}
+          title={props.iconOnly ? t("chat.action") : undefined}
           disabled={!props.online}
           aria-describedby={props.online ? undefined : reasonId}
           onClick={() => setOpen(true)}
         >
           <Icon name="chat" />
+          <Show when={!props.iconOnly}>{t("chat.action")}</Show>
         </button>
         <NeedsConnection id={reasonId} online={props.online} />
       </div>

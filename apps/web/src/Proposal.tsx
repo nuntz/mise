@@ -1,9 +1,11 @@
 import {
+  addDays,
   type ConflictWho,
   type EffortBudgets,
   type Household,
   type Item,
   type ItemId,
+  isPencilled,
   isRerollable,
   type Locale,
   type ProposalReason,
@@ -18,7 +20,7 @@ import {
 } from "@mise/domain";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
 import type { MiseClient } from "./client";
-import { formatDate } from "./dates";
+import { dayInitial, formatDate } from "./dates";
 import { errorText } from "./errors";
 import { Icon } from "./icons";
 import { itemNamed } from "./items";
@@ -229,6 +231,15 @@ export function ProposalControls(props: {
   );
 }
 
+/**
+ * Whether the Week marks the Slot as pencilled: Mise chose it and a Re-roll could still change it (ADR 0032),
+ * so the chip keeps the promise of the line under Re-roll. A dinner nobody is eating, left unplanned, or one
+ * already cooked has a reason but nothing for a Re-roll to change.
+ */
+export function marksPencilled(slot: Slot): boolean {
+  return isPencilled(slot) && isRerollable(slot);
+}
+
 /** What marks a pencilled dinner on the Week: Mise chose it, and a Re-roll may change it (ADR 0032). */
 export function PencilledChip() {
   return (
@@ -339,20 +350,21 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
     const week = changed("week", props.week.effortBudgets);
     const every = changed("every", props.household.effortBudgets);
     const writes: (() => Promise<ToolResult<unknown>>)[] = [];
+    // Every Week's first, so that this Week's are compared with the Household's budgets as saved.
+    if (Object.keys(every).length > 0) writes.push(() => props.client.call("set_effort_budgets", { budgets: every }));
     if (Object.keys(week).length > 0)
       writes.push(() =>
         props.client.call("set_week_effort_budgets", {
           date: props.week.startDate,
-          // The Household's own budget is no override.
+          // The Household's own budget, as the Every Week row now has it, is no override.
           budgets: Object.fromEntries(
             Object.entries(week).map(([weekday, minutes]) => [
               weekday,
-              minutes === props.household.effortBudgets[weekday as Weekday] ? null : minutes,
+              minutes === Number(value("every", weekday as Weekday)) ? null : minutes,
             ]),
           ),
         }),
       );
-    if (Object.keys(every).length > 0) writes.push(() => props.client.call("set_effort_budgets", { budgets: every }));
     if (writes.length === 0) return;
     setBusy(true);
     try {
@@ -372,15 +384,15 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
     setBusy(false);
   };
 
-  const initial = (weekday: Weekday) =>
-    formatDate(`2024-01-0${WEEKDAYS.indexOf(weekday) + 1}`, props.household.locale, { weekday: "narrow" });
+  // The Week's own days, in its order, as the day rail above has them.
+  const days = () => Array.from({ length: 7 }, (_, offset) => addDays(props.week.startDate, offset));
   // This Week's budget where it differs from every Week's.
   const overridden = (weekday: Weekday) => props.week.effortBudgets[weekday] !== props.household.effortBudgets[weekday];
   const row = (which: "week" | "every") => (
     <fieldset class="field budget-row">
       <legend>{t(which === "week" ? "effort.thisWeek" : "effort.everyWeek")}</legend>
       <div class="budget-cells">
-        <For each={WEEKDAYS}>
+        <For each={days().map(weekdayOf)}>
           {(weekday) => (
             <input
               type="number"
@@ -413,7 +425,7 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
           </p>
         </Show>
         <div class="budget-cells budget-days" aria-hidden="true">
-          <For each={WEEKDAYS}>{(weekday) => <span>{initial(weekday)}</span>}</For>
+          <For each={days()}>{(date) => <span>{dayInitial(date, props.household.locale)}</span>}</For>
         </div>
         {row("week")}
         {row("every")}

@@ -6,7 +6,7 @@ A pencilled dinner is now marked by a **Pencilled chip** beside its day on the W
 
 The reason itself moves into the dinner's Recipe sheet, which the card's title opens, with Keep under it. A pencilled dinner with no Recipe to open, such as one no Recipe fit, still says why on its card, since that is the only place it can. Keep stays on the card too, beside Cook, so settling a dinner is still one tap.
 
-The rule of ADR 0030 is unchanged: a dinner is pencilled exactly when it has a reason. Only how the Week shows that changes.
+The rule of ADR 0030 is unchanged: a dinner is pencilled exactly when it has a reason. Only how the Week shows that changes. Since the chip is the key to what a Re-roll changes, it marks only a pencilled dinner a Re-roll could change (`isRerollable`): a dinner nobody is eating, left unplanned with a reason, carries none, and neither does its day on the rail.
 
 ## Considered Options
 

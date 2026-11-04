@@ -33,7 +33,7 @@ import {
 import { createEffect, createMemo, createSignal, createUniqueId, For, type JSX, Match, Show, Switch } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
-import { formatDate, shortDate } from "./dates";
+import { dayInitial, formatDate, shortDate } from "./dates";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
@@ -45,6 +45,7 @@ import { RunOut } from "./Pantry";
 import {
   EffortBudgetsEditor,
   type WeekHousehold as Household,
+  marksPencilled,
   PencilledChip,
   ProposalControls,
   reasonText,
@@ -323,9 +324,9 @@ export function WeekPage(props: {
   );
 }
 
-/** Whether the day's dinner is pencilled: Mise chose it, and no one has settled it (ADR 0030). */
+/** Whether the day's dinner is marked pencilled, as its card's chip says (ADR 0032). */
 function pencilledOn(week: Week, date: LocalDate): boolean {
-  return week.slots.some((slot) => slot.date === date && slot.meal === "dinner" && slot.reason !== null);
+  return week.slots.some((slot) => slot.date === date && slot.meal === "dinner" && marksPencilled(slot));
 }
 
 /**
@@ -463,7 +464,7 @@ function Day(props: {
           <Icon name="chevronDown" />
         </button>
       </div>
-      {/* Hidden rather than unmounted when folded, so a form being filled in keeps what was typed. */}
+      {/* Hidden rather than unmounted when folded, so the button that unfolds it controls something there. */}
       <div class="strip-meals" id={otherMealsId} hidden={!unfolded()}>
         {view("breakfast")}
         {view("lunch")}
@@ -512,7 +513,7 @@ function SlotView(props: {
     const conflict = unsafe();
     return conflict && conflictChip(conflict, props.household);
   };
-  const pencilled = () => props.slot.reason !== null;
+  const pencilled = () => marksPencilled(props.slot);
   const keepable = () => !props.readOnly && isKeepable(props.slot);
   // A Slot whose title opens a Recipe's sheet: why Mise pencilled it is said there.
   const openable = () => !!(props.slot.recipe ?? props.slot.leftoversOf?.recipe);
@@ -587,7 +588,10 @@ function SlotView(props: {
             <div class="row-end">
               <Switch fallback={<Show when={!props.readOnly}>{choose()}</Show>}>
                 <Match when={rated()}>{(given) => ratedChip(given().rating)}</Match>
-                <Match when={props.slot.cookedAt}>{rateIt()}</Match>
+                <Match when={props.slot.cookedAt}>
+                  <CookedChip />
+                  {rateIt()}
+                </Match>
                 <Match when={props.slot.recipe}>{(recipe) => cook(recipe(), false)}</Match>
               </Switch>
             </div>
@@ -1114,7 +1118,7 @@ function SlotForm(props: {
             {t(`slot.edit.${slot.meal}`)}
           </h2>
         </div>
-        <button type="button" class="icon-button" aria-label={t("slot.cancel")} onClick={() => props.onDone()}>
+        <button type="button" class="icon-button" aria-label={t("slot.close")} onClick={() => props.onDone()}>
           <Icon name="close" />
         </button>
       </div>
@@ -1511,14 +1515,19 @@ function cookForText(slot: Slot, household: Household): string {
 }
 
 /**
- * What a Slot's Recipe is cooked for, when that isn't plain: with its Leftovers, with Guests, or for more
- * or fewer than the Recipe makes. Who of the Household is eating is the day's strip.
+ * What a Slot's Recipe is cooked for, when that isn't plain: with its Leftovers, for more or fewer than the
+ * Recipe makes, and with how many Guests, whom the day's strip doesn't count.
  */
 function cookedForText(slot: Slot, household: Household): string | undefined {
   if (!slot.recipe) return undefined;
   if (slot.leftovers.length > 0) return cookForText(slot, household);
-  if (slot.servings === 0 || (slot.servings === slot.recipe.baseServings && slot.guests === 0)) return undefined;
-  return t("slot.forRecipe", { count: String(slot.servings), base: String(slot.recipe.baseServings) });
+  if (slot.servings === 0) return undefined;
+  const parts = [
+    slot.servings !== slot.recipe.baseServings &&
+      t("slot.forRecipe", { count: String(slot.servings), base: String(slot.recipe.baseServings) }),
+    slot.guests > 0 && (slot.guests === 1 ? t("slot.withGuest") : t("slot.withGuests", { count: String(slot.guests) })),
+  ].filter((part) => part !== false);
+  return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 function sameSlot(slot: SlotKey, other: SlotKey): boolean {
@@ -1544,11 +1553,6 @@ function dayId(date: LocalDate): string {
 function dayLabel(date: LocalDate, locale: Locale, today: boolean): string {
   const day = formatDate(date, locale, { weekday: "short", day: "numeric" });
   return today ? t("week.tonight", { day }) : day;
-}
-
-/** The weekday's initial, as the day rail shows it. */
-function dayInitial(date: LocalDate, locale: Locale): string {
-  return formatDate(date, locale, { weekday: "narrow" });
 }
 
 /** The Week as its title says it, such as "Oct 26 to Nov 1". */

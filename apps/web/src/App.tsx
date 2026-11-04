@@ -244,8 +244,10 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                 </div>
               </Show>
               <header class="app-header">
-                <RanOut client={props.client} online={online()} />
+                {/* On the Week they are icons at the end of its title's line; elsewhere they say what they are. */}
+                <RanOut client={props.client} online={online()} iconOnly={page() === "week"} />
                 <Chat
+                  iconOnly={page() === "week"}
                   client={props.client}
                   online={online()}
                   where={where}
