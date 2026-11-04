@@ -73,6 +73,14 @@ test("a sheet's title takes the header's remaining width, so the close button si
   expect(declarations(".sheet-header .page-heading")).toMatch(/flex:\s*1/);
 });
 
+test("the Week's actions leave the title's line while a banner tops the app, so they never cover it", () => {
+  const lifted = [...appCss.matchAll(/^([^{}]*\.week-screen:first-child[^{}]*)\{/gm)].map(
+    ([, selector = ""]) => selector,
+  );
+  expect(lifted.length).toBeGreaterThan(0);
+  for (const selector of lifted) expect(selector.replace(/\s+/g, "")).toContain(":not(:has(>.banner-top,");
+});
+
 test("no list renders the browser's markers", () => {
   expect(declarations("ul, ol")).toMatch(/list-style:\s*none/);
   expect(appCss).not.toMatch(/list-style:\s*(?!none)[a-z]/);

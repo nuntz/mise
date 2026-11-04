@@ -20,6 +20,19 @@ test("a sheet opens on its first field", async () => {
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search" })));
 });
 
+test("a sheet whose first field is a choice opens on it", async () => {
+  render(() => (
+    <Sheet labelledBy="title" onEscape={() => {}}>
+      <h2 id="title">Change</h2>
+      <select aria-label="What">
+        <option>Recipe</option>
+      </select>
+      <input aria-label="Note" />
+    </Sheet>
+  ));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "What" })));
+});
+
 test("on a touch screen, every sheet opens on itself, not the keyboard", async () => {
   window.matchMedia = (query: string) => ({ matches: query === "(pointer: coarse)" }) as MediaQueryList;
   render(search);

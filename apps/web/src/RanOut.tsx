@@ -16,7 +16,12 @@ const NOTE_MS = 6000;
  * "Ran out", in the app header: records any Staple low or out the moment it runs out, from whatever
  * screen is open. It needs the connection: offline, only Grocery Lists can be changed.
  */
-export function RanOut(props: { client: MiseClient; online: boolean }) {
+export function RanOut(props: {
+  client: MiseClient;
+  online: boolean;
+  /** Just its icon, named for screen readers: the Week puts it at the end of its title's line. */
+  iconOnly?: boolean;
+}) {
   const [open, setOpen] = createSignal(false);
   const [note, setNote] = createSignal<string>();
   const reasonId = createUniqueId();
@@ -40,9 +45,9 @@ export function RanOut(props: { client: MiseClient; online: boolean }) {
       <div class="control">
         <button
           type="button"
-          class="icon-button"
-          aria-label={t("ranOut.action")}
-          title={t("ranOut.action")}
+          class={props.iconOnly ? "icon-button" : "button-row"}
+          aria-label={props.iconOnly ? t("ranOut.action") : undefined}
+          title={props.iconOnly ? t("ranOut.action") : undefined}
           disabled={!props.online}
           aria-describedby={props.online ? undefined : reasonId}
           onClick={() => {
@@ -51,6 +56,7 @@ export function RanOut(props: { client: MiseClient; online: boolean }) {
           }}
         >
           <Icon name="low" />
+          <Show when={!props.iconOnly}>{t("ranOut.action")}</Show>
         </button>
         <NeedsConnection id={reasonId} online={props.online} />
       </div>

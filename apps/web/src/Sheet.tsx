@@ -16,7 +16,10 @@ export function Sheet(props: {
 }) {
   const focusFirst = (sheet: HTMLElement) =>
     queueMicrotask(() =>
-      (props.focusField === false || touch() ? sheet : sheet.querySelector<HTMLElement>("input, textarea"))?.focus(),
+      (props.focusField === false || touch()
+        ? sheet
+        : sheet.querySelector<HTMLElement>("input, select, textarea")
+      )?.focus(),
     );
 
   return (
@@ -47,7 +50,7 @@ export function touch() {
 }
 
 function keepFocusIn(sheet: HTMLElement, event: KeyboardEvent) {
-  const controls = [...sheet.querySelectorAll<HTMLElement>("input, textarea, button:not(:disabled)")];
+  const controls = [...sheet.querySelectorAll<HTMLElement>("input, select, textarea, button:not(:disabled)")];
   const [first, last] = [controls[0], controls.at(-1)];
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();

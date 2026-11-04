@@ -83,7 +83,7 @@ function fakeClient() {
   return { ...fake, recorded };
 }
 
-test("every screen's header has a Ran out action", async () => {
+test("every screen's header has a Ran out action, an icon on the Week and labelled elsewhere", async () => {
   const { client } = fakeClient();
   const user = userEvent.setup();
   render(() => <App client={client} />);
@@ -92,7 +92,15 @@ test("every screen's header has a Ran out action", async () => {
   for (const page of ["Week", "Recipes", "Groceries", "Pantry"]) {
     await user.click(within(nav).getByRole("button", { name: page }));
     const headers = screen.getAllByRole("banner");
-    expect(headers.filter((header) => within(header).queryByRole("button", { name: "Ran out" }))).toHaveLength(1);
+    const actions = headers.flatMap((header) =>
+      within(header).queryAllByRole("button", { name: /^(Ran out|Ask Mise)$/ }),
+    );
+    expect(actions.map((action) => action.getAttribute("aria-label") ?? action.textContent)).toEqual([
+      "Ran out",
+      "Ask Mise",
+    ]);
+    // The Week has them at the end of its title's line, as icons; other screens say what they are.
+    expect(actions.map((action) => action.textContent)).toEqual(page === "Week" ? ["", ""] : ["Ran out", "Ask Mise"]);
   }
 });
 
