@@ -275,10 +275,6 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                     </button>
                   </div>
                 </Show>
-                {/* The nudge shows on the Week, which leads to the check; Pantry says it in its heading. */}
-                <Show when={page() === "week"}>
-                  <PantryBanner client={props.client} online={online()} onOpen={() => go("pantry")} />
-                </Show>
                 <Switch>
                   <Match when={page() === "week"}>
                     <WeekPage
@@ -288,6 +284,10 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                       onCook={cook}
                       onWeekShown={setWeekShown}
                       openNext={openedNextWeek()}
+                      banner={
+                        // The nudge shows on the Week, which leads to the check; Pantry says it in its heading.
+                        <PantryBanner client={props.client} online={online()} onOpen={() => go("pantry")} />
+                      }
                     />
                   </Match>
                   <Match when={page() === "grocery"}>

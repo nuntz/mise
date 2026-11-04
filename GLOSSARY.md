@@ -141,7 +141,7 @@ A Slot filled by food already cooked. When it names the earlier Slot it comes fr
 The Recipes Mise chooses for a Week's pencilled and unplanned dinners, with a reason for each choice.
 
 **Pencilled dinner**:
-A dinner Mise chose, which a later Proposal may change; every other dinner is the Household's own and stays.
+A dinner Mise chose, which a later Proposal may change; every other dinner is the Household's own and stays. The Week marks it with a Pencilled chip (ADR 0032).
 _Avoid_: Suggestion (that is an Unresolved Ingredient's), Mise's pick, proposed dinner, tentative dinner
 
 **Keep**:

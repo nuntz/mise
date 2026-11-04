@@ -498,11 +498,6 @@ details[open] > summary::after {
   gap: var(--space-1);
 }
 
-.proposal-notes .button-link {
-  justify-content: flex-start;
-  text-align: start;
-}
-
 .app-header-note {
   flex: 1 1 12em;
   font: var(--type-meta);
@@ -933,19 +928,9 @@ fieldset > .toggle-chip {
   background: var(--surface-raised);
 }
 
-.skeleton-photo {
-  height: var(--photo);
-  border-radius: var(--radius-lg);
-}
-
 .sk-label {
   height: 12px;
   width: 28%;
-}
-
-.sk-title {
-  height: 24px;
-  width: 72%;
 }
 
 .sk-title-sm,
@@ -1202,6 +1187,49 @@ fieldset > .toggle-chip {
 
 /* ---------- Week ---------- */
 
+/* The dates are the Week's title, at title size: the switch under it says which Week they are. */
+.week-title {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch-min);
+  font: var(--type-title);
+  letter-spacing: -0.01em;
+}
+
+/* On the Week, the app's two actions sit at the end of the title's line, so the days start higher. Not
+ * while a banner comes first on the page, or while either action says why it can't work or what it did:
+ * then they have their own line. */
+.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) {
+  position: relative;
+}
+
+.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) .app-header {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) .page {
+  padding-top: var(--space-3);
+}
+
+.app:has(.page > .week-screen:first-child):not(:has(.app-header :is(.control-reason, .app-header-note))) .week-title {
+  padding-inline-end: calc(2 * var(--touch-min) + var(--space-3) + var(--space-2));
+}
+
+.week-screen .page-header {
+  gap: var(--space-3);
+}
+
+.week-screen .segmented {
+  padding: 0;
+  gap: 0;
+}
+
+.week-screen .segmented button {
+  border-radius: var(--radius-md);
+}
+
 .day-rail {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1210,7 +1238,7 @@ fieldset > .toggle-chip {
 
 .day-rail button {
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
   min-width: 0;
   height: var(--day-rail);
   padding: 0;
@@ -1227,30 +1255,39 @@ fieldset > .toggle-chip {
   letter-spacing: 0;
 }
 
+/* Under a day whose dinner is pencilled, a plum dot: the rail shows what a Re-roll may change. */
+.day-rail-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+}
+
+.day-rail-dot-on {
+  background: var(--plum);
+}
+
 .day-rail button[aria-current="date"] {
   background: var(--plum);
   color: var(--on-plum);
 }
 
+.day-rail button[aria-current="date"] .day-rail-dot-on {
+  background: var(--on-plum);
+}
+
 .days {
   display: flex;
   flex-direction: column;
+  border-top: var(--hairline) solid var(--line);
 }
 
 .day {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) 0 var(--space-1);
+  gap: var(--space-1);
+  padding: var(--space-3) 0 0;
   border-bottom: var(--hairline) solid var(--line);
   scroll-margin-top: var(--space-4);
-}
-
-.day-title {
-  font: var(--type-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--plum);
 }
 
 .slot {
@@ -1259,6 +1296,7 @@ fieldset > .toggle-chip {
   gap: var(--space-2);
 }
 
+/* A recipe's hero photo, in its sheet. */
 .photo {
   position: relative;
   display: flex;
@@ -1279,43 +1317,31 @@ fieldset > .toggle-chip {
   object-fit: cover;
 }
 
-.pill {
-  position: absolute;
-  top: var(--space-3);
-  left: var(--space-3);
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--space-8);
-  max-width: calc(100% - 2 * var(--space-3));
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--badge);
-  color: var(--badge-ink);
-  font: var(--type-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.pill-today {
-  background: var(--plum);
-  color: var(--on-plum);
-}
-
-.pill-status {
-  left: auto;
-  right: var(--space-3);
-  letter-spacing: 0.04em;
-}
-
-.pill-warn {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
 .dish {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 2px;
+  min-width: 0;
+}
+
+/* A dinner card's day, and beside it what marks the dinner: Pencilled, Ready-made, a Conflict. */
+.slot-day {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.slot-day .chip {
+  min-height: 0;
+  padding: 2px var(--space-2);
+}
+
+.overline-today {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--plum);
+  color: var(--on-plum);
 }
 
 /* A dish's name, whatever level of heading it is. */
@@ -1326,16 +1352,9 @@ fieldset > .toggle-chip {
   color: inherit;
 }
 
-/* A Slot's title opens its Recipe; on a card its tap area stretches over the photo, or the thumb. */
-.dish-card,
+/* A Slot's title opens its Recipe; on a card its tap area stretches over the card, thumb included. */
 .compact {
   position: relative;
-}
-
-.dish-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
 }
 
 .dish-open {
@@ -1351,21 +1370,22 @@ fieldset > .toggle-chip {
   text-align: start;
 }
 
-:is(.dish-card, .compact) .dish-open::after {
+.compact .dish-open::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: var(--radius-lg);
 }
 
-:is(.dish-card, .compact) .dish-open:focus-visible {
+.compact .dish-open:focus-visible {
   box-shadow: none;
 }
 
-:is(.dish-card, .compact) .dish-open:focus-visible::after {
+.compact .dish-open:focus-visible::after {
   box-shadow: var(--focus-ring);
 }
 
+/* A dinner card: its thumb, then its day, name and meta, and its one action at the end when it has one. */
 .compact {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1377,9 +1397,21 @@ fieldset > .toggle-chip {
   font: var(--type-title-sm);
 }
 
-/* A compact row with its one action trailing, such as an unplanned dinner's Choose. */
+/* A pencilled dinner's name, in italic as if in pencil: Mise chose it, and a Re-roll may change it. After
+ * the title's font, which would set it upright. */
+.dish-title.dish-title-pencilled {
+  font-style: italic;
+  font-weight: 500;
+}
+
 .compact-end {
   grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+/* Above the title's stretched tap area, so the action is its own tap. */
+.compact > .row-end {
+  position: relative;
+  z-index: 1;
 }
 
 .thumb {
@@ -1439,34 +1471,36 @@ fieldset > .toggle-chip {
   white-space: nowrap;
 }
 
+/* A dinner card's actions on one line under its name, in from the thumb: Cook, then Keep. */
 .slot-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
+  padding-inline-start: calc(var(--thumb) + var(--space-3));
 }
 
 .slot-actions .button-primary {
   min-height: var(--touch-min);
 }
 
-/* A pencilled dinner's grey reason line at the card's full width, Keep under it at the left edge, and a refusal
- * of Keep below both. */
+/* In a Recipe's sheet, why Mise pencilled the dinner: the chip, the reason, then Keep at the left edge. */
 .slot-reason {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .slot-reason .banner {
   align-self: stretch;
 }
 
-/* What a Slot form does at once, Keep or "Let Mise choose", as full-width rows above its fields, ruled off
- * from them and from Save and Cancel, which wait. */
+/* What a Slot form does at once, Keep or "Let Mise choose", side by side above its fields and ruled off
+ * from them; Save and Cancel wait at the sheet's foot. */
 .slot-form-now {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9em), 1fr));
   gap: var(--space-2);
   padding-bottom: var(--space-3);
   border-bottom: var(--hairline) solid var(--line);
@@ -1479,12 +1513,59 @@ fieldset > .toggle-chip {
   background: var(--surface);
 }
 
+/* The Slot form's sheet: no box of its own, and Save and Cancel held in view at its foot. */
+.slot-form.sheet-body {
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: 0;
+}
+
+.slot-form.sheet-body > .actions {
+  position: sticky;
+  bottom: 0;
+  margin-inline: calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: var(--hairline) solid var(--line);
+  background: var(--surface);
+}
+
+/* Fields with their labels beside them, the labels in one column. */
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(5em, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.field-grid > :is(label, .field-row) {
+  display: contents;
+  font: var(--type-strip);
+  color: var(--ink-muted);
+}
+
+/* A number stepped either side, such as Guests. */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stepper input {
+  width: 4.5em;
+  text-align: center;
+}
+
+.stepper .icon-button {
+  background: transparent;
+}
+
 /* A Day's strip: who's eating, which opens the Day's Diners, then breakfast and lunch, folded. */
 .strip {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  min-height: var(--touch-min);
   font: var(--type-strip);
   color: var(--ink-muted);
 }
@@ -1534,26 +1615,170 @@ fieldset > .toggle-chip {
   transform: rotate(180deg);
 }
 
+/* Breakfast and lunch, unfolded: a line each on a raised ground, so the day still fits the screen. */
 .strip-meals {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
 }
 
 .strip-meals[hidden] {
   display: none;
 }
 
-.strip-meals .slot {
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--line);
+.meal-row {
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+}
+
+.meal-row + .meal-row {
+  border-top: var(--hairline) solid var(--line);
+}
+
+.meal-row > :not(.meal-row-line) {
+  padding-inline-end: var(--space-2);
+}
+
+/* The meal, what's planned, then its action, which goes under them when a long translation needs the room. */
+.meal-row-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: var(--touch-min);
+}
+
+.meal-row-label {
+  flex: none;
+  min-width: 5em;
+}
+
+.meal-row-title {
+  flex: 1 1 8em;
+  min-width: 0;
+}
+
+.meal-row-line > .row-end {
+  margin-inline-start: auto;
+}
+
+.meal-row-label {
+  font: var(--type-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.meal-row-title {
+  font: var(--type-title-sm);
+}
+
+.meal-row-none {
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.meal-row .row-end .button-row {
+  background: var(--surface);
 }
 
 .rating {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
+}
+
+/* Re-roll and Use it up side by side under the day rail; Use it up takes the rest of the line. */
+.proposal-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.proposal-use-up {
+  flex: 1 1 10em;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.proposal-use-up > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Re-roll's hint, led by the chip each pencilled dinner carries, as one run of text. */
+.proposal-hint .chip {
+  min-height: 0;
+  margin-inline-end: var(--space-2);
+  padding: 2px var(--space-2);
+  vertical-align: middle;
+}
+
+/* Effort Budgets, folded to their name and what they are. */
+.effort-budgets > summary {
+  justify-content: flex-start;
+  gap: var(--space-3);
+}
+
+.effort-budgets > summary > .meta {
+  flex: 1;
+}
+
+/* A day's budget per column, the same columns as the day initials over them. */
+.budget-cells {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.budget-days {
+  font: var(--type-label);
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+.budget-cells input {
+  min-height: var(--touch-min);
+  padding: 0;
+  text-align: center;
+  appearance: textfield;
+}
+
+.budget-cells input::-webkit-inner-spin-button,
+.budget-cells input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* This Week's budget where it differs from every Week's. */
+.budget-cells input.budget-overridden,
+.budget-key {
+  border-color: var(--plum);
+  background: var(--plum-soft);
+}
+
+.budget-key {
+  display: inline-block;
+  width: var(--space-4);
+  height: var(--space-4);
+  margin-inline-end: var(--space-2);
+  border: 2px solid var(--plum);
+  border-radius: var(--radius-sm);
+  vertical-align: -1px;
+}
+
+.budget-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.week-screen > .button-danger {
+  align-self: flex-start;
 }
 
 /* ---------- Grocery list ---------- */

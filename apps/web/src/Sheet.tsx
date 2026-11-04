@@ -29,6 +29,8 @@ export function Sheet(props: {
         tabIndex={-1}
         ref={focusFirst}
         onKeyDown={(event) => {
+          // A sheet over a sheet, such as a refusal over the Slot form, answers its own keys.
+          if (event.key === "Escape" || event.key === "Tab") event.stopPropagation();
           if (event.key === "Escape") props.onEscape();
           if (event.key === "Tab") keepFocusIn(event.currentTarget, event);
         }}

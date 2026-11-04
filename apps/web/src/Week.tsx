@@ -22,6 +22,7 @@ import {
   SLOT_KINDS,
   type Slot,
   type SlotKind,
+  type SlotRecipe,
   sameConflict,
   type ToolInput,
   type ToolResult,
@@ -29,7 +30,7 @@ import {
   type WeekSpan,
   weekDates,
 } from "@mise/domain";
-import { createEffect, createMemo, createSignal, createUniqueId, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, For, type JSX, Match, Show, Switch } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { formatDate, shortDate } from "./dates";
@@ -44,6 +45,7 @@ import { RunOut } from "./Pantry";
 import {
   EffortBudgetsEditor,
   type WeekHousehold as Household,
+  PencilledChip,
   ProposalControls,
   reasonText,
   recurringNightText,
@@ -75,6 +77,8 @@ export function WeekPage(props: {
   onWeekShown?: (start: LocalDate | undefined) => void;
   /** Opens on next Week, once the current one has said when that starts, as a notification's link asks. */
   openNext?: boolean;
+  /** A banner under the Week's title and switch, such as the Pantry check's nudge. */
+  banner?: JSX.Element;
 }) {
   const [next, setNext] = createSignal(false);
   const readOnly = () => !props.online;
@@ -172,12 +176,12 @@ export function WeekPage(props: {
   const jump = (date: LocalDate) => document.getElementById(dayId(date))?.scrollIntoView?.({ block: "start" });
 
   return (
-    <section class="screen" aria-labelledby="week-title">
+    <section class="screen week-screen" aria-labelledby="week-title">
       <header class="page-header">
-        <div class="page-heading">
-          <p class="overline">{next() ? t("week.overlineNext") : t("week.overline")}</p>
-          <h1 id="week-title">{week() ? weekRange(week() as Week, props.household.locale) : t("week.title")}</h1>
-        </div>
+        {/* The dates are the title: the switch under it says which Week they are. */}
+        <h1 id="week-title" class="week-title">
+          {week() ? weekRange(week() as Week, props.household.locale) : t("week.title")}
+        </h1>
         <div class="segmented">
           <button type="button" aria-pressed={!next()} onClick={() => show(false)}>
             {t("week.this")}
@@ -186,6 +190,7 @@ export function WeekPage(props: {
             {t("week.next")}
           </button>
         </div>
+        {props.banner}
         <Show when={week()}>
           {(shown) => (
             <>
@@ -202,6 +207,11 @@ export function WeekPage(props: {
                       <span class="numeral" aria-hidden="true">
                         {Number(date.slice(8))}
                       </span>
+                      {/* A dot under a day whose dinner is pencilled, so the rail shows what a Re-roll may change. */}
+                      <span
+                        class={pencilledOn(shown(), date) ? "day-rail-dot day-rail-dot-on" : "day-rail-dot"}
+                        aria-hidden="true"
+                      />
                     </button>
                   )}
                 </For>
@@ -296,6 +306,13 @@ export function WeekPage(props: {
                   </Show>
                 }
               >
+                <SlotReason
+                  client={props.client}
+                  household={props.household}
+                  items={items()}
+                  slot={slot()}
+                  readOnly={readOnly()}
+                />
                 <SlotConflicts household={props.household} slot={slot()} />
               </RecipeSheet>
             )}
@@ -304,6 +321,11 @@ export function WeekPage(props: {
       </Show>
     </section>
   );
+}
+
+/** Whether the day's dinner is pencilled: Mise chose it, and no one has settled it (ADR 0030). */
+function pencilledOn(week: Week, date: LocalDate): boolean {
+  return week.slots.some((slot) => slot.date === date && slot.meal === "dinner" && slot.reason !== null);
 }
 
 /**
@@ -323,31 +345,21 @@ function clearable(slot: Slot): boolean {
   );
 }
 
-/** The Week's shape in still blocks while it loads: photo cards and compact rows, as they will land. */
+/** The Week's shape in still blocks while it loads: a compact card per day, as they will land. */
 function WeekLoading() {
-  const full = [true, false, true, true, false, true, true];
   return (
     <div class="days" aria-busy="true">
       <p class="visually-hidden">{t("week.loading")}</p>
-      <For each={full}>
-        {(isFull) => (
+      <For each={[1, 2, 3, 4, 5, 6, 7]}>
+        {() => (
           <div class="day" aria-hidden="true">
-            <Show
-              when={isFull}
-              fallback={
-                <div class="compact">
-                  <span class="skeleton thumb" />
-                  <div class="stack">
-                    <span class="skeleton sk-title-sm" />
-                    <span class="skeleton sk-meta" />
-                  </div>
-                </div>
-              }
-            >
-              <span class="skeleton skeleton-photo" />
-              <span class="skeleton sk-title" />
-              <span class="skeleton sk-meta" />
-            </Show>
+            <div class="compact">
+              <span class="skeleton thumb" />
+              <div class="stack">
+                <span class="skeleton sk-title-sm" />
+                <span class="skeleton sk-meta" />
+              </div>
+            </div>
             <span class="skeleton sk-strip" />
           </div>
         )}
@@ -470,16 +482,18 @@ function Day(props: {
 }
 
 /**
- * A Slot as the Week shows it, with one action by where it stands: nothing chosen, Choose; Leftovers,
- * a meal out or no meal, Change; a Recipe to cook, Cook; cooked, Rate it; rated, none. The rest is in
- * its Recipe's sheet. A pencilled dinner that can be kept also has Keep, beside its reason line.
+ * A Slot as the Week shows it. A dinner is a compact card: its thumb; its day, with Pencilled, Ready-made
+ * or a Conflict beside it; its name and what it's cooked for. Under them are its actions on one line, or,
+ * when Change or Choose is its only one, that action at the card's end. Breakfast and lunch are a line
+ * each: the meal, what's planned and its one action. Why Mise pencilled a dinner is in its Recipe's sheet,
+ * or on the card when it has no Recipe to open. Editing a Slot opens its form in a sheet.
  */
 function SlotView(props: {
   client: MiseClient;
   household: Household;
   items: Map<ItemId, Item>;
   slot: Slot;
-  /** The day as its pill says it, such as "Tonight · Mon 26". */
+  /** The day as the card says it, such as "Tonight · Mon 26". */
   day: string;
   today: boolean;
   readOnly: boolean;
@@ -498,173 +512,182 @@ function SlotView(props: {
     const conflict = unsafe();
     return conflict && conflictChip(conflict, props.household);
   };
-  // Under the title, in its text column: who it feeds, what it's cooked for, and its note.
+  const pencilled = () => props.slot.reason !== null;
+  const keepable = () => !props.readOnly && isKeepable(props.slot);
+  // A Slot whose title opens a Recipe's sheet: why Mise pencilled it is said there.
+  const openable = () => !!(props.slot.recipe ?? props.slot.leftoversOf?.recipe);
+  const rated = () => (props.slot.cookedAt ? props.slot.ratings.at(-1) : undefined);
   const meta = () => (
     <>
-      <p class="meta">{servingsText(props.slot, props.household)}</p>
-      <Show when={props.slot.recipe && props.slot.leftovers.length > 0}>
-        <p class="meta">{cookForText(props.slot, props.household)}</p>
-      </Show>
+      <Show when={cookedForText(props.slot, props.household)}>{(text) => <p class="meta">{text()}</p>}</Show>
       <Show when={props.slot.note}>{(note) => <p class="meta">{note()}</p>}</Show>
+      <Show when={!openable() && props.slot.reason}>
+        {(reason) => <p class="meta">{reasonText(reason(), props.household, props.items)}</p>}
+      </Show>
     </>
   );
   const choose = () => (
+    <button type="button" class="button-row" onClick={() => props.onEdit(true)}>
+      {/* Leftovers, a meal out or no meal is decided: its one action changes that. */}
+      {t(`slot.${props.slot.kind === "unplanned" ? "choose" : "change"}.${props.slot.meal}`)}
+    </button>
+  );
+  const cook = (recipe: SlotRecipe, primary: boolean) => (
+    <button
+      type="button"
+      class={primary ? "button-primary" : "button-row"}
+      onClick={() =>
+        props.onCook(recipe.id, props.slot.cookFor || recipe.baseServings, {
+          date: props.slot.date,
+          meal: props.slot.meal,
+        })
+      }
+    >
+      <Icon name="pot" />
+      {t("kitchen.cook")}
+    </button>
+  );
+  const rateIt = () => (
     <Show when={!props.readOnly}>
-      <button type="button" class="button-row" onClick={() => props.onEdit(true)}>
-        {/* Leftovers, a meal out or no meal is decided: its one action changes that. */}
-        {t(`slot.${props.slot.kind === "unplanned" ? "choose" : "change"}.${props.slot.meal}`)}
+      <button type="button" class="button-row" onClick={() => props.onOpen(props.slot, true)}>
+        {t("cooking.rateIt")}
       </button>
+    </Show>
+  );
+  const ratedChip = (rating: Rating) => <span class="chip">{t(`rating.${rating}`)}</span>;
+  // A decided dinner's one action at its card's end: Change, when it has nothing to cook or keep.
+  const cardEnd = () =>
+    !props.readOnly && !props.slot.cookedAt && !props.slot.recipe && !keepable() && props.slot.kind !== "unplanned";
+  // Nothing planned has Choose on its own line, so its name and why keep the card's width.
+  const choosing = () => !props.readOnly && !props.slot.cookedAt && props.slot.kind === "unplanned";
+  const hasActions = () => !!props.slot.cookedAt || !!props.slot.recipe || keepable() || choosing();
+  const form = () => (
+    <Show when={props.editing}>
+      <SlotForm
+        client={props.client}
+        household={props.household}
+        slot={props.slot}
+        week={props.week}
+        day={props.day}
+        onDone={() => props.onEdit(false)}
+      />
     </Show>
   );
 
   return (
-    <section class="slot" aria-label={meal()}>
-      <Show
-        when={props.prominent}
-        fallback={
-          <p>
-            <strong>{meal()}</strong>: <OpenTitle slot={props.slot} onOpen={props.onOpen} />
-          </p>
-        }
-      >
-        <Show
-          when={props.slot.kind === "recipe" && props.slot.recipe}
-          fallback={
-            <Show
-              when={props.slot.kind !== "unplanned"}
-              fallback={
-                <div class="compact compact-end">
-                  <SlotThumb client={props.client} slot={props.slot} />
-                  <div class="row-body">
-                    <p class="row-title">{t("week.nothingPlanned", { day: props.day })}</p>
-                    <Show when={props.slot.note}>{(note) => <p class="row-meta">{note()}</p>}</Show>
-                  </div>
-                  <Show when={!props.editing}>
-                    <div class="row-end">{choose()}</div>
-                  </Show>
-                </div>
-              }
-            >
-              <div class="compact">
-                <SlotThumb client={props.client} slot={props.slot} />
-                <div class="dish">
-                  <p class="overline">{props.day}</p>
-                  <DishTitle slot={props.slot} onOpen={props.onOpen} />
-                  {meta()}
-                  <Show when={flag()}>
-                    {(shown) => (
-                      <p class="chips">
-                        <span class="chip chip-warn">{shown()}</span>
-                      </p>
-                    )}
-                  </Show>
-                </div>
-              </div>
-            </Show>
-          }
-        >
-          {(recipe) => (
-            <div class="dish-card">
-              <div class="photo">
-                <Show when={recipe().photoKey} fallback={<PlateGlyph size={64} />}>
-                  {(key) => (
-                    <img
-                      src={props.client.photoUrl(recipe().id, key())}
-                      alt={t("recipe.photoAlt", { title: recipe().title })}
-                    />
-                  )}
-                </Show>
-                <span class={props.today ? "pill pill-today" : "pill"}>{props.day}</span>
-                <Show when={flag()}>{(shown) => <span class="pill pill-status pill-warn">{shown()}</span>}</Show>
-              </div>
-              <div class="dish">
-                <DishTitle slot={props.slot} onOpen={props.onOpen} />
-                <Show when={recipe().readyMade}>
-                  <p class="chips">
-                    <ReadyMadeChip />
-                  </p>
-                </Show>
-                {meta()}
-              </div>
+    <Show
+      when={props.prominent}
+      fallback={
+        <section class="slot meal-row" aria-label={meal()}>
+          <div class="meal-row-line">
+            <span class="meal-row-label">{meal()}</span>
+            <p class={props.slot.kind === "unplanned" ? "meal-row-title meal-row-none" : "meal-row-title"}>
+              <OpenTitle slot={props.slot} onOpen={props.onOpen} />
+            </p>
+            <div class="row-end">
+              <Switch fallback={<Show when={!props.readOnly}>{choose()}</Show>}>
+                <Match when={rated()}>{(given) => ratedChip(given().rating)}</Match>
+                <Match when={props.slot.cookedAt}>{rateIt()}</Match>
+                <Match when={props.slot.recipe}>{(recipe) => cook(recipe(), false)}</Match>
+              </Switch>
             </div>
-          )}
-        </Show>
-      </Show>
-      <Show when={!props.prominent}>{meta()}</Show>
-      <Show when={props.slot.reason}>
-        {(reason) => (
-          <div class="slot-reason">
-            <p class="meta">{reasonText(reason(), props.household, props.items)}</p>
-            {/* While its form is open, the form's Keep is the one. */}
-            <Show when={!props.readOnly && !props.editing && isKeepable(props.slot)}>
-              <KeepButton client={props.client} slot={props.slot} class="button-link" />
-            </Show>
           </div>
-        )}
-      </Show>
-      <SlotConflicts household={props.household} slot={props.slot} />
-      <Show
-        when={props.editing}
-        fallback={
-          <Switch fallback={<Show when={props.slot.kind !== "unplanned" || !props.prominent}>{choose()}</Show>}>
-            <Match when={props.slot.cookedAt ? props.slot.ratings.at(-1) : undefined}>
-              {(rated) => (
-                <p class="chips">
-                  <span class="chip">{t(`rating.${rated().rating}`)}</span>
-                </p>
-              )}
-            </Match>
-            <Match when={props.slot.cookedAt}>
-              <p class="chips">
-                <CookedChip />
-              </p>
-              <Show when={!props.readOnly}>
-                <div class="slot-actions">
-                  <button type="button" class="button-row" onClick={() => props.onOpen(props.slot, true)}>
-                    {t("cooking.rateIt")}
-                  </button>
-                </div>
+          {meta()}
+          <SlotConflicts household={props.household} slot={props.slot} />
+          {form()}
+        </section>
+      }
+    >
+      <section class="slot" aria-label={meal()}>
+        <div class={cardEnd() ? "compact compact-end" : "compact"}>
+          <SlotThumb client={props.client} slot={props.slot} />
+          <div class="dish">
+            <p class="slot-day">
+              <span class={props.today ? "overline overline-today" : "overline"}>{props.day}</span>
+              <Show when={pencilled()}>
+                <PencilledChip />
               </Show>
-            </Match>
-            <Match when={props.slot.recipe}>
-              {(recipe) => (
-                <div class="slot-actions">
-                  <button
-                    type="button"
-                    class="button-primary"
-                    onClick={() =>
-                      props.onCook(recipe().id, props.slot.cookFor || recipe().baseServings, {
-                        date: props.slot.date,
-                        meal: props.slot.meal,
-                      })
-                    }
-                  >
-                    <Icon name="pot" />
-                    {t("kitchen.cook")}
-                  </button>
-                </div>
-              )}
-            </Match>
-          </Switch>
-        }
-      >
-        <SlotForm
-          client={props.client}
-          household={props.household}
-          slot={props.slot}
-          week={props.week}
-          onDone={() => props.onEdit(false)}
-        />
-      </Show>
-    </section>
+              <Show when={props.slot.recipe?.readyMade}>
+                <ReadyMadeChip />
+              </Show>
+              <Show when={flag()}>{(shown) => <span class="chip chip-warn">{shown()}</span>}</Show>
+            </p>
+            <DishTitle slot={props.slot} onOpen={props.onOpen} pencilled={pencilled()} />
+            {meta()}
+          </div>
+          <Show when={cardEnd()}>
+            <div class="row-end">{choose()}</div>
+          </Show>
+        </div>
+        <SlotConflicts household={props.household} slot={props.slot} />
+        <Show when={hasActions()}>
+          <div class="slot-actions">
+            <Switch>
+              <Match when={rated()}>{(given) => ratedChip(given().rating)}</Match>
+              <Match when={props.slot.cookedAt}>
+                <CookedChip />
+                {rateIt()}
+              </Match>
+              <Match when={props.slot.recipe}>
+                {(recipe) => (
+                  <>
+                    {cook(recipe(), true)}
+                    {/* While its form is open, the form's Keep is the one. */}
+                    <Show when={keepable() && !props.editing}>
+                      <KeepButton client={props.client} slot={props.slot} />
+                    </Show>
+                  </>
+                )}
+              </Match>
+              <Match when={choosing()}>{choose()}</Match>
+              <Match when={keepable()}>
+                <Show when={!props.editing}>
+                  <KeepButton client={props.client} slot={props.slot} />
+                </Show>
+                {choose()}
+              </Match>
+            </Switch>
+          </div>
+        </Show>
+        {form()}
+      </section>
+    </Show>
   );
 }
 
 /**
- * Keeps a pencilled dinner at once, making it the Household's own; the Week refetches without its reason. A
- * link under the card's reason line, or a row in the Slot form, as "Let Mise choose" is there.
+ * Why Mise pencilled a dinner, in its Recipe's sheet: the Pencilled chip, the reason, and Keep to make
+ * it the Household's own.
  */
-function KeepButton(props: { client: MiseClient; slot: Slot; class: "button-link" | "button-row" }) {
+function SlotReason(props: {
+  client: MiseClient;
+  household: Household;
+  items: Map<ItemId, Item>;
+  slot: Slot;
+  readOnly: boolean;
+}) {
+  return (
+    <Show when={props.slot.reason}>
+      {(reason) => (
+        <div class="slot-reason">
+          <p class="chips">
+            <PencilledChip />
+          </p>
+          <p class="meta">{reasonText(reason(), props.household, props.items)}</p>
+          <Show when={!props.readOnly && isKeepable(props.slot)}>
+            <KeepButton client={props.client} slot={props.slot} />
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
+}
+
+/**
+ * Keeps a pencilled dinner at once, making it the Household's own; the Week refetches without its reason. On
+ * the card beside Cook, in the Recipe's sheet under the reason, and in the Slot form beside "Let Mise choose".
+ */
+function KeepButton(props: { client: MiseClient; slot: Slot }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const keep = async () => {
@@ -675,7 +698,8 @@ function KeepButton(props: { client: MiseClient; slot: Slot; class: "button-link
   };
   return (
     <>
-      <button type="button" class={props.class} disabled={busy()} onClick={keep}>
+      <button type="button" class="button-row" disabled={busy()} onClick={keep}>
+        <Icon name="check" />
         {t("slot.keep")}
       </button>
       <Show when={error()}>
@@ -687,10 +711,13 @@ function KeepButton(props: { client: MiseClient; slot: Slot; class: "button-link
   );
 }
 
-/** A Slot card's title, opening its Recipe as `OpenTitle` does; on a card, tapping its photo does too. */
-function DishTitle(props: { slot: Slot; onOpen: (slot: Slot) => void }) {
+/**
+ * A Slot card's title, opening its Recipe as `OpenTitle` does; tapping the card's thumb does too. A
+ * pencilled dinner's is set in italic, as if in pencil.
+ */
+function DishTitle(props: { slot: Slot; onOpen: (slot: Slot) => void; pencilled: boolean }) {
   return (
-    <h3 class="dish-title">
+    <h3 class={props.pencilled ? "dish-title dish-title-pencilled" : "dish-title"}>
       <OpenTitle slot={props.slot} onOpen={props.onOpen} />
     </h3>
   );
@@ -734,8 +761,8 @@ function SlotConflicts(props: { household: Household; slot: Slot }) {
 }
 
 /**
- * A compact row's square: the dish's photo with a Leftovers band, a solid fork and knife for eating
- * out, or a dashed box for nothing decided.
+ * A card's square: the dish's photo, or with a Leftovers band; a solid fork and knife for eating out;
+ * or a dashed box for nothing decided.
  */
 function SlotThumb(props: { client: MiseClient; slot: Slot }) {
   return (
@@ -746,6 +773,15 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
         </span>
       }
     >
+      <Match when={props.slot.kind === "recipe" && props.slot.recipe}>
+        {(recipe) => (
+          <span class="thumb" aria-hidden="true">
+            <Show when={recipe().photoKey} fallback={<PlateGlyph size={30} />}>
+              {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
+            </Show>
+          </span>
+        )}
+      </Match>
       <Match when={props.slot.kind === "eat_out"}>
         <span class="thumb thumb-solid" aria-hidden="true">
           <Icon name="eatOut" />
@@ -907,7 +943,19 @@ type DinersDraft = { everyone: boolean; diners: MemberId[] };
 /** A Slot that Leftovers can be of: its day and meal, and the Recipe it holds. */
 type LeftoversChoice = SlotKey & { recipe: Slot["recipe"] };
 
-function SlotForm(props: { client: MiseClient; household: Household; slot: Slot; week: Week; onDone: () => void }) {
+/**
+ * A Slot's form, in a sheet over the Week so it fits the screen: what acts at once at its top, the fields
+ * with their labels beside them, and Save and Cancel held at its foot.
+ */
+function SlotForm(props: {
+  client: MiseClient;
+  household: Household;
+  slot: Slot;
+  week: Week;
+  /** The day as the card says it, such as "Tonight · Mon 26". */
+  day: string;
+  onDone: () => void;
+}) {
   const { slot } = props;
   const [kind, setKind] = createSignal<SlotKind>(slot.kind);
   const [recipeId, setRecipeId] = createSignal(slot.recipe ? String(slot.recipe.id) : "");
@@ -1052,109 +1100,161 @@ function SlotForm(props: { client: MiseClient; household: Household; slot: Slot;
       title: choice.recipe?.title ?? t("slotKind.unplanned"),
     });
 
+  const titleId = createUniqueId();
+  const guestsId = createUniqueId();
+  const guestCount = () => Number(guests()) || 0;
+  const stepGuests = (by: number) => changing(setGuests)(String(Math.min(50, Math.max(0, guestCount() + by))));
+
   return (
-    <form class="slot-form" aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
-      <Show when={error()}>
-        <p class="banner banner-warn" role="alert">
-          {error()}
-        </p>
-      </Show>
-      {/* What acts at once, Keep or "Let Mise choose", set apart from the fields that wait for Save. Both go
-          by the Slot as the Week now has it: once kept, it has nothing left to keep and can be handed back.
-          What's typed stays. */}
-      <Show when={isKeepable(props.slot) || canHandBack(props.slot)}>
-        <div class="slot-form-now">
-          <Show when={isKeepable(props.slot)}>
-            <KeepButton client={props.client} slot={props.slot} class="button-row" />
-          </Show>
-          <Show when={canHandBack(props.slot)}>
-            <button type="button" class="button-row" disabled={busy() || unchanged() !== undefined} onClick={handBack}>
-              {t("slot.letMiseChoose")}
-            </button>
-            <Show when={unchanged()}>
-              <p class="banner banner-plum" role="status">
-                {unchanged()}
-              </p>
-            </Show>
-          </Show>
+    <Sheet labelledBy={titleId} onEscape={() => props.onDone()}>
+      <div class="sheet-header">
+        <div class="page-heading">
+          <p class="overline">{t("slot.formOverline", { day: props.day, meal: t(`meal.${slot.meal}`) })}</p>
+          <h2 id={titleId} class="dish-title">
+            {t(`slot.edit.${slot.meal}`)}
+          </h2>
         </div>
-      </Show>
-      <label>
-        {t("slot.kind")}
-        <select value={kind()} onChange={(e) => changing(setKind)(e.currentTarget.value as SlotKind)}>
-          <For each={SLOT_KINDS}>{(option) => <option value={option}>{t(`slotKind.${option}`)}</option>}</For>
-        </select>
-      </label>
-      <Show when={kind() === "recipe"}>
-        <label>
-          {t("slot.recipe")}
-          <select onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
-            <option value="" selected={recipeId() === ""}>
-              {t("slot.chooseRecipe")}
-            </option>
-            {/* Selected option by option: the Recipes arrive after the list is drawn. */}
-            <For each={recipes()}>
-              {(recipe) => (
-                <option value={String(recipe.id)} selected={recipeId() === String(recipe.id)}>
-                  {recipe.title}
+        <button type="button" class="icon-button" aria-label={t("slot.cancel")} onClick={() => props.onDone()}>
+          <Icon name="close" />
+        </button>
+      </div>
+      <form class="slot-form sheet-body" aria-label={t(`meal.${slot.meal}`)} onSubmit={save}>
+        <Show when={error()}>
+          <p class="banner banner-warn" role="alert">
+            {error()}
+          </p>
+        </Show>
+        {/* What acts at once, Keep or "Let Mise choose", set apart from the fields that wait for Save. Both go
+            by the Slot as the Week now has it: once kept, it has nothing left to keep and can be handed back.
+            What's typed stays. */}
+        <Show when={isKeepable(props.slot) || canHandBack(props.slot)}>
+          <div class="slot-form-now">
+            <Show when={isKeepable(props.slot)}>
+              <KeepButton client={props.client} slot={props.slot} />
+            </Show>
+            <Show when={canHandBack(props.slot)}>
+              <button
+                type="button"
+                class="button-row"
+                disabled={busy() || unchanged() !== undefined}
+                onClick={handBack}
+              >
+                <Icon name="refresh" />
+                {t("slot.letMiseChoose")}
+              </button>
+            </Show>
+          </div>
+          <Show when={unchanged()}>
+            <p class="banner banner-plum" role="status">
+              {unchanged()}
+            </p>
+          </Show>
+        </Show>
+        <div class="field-grid">
+          <label>
+            <span>{t("slot.kind")}</span>
+            <select value={kind()} onChange={(e) => changing(setKind)(e.currentTarget.value as SlotKind)}>
+              <For each={SLOT_KINDS}>{(option) => <option value={option}>{t(`slotKind.${option}`)}</option>}</For>
+            </select>
+          </label>
+          <Show when={kind() === "recipe"}>
+            <label>
+              <span>{t("slot.recipe")}</span>
+              <select onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
+                <option value="" selected={recipeId() === ""}>
+                  {t("slot.chooseRecipe")}
                 </option>
-              )}
-            </For>
-          </select>
-        </label>
-      </Show>
-      <Show when={kind() === "leftovers"}>
-        <label>
-          {t("slot.leftoversOfMeal")}
-          <select onChange={(e) => changing(setLeftoversOf)(e.currentTarget.value)}>
-            <option value="" selected={leftoversOf() === ""}>
-              {t("slot.leftoversOfNothing")}
-            </option>
-            {/* Selected option by option: the Week before may arrive after the list is drawn. */}
-            <For each={choices()}>
-              {(choice) => (
-                <option value={choiceValue(choice)} selected={leftoversOf() === choiceValue(choice)}>
-                  {choiceText(choice)}
+                {/* Selected option by option: the Recipes arrive after the list is drawn. */}
+                <For each={recipes()}>
+                  {(recipe) => (
+                    <option value={String(recipe.id)} selected={recipeId() === String(recipe.id)}>
+                      {recipe.title}
+                    </option>
+                  )}
+                </For>
+              </select>
+            </label>
+          </Show>
+          <Show when={kind() === "leftovers"}>
+            <label>
+              <span>{t("slot.leftoversOfMeal")}</span>
+              <select onChange={(e) => changing(setLeftoversOf)(e.currentTarget.value)}>
+                <option value="" selected={leftoversOf() === ""}>
+                  {t("slot.leftoversOfNothing")}
                 </option>
-              )}
-            </For>
-          </select>
-        </label>
-      </Show>
-      <label>
-        {t("slot.note")}
-        <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
-      </label>
-      <DinersFields members={props.household.members} draft={diners()} onChange={changing(setDiners)} />
-      <label>
-        {t("slot.guests")}
-        <input
-          type="number"
-          min={0}
-          max={50}
-          value={guests()}
-          onInput={(e) => changing(setGuests)(e.currentTarget.value)}
+                {/* Selected option by option: the Week before may arrive after the list is drawn. */}
+                <For each={choices()}>
+                  {(choice) => (
+                    <option value={choiceValue(choice)} selected={leftoversOf() === choiceValue(choice)}>
+                      {choiceText(choice)}
+                    </option>
+                  )}
+                </For>
+              </select>
+            </label>
+          </Show>
+          <label>
+            <span>{t("slot.note")}</span>
+            <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
+          </label>
+        </div>
+        <DinersFields members={props.household.members} draft={diners()} onChange={changing(setDiners)} />
+        {/* Guests by a step either side, and their Constraints only once there are Guests to have them. */}
+        <div class="field-grid">
+          <div class="field-row">
+            <label for={guestsId}>{t("slot.guests")}</label>
+            <span class="stepper">
+              <button
+                type="button"
+                class="icon-button"
+                aria-label={t("slot.guestsFewer")}
+                disabled={guestCount() <= 0}
+                onClick={() => stepGuests(-1)}
+              >
+                <Icon name="minus" />
+              </button>
+              <input
+                id={guestsId}
+                type="number"
+                min={0}
+                max={50}
+                value={guests()}
+                onInput={(e) => changing(setGuests)(e.currentTarget.value)}
+              />
+              <button
+                type="button"
+                class="icon-button"
+                aria-label={t("slot.guestsMore")}
+                disabled={guestCount() >= 50}
+                onClick={() => stepGuests(1)}
+              >
+                <Icon name="plus" />
+              </button>
+            </span>
+          </div>
+        </div>
+        <Show when={guestCount() > 0 || guestConstraints().length > 0}>
+          <fieldset>
+            <legend>{t("slot.guestConstraints")}</legend>
+            <ConstraintFields constraints={guestConstraints()} onChange={changing(setGuestConstraints)} />
+          </fieldset>
+        </Show>
+        <ConflictOverrides
+          household={props.household}
+          conflicts={refused()}
+          describe={(conflict) => conflictText(conflict, props.household, recipeTitle())}
+          reasons={reasons()}
+          busy={busy()}
+          onChange={setReasons}
+          onChangeIt={() => {
+            setRefused([]);
+            setReasons({});
+          }}
+          onCancel={() => props.onDone()}
         />
-      </label>
-      <fieldset>
-        <legend>{t("slot.guestConstraints")}</legend>
-        <ConstraintFields constraints={guestConstraints()} onChange={changing(setGuestConstraints)} />
-      </fieldset>
-      <ConflictOverrides
-        household={props.household}
-        conflicts={refused()}
-        describe={(conflict) => conflictText(conflict, props.household, recipeTitle())}
-        reasons={reasons()}
-        busy={busy()}
-        onChange={setReasons}
-        onChangeIt={() => {
-          setRefused([]);
-          setReasons({});
-        }}
-        onCancel={() => props.onDone()}
-      />
-      <FormButtons busy={busy()} refused={refused().length > 0} onCancel={() => props.onDone()} />
-    </form>
+        <FormButtons busy={busy()} refused={refused().length > 0} onCancel={() => props.onDone()} />
+      </form>
+    </Sheet>
   );
 }
 
@@ -1337,38 +1437,42 @@ function overridesOf(conflicts: RefusedConflict[], reasons: Record<string, strin
   return overrides.every((override) => override.reason) ? overrides : null;
 }
 
-/** "Everyone" follows the Household's default; untick it to choose Members one by one. */
+/**
+ * Who's eating, as chips that toggle. "Everyone" follows the Household's default; untick a Member from it
+ * to choose them one by one, starting from everyone else.
+ */
 function DinersFields(props: { members: Member[]; draft: DinersDraft; onChange: (draft: DinersDraft) => void }) {
-  const toggle = (id: MemberId, eating: boolean) =>
-    props.onChange({
-      ...props.draft,
-      diners: eating ? [...props.draft.diners, id] : props.draft.diners.filter((diner) => diner !== id),
-    });
+  const eating = (id: MemberId) => props.draft.everyone || props.draft.diners.includes(id);
+  const toggle = (id: MemberId, on: boolean) => {
+    const before = props.draft.everyone ? props.members.map((member) => member.id) : props.draft.diners;
+    props.onChange({ everyone: false, diners: on ? [...before, id] : before.filter((diner) => diner !== id) });
+  };
 
   return (
-    <fieldset>
+    <fieldset class="field">
       <legend>{t("slot.diners")}</legend>
-      <label>
-        <input
-          type="checkbox"
-          checked={props.draft.everyone}
-          onChange={(e) => props.onChange({ ...props.draft, everyone: e.currentTarget.checked })}
-        />
-        {t("slot.everyone")}
-      </label>
-      <For each={props.members}>
-        {(member) => (
-          <label>
-            <input
-              type="checkbox"
-              disabled={props.draft.everyone}
-              checked={props.draft.everyone || props.draft.diners.includes(member.id)}
-              onChange={(e) => toggle(member.id, e.currentTarget.checked)}
-            />
-            <span class="name">{nameText(member.name)}</span>
-          </label>
-        )}
-      </For>
+      <div class="chips">
+        <label class="toggle-chip">
+          <input
+            type="checkbox"
+            checked={props.draft.everyone}
+            onChange={(e) => props.onChange({ ...props.draft, everyone: e.currentTarget.checked })}
+          />
+          {t("slot.everyone")}
+        </label>
+        <For each={props.members}>
+          {(member) => (
+            <label class="toggle-chip">
+              <input
+                type="checkbox"
+                checked={eating(member.id)}
+                onChange={(e) => toggle(member.id, e.currentTarget.checked)}
+              />
+              <span class="name">{nameText(member.name)}</span>
+            </label>
+          )}
+        </For>
+      </div>
     </fieldset>
   );
 }
@@ -1406,20 +1510,15 @@ function cookForText(slot: Slot, household: Household): string {
   });
 }
 
-/** Who a Slot feeds, and how that compares with what its Recipe makes. */
-function servingsText(slot: Slot, household: Household): string {
-  if (slot.servings === 0) return t("slot.nobody");
-  const names = slot.diners.map((id) => household.members.find((member) => member.id === id)?.name ?? String(id));
-  if (slot.guests > 0) {
-    names.push(slot.guests === 1 ? t("slot.guestCount") : t("slot.guestCountMany", { count: String(slot.guests) }));
-  }
-  const params = {
-    count: String(slot.servings),
-    who: new Intl.ListFormat(household.locale, { type: "conjunction" }).format(names),
-  };
-  return slot.recipe
-    ? t("slot.servesRecipe", { ...params, base: String(slot.recipe.baseServings) })
-    : t("slot.serves", params);
+/**
+ * What a Slot's Recipe is cooked for, when that isn't plain: with its Leftovers, with Guests, or for more
+ * or fewer than the Recipe makes. Who of the Household is eating is the day's strip.
+ */
+function cookedForText(slot: Slot, household: Household): string | undefined {
+  if (!slot.recipe) return undefined;
+  if (slot.leftovers.length > 0) return cookForText(slot, household);
+  if (slot.servings === 0 || (slot.servings === slot.recipe.baseServings && slot.guests === 0)) return undefined;
+  return t("slot.forRecipe", { count: String(slot.servings), base: String(slot.recipe.baseServings) });
 }
 
 function sameSlot(slot: SlotKey, other: SlotKey): boolean {
@@ -1441,7 +1540,7 @@ function dayId(date: LocalDate): string {
   return `day-${date}`;
 }
 
-/** The day as a pill over its photo says it: "Mon 26", or "Tonight · Mon 26". */
+/** The day as its card says it: "Mon 26", or "Tonight · Mon 26". */
 function dayLabel(date: LocalDate, locale: Locale, today: boolean): string {
   const day = formatDate(date, locale, { weekday: "short", day: "numeric" });
   return today ? t("week.tonight", { day }) : day;

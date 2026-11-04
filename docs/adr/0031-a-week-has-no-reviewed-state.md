@@ -17,3 +17,7 @@ This amends ADR 0013 ("Proposing marks the Week as not reviewed until someone ma
 - A migration drops the column, as `slot.locked` was dropped (ADR 0030). An older Backup is restored with the release that wrote it, then upgraded (ADR 0006); replaying it at its own schema version still migrates it.
 - A Re-roll or Use it up that changes no dinner still says so; that never depended on the flag.
 - The Notification that next week is proposed still says "Review it before you shop": the verb, not a state.
+
+## Amended by ADR 0032
+
+The sign of what Mise chose and no one has settled is each pencilled dinner's Pencilled chip, not its grey line; the reason is in the dinner's sheet.

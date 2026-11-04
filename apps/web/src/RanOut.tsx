@@ -40,7 +40,9 @@ export function RanOut(props: { client: MiseClient; online: boolean }) {
       <div class="control">
         <button
           type="button"
-          class="button-row"
+          class="icon-button"
+          aria-label={t("ranOut.action")}
+          title={t("ranOut.action")}
           disabled={!props.online}
           aria-describedby={props.online ? undefined : reasonId}
           onClick={() => {
@@ -49,7 +51,6 @@ export function RanOut(props: { client: MiseClient; online: boolean }) {
           }}
         >
           <Icon name="low" />
-          {t("ranOut.action")}
         </button>
         <NeedsConnection id={reasonId} online={props.online} />
       </div>

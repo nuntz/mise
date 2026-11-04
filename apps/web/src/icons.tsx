@@ -116,6 +116,22 @@ const PATHS = {
       <path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5" />
     </>
   ),
+  /** A pencilled dinner: Mise's choice, which a Re-roll may change. */
+  pencil: () => (
+    <>
+      <path d="M4 20h4L19 9l-4-4L4 16z" />
+      <path d="M14 6l4 4" />
+    </>
+  ),
+  /** Use it up: Items on hand. */
+  sprout: () => (
+    <>
+      <path d="M12 21v-9" />
+      <path d="M12 12c0-4 3-6.5 8-6.5 0 4-3 6.5-8 6.5z" />
+      <path d="M12 14c0-3.5-2.5-5.5-7-5.5 0 3.5 2.5 5.5 7 5.5z" />
+    </>
+  ),
+  minus: () => <path d="M5 12h14" />,
 } satisfies Record<string, () => JSX.Element>;
 
 export type IconName = keyof typeof PATHS;

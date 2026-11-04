@@ -31,7 +31,7 @@ export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudget
 
 /**
  * Proposing the Week and re-rolling it. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
- * The Week keeps its Use it up (ADR 0030): proposing first offers it, and under Re-roll it can be changed.
+ * The Week keeps its Use it up (ADR 0030): proposing first offers it, and beside Re-roll it can be changed.
  */
 export function ProposalControls(props: {
   client: MiseClient;
@@ -138,16 +138,33 @@ export function ProposalControls(props: {
         }
       >
         <Show when={proposed()} fallback={proposeButton()}>
-          <button
-            type="button"
-            class="button-primary"
-            disabled={disabled() || !canReroll()}
-            aria-describedby={rerollDescribedBy()}
-            onClick={reroll}
-          >
-            <Icon name="refresh" />
-            {t("week.reroll")}
-          </button>
+          {/* Re-roll and Use it up, the same size side by side: neither outranks the Week under them. */}
+          <div class="proposal-tools">
+            <button
+              type="button"
+              class="button-row"
+              disabled={disabled() || !canReroll()}
+              aria-describedby={rerollDescribedBy()}
+              onClick={reroll}
+            >
+              <Icon name="refresh" />
+              {t("week.reroll")}
+            </button>
+            <button
+              type="button"
+              class="button-row proposal-use-up"
+              disabled={disabled()}
+              aria-describedby={describedBy()}
+              onClick={offerUseUp}
+            >
+              <Icon name="sprout" />
+              <span>
+                {props.week.useUp.length > 0
+                  ? t("useUp.change", { items: props.week.useUp.map(nameOf).join(", ") })
+                  : t("useUp.none")}
+              </span>
+            </button>
+          </div>
         </Show>
         <Show when={!props.online || proposed()}>
           <div class="proposal-notes">
@@ -161,21 +178,12 @@ export function ProposalControls(props: {
                   </p>
                 }
               >
-                <small>{t("week.proposeHint")}</small>
+                {/* The chip each pencilled dinner carries, as the key to what Re-roll changes. */}
+                <p class="control-reason proposal-hint">
+                  <PencilledChip />
+                  {t("week.proposeHint")}
+                </p>
               </Show>
-            </Show>
-            <Show when={proposed()}>
-              <button
-                type="button"
-                class="button-link"
-                disabled={disabled()}
-                aria-describedby={describedBy()}
-                onClick={offerUseUp}
-              >
-                {props.week.useUp.length > 0
-                  ? t("useUp.change", { items: props.week.useUp.map(nameOf).join(", ") })
-                  : t("useUp.none")}
-              </button>
             </Show>
           </div>
         </Show>
@@ -218,6 +226,16 @@ export function ProposalControls(props: {
         )}
       </Show>
     </>
+  );
+}
+
+/** What marks a pencilled dinner on the Week: Mise chose it, and a Re-roll may change it (ADR 0032). */
+export function PencilledChip() {
+  return (
+    <span class="chip chip-plum">
+      <Icon name="pencil" size={14} />
+      {t("slot.pencilled")}
+    </span>
   );
 }
 
@@ -293,101 +311,136 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
   );
 }
 
-/** This Week's Effort Budgets, which override the Household's, and the Household's for every Week. */
+/**
+ * The Effort Budgets, folded to one line that says them. Open, a grid of the week's days: a row for this
+ * Week, whose differences from the Household's override them, and a row for every Week, with one Save.
+ */
 export function EffortBudgetsEditor(props: { client: MiseClient; household: WeekHousehold; week: Week }) {
-  return (
-    <details>
-      <summary class="section-head">
-        <h2>{t("effort.title")}</h2>
-      </summary>
-      <div class="stack">
-        <p class="meta">{t("effort.hint")}</p>
-        <BudgetsForm
-          label={t("effort.thisWeek")}
-          budgets={props.week.effortBudgets}
-          save={(changed) =>
-            props.client.call("set_week_effort_budgets", {
-              date: props.week.startDate,
-              // The Household's own budget is no override.
-              budgets: Object.fromEntries(
-                Object.entries(changed).map(([weekday, minutes]) => [
-                  weekday,
-                  minutes === props.household.effortBudgets[weekday as Weekday] ? null : minutes,
-                ]),
-              ),
-            })
-          }
-        />
-        <BudgetsForm
-          label={t("effort.everyWeek")}
-          budgets={props.household.effortBudgets}
-          save={(changed) => props.client.call("set_effort_budgets", { budgets: changed })}
-        />
-      </div>
-    </details>
-  );
-}
-
-/** A minutes field per weekday; saving sends only the weekdays changed. */
-function BudgetsForm(props: {
-  label: string;
-  budgets: EffortBudgets;
-  save: (changed: Partial<EffortBudgets>) => Promise<ToolResult<unknown>>;
-}) {
-  const [typed, setTyped] = createSignal<Partial<Record<Weekday, string>>>({});
+  const [typed, setTyped] = createSignal<{
+    week: Partial<Record<Weekday, string>>;
+    every: Partial<Record<Weekday, string>>;
+  }>({ week: {}, every: {} });
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
-  const value = (weekday: Weekday) => typed()[weekday] ?? String(props.budgets[weekday]);
+  const value = (row: "week" | "every", weekday: Weekday) =>
+    typed()[row][weekday] ??
+    String(row === "week" ? props.week.effortBudgets[weekday] : props.household.effortBudgets[weekday]);
+  const type = (row: "week" | "every", weekday: Weekday, text: string) =>
+    setTyped({ ...typed(), [row]: { ...typed()[row], [weekday]: text } });
+  const changed = (row: "week" | "every", budgets: EffortBudgets) =>
+    Object.fromEntries(
+      WEEKDAYS.flatMap((weekday) =>
+        Number(value(row, weekday)) === budgets[weekday] ? [] : [[weekday, Number(value(row, weekday))]],
+      ),
+    ) as Partial<EffortBudgets>;
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
-    const changed = Object.fromEntries(
-      WEEKDAYS.flatMap((weekday) =>
-        Number(value(weekday)) === props.budgets[weekday] ? [] : [[weekday, Number(value(weekday))]],
-      ),
-    );
-    if (Object.keys(changed).length === 0) return;
+    const week = changed("week", props.week.effortBudgets);
+    const every = changed("every", props.household.effortBudgets);
+    const writes: (() => Promise<ToolResult<unknown>>)[] = [];
+    if (Object.keys(week).length > 0)
+      writes.push(() =>
+        props.client.call("set_week_effort_budgets", {
+          date: props.week.startDate,
+          // The Household's own budget is no override.
+          budgets: Object.fromEntries(
+            Object.entries(week).map(([weekday, minutes]) => [
+              weekday,
+              minutes === props.household.effortBudgets[weekday as Weekday] ? null : minutes,
+            ]),
+          ),
+        }),
+      );
+    if (Object.keys(every).length > 0) writes.push(() => props.client.call("set_effort_budgets", { budgets: every }));
+    if (writes.length === 0) return;
     setBusy(true);
     try {
-      const result = await props.save(changed);
-      setError(result.ok ? undefined : errorText(result.error, "slot"));
-      if (result.ok) setTyped({});
+      for (const write of writes) {
+        const result = await write();
+        if (!result.ok) {
+          setError(errorText(result.error, "slot"));
+          setBusy(false);
+          return;
+        }
+      }
+      setError(undefined);
+      setTyped({ week: {}, every: {} });
     } catch {
       setError(t("app.error"));
     }
     setBusy(false);
   };
 
+  const initial = (weekday: Weekday) =>
+    formatDate(`2024-01-0${WEEKDAYS.indexOf(weekday) + 1}`, props.household.locale, { weekday: "narrow" });
+  // This Week's budget where it differs from every Week's.
+  const overridden = (weekday: Weekday) => props.week.effortBudgets[weekday] !== props.household.effortBudgets[weekday];
+  const row = (which: "week" | "every") => (
+    <fieldset class="field budget-row">
+      <legend>{t(which === "week" ? "effort.thisWeek" : "effort.everyWeek")}</legend>
+      <div class="budget-cells">
+        <For each={WEEKDAYS}>
+          {(weekday) => (
+            <input
+              type="number"
+              inputMode="numeric"
+              class={which === "week" && overridden(weekday) ? "budget-overridden" : undefined}
+              aria-label={t(`weekday.${weekday}`)}
+              required
+              min={0}
+              max={24 * 60}
+              value={value(which, weekday)}
+              onInput={(e) => type(which, weekday, e.currentTarget.value)}
+            />
+          )}
+        </For>
+      </div>
+    </fieldset>
+  );
+
   return (
-    <form aria-label={props.label} onSubmit={submit}>
-      <fieldset>
-        <legend>{props.label}</legend>
+    <details class="effort-budgets">
+      <summary class="section-head">
+        <h2>{t("effort.title")}</h2>
+        <span class="meta">{effortSummary(props.week.effortBudgets)}</span>
+      </summary>
+      <form class="stack" aria-label={t("effort.title")} onSubmit={submit}>
+        <p class="meta">{t("effort.hint")}</p>
         <Show when={error()}>
           <p class="banner banner-warn" role="alert">
             {error()}
           </p>
         </Show>
-        <For each={WEEKDAYS}>
-          {(weekday) => (
-            <label>
-              {t(`weekday.${weekday}`)}
-              <input
-                type="number"
-                required
-                min={0}
-                max={24 * 60}
-                value={value(weekday)}
-                onInput={(e) => setTyped({ ...typed(), [weekday]: e.currentTarget.value })}
-              />
-            </label>
-          )}
-        </For>
-        <button type="submit" class="button-secondary" disabled={busy()}>
-          {busy() ? t("slot.saving") : t("slot.save")}
-        </button>
-      </fieldset>
-    </form>
+        <div class="budget-cells budget-days" aria-hidden="true">
+          <For each={WEEKDAYS}>{(weekday) => <span>{initial(weekday)}</span>}</For>
+        </div>
+        {row("week")}
+        {row("every")}
+        <div class="budget-foot">
+          <p class="meta">
+            <span class="budget-key" aria-hidden="true" />
+            {t("effort.overriddenKey")}
+          </p>
+          <button type="submit" class="button-secondary" disabled={busy()}>
+            {busy() ? t("slot.saving") : t("slot.save")}
+          </button>
+        </div>
+      </form>
+    </details>
   );
+}
+
+/** The Week's Effort Budgets in a few words: one for every day, weekdays and weekends, or each day's. */
+function effortSummary(budgets: EffortBudgets): string {
+  const minutes = WEEKDAYS.map((weekday) => budgets[weekday]);
+  const [first = 0] = minutes;
+  if (minutes.every((each) => each === first)) return t("effort.summaryEvery", { minutes: String(first) });
+  const weekdays = minutes.slice(0, 5);
+  const weekend = minutes.slice(5);
+  if (weekdays.every((each) => each === first) && weekend.every((each) => each === weekend[0]))
+    return t("effort.summaryWeekend", { weekdays: String(first), weekend: String(weekend[0]) });
+  return t("effort.summaryEach", { minutes: minutes.join(" · ") });
 }
 
 /** A Member by name, or the Guests. */
