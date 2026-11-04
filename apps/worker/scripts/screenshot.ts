@@ -177,9 +177,8 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
     kind: "recipe",
     recipeId: readyMade.id,
   });
-  // Proposing a Week chosen entirely by hand changes no dinner; looked over, it shows no banner.
+  // Proposing a Week chosen entirely by hand changes no dinner.
   await call(agent, "propose_week", { date: thisWeek.startDate });
-  await call(agent, "review_week", { date: thisWeek.startDate, reviewed: true });
   await call(agent, "set_use_up", { date: next, items: ["broccoli", "apple"] });
   await call(agent, "propose_week", { date: next });
 }

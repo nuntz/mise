@@ -17,3 +17,7 @@ Each dinner's reason is structured data (`ProposalReason`): the rule that kept i
 ## Amended by ADR 0030
 
 A dinner chosen by hand is no longer chosen again, Use it up is stored on the Week, and Lock is retired: a dinner is a Suggestion or the Household's own.
+
+## Amended by ADR 0031
+
+A Week has no reviewed state: nothing marks it reviewed or not reviewed, and a Suggestion's grey line is the only sign of what Mise chose and no one has settled.

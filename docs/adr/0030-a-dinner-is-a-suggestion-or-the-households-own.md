@@ -43,3 +43,7 @@ It amends ADR 0016 in two:
 - Re-roll is disabled only when every dinner is the Household's own and planned, or nobody is eating it. A dinner no Recipe fit still counts, because a Recipe added since may fit.
 - The Proposer still needs to know which dinners have Leftovers linked by hand, so that it places no more Leftovers after them. It no longer needs to know who eats those Leftovers.
 - Use it up is a table like any other, so the Backup carries it (ADR 0006).
+
+## Amended by ADR 0031
+
+A Week has no reviewed state: nothing marks it reviewed or not reviewed, and a Suggestion's grey line is the only sign of what Mise chose and no one has settled.

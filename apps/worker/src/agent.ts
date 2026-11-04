@@ -201,7 +201,6 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "dinners can change. Returns `{ week, changed }`; with `changed: false` on a proposed Week, the Items are " +
     "stored but tell the person “No dinner changed: nothing that fits uses <the Items> better than what's planned.”",
   set_week_effort_budgets: "Overrides the Effort Budget of the weekdays given for one Week; null goes back.",
-  review_week: "Marks the Week as looked over since it was proposed, or not.",
   mark_cooked: "Marks a Slot cooked, today or earlier.",
   keep_slot:
     "Keeps one of Mise's Suggestions (“keep Wednesday”): the dinner becomes the Household's own, loses its " +

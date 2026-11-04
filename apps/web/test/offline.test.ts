@@ -100,7 +100,6 @@ function week(startDate: LocalDate, planned: Partial<Slot>[] = []): Week {
     effortBudgets: DEFAULT_EFFORT_BUDGETS,
     effortBudgetOverrides: {},
     proposalSeed: null,
-    reviewed: false,
     useUp: [],
   };
 }

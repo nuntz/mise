@@ -78,14 +78,13 @@ type SlotRow = {
 
 type SlotKey = { date: string; meal: string };
 
-type WeekRow = { start_date: string; proposal_seed: number | null; proposal_choice: string | null; reviewed: number };
+type WeekRow = { start_date: string; proposal_seed: number | null; proposal_choice: string | null };
 
 /** What is stored about a Week beside its Slots, with the choice it was last proposed with (null until it is). */
 const WeekRecord = Week.pick({
   startDate: true,
   effortBudgetOverrides: true,
   proposalSeed: true,
-  reviewed: true,
   useUp: true,
 }).extend({ proposalChoice: ProposalChoice.nullable() });
 type WeekRecord = ReturnType<typeof WeekRecord.parse>;
@@ -114,7 +113,6 @@ type WeekTools =
   | "propose_dinner"
   | "set_use_up"
   | "set_week_effort_budgets"
-  | "review_week"
   | "mark_cooked"
   | "keep_slot"
   | "rate_recipe";
@@ -285,8 +283,6 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     if (!settings) return notSetUp();
     const span = weekNamedBy(settings, input.date);
     const changed = proposeAgain(sql, settings, span, input.reroll);
-    // A Re-roll that changes nothing leaves the Week exactly as it was.
-    if (changed || !input.reroll) markNotReviewed(sql, span);
     return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
@@ -304,9 +300,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     }
     // A Week not yet proposed favours them once it is.
     const proposed = (readWeekRecords(sql, span.startDate)[0]?.proposalSeed ?? null) !== null;
-    // When no dinner changes, the reasons still say what it uses up, but the Week stays reviewed.
+    // When no dinner changes, the reasons are still written again, to say what it uses up.
     const changed = proposed && proposeAgain(sql, settings, span, false);
-    if (changed) markNotReviewed(sql, span);
     return { ok: true, value: { week: readWeek(sql, span), changed } };
   },
 
@@ -316,9 +311,8 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     if (readSlot(sql, input.date, "dinner").cookedAt !== null) return alreadyCooked(input.date);
     const span = weekOf(input.date, settings);
     const proposal = proposeDinner(readProposerInput(sql, span), input.date);
+    // It is proposed from the Week's seed and choice, so they stay.
     storeProposal(sql, settings, span, proposal);
-    // It is proposed from the Week's seed and choice, so they stay; only a change needs looking over.
-    if (proposal.changed) markNotReviewed(sql, span);
     return { ok: true, value: { week: readWeek(sql, span), changed: proposal.changed } };
   },
 
@@ -339,15 +333,6 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
         );
       }
     }
-    return { ok: true, value: readWeek(sql, span) };
-  },
-
-  review_week: (sql, input) => {
-    const settings = readSettings(sql);
-    if (!settings) return notSetUp();
-    const span = weekOf(input.date, settings);
-    storeWeek(sql, span.startDate);
-    sql.exec("UPDATE week SET reviewed = ? WHERE start_date = ?", Number(input.reviewed), span.startDate);
     return { ok: true, value: readWeek(sql, span) };
   },
 
@@ -419,7 +404,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
 /**
  * Proposes the Week's dinners from its stored seed and choice, or re-rolls them to a new seed, with its
  * stored Use it up; returns whether any dinner changed. A re-roll that changes none writes nothing, so
- * the Week keeps its seed, choice and reasons. Whether the Week is reviewed is the caller's.
+ * the Week keeps its seed, choice and reasons.
  */
 function proposeAgain(sql: SqlStorage, settings: SettingsAndCalendar, span: WeekSpan, reroll: boolean): boolean {
   const proposerInput = readProposerInput(sql, span);
@@ -547,11 +532,6 @@ function makeOwn(sql: SqlStorage, { date, meal }: SlotKey): void {
 function ownLinkedByHand(sql: SqlStorage, leftovers: SlotKey, of: SlotKey | null): void {
   makeOwn(sql, leftovers);
   if (of) makeOwn(sql, of);
-}
-
-/** The Week needs looking over again: a Proposal changed it. */
-function markNotReviewed(sql: SqlStorage, span: WeekSpan): void {
-  sql.exec("UPDATE week SET reviewed = 0 WHERE start_date = ?", span.startDate);
 }
 
 /** Why Keep can do nothing for the Slot: see `isKeepable`. */
@@ -805,7 +785,6 @@ export function readWeek(sql: SqlStorage, span: WeekSpan): Week {
     effortBudgets: { ...effortBudgets, ...overrides },
     effortBudgetOverrides: overrides,
     proposalSeed: record?.proposalSeed ?? null,
-    reviewed: record?.reviewed ?? false,
     useUp: record?.useUp ?? [],
   };
 }
@@ -836,7 +815,6 @@ export function readWeekRecords(sql: SqlStorage, startDate?: LocalDate): WeekRec
       ),
       proposalSeed: row.proposal_seed,
       proposalChoice: row.proposal_choice,
-      reviewed: row.reviewed === 1,
       useUp: useUp.filter((item) => item.start_date === row.start_date).map((item) => item.item_id),
     }),
   );

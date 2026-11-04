@@ -565,6 +565,11 @@ const migrations: { version: number; statements: string[] }[] = [
       "ALTER TABLE slot DROP COLUMN locked",
     ],
   },
+  {
+    version: 34,
+    // A Week has no reviewed state (ADR 0031).
+    statements: ["ALTER TABLE week DROP COLUMN reviewed"],
+  },
 ];
 
 /** Brings the database up to `upTo`, by default the latest version. */

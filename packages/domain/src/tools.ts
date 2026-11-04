@@ -75,7 +75,6 @@ import {
   ProposedWeek,
   ProposeWeekInput,
   RateRecipeInput,
-  ReviewWeekInput,
   SetDinersInput,
   SetGuestsInput,
   SetSlotInput,
@@ -471,12 +470,6 @@ export const tools = {
   /** Returns the Week, with its Effort Budgets as they now are. */
   set_week_effort_budgets: defineTool({
     input: SetWeekEffortBudgetsInput,
-    output: Week,
-    changes: "plan",
-  }),
-  /** Marks the Week as looked over since it was proposed, or not. */
-  review_week: defineTool({
-    input: ReviewWeekInput,
     output: Week,
     changes: "plan",
   }),

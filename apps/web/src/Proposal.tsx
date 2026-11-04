@@ -30,8 +30,7 @@ import { Sheet } from "./Sheet";
 export type WeekHousehold = Pick<Household, "members" | "locale" | "effortBudgets" | "timezone">;
 
 /**
- * Proposing the Week and re-rolling it, and, while a proposed Week hasn't been looked over, a banner
- * asking for that. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
+ * Proposing the Week and re-rolling it. A Week with nothing planned yet shows as empty, with proposing it the one thing to do.
  * The Week keeps its Use it up (ADR 0030): proposing first offers it, and under Re-roll it can be changed.
  */
 export function ProposalControls(props: {
@@ -119,18 +118,6 @@ export function ProposalControls(props: {
 
   return (
     <>
-      <Show when={proposed() && !props.week.reviewed}>
-        <div class="banner banner-plum" role="status">
-          <p>{t("week.unreviewed")}</p>
-          <button
-            type="button"
-            disabled={disabled()}
-            onClick={() => run(() => props.client.call("review_week", { date: date(), reviewed: true }))}
-          >
-            {t("week.markReviewed")}
-          </button>
-        </div>
-      </Show>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
           {error()}

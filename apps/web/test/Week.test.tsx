@@ -110,13 +110,12 @@ function emptyWeek(startDate: string): Week {
     effortBudgets: DEFAULT_EFFORT_BUDGETS,
     effortBudgetOverrides: {},
     proposalSeed: null,
-    reviewed: false,
     useUp: [],
   };
 }
 
 /**
- * This Week as proposed with seed 7 and not yet reviewed, with Monday's Effort Budget overridden:
+ * This Week as proposed with seed 7, with Monday's Effort Budget overridden:
  * Monday's dinner chosen, and no Recipe fitting Tuesday's.
  */
 function proposedWeek(): Week {
@@ -141,7 +140,6 @@ function proposedWeek(): Week {
   return {
     ...week,
     proposalSeed: 7,
-    reviewed: false,
     effortBudgetOverrides: { monday: 30 },
     effortBudgets: { ...DEFAULT_EFFORT_BUDGETS, monday: 30 },
   };
@@ -193,7 +191,6 @@ function fakeClient(answers: Record<string, Answer> = {}) {
         case "propose_dinner":
         case "set_use_up":
           return { ok: true, value: { week: thisWeek, changed: true } };
-        case "review_week":
         case "set_week_effort_budgets":
           return { ok: true, value: thisWeek };
         case "set_effort_budgets":
@@ -1375,7 +1372,7 @@ test("Leftovers linked to a meal that isn't safe are refused, and linked anyway 
   });
 });
 
-test("a proposed Week shows why each dinner was chosen, and asks to be reviewed", async () => {
+test("a proposed Week shows why each dinner was chosen, with nothing to mark reviewed", async () => {
   const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   const user = userEvent.setup();
   render(() => <App client={client} />);
@@ -1392,15 +1389,12 @@ test("a proposed Week shows why each dinner was chosen, and asks to be reviewed"
     ),
   ).toBeTruthy();
 
-  expect(screen.getByRole("status").textContent).toContain("This Week was proposed and hasn't been reviewed yet.");
+  expect(screen.queryByText("This Week was proposed and hasn't been reviewed yet.")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Mark as reviewed" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Re-roll" }));
-  await user.click(screen.getByRole("button", { name: "Mark as reviewed" }));
 
   await vi.waitFor(() =>
-    expect(writes(calls)).toEqual([
-      { name: "propose_week", input: { date: "2026-10-26", reroll: true } },
-      { name: "review_week", input: { date: "2026-10-26", reviewed: true } },
-    ]),
+    expect(writes(calls)).toEqual([{ name: "propose_week", input: { date: "2026-10-26", reroll: true } }]),
   );
 });
 

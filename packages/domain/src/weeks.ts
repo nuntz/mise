@@ -249,8 +249,6 @@ export const Week = z.object({
   effortBudgetOverrides: z.partialRecord(Weekday, Minutes),
   /** The seed of the latest Proposal; null until the Week is first proposed. */
   proposalSeed: z.number().int().nonnegative().nullable(),
-  /** Whether someone has looked the Week over since it was last proposed. */
-  reviewed: z.boolean(),
   /** Its Use it up: the Items on hand that its Proposals favour Recipes for, as last set; none to start with. */
   useUp: z.array(ItemId),
 });
@@ -358,8 +356,8 @@ export const ClearWeekInput = z.object({ date: LocalDate, confirm: z.literal(tru
 /**
  * Proposes the Week's dinners (see `proposeWeek`), favouring Recipes that use its stored Use it up. The
  * same Week, unchanged, gets the same Proposal from the seed it was last proposed with; a re-roll moves
- * on to a new seed and a different Proposal. Either way the Week is marked as not reviewed, except by
- * a re-roll that changes no dinner, which leaves the Week exactly as it was, seed and reasons included.
+ * on to a new seed and a different Proposal, except a re-roll that changes no dinner, which leaves the
+ * Week exactly as it was, seed and reasons included.
  */
 export const ProposeWeekInput = z
   .object({
@@ -370,9 +368,8 @@ export const ProposeWeekInput = z
 
 /**
  * Stores the Week's Use it up, replacing what it had; none clears it. A Week already proposed is
- * proposed again from the same seed, so that only its Suggestions and unplanned dinners adjust, and is
- * marked as not reviewed if a dinner changed. When none did, its reasons are still written again (so
- * that a dinner can say it uses up spinach), but it stays reviewed.
+ * proposed again from the same seed, so that only its Suggestions and unplanned dinners adjust. When no
+ * dinner changed, its reasons are still written again, so that a dinner can say it uses up spinach.
  */
 export const SetUseUpInput = z
   .object({
@@ -387,8 +384,7 @@ export const SetUseUpInput = z
 /**
  * Hands a dinner back to Mise ("Let Mise choose") and proposes it again at once (see `proposeDinner`),
  * from the seed and choice the Week was last proposed with, which stay as they are. The dinner becomes a
- * Suggestion with its reason; every other dinner is left as it is. The Week is marked as not reviewed
- * when the dinner changed.
+ * Suggestion with its reason; every other dinner is left as it is.
  */
 export const ProposeDinnerInput = z.object({ date: LocalDate }).strict();
 
@@ -396,8 +392,6 @@ export const ProposeDinnerInput = z.object({ date: LocalDate }).strict();
 export const SetWeekEffortBudgetsInput = z
   .object({ date: LocalDate, budgets: z.partialRecord(Weekday, Minutes.nullable()) })
   .strict();
-
-export const ReviewWeekInput = z.object({ date: LocalDate, reviewed: z.boolean() }).strict();
 
 /**
  * Marks a Slot with a Recipe as cooked, or not (which drops its Ratings). Cooking counts for its

@@ -106,7 +106,6 @@ function week(): Week {
     effortBudgets: DEFAULT_EFFORT_BUDGETS,
     effortBudgetOverrides: {},
     proposalSeed: null,
-    reviewed: false,
     useUp: [],
   };
 }

@@ -66,7 +66,6 @@ describe("export and restore", () => {
       await original.callTool("set_week_effort_budgets", { date: "2026-11-02", budgets: { friday: 15 } }),
       await original.callTool("set_use_up", { date: "2026-11-02", items: ["spinach", "egg"] }),
       await original.callTool("propose_week", { date: "2026-11-02" }),
-      await original.callTool("review_week", { date: "2026-11-02", reviewed: true }),
       // A dinner already eaten, cooked and rated.
       await original.callTool("set_slot", {
         date: "2026-10-05",
@@ -239,7 +238,7 @@ describe("export and restore", () => {
     expect(exported).toEqual({
       format: "mise.household-export",
       version: 2,
-      schemaVersion: 33,
+      schemaVersion: 34,
       tables: {
         calendar_token: [],
         chat_turn: [],
