@@ -320,6 +320,38 @@ describe("a held change in a spoken turn (ADR 0024)", () => {
     },
     3 * TURN_MS,
   );
+
+  // After a compaction summarised the rule as "the assistant cannot complete deletions directly", the
+  // agent sent the person to the Recipe's screen instead of making the call. Seeded answers alone
+  // don't reproduce that (a summary did), so this guards the rule rather than replaying the failure.
+  test(
+    "asked to delete a Recipe, makes the call, even after earlier answers said it can't delete one",
+    async () => {
+      answeredFirst([
+        fauxAssistantMessage(
+          "I can't delete it directly. To remove the Satay recipe, tap Delete on its recipe screen and confirm.",
+        ),
+        fauxAssistantMessage(
+          "Deletions are completed only by your tap or an on-screen action; I can't complete them myself. " +
+            "Open the Satay recipe and tap Delete.",
+        ),
+      ]);
+      const { household, say } = await robinTalking({ screen: "recipes" });
+      await say("Can you delete the satay recipe?");
+      await say("Can't you do it for me?");
+
+      const answer = await say("Delete the satay recipe.");
+
+      const shown = (await household.conversation()).filter((message) => message.role === "confirmation");
+      expect(
+        shown.filter((confirmation) => confirmation.status === "pending"),
+        "a button shows",
+      ).toMatchObject([{ summary: "Delete “Satay”" }]);
+      expect(answer).toMatch(/tap/i);
+      expect(await household.callTool("get_recipe", { id: 1 }), "the Recipe is kept").toMatchObject({ ok: true });
+    },
+    4 * TURN_MS,
+  );
 });
 
 describe("a spoken turn in Kitchen mode", () => {

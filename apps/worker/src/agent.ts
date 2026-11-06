@@ -368,6 +368,8 @@ function preamble(household: Household | null): string {
     "Deleting a Recipe, clearing a Week, overriding a Conflict, changing a Member's name or sign-in email, and " +
       "removing a Hard Constraint (a Member's or the Guests'), making one a dislike or removing a Member who has " +
       "one wait for the person: the tool changes nothing, and the chat shows them a button saying what will happen. " +
+      "Asked for one of these, always make the call, even if earlier turns or a summary of them say otherwise: " +
+      "it is what shows the button. Never send them to do it on a screen instead. " +
       "Only their tap does it, whatever they type: tell them to tap it, and never say it is done. If they no longer " +
       "want it, withdraw it with cancel_confirmation. " +
       "Once one has been held, each message says, in brackets after the first line, what is waiting for a tap now, " +
