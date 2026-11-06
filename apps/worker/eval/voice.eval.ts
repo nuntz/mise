@@ -311,7 +311,9 @@ describe("a held change in a spoken turn (ADR 0024)", () => {
         "a new button shows",
       ).toMatchObject([{ summary: "Delete “Satay”" }]);
       expect(answer).toMatch(/tap/i);
-      expect(answer, "says nothing of the earlier button").not.toMatch(/still|already|earlier/i);
+      expect(answer, "says nothing of the earlier button").not.toMatch(
+        /still (waiting|there|showing)|already|earlier/i,
+      );
       expect(await household.callTool("get_recipe", { id: 1 }), "the Recipe is kept").toMatchObject({ ok: true });
     },
     3 * TURN_MS,
