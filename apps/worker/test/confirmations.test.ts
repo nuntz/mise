@@ -114,6 +114,58 @@ describe("what the agent can't do without a person's tap (ADR 0024)", () => {
   });
 });
 
+describe("each turn says what waits for a tap now (#114)", () => {
+  /** A model that deletes the Satay when asked to, and the turns it is shown, as the model sees them. */
+  function scriptDeleterRecordingTurns() {
+    const seen: string[] = [];
+    const deleter = caller([["delete_recipe", { id: 1, confirm: true }]]);
+    const answerer = caller([]);
+    scriptModel((context, ...rest) => {
+      const asked = textOf([...context.messages].reverse().find((message) => message.role === "user"));
+      if (context.messages.at(-1)?.role === "user") seen.push(asked);
+      return (asked.endsWith("Delete the Satay") ? deleter : answerer)(context, ...rest);
+    });
+    return seen;
+  }
+
+  /** The line a turn the model was shown gives what waits for a tap, if it gives one. */
+  const waitingIn = (turn: string | undefined) => turn?.split("\n").find((line) => /^\[(Waiting|Nothing)/.test(line));
+
+  test("none before the first hold; the one held while it waits; nothing once a person cancels it", async () => {
+    const seen = scriptDeleterRecordingTurns();
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+    await robin.rpc("chat", ["Hello", { screen: "recipes" }]);
+    await robin.rpc("chat", ["Delete the Satay", { screen: "recipes" }]);
+
+    await robin.rpc("chat", ["Is it gone?", { screen: "recipes" }]);
+    await robin.call("cancel_confirmation", { id: 1 });
+    await robin.rpc("chat", ["And now?", { screen: "recipes" }]);
+
+    expect(seen.map(waitingIn)).toEqual([
+      undefined,
+      undefined,
+      "[Waiting for a tap: 1 “Delete “Satay””]",
+      "[Nothing is waiting for a tap]",
+    ]);
+  });
+
+  test("nothing once what the held call describes has changed on a screen", async () => {
+    const seen = scriptDeleterRecordingTurns();
+    const household = await familyHousehold();
+    const robin = await connectAs(household, "robin@example.com");
+    await robin.rpc("chat", ["Delete the Satay", { screen: "recipes" }]);
+
+    await household.callTool("delete_recipe", { id: 1, confirm: true });
+    await robin.rpc("chat", ["Is it gone?", { screen: "recipes" }]);
+
+    expect(waitingIn(seen.at(-1))).toBe("[Nothing is waiting for a tap]");
+    expect(await confirmations(household), "the chat shows it no longer applies").toMatchObject([
+      { status: "expired" },
+    ]);
+  });
+});
+
 /**
  * A call the agent makes that needs a tap: how the Household is set up for it first (on the screens),
  * the button it should show, and what to look at to see whether it ran.

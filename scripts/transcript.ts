@@ -182,12 +182,15 @@ function format(log: AgentLog, options: { turns: number; costs: boolean; results
       const header = content.match(/^\[([^\]]*)\]/)?.[1]?.split("; ")[0] ?? "";
       const said = entry.data?.text ?? content;
       const spoken = /, speaking on /.test(header) || said.startsWith(SPOKEN);
+      // What the turn told the agent was waiting for a tap, once one had been held (`presentTurn`).
+      const waiting = content.match(/^\[(?:Waiting for a tap: .*|Nothing is waiting for a tap)\]$/m)?.[0];
       turns.push({
         kind: "turn",
         at: message.timestamp ?? 0,
         turn: entry.data?.turn,
         lines: [
           `Turn ${entry.data?.turn ?? "?"} · ${time(message.timestamp)} · ${spoken ? "spoken" : "typed"} · ${header}`,
+          ...(waiting ? [`  ${waiting}`] : []),
           `  > ${said.startsWith(SPOKEN) ? said.slice(SPOKEN.length) : said}`,
         ],
       });

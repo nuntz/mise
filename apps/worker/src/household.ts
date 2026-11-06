@@ -97,7 +97,13 @@ import {
 import { type AgentLog, agentLog, recordExchange } from "./agentLog";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed, readPrepAhead } from "./calendar";
-import { confirmationShown, holdIfGuarded, releaseConfirmation, takeConfirmation } from "./confirmations";
+import {
+  confirmationShown,
+  holdIfGuarded,
+  pendingConfirmations,
+  releaseConfirmation,
+  takeConfirmation,
+} from "./confirmations";
 import { type Drive, DriveError, driveRevision, openDrive, recordDriveDocs } from "./drive";
 import { callerFrom } from "./identity";
 import { fillDraft, isUnchanged, type PreparedRecipe, readRecipeFrom, runImport } from "./imports";
@@ -329,6 +335,7 @@ class HouseholdAgent extends Agent<Env> {
       checkIn: spoken && where.screen === "pantry" ? this.dueStaples() : undefined,
       spoken,
       afterUnanswered,
+      waiting: pendingConfirmations(sql),
       text,
     });
     const entry: TurnData = { turn, text };

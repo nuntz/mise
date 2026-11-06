@@ -127,6 +127,35 @@ describe("presentTurn", () => {
   });
 });
 
+describe("presentTurn after a held call (ADR 0024)", () => {
+  const turn = { speaker: "Robin", today: "2026-10-30", where: { screen: "recipes" as const }, spoken: false };
+
+  test("says nothing of taps when the conversation has never held a call", () => {
+    expect(presentTurn({ ...turn, text: "delete the satay" })).toBe(
+      "[Robin, writing on Friday 2026-10-30, on the Recipes screen]\ndelete the satay",
+    );
+  });
+
+  test("says nothing is waiting for a tap once none is", () => {
+    expect(presentTurn({ ...turn, waiting: [], text: "delete the satay" })).toBe(
+      "[Robin, writing on Friday 2026-10-30, on the Recipes screen]\n[Nothing is waiting for a tap]\ndelete the satay",
+    );
+  });
+
+  test("names each call waiting for a tap by its id and what its button says", () => {
+    const waiting = [
+      { id: 11, summary: "Delete “Cheesy Pan Pizza”" },
+      { id: 12, summary: "Clear the Week of Monday 2026-10-26" },
+    ];
+
+    expect(presentTurn({ ...turn, waiting, text: "is it done?" })).toBe(
+      "[Robin, writing on Friday 2026-10-30, on the Recipes screen]\n" +
+        "[Waiting for a tap: 11 “Delete “Cheesy Pan Pizza””; 12 “Clear the Week of Monday 2026-10-26”]\n" +
+        "is it done?",
+    );
+  });
+});
+
 describe("presentTurn on the Pantry screen", () => {
   const cumin: CheckInStaple = { item: "cumin" as ItemId, name: "cumin", status: "stocked" };
   const rice: CheckInStaple = { item: "rice" as ItemId, name: "rice", status: "low" };
@@ -151,6 +180,25 @@ describe("presentTurn on the Pantry screen", () => {
         "rice (Item rice, low when last checked)]\n" +
         "let's do the pantry",
     );
+  });
+
+  test("gives the Staples due after what waits for a tap", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-10-30",
+      where: { screen: "pantry" },
+      checkIn: [cumin],
+      waiting: [],
+      spoken: true,
+      text: "let's do the pantry",
+    });
+
+    const [, waiting, staples, text] = presented.split("\n");
+    expect(waiting).toBe("[Nothing is waiting for a tap]");
+    expect(staples).toBe(
+      "[Staples due for the Check-in, in card order: cumin (Item cumin, stocked when last checked)]",
+    );
+    expect(text).toBe("let's do the pantry");
   });
 
   test("leaves the Check-in out of a written turn, and of a spoken one with nothing due", () => {
@@ -205,6 +253,24 @@ describe("presentTurn in Kitchen mode", () => {
     expect(presented).toMatch(
       /\n\[Satay's Ingredients for 4 servings, as Kitchen mode shows them: 2 cloves garlic; 400 g chicken\]\n/,
     );
+  });
+
+  test("gives the steps and Ingredients after what waits for a tap", () => {
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-11-03",
+      where: { screen: "kitchen", recipe: 1, step: 1 },
+      cooking: { recipe: satay, servings: 4, locale: "en-CA" },
+      waiting: [{ id: 3, summary: "Delete “Satay”" }],
+      spoken: true,
+      text: "delete this recipe",
+    });
+
+    const [, waiting, steps, ingredients, text] = presented.split("\n");
+    expect(waiting).toBe("[Waiting for a tap: 3 “Delete “Satay””]");
+    expect(steps).toMatch(/^\[Satay's steps: /);
+    expect(ingredients).toMatch(/^\[Satay's Ingredients for 4 servings, /);
+    expect(text).toBe("delete this recipe");
   });
 
   test("says only Kitchen mode when the Recipe is gone", () => {

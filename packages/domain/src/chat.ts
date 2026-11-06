@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ConfirmationStatus } from "./confirmations";
+import type { ConfirmationStatus, PendingConfirmation } from "./confirmations";
 import { scaledLines } from "./ingredients";
 import { type Recipe, RecipeId } from "./recipes";
 import type { Staple } from "./staples";
@@ -95,6 +95,9 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * cards ask about them, with their Items to record each answer by, so that it can lead the Check-in.
  * A turn `afterUnanswered`, sent after a turn whose run failed, is to be answered alone: the model
  * would otherwise answer every message still waiting at once.
+ * Once the conversation has held a call for a tap (ADR 0024), every turn says which are `waiting` for
+ * one now: a button may have been tapped, cancelled or expired on a screen since the call said it was
+ * held, and the conversation is never told. Undefined says nothing, for a conversation that never held one.
  */
 export function presentTurn(turn: {
   speaker: string | null;
@@ -104,6 +107,7 @@ export function presentTurn(turn: {
   checkIn?: readonly CheckInStaple[];
   spoken: boolean;
   afterUnanswered?: boolean;
+  waiting?: readonly PendingConfirmation[];
   text: string;
 }): string {
   const { where } = turn;
@@ -124,8 +128,9 @@ export function presentTurn(turn: {
   if (turn.spoken) header.push(FOR_THE_EAR);
   if (checkIn) header.push(LEAD_THE_CHECK_IN);
   if (turn.afterUnanswered) header.push(ONLY_THIS_ONE);
+  const waiting = turn.waiting ? [waitingLine(turn.waiting)] : [];
   const lines = kitchen?.lines ?? (checkIn ? [checkInLine(checkIn)] : []);
-  return [`[${header.join("; ")}]`, ...lines, turn.text].join("\n");
+  return [`[${header.join("; ")}]`, ...waiting, ...lines, turn.text].join("\n");
 }
 
 /** What a turn from Kitchen mode says of the Recipe `cooking`: in its header, and on lines of their own. */
@@ -149,6 +154,12 @@ function kitchenLines(where: KitchenWhere, cooking: Cooking | undefined) {
     lines.push(`[${recipe.title}'s Ingredients for ${servings} servings, as Kitchen mode shows them: ${scaled}]`);
   }
   return { parts, lines };
+}
+
+/** The held calls waiting for a tap, by their confirmation ids and what their buttons say. */
+function waitingLine(waiting: readonly PendingConfirmation[]): string {
+  if (waiting.length === 0) return "[Nothing is waiting for a tap]";
+  return `[Waiting for a tap: ${waiting.map(({ id, summary }) => `${id} “${summary}”`).join("; ")}]`;
 }
 
 /** The Staples due, as a spoken turn from the Pantry screen lists them. */

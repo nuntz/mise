@@ -288,6 +288,38 @@ describe("a held change in a spoken turn (ADR 0024)", () => {
     },
     3 * TURN_MS,
   );
+
+  // Once told a button was waiting, the agent kept saying so after it was cancelled on the screen, and
+  // never called delete_recipe again (#114).
+  test(
+    "asked again after the button was cancelled on the screen, holds the change again and shows a new button",
+    async () => {
+      answeredFirst([
+        fauxAssistantMessage(fauxToolCall("search_recipes", { query: "Satay" }), { stopReason: "toolUse" }),
+        fauxAssistantMessage(fauxToolCall("delete_recipe", { id: 1, confirm: true }), { stopReason: "toolUse" }),
+        fauxAssistantMessage("Tap Delete Satay on the screen to remove it."),
+      ]);
+      const { household, robin, say } = await robinTalking(ON_THE_PANTRY);
+      await say("Delete the Satay recipe.");
+      const [held] = (await household.conversation()).filter((message) => message.role === "confirmation");
+      if (held?.role !== "confirmation") throw new Error("The first turn held nothing");
+      expect(await robin.call("cancel_confirmation", { id: held.id }), "cancelled on the screen").toMatchObject({
+        ok: true,
+      });
+
+      const answer = await say("Delete the Satay recipe.");
+
+      const shown = (await household.conversation()).filter((message) => message.role === "confirmation");
+      expect(
+        shown.filter((confirmation) => confirmation.status === "pending"),
+        "a new button shows",
+      ).toMatchObject([{ summary: "Delete “Satay”" }]);
+      expect(answer).toMatch(/tap/i);
+      expect(answer, "says nothing of the earlier button").not.toMatch(/still|already|earlier/i);
+      expect(await household.callTool("get_recipe", { id: 1 }), "the Recipe is kept").toMatchObject({ ok: true });
+    },
+    3 * TURN_MS,
+  );
 });
 
 describe("a spoken turn in Kitchen mode", () => {

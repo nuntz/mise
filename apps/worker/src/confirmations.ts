@@ -117,6 +117,19 @@ export function confirmationShown(sql: SqlStorage, id: number): { summary: strin
   return { summary: row.summary, status: status as ConfirmationStatus };
 }
 
+/**
+ * The Pending Confirmations still waiting for a tap, oldest first, as the chat shows them: not one
+ * whose state has changed. Undefined when none was ever held.
+ */
+export function pendingConfirmations(sql: SqlStorage): PendingConfirmation[] | undefined {
+  if (sql.exec("SELECT 1 FROM pending_confirmation LIMIT 1").toArray().length === 0) return undefined;
+  const ids = sql.exec<{ id: number }>("SELECT id FROM pending_confirmation WHERE status = 'pending' ORDER BY id");
+  return ids.toArray().flatMap(({ id }) => {
+    const shown = confirmationShown(sql, id);
+    return shown?.status === "pending" ? [{ id, summary: shown.summary }] : [];
+  });
+}
+
 /** The state a stored call describes now; null once its input no longer parses, which never matches. */
 function currentState(sql: SqlStorage, row: ConfirmationRow): string | null {
   const parsed = parseToolInput(row.tool, JSON.parse(row.input));
