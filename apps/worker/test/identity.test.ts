@@ -90,6 +90,15 @@ describe("identity at the HTTP seam", () => {
     expect(call).toBeUndefined();
   });
 
+  test.each(["/rpc", "/%0A/rpc", "/%0D/rpc", "/%5C../rpc", "/%2e%2e/household/rpc"])(
+    "an encoded or nested household path %s still requires Access",
+    async (path) => {
+      const response = await exports.default.fetch(`${householdUrl}${path}`);
+
+      expect(response.status).toBe(401);
+    },
+  );
+
   test.each([
     ["signed by someone other than Access", () => accessJwt({}, strangerKey)],
     ["for another Access application", () => accessJwt({ aud: ["another-application"] })],
