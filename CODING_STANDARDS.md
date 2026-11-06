@@ -52,3 +52,14 @@ nothing without another (an Item created for the Recipe that names it), one tool
 handler calling the others' handlers, and the server decides what the browser would otherwise guess
 (#76). Writes that each stand alone, like a Slot's change and then its Leftovers link, may be
 chained from a screen.
+
+## A loading placeholder keeps the shape it stands in for
+
+A placeholder promises the layout that replaces it, so nothing jumps when content lands. A change to a
+card's thumb, indent or rows changes its placeholder in the same diff, as the Week's cards and
+`WeekLoading` do (#147).
+
+## Words on a screen and the briefs doc change together
+
+`docs/agents/agent-briefs.md` names the words a screen shows, and briefs quote it word for word. A
+change to a control's label or where it shows updates every bullet there that names it (#147).

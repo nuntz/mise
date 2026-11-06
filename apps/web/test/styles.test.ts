@@ -48,6 +48,15 @@ function declarations(selector: string): string {
   return rule?.[2] ?? "";
 }
 
+test("the primary fill comes after the icon button's ground, so a card's icon Cook keeps it", () => {
+  const start = (selector: string) =>
+    [...appCss.matchAll(/([^{}]+)\{[^{}]*\}/g)].findIndex(
+      ([, selectors]) => selectors?.replace(/\s+/g, " ").trim() === selector,
+    );
+  expect(declarations(".button-primary, .icon-button-primary")).toMatch(/background:\s*var\(--plum\)/);
+  expect(start(".button-primary, .icon-button-primary")).toBeGreaterThan(start(".icon-button"));
+});
+
 test("a bare button takes the row look, so it never reads as disabled", () => {
   expect(declarations("button, .button")).toMatch(/border:\s*var\(--hairline\) solid var\(--line-control\)/);
   expect(declarations('button:disabled, button[aria-disabled="true"]')).toMatch(
