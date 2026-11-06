@@ -241,9 +241,9 @@ test("the Week opens first: each day's dinner as a compact card with its photo, 
   // Lock is retired (ADR 0030): a dinner is pencilled or the Household's own.
   expect(within(dinner).queryByText("Locked")).toBeNull();
 
-  expect(
-    within(tuesday).getByRole("button", { name: "Breakfast and lunch not planned" }).getAttribute("aria-expanded"),
-  ).toBe("false");
+  expect(within(tuesday).getByRole("button", { name: "No breakfast or lunch" }).getAttribute("aria-expanded")).toBe(
+    "false",
+  );
   expect(within(tuesday).queryByRole("region", { name: "Breakfast" })).toBeNull();
   const monday = within(screen.getByRole("region", { name: "Monday, October 26" }));
   expect(monday.getByText("Mon 26")).toBeTruthy();
@@ -399,7 +399,7 @@ test("breakfast's Recipe opens over the Week from the folded strip too", async (
   render(() => <App client={client} />);
 
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  await user.click(within(tuesday).getByRole("button", { name: "Breakfast: Pasta · Lunch not planned" }));
+  await user.click(within(tuesday).getByRole("button", { name: "Breakfast: Pasta" }));
   const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
   await user.click(within(breakfast).getByRole("button", { name: "Pasta" }));
 
@@ -609,7 +609,7 @@ test("a breakfast that isn't safe unfolds its Day's strip, which can still be fo
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
 
-  const strip = within(tuesday).getByRole("button", { name: "Breakfast: Pasta · Lunch not planned" });
+  const strip = within(tuesday).getByRole("button", { name: "Breakfast: Pasta" });
   expect(strip.getAttribute("aria-expanded")).toBe("true");
   expect(within(tuesday).getByRole("region", { name: "Breakfast" })).toBeTruthy();
   await user.click(strip);
@@ -876,10 +876,10 @@ test("Re-roll is disabled, and says why under it, when every dinner is the House
   const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
   expect(reroll.disabled).toBe(true);
   const reason = screen.getByText(
-    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
+    "Every dinner is yours. To have Mise choose one, tap Change on its card, or open it and tap Edit dinner.",
   );
   expect(description(reroll)).toBe(
-    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
+    "Every dinner is yours. To have Mise choose one, tap Change on its card, or open it and tap Edit dinner.",
   );
   // Under Re-roll and Use it up, which sit side by side.
   expect(precedes(reroll, screen.getByRole("button", { name: "Use it up" }))).toBe(true);
@@ -935,7 +935,7 @@ test("Re-roll is disabled when one dinner has nobody eating and the rest are the
   const reroll = (await screen.findByRole("button", { name: "Re-roll" })) as HTMLButtonElement;
   expect(reroll.disabled).toBe(true);
   expect(description(reroll)).toBe(
-    "Every dinner is yours. To have Mise choose one, tap Change dinner, or open it and tap Edit dinner.",
+    "Every dinner is yours. To have Mise choose one, tap Change on its card, or open it and tap Edit dinner.",
   );
 });
 
@@ -1789,12 +1789,15 @@ function dinnersByState(): Week {
   return week;
 }
 
-/** What a dinner card offers besides opening its Recipe from its title. */
+/** A button's name: its label where its text is shortened or an icon, as at a dinner card's end. */
+const buttonName = (button: HTMLElement) => button.getAttribute("aria-label") ?? button.textContent;
+
+/** What a dinner card offers besides opening its Recipe from its title, by name. */
 const dinnerActions = (day: string) => {
   const dinner = within(screen.getByRole("region", { name: day })).getByRole("region", { name: "Dinner" });
   return within(dinner)
     .queryAllByRole("button")
-    .map((button) => button.textContent)
+    .map(buttonName)
     .filter((name) => name !== "Pasta");
 };
 
@@ -1847,7 +1850,9 @@ test("in the pseudo-locale, a Leftovers, Eat out or Skip dinner's action doesn't
   for (const day of [/Monday/, /Tuesday/, /Wednesday/]) {
     const dinner = within(screen.getByRole("region", { name: day })).getByRole("region", { name: /Đîññéŕ/ });
     const actions = within(dinner).getAllByRole("button");
-    expect(actions.map((button) => button.textContent)).toEqual([expect.stringMatching(/^\[Çĥàñĝé đîññéŕ ·+\]$/)]);
+    expect(actions.map(buttonName)).toEqual([expect.stringMatching(/^\[Çĥàñĝé đîññéŕ ·+\]$/)]);
+    // Shortened to fit the card's end, it still says Change.
+    expect(actions.map((button) => button.textContent)).toEqual([expect.stringMatching(/^\[Çĥàñĝé ·+\]$/)]);
   }
 });
 
@@ -2160,7 +2165,7 @@ test("offline, the Week last loaded opens read-only: it can be cooked from, not 
     within(monday)
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(["Breakfast and lunch not planned"]);
+  ).toEqual(["No breakfast or lunch"]);
   expect(within(monday).getByText("3 eating")).toBeTruthy();
   await userEvent.click(within(tuesday).getByRole("button", { name: "Pasta" }));
   const sheet = await screen.findByRole("dialog");
@@ -2493,7 +2498,7 @@ test("breakfast and lunch unfold to a line each: the meal, what's planned and it
   render(() => <App client={client} />);
   const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
 
-  await user.click(within(tuesday).getByRole("button", { name: "Breakfast and lunch not planned" }));
+  await user.click(within(tuesday).getByRole("button", { name: "No breakfast or lunch" }));
   const breakfast = within(tuesday).getByRole("region", { name: "Breakfast" });
   expect(breakfast.textContent).toBe("BreakfastNothing plannedChoose a breakfast");
   // A line, with no thumb.

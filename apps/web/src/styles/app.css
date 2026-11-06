@@ -1392,16 +1392,35 @@ fieldset > .toggle-chip {
   box-shadow: var(--focus-ring);
 }
 
-/* A dinner card: its thumb, then its day, name and meta, and its one action at the end when it has one. */
+/* A dinner card: its thumb, then its day, name and meta, and its actions at the end. */
 .compact {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   gap: var(--space-3);
   align-items: center;
 }
 
+.compact > .dish {
+  flex: 1;
+}
+
 .compact .dish-title {
-  font: var(--type-title-sm);
+  font: var(--type-title-xs);
+}
+
+/* A Week card's square is the smaller thumb, so Keep and Cook fit beside its name. */
+.slot-card .thumb {
+  width: var(--thumb-slot);
+  height: var(--thumb-slot);
+}
+
+.slot-card .thumb-banded {
+  width: auto;
+  min-width: var(--thumb-slot);
+}
+
+/* Under a card, its banners and overridden Conflicts start where its name does. */
+.slot-card > :is(.banner, .chips) {
+  margin-inline-start: calc(var(--thumb-slot) + var(--space-3));
 }
 
 /* A pencilled dinner's name, in italic as if in pencil: Mise chose it, and a Re-roll may change it. After
@@ -1411,14 +1430,25 @@ fieldset > .toggle-chip {
   font-weight: 500;
 }
 
-.compact-end {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-
-/* Above the title's stretched tap area, so the action is its own tap. */
+/* Above the title's stretched tap area, so each action is its own tap: Keep, then Cook at the edge. */
 .compact > .row-end {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.compact > .row-end:empty {
+  display: none;
+}
+
+/* Cook on a card: the primary fill on an icon button. */
+.icon-button-primary {
+  border-color: var(--plum);
+  background: var(--plum);
+  color: var(--on-plum);
 }
 
 .thumb {
@@ -1478,17 +1508,13 @@ fieldset > .toggle-chip {
   white-space: nowrap;
 }
 
-/* A dinner card's actions on one line under its name, in from the thumb: Cook, then Keep. */
+/* A row of actions on one line, in from the thumb: a Recipe's Edit and photo buttons in its sheet. */
 .slot-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding-inline-start: calc(var(--thumb) + var(--space-3));
-}
-
-.slot-actions .button-primary {
-  min-height: var(--touch-min);
 }
 
 /* In a Recipe's sheet, why Mise pencilled the dinner: the chip, the reason, then Keep at the left edge. */
@@ -1566,13 +1592,15 @@ fieldset > .toggle-chip {
   background: transparent;
 }
 
-/* A Day's strip: who's eating, which opens the Day's Diners, then breakfast and lunch, folded. */
+/* A Day's strip: who's eating, which opens the Day's Diners, then breakfast and lunch, folded. In under
+ * the card's name, as the card's meta is. */
 .strip {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
   min-height: var(--touch-min);
+  padding-inline-start: calc(var(--thumb-slot) + var(--space-3));
   font: var(--type-strip);
   color: var(--ink-muted);
 }

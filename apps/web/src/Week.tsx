@@ -483,10 +483,10 @@ function Day(props: {
 }
 
 /**
- * A Slot as the Week shows it. A dinner is a compact card: its thumb; its day, with Pencilled, Ready-made
- * or a Conflict beside it; its name and what it's cooked for. Under them are its actions on one line, or,
- * when Change or Choose is its only one, that action at the card's end. Breakfast and lunch are a line
- * each: the meal, what's planned and its one action. Why Mise pencilled a dinner is in its Recipe's sheet,
+ * A Slot as the Week shows it. A dinner is a compact card: its thumb; its day, with Pencilled, Ready-made,
+ * Cooked or a Conflict beside it; its name and what it's cooked for; and its actions at the card's end, as
+ * icons (Keep, then Cook) or one short label (Rate it, Change, Choose), so a day is one card and its
+ * strip. Breakfast and lunch are a line each: the meal, what's planned and its one action. Why Mise pencilled a dinner is in its Recipe's sheet,
  * or on the card when it has no Recipe to open. Editing a Slot opens its form in a sheet.
  */
 function SlotView(props: {
@@ -533,10 +533,11 @@ function SlotView(props: {
       {t(`slot.${props.slot.kind === "unplanned" ? "choose" : "change"}.${props.slot.meal}`)}
     </button>
   );
-  const cook = (recipe: SlotRecipe, primary: boolean) => (
+  // Breakfast's or lunch's Cook, on its line.
+  const cook = (recipe: SlotRecipe) => (
     <button
       type="button"
-      class={primary ? "button-primary" : "button-row"}
+      class="button-row"
       onClick={() =>
         props.onCook(recipe.id, props.slot.cookFor || recipe.baseServings, {
           date: props.slot.date,
@@ -556,12 +557,38 @@ function SlotView(props: {
     </Show>
   );
   const ratedChip = (rating: Rating) => <span class="chip">{t(`rating.${rating}`)}</span>;
-  // A decided dinner's one action at its card's end: Change, when it has nothing to cook or keep.
-  const cardEnd = () =>
-    !props.readOnly && !props.slot.cookedAt && !props.slot.recipe && !keepable() && props.slot.kind !== "unplanned";
-  // Nothing planned has Choose on its own line, so its name and why keep the card's width.
-  const choosing = () => !props.readOnly && !props.slot.cookedAt && props.slot.kind === "unplanned";
-  const hasActions = () => !!props.slot.cookedAt || !!props.slot.recipe || keepable() || choosing();
+  // A dinner card's Change or Choose, its label shortened to fit the card's end; the full one names it.
+  const chooseShort = () => {
+    const kind = props.slot.kind === "unplanned" ? "choose" : "change";
+    return (
+      <button type="button" class="button-row" aria-label={t(`slot.${kind}.dinner`)} onClick={() => props.onEdit(true)}>
+        {t(`slot.${kind}Short`)}
+      </button>
+    );
+  };
+  // Cook on a dinner's card: an icon in plum at the card's end, named Cook.
+  const cookIcon = (recipe: SlotRecipe) => (
+    <button
+      type="button"
+      class="icon-button icon-button-primary slot-cook"
+      aria-label={t("kitchen.cook")}
+      onClick={() =>
+        props.onCook(recipe.id, props.slot.cookFor || recipe.baseServings, {
+          date: props.slot.date,
+          meal: props.slot.meal,
+        })
+      }
+    >
+      <Icon name="pot" />
+    </button>
+  );
+  const [keepError, setKeepError] = createSignal<string>();
+  // While its form is open, the form's Keep is the one.
+  const keepIcon = () => (
+    <Show when={keepable() && !props.editing}>
+      <KeepButton client={props.client} slot={props.slot} iconOnly onError={setKeepError} />
+    </Show>
+  );
   const form = () => (
     <Show when={props.editing}>
       <SlotForm
@@ -592,7 +619,7 @@ function SlotView(props: {
                   <CookedChip />
                   {rateIt()}
                 </Match>
-                <Match when={props.slot.recipe}>{(recipe) => cook(recipe(), false)}</Match>
+                <Match when={props.slot.recipe}>{(recipe) => cook(recipe())}</Match>
               </Switch>
             </div>
           </div>
@@ -602,8 +629,8 @@ function SlotView(props: {
         </section>
       }
     >
-      <section class="slot" aria-label={meal()}>
-        <div class={cardEnd() ? "compact compact-end" : "compact"}>
+      <section class="slot slot-card" aria-label={meal()}>
+        <div class="compact">
           <SlotThumb client={props.client} slot={props.slot} />
           <div class="dish">
             <p class="slot-day">
@@ -614,45 +641,39 @@ function SlotView(props: {
               <Show when={props.slot.recipe?.readyMade}>
                 <ReadyMadeChip />
               </Show>
+              <Show when={props.slot.cookedAt && !rated()}>
+                <CookedChip />
+              </Show>
               <Show when={flag()}>{(shown) => <span class="chip chip-warn">{shown()}</span>}</Show>
             </p>
             <DishTitle slot={props.slot} onOpen={props.onOpen} pencilled={pencilled()} />
             {meta()}
           </div>
-          <Show when={cardEnd()}>
-            <div class="row-end">{choose()}</div>
-          </Show>
-        </div>
-        <SlotConflicts household={props.household} slot={props.slot} />
-        <Show when={hasActions()}>
-          <div class="slot-actions">
-            <Switch>
+          <div class="row-end">
+            <Switch fallback={<Show when={!props.readOnly}>{chooseShort()}</Show>}>
               <Match when={rated()}>{(given) => ratedChip(given().rating)}</Match>
-              <Match when={props.slot.cookedAt}>
-                <CookedChip />
-                {rateIt()}
-              </Match>
+              <Match when={props.slot.cookedAt}>{rateIt()}</Match>
               <Match when={props.slot.recipe}>
                 {(recipe) => (
                   <>
-                    {cook(recipe(), true)}
-                    {/* While its form is open, the form's Keep is the one. */}
-                    <Show when={keepable() && !props.editing}>
-                      <KeepButton client={props.client} slot={props.slot} />
-                    </Show>
+                    {keepIcon()}
+                    {cookIcon(recipe())}
                   </>
                 )}
               </Match>
-              <Match when={choosing()}>{choose()}</Match>
               <Match when={keepable()}>
-                <Show when={!props.editing}>
-                  <KeepButton client={props.client} slot={props.slot} />
-                </Show>
-                {choose()}
+                {keepIcon()}
+                {chooseShort()}
               </Match>
             </Switch>
           </div>
+        </div>
+        <Show when={keepError()}>
+          <p class="banner banner-warn" role="alert">
+            {keepError()}
+          </p>
         </Show>
+        <SlotConflicts household={props.household} slot={props.slot} />
         {form()}
       </section>
     </Show>
@@ -691,20 +712,35 @@ function SlotReason(props: {
  * Keeps a pencilled dinner at once, making it the Household's own; the Week refetches without its reason. On
  * the card beside Cook, in the Recipe's sheet under the reason, and in the Slot form beside "Let Mise choose".
  */
-function KeepButton(props: { client: MiseClient; slot: Slot }) {
+function KeepButton(props: {
+  client: MiseClient;
+  slot: Slot;
+  /** On a card's end: a check alone, named Keep. */
+  iconOnly?: boolean;
+  /** Says why keeping failed where the caller has room for it, rather than beside the button. */
+  onError?: (failure: string | undefined) => void;
+}) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const keep = async () => {
     setBusy(true);
     const where = { date: props.slot.date, meal: props.slot.meal };
-    setError((await outcomeOf(() => props.client.call("keep_slot", where))).failure);
+    const failure = (await outcomeOf(() => props.client.call("keep_slot", where))).failure;
+    if (props.onError) props.onError(failure);
+    else setError(failure);
     setBusy(false);
   };
   return (
     <>
-      <button type="button" class="button-row" disabled={busy()} onClick={keep}>
+      <button
+        type="button"
+        class={props.iconOnly ? "icon-button slot-keep" : "button-row slot-keep"}
+        aria-label={props.iconOnly ? t("slot.keep") : undefined}
+        disabled={busy()}
+        onClick={keep}
+      >
         <Icon name="check" />
-        {t("slot.keep")}
+        <Show when={!props.iconOnly}>{t("slot.keep")}</Show>
       </button>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
