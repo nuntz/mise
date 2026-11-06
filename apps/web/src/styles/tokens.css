@@ -47,7 +47,7 @@
   --type-title-sm: 600 20px / 24px var(--font-display);
   --type-numeral: 600 18px / 20px var(--font-display);
   /* A dish's name on a Week card, smaller than title-sm so a day stays one card and its strip. */
-  --type-title-xs: 600 18px / 22px var(--font-display);
+  --type-title-card: 600 18px / 22px var(--font-display);
   --type-body: 400 15px / 22px var(--font-sans);
   /* What's typed in a field: never under 16px, or iOS Safari zooms in on the field it focuses. */
   --type-field: 400 16px / 22px var(--font-sans);
@@ -140,7 +140,7 @@
   --type-title: 600 28px / 32px var(--font-display);
   --type-title-sm: 600 22px / 26px var(--font-display);
   --type-numeral: 600 20px / 22px var(--font-display);
-  --type-title-xs: 600 21px / 25px var(--font-display);
+  --type-title-card: 600 21px / 25px var(--font-display);
   --type-body: 400 17px / 25px var(--font-sans);
   --type-field: 400 17px / 25px var(--font-sans);
   --type-button: 800 16px / 20px var(--font-sans);

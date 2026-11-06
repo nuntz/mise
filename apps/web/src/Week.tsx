@@ -354,11 +354,13 @@ function WeekLoading() {
       <For each={[1, 2, 3, 4, 5, 6, 7]}>
         {() => (
           <div class="day" aria-hidden="true">
-            <div class="compact">
-              <span class="skeleton thumb" />
-              <div class="stack">
-                <span class="skeleton sk-title-sm" />
-                <span class="skeleton sk-meta" />
+            <div class="slot slot-card">
+              <div class="compact">
+                <span class="skeleton thumb" />
+                <div class="dish">
+                  <span class="skeleton sk-title-sm" />
+                  <span class="skeleton sk-meta" />
+                </div>
               </div>
             </div>
             <span class="skeleton sk-strip" />
@@ -433,10 +435,12 @@ function Day(props: {
     if (count === 0) return t("week.eatingNone");
     return count === 1 ? t("week.eatingOne") : t("week.eating", { count: String(count) });
   };
+  // The count beside the people icon; the whole phrase, "3 eating", names it.
   const eatingText = () => (
     <>
       <Icon name="people" />
-      {eating()}
+      <span aria-hidden="true">{slot("dinner").diners.length}</span>
+      <span class="visually-hidden">{eating()}</span>
     </>
   );
 
@@ -486,8 +490,9 @@ function Day(props: {
  * A Slot as the Week shows it. A dinner is a compact card: its thumb; its day, with Pencilled, Ready-made,
  * Cooked or a Conflict beside it; its name and what it's cooked for; and its actions at the card's end, as
  * icons (Keep, then Cook) or one short label (Rate it, Change, Choose), so a day is one card and its
- * strip. Breakfast and lunch are a line each: the meal, what's planned and its one action. Why Mise pencilled a dinner is in its Recipe's sheet,
- * or on the card when it has no Recipe to open. Editing a Slot opens its form in a sheet.
+ * strip. Breakfast and lunch are a line each: the meal, what's planned and its one action. Why Mise
+ * pencilled a dinner is in its Recipe's sheet, or on the card when it has no Recipe to open. Editing a
+ * Slot opens its form in a sheet.
  */
 function SlotView(props: {
   client: MiseClient;
@@ -527,24 +532,21 @@ function SlotView(props: {
       </Show>
     </>
   );
+  // Leftovers, a meal out or no meal is decided: its one action changes that. Nothing planned chooses.
+  const choiceKind = () => (props.slot.kind === "unplanned" ? "choose" : "change");
   const choose = () => (
     <button type="button" class="button-row" onClick={() => props.onEdit(true)}>
-      {/* Leftovers, a meal out or no meal is decided: its one action changes that. */}
-      {t(`slot.${props.slot.kind === "unplanned" ? "choose" : "change"}.${props.slot.meal}`)}
+      {t(`slot.${choiceKind()}.${props.slot.meal}`)}
     </button>
   );
+  const cookIt = (recipe: SlotRecipe) =>
+    props.onCook(recipe.id, props.slot.cookFor || recipe.baseServings, {
+      date: props.slot.date,
+      meal: props.slot.meal,
+    });
   // Breakfast's or lunch's Cook, on its line.
   const cook = (recipe: SlotRecipe) => (
-    <button
-      type="button"
-      class="button-row"
-      onClick={() =>
-        props.onCook(recipe.id, props.slot.cookFor || recipe.baseServings, {
-          date: props.slot.date,
-          meal: props.slot.meal,
-        })
-      }
-    >
+    <button type="button" class="button-row" onClick={() => cookIt(recipe)}>
       <Icon name="pot" />
       {t("kitchen.cook")}
     </button>
@@ -558,26 +560,23 @@ function SlotView(props: {
   );
   const ratedChip = (rating: Rating) => <span class="chip">{t(`rating.${rating}`)}</span>;
   // A dinner card's Change or Choose, its label shortened to fit the card's end; the full one names it.
-  const chooseShort = () => {
-    const kind = props.slot.kind === "unplanned" ? "choose" : "change";
-    return (
-      <button type="button" class="button-row" aria-label={t(`slot.${kind}.dinner`)} onClick={() => props.onEdit(true)}>
-        {t(`slot.${kind}Short`)}
-      </button>
-    );
-  };
+  const chooseShort = () => (
+    <button
+      type="button"
+      class="button-row"
+      aria-label={t(`slot.${choiceKind()}.dinner`)}
+      onClick={() => props.onEdit(true)}
+    >
+      {t(`slot.${choiceKind()}Short`)}
+    </button>
+  );
   // Cook on a dinner's card: an icon in plum at the card's end, named Cook.
   const cookIcon = (recipe: SlotRecipe) => (
     <button
       type="button"
       class="icon-button icon-button-primary slot-cook"
       aria-label={t("kitchen.cook")}
-      onClick={() =>
-        props.onCook(recipe.id, props.slot.cookFor || recipe.baseServings, {
-          date: props.slot.date,
-          meal: props.slot.meal,
-        })
-      }
+      onClick={() => cookIt(recipe)}
     >
       <Icon name="pot" />
     </button>
@@ -586,7 +585,7 @@ function SlotView(props: {
   // While its form is open, the form's Keep is the one.
   const keepIcon = () => (
     <Show when={keepable() && !props.editing}>
-      <KeepButton client={props.client} slot={props.slot} iconOnly onError={setKeepError} />
+      <KeepButton client={props.client} slot={props.slot} onCardError={setKeepError} />
     </Show>
   );
   const form = () => (
@@ -715,18 +714,20 @@ function SlotReason(props: {
 function KeepButton(props: {
   client: MiseClient;
   slot: Slot;
-  /** On a card's end: a check alone, named Keep. */
-  iconOnly?: boolean;
-  /** Says why keeping failed where the caller has room for it, rather than beside the button. */
-  onError?: (failure: string | undefined) => void;
+  /**
+   * On a card's end: a check alone, named Keep, with no room beside it, so why keeping failed goes to the
+   * card to say under itself.
+   */
+  onCardError?: (failure: string | undefined) => void;
 }) {
+  const onCard = () => !!props.onCardError;
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const keep = async () => {
     setBusy(true);
     const where = { date: props.slot.date, meal: props.slot.meal };
     const failure = (await outcomeOf(() => props.client.call("keep_slot", where))).failure;
-    if (props.onError) props.onError(failure);
+    if (props.onCardError) props.onCardError(failure);
     else setError(failure);
     setBusy(false);
   };
@@ -734,13 +735,13 @@ function KeepButton(props: {
     <>
       <button
         type="button"
-        class={props.iconOnly ? "icon-button slot-keep" : "button-row slot-keep"}
-        aria-label={props.iconOnly ? t("slot.keep") : undefined}
+        class={onCard() ? "icon-button slot-keep" : "button-row slot-keep"}
+        aria-label={onCard() ? t("slot.keep") : undefined}
         disabled={busy()}
         onClick={keep}
       >
         <Icon name="check" />
-        <Show when={!props.iconOnly}>{t("slot.keep")}</Show>
+        <Show when={!onCard()}>{t("slot.keep")}</Show>
       </button>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
@@ -753,11 +754,14 @@ function KeepButton(props: {
 
 /**
  * A Slot card's title, opening its Recipe as `OpenTitle` does; tapping the card's thumb does too. A
- * pencilled dinner's is set in italic, as if in pencil.
+ * pencilled dinner's is set in italic, as if in pencil; Nothing planned's is muted, a gap rather than a dish.
  */
 function DishTitle(props: { slot: Slot; onOpen: (slot: Slot) => void; pencilled: boolean }) {
   return (
-    <h3 class={props.pencilled ? "dish-title dish-title-pencilled" : "dish-title"}>
+    <h3
+      class="dish-title"
+      classList={{ "dish-title-pencilled": props.pencilled, "dish-title-none": props.slot.kind === "unplanned" }}
+    >
       <OpenTitle slot={props.slot} onOpen={props.onOpen} />
     </h3>
   );
@@ -801,8 +805,8 @@ function SlotConflicts(props: { household: Household; slot: Slot }) {
 }
 
 /**
- * A card's square: the dish's photo, or with a Leftovers band; a solid fork and knife for eating out;
- * or a dashed box for nothing decided.
+ * A card's square: the dish's photo, with a reheat mark in its corner for Leftovers; a solid fork and knife
+ * for eating out; or a dashed box for nothing decided. The card's name says Leftovers in words.
  */
 function SlotThumb(props: { client: MiseClient; slot: Slot }) {
   return (
@@ -816,7 +820,7 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
       <Match when={props.slot.kind === "recipe" && props.slot.recipe}>
         {(recipe) => (
           <span class="thumb" aria-hidden="true">
-            <Show when={recipe().photoKey} fallback={<PlateGlyph size={30} />}>
+            <Show when={recipe().photoKey} fallback={<PlateGlyph size={24} />}>
               {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
             </Show>
           </span>
@@ -828,15 +832,17 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
         </span>
       </Match>
       <Match when={props.slot.kind === "leftovers"}>
-        <span class="thumb thumb-banded" aria-hidden="true">
-          <Show when={props.slot.leftoversOf?.recipe} fallback={<PlateGlyph size={30} />}>
+        <span class="thumb" aria-hidden="true">
+          <Show when={props.slot.leftoversOf?.recipe} fallback={<PlateGlyph size={24} />}>
             {(recipe) => (
-              <Show when={recipe().photoKey} fallback={<PlateGlyph size={30} />}>
+              <Show when={recipe().photoKey} fallback={<PlateGlyph size={24} />}>
                 {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
               </Show>
             )}
           </Show>
-          <span class="thumb-band">{t("slotKind.leftovers")}</span>
+          <span class="thumb-corner">
+            <Icon name="refresh" size={12} />
+          </span>
         </span>
       </Match>
     </Switch>
@@ -1563,7 +1569,7 @@ function cookedForText(slot: Slot, household: Household): string | undefined {
       t("slot.forRecipe", { count: String(slot.servings), base: String(slot.recipe.baseServings) }),
     slot.guests > 0 && (slot.guests === 1 ? t("slot.withGuest") : t("slot.withGuests", { count: String(slot.guests) })),
   ].filter((part) => part !== false);
-  return parts.length > 0 ? parts.join(" ") : undefined;
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function sameSlot(slot: SlotKey, other: SlotKey): boolean {
