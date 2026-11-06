@@ -13,6 +13,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   color-scheme: light;
+  /* A double tap never zooms the screen; pinch zoom still works. */
+  touch-action: manipulation;
 }
 
 html[data-theme="kitchen"],
