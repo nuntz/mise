@@ -61,7 +61,8 @@
   /* A step being cooked: read at arm's length, so bigger than body in both themes. */
   --type-step: 500 22px / 32px var(--font-sans);
 
-  /* Spacing: a 4px scale; the phone gutter is space-4 */
+  /* Spacing: a 4px scale; the phone gutter is space-4. app.css spaces and rounds by these alone, bar a 0 to 2px
+   * optical nudge (styles.test.ts). */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

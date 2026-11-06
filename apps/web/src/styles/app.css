@@ -967,11 +967,13 @@ fieldset > .toggle-chip {
   width: 80%;
 }
 
-/* In under the card's name, as the strip is. */
+/* In under the card's name, as the strip is, and centred in the strip's height. */
 .sk-strip {
-  height: 13px;
+  --sk-line: 13px;
+  height: var(--sk-line);
   width: 36%;
-  margin: 15px 0 15px calc(var(--thumb-slot) + var(--space-3));
+  margin-block: calc((var(--touch-min) - var(--sk-line)) / 2);
+  margin-inline-start: calc(var(--thumb-slot) + var(--space-3));
 }
 
 .sk-tick {
@@ -1300,7 +1302,7 @@ fieldset > .toggle-chip {
 .day {
   display: flex;
   flex-direction: column;
-  padding: 10px 0 0;
+  padding: var(--space-2) 0 0;
   border-bottom: var(--hairline) solid var(--line);
   scroll-margin-top: var(--space-4);
 }
@@ -1344,13 +1346,13 @@ fieldset > .toggle-chip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) 6px;
+  gap: var(--space-1);
 }
 
 .slot-day .chip {
   min-height: 0;
-  gap: 3px;
-  padding: 1px 6px;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
 }
 
 .slot-day .chip .icon {
@@ -1359,7 +1361,7 @@ fieldset > .toggle-chip {
 }
 
 .overline-today {
-  padding: 1px 6px;
+  padding: 2px var(--space-2);
   border-radius: var(--radius-full);
   background: var(--plum);
   color: var(--on-plum);
@@ -1428,14 +1430,13 @@ fieldset > .toggle-chip {
 
 /* A Week card: what's under its line sits close to it. */
 .slot-card {
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 /* A Week card's square is the smaller thumb, so Keep and Cook fit beside its name. */
 .slot-card .thumb {
   width: var(--thumb-slot);
   height: var(--thumb-slot);
-  border-radius: 10px;
 }
 
 /* Under a card, its banners and overridden Conflicts start where its name does, a banner tighter than a
@@ -1445,8 +1446,7 @@ fieldset > .toggle-chip {
 }
 
 .slot-card > .banner {
-  padding: 6px 10px;
-  border-radius: 10px;
+  padding: var(--space-2) var(--space-3);
 }
 
 /* A pencilled dinner's name, in italic as if in pencil: Mise chose it, and a Re-roll may change it. After
@@ -1484,8 +1484,8 @@ fieldset > .toggle-chip {
 /* An end's chip, such as "Again", is drawn as the chips beside the day are. */
 .compact > .row-end .chip {
   min-height: 0;
-  gap: 3px;
-  padding: 1px 6px;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
 }
 
 .thumb {
@@ -1527,8 +1527,8 @@ fieldset > .toggle-chip {
   inset-block-end: 0;
   inset-inline-end: 0;
   display: flex;
-  padding: 3px;
-  border-start-start-radius: 8px;
+  padding: var(--space-1);
+  border-start-start-radius: var(--radius-sm);
   background: var(--scrim);
   color: var(--on-photo);
 }

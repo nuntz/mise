@@ -27,6 +27,17 @@ test("type sizes come from the tokens, never a pixel size in the component style
   ).toEqual([]);
 });
 
+test("spacing and radii come from the tokens, so kitchen mode scales them; 0 to 2px is an optical nudge", () => {
+  const declarations = appCss.matchAll(
+    /(?:^|[;{\s])((?:padding|margin|gap|row-gap|column-gap)[a-z-]*|[a-z-]*radius)\s*:([^;}]*)/g,
+  );
+  const offScale = [...declarations].filter(([, , value = ""]) =>
+    // A safe-area inset's fallback, env(…, 0px), is not spacing.
+    [...value.replace(/env\([^)]*\)/g, "").matchAll(/(\d+(?:\.\d+)?)px/g)].some(([, px]) => Number(px) > 2),
+  );
+  expect(offScale.map(([, property, value]) => `${property}: ${value?.trim()}`)).toEqual([]);
+});
+
 test("colours come from the tokens, never a hex colour in the component styles", () => {
   expect(appCss.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
 });
