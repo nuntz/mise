@@ -113,7 +113,9 @@ describe("a Voice Session", () => {
       ]),
     );
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toMatch(/^\[Robin, .*\]\nWhat's for dinner Thursday\?$/);
+    expect(prompts[0]).toMatch(
+      /^\[Robin, .*\]\n\[The Week on screen, as it is now \(a breakfast or lunch not named has nothing planned\): .*\]\nWhat's for dinner Thursday\?$/,
+    );
     expect(await household.conversation()).toEqual([
       { role: "member", speaker: "Robin", text: "What's for dinner Thursday?" },
       { role: "agent", text: "Thursday's dinner is Rice bowl 2." },
@@ -518,7 +520,9 @@ describe("cutting a Voice Session's turns", () => {
       { type: "session.commentary.append", delegation_id: "item_1", content: FAILURE_LINE },
       { type: "session.commentary.append", delegation_id: "item_2", content: "Saturday is Rice bowl 2." },
     ]);
-    expect(prompts[1]).toMatch(/answer only this message\]\nAnd Saturday\.$/);
+    expect(prompts[1]).toMatch(
+      /answer only this message\]\n\[The Week on screen, as it is now \(a breakfast or lunch not named has nothing planned\): .*\]\nAnd Saturday\.$/,
+    );
     expect(await household.conversation()).toEqual([
       { role: "member", speaker: "Robin", text: "Plan Friday.", unanswered: true },
       { role: "member", speaker: "Robin", text: "And Saturday." },

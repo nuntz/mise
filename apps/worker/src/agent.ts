@@ -21,10 +21,13 @@ import {
   localDate,
   offerLongList,
   type PendingConfirmation,
+  ProposedWeek,
   type ToolName,
   type ToolResult,
   tools,
+  Week,
   weekdayOf,
+  weekForTheAgent,
 } from "@mise/domain";
 import type { PiModel } from "agents/harness/pi";
 import { z } from "zod";
@@ -191,9 +194,11 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
   list_import_runs: "Import runs, newest first, with what each did.",
   list_import_flags: "Recipes an import flagged for a merge or as a possible duplicate.",
   get_week:
-    "The Week containing `date` (YYYY-MM-DD), or this Week without one: every breakfast, lunch and dinner, " +
-    "with its Recipe, Diners, Guests and Conflicts. A dinner with a `reason` is pencilled: " +
-    "a Re-roll may change it, and the reason says why Mise chose it; a dinner without one is the " +
+    "The Week containing `date` (YYYY-MM-DD), day by day; without one, the Week today is in, which may not be " +
+    "the Week on screen, so pass a date of the Week they mean. It gives each day's date and weekday, " +
+    "its dinner, and its breakfast and lunch unless they are unplanned with no note (those are left out), " +
+    "each with its Recipe, Diners, Guests and Conflicts. A dinner with `pencilled: true` is pencilled: " +
+    "a Re-roll may change it, and its `reason` says why Mise chose it; one with `pencilled: false` is the " +
     "Household's own: chosen, changed or cooked by someone, and no Proposal changes it.",
   set_slot:
     "Sets what a Slot is, at breakfast, lunch or dinner: a Recipe (not a Draft, `recipeId` with kind `recipe`), " +
@@ -354,14 +359,20 @@ function preamble(household: Household | null): string {
       : ["- none yet"]),
     "",
     "Each message starts, in brackets, with who is speaking, the day they wrote it, and the screen (and Week) " +
-      "they are looking at. " +
-      "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see. " +
+      "they are looking at. From the Week screen, a line in brackets then gives that Week as it is now, day by " +
+      "day: each dinner, pencilled or the Household's own, and the breakfasts and lunches that hold something. " +
+      "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see, even when " +
+      "earlier turns were about another Week. " +
       "“Today”, “tonight” and “tomorrow” count from the day the message was written, whatever Week they see.",
     "Change things only through the tools. Answer from what they return: never guess what is planned, read it. " +
-      "Don't say why something happened, or what a Week or list holds, unless a tool you just called says so; " +
+      "Don't say why something happened, or what a Week or list holds, unless a tool you just called, or this " +
+      "message's Week, says so; " +
       "if the tools don't tell you, say you don't know. " +
       "Earlier turns may be out of date: people change things on the screens too. Check with a tool before " +
-      "relying on what was said or done earlier, and when a tool disagrees with the conversation, the tool is right.",
+      "relying on what was said or done earlier, and when a tool disagrees with the conversation, the tool is right. " +
+      "Meals named in earlier turns may be out of date too: a Week changed or cleared on a screen never shows up " +
+      "in the conversation. Call a dinner pencilled or the Household's own only from this message's Week or from " +
+      "a Week a tool returned in this turn.",
     "To explain a Proposal, use only each Slot's `reason` from `get_week`; don't invent others.",
     "When a change is refused for a Conflict, say who and which Allergen. Override it only with the reason the " +
       "person gave for planning it anyway.",
@@ -443,12 +454,26 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
         return { output: [{ type: "text", text }], details };
       }
       if (!result.ok) throw new Error(JSON.stringify(result.error));
-      const output = [{ type: "text" as const, text: JSON.stringify(result.value) }];
+      const output = [{ type: "text" as const, text: JSON.stringify(resultForTheAgent(name, result.value)) }];
       const note = offerLongList(name, result.value);
       if (note && (await host.answersSpoken(api.conversationId))) output.push({ type: "text", text: note });
       return { output };
     },
   };
+}
+
+/**
+ * What a tool returns, as the agent is given it: a Week day by day (`weekForTheAgent`), alone or with
+ * whether a Proposal changed it; anything else as the tool returns it.
+ */
+function resultForTheAgent(name: ToolName, value: unknown): unknown {
+  const { output } = tools[name];
+  if (output === Week) return weekForTheAgent(value as Week);
+  if (output === ProposedWeek) {
+    const proposed = value as ProposedWeek;
+    return { ...proposed, week: weekForTheAgent(proposed.week) };
+  }
+  return value;
 }
 
 type JsonSchema = {

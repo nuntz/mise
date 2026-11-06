@@ -1,18 +1,13 @@
 import { env } from "cloudflare:workers";
-import {
-  type AssistantMessage,
-  createModels,
-  fauxAssistantMessage,
-  fauxProvider,
-  fauxToolCall,
-} from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, test, vi } from "vitest";
-import { type AgentModels, claudeAgentModels, useAgentModels } from "../src/agent";
+import { useAgentModels } from "../src/agent";
 import { useLive } from "../src/live";
 import { connectAs } from "../test/connect";
 import { pretendLive } from "../test/liveService";
-import { dinnerOn, familyHousehold, type HouseholdStub } from "../test/scripted";
+import { dinnerOn, familyHousehold, type HouseholdStub, weekOf } from "../test/scripted";
+import { answeredFirst, realModels } from "./models";
 
 /**
  * Spoken turns on the real agent model: what a Voice Session's agent does with a turn, and how it
@@ -28,37 +23,6 @@ const FRIDAY_NOON = new Date("2026-10-30T12:00:00-07:00");
 const ON_THE_PANTRY: ChatWhere = { screen: "pantry" };
 // How long a turn may take: the agent may read the Week and make several calls first.
 const TURN_MS = 90_000;
-
-/** The real model, not a scripted one: the agent's, or the one `MISE_EVAL_MODEL` asks for. */
-function realModels(env: Env): AgentModels {
-  return claudeAgentModels(env.ANTHROPIC_API_KEY, inject("agentModel") || undefined);
-}
-
-/**
- * The real model, but the first requests of households started from now on get `responses`, one each,
- * as if it had given them: a history the real model then goes on from. Put back with
- * `useAgentModels(realModels)`.
- */
-function answeredFirst(responses: AssistantMessage[]) {
-  useAgentModels((env) => {
-    const real = realModels(env);
-    const faux = fauxProvider({ models: [{ id: "scripted" }] });
-    faux.setResponses(responses);
-    const scripted = createModels();
-    scripted.setProvider(faux.provider);
-    const asking = new Set<PropertyKey>(["stream", "streamSimple", "complete", "completeSimple"]);
-    const models = new Proxy(real.models, {
-      get(target, key) {
-        const answered = faux.getPendingResponseCount() > 0 && asking.has(key);
-        const [owner, model] = answered ? [scripted, faux.getModel()] : [target, undefined];
-        const value = Reflect.get(owner, key);
-        if (typeof value !== "function") return value;
-        return model ? (_: unknown, ...rest: unknown[]) => value.call(owner, model, ...rest) : value.bind(owner);
-      },
-    });
-    return { models, model: real.model };
-  });
-}
 
 beforeAll(() => {
   if (!env.ANTHROPIC_API_KEY) throw new Error("Put ANTHROPIC_API_KEY in apps/worker/.dev.vars to run the eval.");
@@ -237,6 +201,38 @@ describe("a spoken turn", () => {
         RECIPE_TITLES.filter((title) => offer.includes(title)),
         "names none inside the offer",
       ).toEqual([]);
+    },
+    3 * TURN_MS,
+  );
+});
+
+describe("a spoken turn from the Week screen", () => {
+  // After a Week was cleared on the screen, the agent once said a breakfast set in an earlier turn was
+  // already planned, and set nothing (#124).
+  test(
+    "after the Week is cleared on the screen, asking for a breakfast set in an earlier turn sets it again",
+    async () => {
+      const SUNDAY = "2026-11-08";
+      answeredFirst([
+        fauxAssistantMessage(
+          fauxToolCall("set_slot", { date: SUNDAY, meal: "breakfast", kind: "recipe", recipeId: 2 }),
+          {
+            stopReason: "toolUse",
+          },
+        ),
+        fauxAssistantMessage("Done: Rice bowl 2 is Sunday's breakfast, and it's locked in."),
+      ]);
+      const { household, say } = await robinTalking({ screen: "week", week: "2026-11-02" });
+      await say("Rice bowl 2 for breakfast on Sunday.");
+      expect(await household.callTool("clear_week", { date: SUNDAY, confirm: true })).toMatchObject({ ok: true });
+
+      const answer = await say("Rice bowl 2 for breakfast on Sunday.");
+
+      const breakfast = (await weekOf(household, SUNDAY)).slots.find(
+        (slot) => slot.date === SUNDAY && slot.meal === "breakfast",
+      );
+      expect(breakfast?.recipe?.title, "set again").toBe("Rice bowl 2");
+      expect(answer, "not said to be planned already").not.toMatch(/already/i);
     },
     3 * TURN_MS,
   );

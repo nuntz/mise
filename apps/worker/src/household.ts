@@ -336,6 +336,7 @@ class HouseholdAgent extends Agent<Env> {
       spoken,
       afterUnanswered,
       waiting: pendingConfirmations(sql),
+      week: this.weekShownAt(where),
       text,
     });
     const entry: TurnData = { turn, text };
@@ -371,6 +372,13 @@ class HouseholdAgent extends Agent<Env> {
       if (slot?.recipe?.id === where.recipe && slot.cookFor > 0) servings = slot.cookFor;
     }
     return { recipe: recipe.value, servings, locale: household.locale };
+  }
+
+  /** The Week the Week screen shows at `where`, as it is now; none from any other screen. */
+  private weekShownAt(where: ChatWhere): Week | undefined {
+    if (where.screen !== "week" || !where.week) return undefined;
+    const week = handlers.get_week(this.ctx.storage.sql, { date: where.week }, { caller: null });
+    return week.ok ? week.value : undefined;
   }
 
   /** The Staples a Check-in asks about now, in the order the Pantry's cards ask about them. */

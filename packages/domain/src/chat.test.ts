@@ -1,7 +1,56 @@
 import { describe, expect, test } from "bun:test";
-import { ChatWhere, type CheckInStaple, offerLongList, presentTurn } from "./chat";
+import { ChatWhere, type CheckInStaple, offerLongList, presentTurn, weekForTheAgent } from "./chat";
 import { parseIngredient } from "./ingredients";
 import type { ItemId } from "./items";
+import type { ProposalReason } from "./proposals";
+import { addDays, MEALS, type Slot, type Week } from "./weeks";
+
+const CHOSEN: ProposalReason = { kind: "chosen", candidates: 4, factors: [] };
+
+/**
+ * The Week of Monday 2026-11-09 with its 21 meals unplanned, but for `changed`, by "date meal"
+ * ("2026-11-11 dinner"), each given the Slot fields it differs in.
+ */
+function weekWith(changed: Record<string, Partial<Slot>> = {}): Week {
+  const slots = Array.from({ length: 7 }, (_, days) => addDays("2026-11-09", days)).flatMap((date) =>
+    MEALS.map(
+      (meal): Slot => ({
+        date,
+        meal,
+        kind: "unplanned",
+        recipe: null,
+        note: null,
+        diners: [1, 2],
+        dinersAreDefault: true,
+        guests: 0,
+        guestConstraints: [],
+        servings: 2,
+        cookFor: 0,
+        leftoversOf: null,
+        leftovers: [],
+        conflicts: [],
+        reason: null,
+        cookedAt: null,
+        ratings: [],
+        ...changed[`${date} ${meal}`],
+      }),
+    ),
+  );
+  return {
+    startDate: "2026-11-09",
+    endDate: "2026-11-15",
+    slots,
+    effortBudgets: { monday: 30, tuesday: 30, wednesday: 30, thursday: 30, friday: 30, saturday: 60, sunday: 60 },
+    effortBudgetOverrides: {},
+    proposalSeed: 7,
+    useUp: [],
+  };
+}
+
+/** A Recipe as a Slot holds it. */
+function recipe(id: number, title: string) {
+  return { kind: "recipe" as const, recipe: { id, title, baseServings: 4, photoKey: null, readyMade: false } };
+}
 
 describe("presentTurn", () => {
   test("says the day the turn was sent, so “tomorrow” has one meaning", () => {
@@ -123,6 +172,48 @@ describe("presentTurn", () => {
         "answer for the ear: one or two plain sentences; " +
         "Mise couldn't answer the messages before this one: answer only this message]\n" +
         "next step",
+    );
+  });
+});
+
+// "keep Wednesday" with next Week shown once kept this Week's, from earlier turns; a Kept dinner was once
+// called Mise's from a read before the Keep; a cleared breakfast was once said to be planned (#142).
+describe("presentTurn from the Week screen", () => {
+  test("gives the Week on screen as it is now: every dinner, and the breakfasts and lunches that hold something", () => {
+    const week = weekWith({
+      "2026-11-09 dinner": { ...recipe(2, "Lemon chicken"), cookedAt: "2026-11-10T02:00:00.000Z" },
+      "2026-11-10 dinner": {
+        kind: "leftovers",
+        leftoversOf: { date: "2026-11-09", meal: "dinner", recipe: recipe(2, "Lemon chicken").recipe },
+      },
+      "2026-11-11 dinner": { ...recipe(3, "Chickpea curry"), reason: CHOSEN },
+      "2026-11-12 breakfast": recipe(4, "Pancakes"),
+      "2026-11-12 lunch": { dinersAreDefault: false, diners: [1] },
+      "2026-11-13 lunch": { note: "Sam's at camp" },
+      "2026-11-13 dinner": { kind: "eat_out" },
+      "2026-11-14 dinner": { kind: "skip" },
+    });
+
+    const presented = presentTurn({
+      speaker: "Robin",
+      today: "2026-11-05",
+      where: { screen: "week", week: "2026-11-09" },
+      week,
+      spoken: false,
+      text: "keep Wednesday",
+    });
+
+    expect(presented).toBe(
+      "[Robin, writing on Thursday 2026-11-05, on the Week screen, showing the Week of Monday 2026-11-09]\n" +
+        "[The Week on screen, as it is now (a breakfast or lunch not named has nothing planned): " +
+        "Monday 2026-11-09: dinner Lemon chicken (the Household's own, cooked); " +
+        "Tuesday 2026-11-10: dinner Leftovers of Lemon chicken (the Household's own); " +
+        "Wednesday 2026-11-11: dinner Chickpea curry (pencilled); " +
+        "Thursday 2026-11-12: breakfast Pancakes, dinner nothing planned (the Household's own); " +
+        "Friday 2026-11-13: lunch nothing planned (note: “Sam's at camp”), dinner eating out (the Household's own); " +
+        "Saturday 2026-11-14: dinner skipped (the Household's own); " +
+        "Sunday 2026-11-15: dinner nothing planned (the Household's own)]\n" +
+        "keep Wednesday",
     );
   });
 });
@@ -283,6 +374,56 @@ describe("presentTurn in Kitchen mode", () => {
     });
 
     expect(presented).toBe("[Robin, writing on Tuesday 2026-11-03, in Kitchen mode]\nnext step");
+  });
+});
+
+// Given all 21 meals by ISO date alone, the agent listed six dinners for seven days, a day off, and
+// took the Household's own for pencilled (#142).
+describe("weekForTheAgent", () => {
+  const week = weekWith({
+    "2026-11-09 dinner": recipe(2, "Lemon chicken"),
+    "2026-11-10 dinner": { ...recipe(3, "Chickpea curry"), reason: CHOSEN },
+    "2026-11-11 breakfast": { note: "Sam's at camp" },
+    "2026-11-12 lunch": { kind: "eat_out" },
+    "2026-11-13 breakfast": { dinersAreDefault: false, diners: [1] },
+  });
+
+  test("goes day by day, each named by its weekday, with every dinner, unplanned ones too", () => {
+    const { days } = weekForTheAgent(week);
+
+    expect(days.map(({ date, weekday }) => `${weekday} ${date}`)).toEqual([
+      "Monday 2026-11-09",
+      "Tuesday 2026-11-10",
+      "Wednesday 2026-11-11",
+      "Thursday 2026-11-12",
+      "Friday 2026-11-13",
+      "Saturday 2026-11-14",
+      "Sunday 2026-11-15",
+    ]);
+    expect(days.map((day) => day.meals.map(({ meal, kind }) => `${meal} ${kind}`))).toEqual([
+      ["dinner recipe"],
+      ["dinner recipe"],
+      ["breakfast unplanned", "dinner unplanned"],
+      ["lunch eat_out", "dinner unplanned"],
+      ["dinner unplanned"],
+      ["dinner unplanned"],
+      ["dinner unplanned"],
+    ]);
+  });
+
+  test("says whether each dinner is pencilled, beside its reason", () => {
+    const [monday, tuesday, wednesday] = weekForTheAgent(week).days;
+
+    expect(monday?.meals[0]).toMatchObject({ recipe: { title: "Lemon chicken" }, reason: null, pencilled: false });
+    expect(tuesday?.meals[0]).toMatchObject({ recipe: { title: "Chickpea curry" }, reason: CHOSEN, pencilled: true });
+    expect(wednesday?.meals[0], "a breakfast is never pencilled").not.toHaveProperty("pencilled");
+  });
+
+  test("keeps the rest of the Week as it is", () => {
+    const { days, ...rest } = weekForTheAgent(week);
+    const { slots, ...unchanged } = week;
+
+    expect(rest).toEqual(unchanged);
   });
 });
 

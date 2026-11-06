@@ -4,7 +4,7 @@ import { scaledLines } from "./ingredients";
 import { type Recipe, RecipeId } from "./recipes";
 import type { Staple } from "./staples";
 import { type ToolName, thingsListed } from "./tools";
-import { addDays, LocalDate, SlotRef, weekdayOf } from "./weeks";
+import { addDays, isPencilled, LocalDate, type Slot, SlotRef, type Week, weekdayOf } from "./weeks";
 
 /** The longest message a Member can send the agent. */
 export const MAX_CHAT_MESSAGE = 4000;
@@ -93,6 +93,10 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * seven days, so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
  * A spoken turn from the Pantry screen is given the Staples due, `checkIn`, in the order the Pantry's
  * cards ask about them, with their Items to record each answer by, so that it can lead the Check-in.
+ * A turn from the Week screen is given the `week` it shows, as it is when the turn is presented: changes
+ * made on a screen never reach the conversation, so the agent once kept this Week's Wednesday with next
+ * Week shown, called a Kept dinner Mise's, and said a cleared breakfast was planned, all from earlier
+ * turns (#142).
  * A turn `afterUnanswered`, sent after a turn whose run failed, is to be answered alone: the model
  * would otherwise answer every message still waiting at once.
  * Once the conversation has held a call for a tap (ADR 0024), every turn says which are `waiting` for
@@ -108,6 +112,7 @@ export function presentTurn(turn: {
   spoken: boolean;
   afterUnanswered?: boolean;
   waiting?: readonly PendingConfirmation[];
+  week?: Week;
   text: string;
 }): string {
   const { where } = turn;
@@ -129,7 +134,7 @@ export function presentTurn(turn: {
   if (checkIn) header.push(LEAD_THE_CHECK_IN);
   if (turn.afterUnanswered) header.push(ONLY_THIS_ONE);
   const waiting = turn.waiting ? [waitingLine(turn.waiting)] : [];
-  const lines = kitchen?.lines ?? (checkIn ? [checkInLine(checkIn)] : []);
+  const lines = kitchen?.lines ?? (checkIn ? [checkInLine(checkIn)] : turn.week ? [weekLine(turn.week)] : []);
   return [`[${header.join("; ")}]`, ...waiting, ...lines, turn.text].join("\n");
 }
 
@@ -154,6 +159,38 @@ function kitchenLines(where: KitchenWhere, cooking: Cooking | undefined) {
     lines.push(`[${recipe.title}'s Ingredients for ${servings} servings, as Kitchen mode shows them: ${scaled}]`);
   }
   return { parts, lines };
+}
+
+/** The Week on screen, as a turn from the Week screen gives it: day by day, as `weekForTheAgent` tells it. */
+function weekLine(week: Week): string {
+  const days = weekForTheAgent(week).days.map(
+    ({ date, weekday, meals }) => `${weekday} ${date}: ${meals.map(mealLine).join(", ")}`,
+  );
+  return `[The Week on screen, as it is now (a breakfast or lunch not named has nothing planned): ${days.join("; ")}]`;
+}
+
+/** A meal in a turn's Week: what it is, its note, and for a dinner whether it is pencilled; and if it was cooked. */
+function mealLine(meal: MealForTheAgent): string {
+  const about = [];
+  if (meal.pencilled !== undefined) about.push(meal.pencilled ? "pencilled" : "the Household's own");
+  if (meal.cookedAt) about.push("cooked");
+  const note = meal.note ? ` (note: “${meal.note}”)` : "";
+  return `${meal.meal} ${whatItIs(meal)}${note}${about.length > 0 ? ` (${about.join(", ")})` : ""}`;
+}
+
+function whatItIs(meal: MealForTheAgent): string {
+  switch (meal.kind) {
+    case "recipe":
+      return meal.recipe?.title ?? "a Recipe";
+    case "leftovers":
+      return meal.leftoversOf?.recipe ? `Leftovers of ${meal.leftoversOf.recipe.title}` : "Leftovers";
+    case "eat_out":
+      return "eating out";
+    case "skip":
+      return "skipped";
+    case "unplanned":
+      return "nothing planned";
+  }
 }
 
 /** The held calls waiting for a tap, by their confirmation ids and what their buttons say. */
@@ -195,6 +232,39 @@ export function offerLongList(tool: ToolName, output: unknown): string | undefin
 
 /** What a turn after an unanswered one says, so that the messages left waiting aren't answered with it. */
 const ONLY_THIS_ONE = "Mise couldn't answer the messages before this one: answer only this message";
+
+/** A meal of a Week as the agent reads it: a dinner says whether it is pencilled. */
+export type MealForTheAgent = Omit<Slot, "date"> & { pencilled?: boolean };
+
+/** A Week as the agent reads it; see `weekForTheAgent`. */
+export type WeekForTheAgent = Omit<Week, "slots"> & {
+  days: { date: LocalDate; weekday: string; meals: MealForTheAgent[] }[];
+};
+
+/**
+ * A Week as the agent is given it, by a tool or in a turn: day by day, each day named by its weekday,
+ * with every dinner and only the breakfasts and lunches that are planned or have a note, and each
+ * dinner saying whether it is pencilled. Given all of a Week's meals, each by its ISO date alone, the agent miscounted the
+ * dinners, put them on the wrong days and took a dinner without a `reason` for a pencilled one (#142).
+ */
+export function weekForTheAgent({ slots, ...week }: Week): WeekForTheAgent {
+  const days: WeekForTheAgent["days"] = [];
+  for (const { date, ...slot } of slots) {
+    let day = days.at(-1);
+    if (day?.date !== date) {
+      day = { date, weekday: capitalised(weekdayOf(date)), meals: [] };
+      days.push(day);
+    }
+    if (!told(slot)) continue;
+    day.meals.push(slot.meal === "dinner" ? { ...slot, pencilled: isPencilled(slot) } : slot);
+  }
+  return { ...week, days };
+}
+
+/** Whether the agent is told of a meal: every dinner, and a breakfast or lunch that is planned or has a note. */
+function told(slot: Pick<Slot, "meal" | "kind" | "note">): boolean {
+  return slot.meal === "dinner" || slot.kind !== "unplanned" || slot.note !== null;
+}
 
 /** `date` with its weekday, as a turn names it. */
 function dayOf(date: LocalDate): string {

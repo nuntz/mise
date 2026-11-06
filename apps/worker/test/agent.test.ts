@@ -7,7 +7,7 @@ import {
   type TranscriptContext,
   Type,
 } from "@earendil-works/pi-ai";
-import type { ChatWhere } from "@mise/domain";
+import type { ChatWhere, WeekForTheAgent } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { agentModels, claudeAgentModels, useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
@@ -61,10 +61,9 @@ function dinnerReader(): FauxResponseFactory {
     if (last?.role !== "toolResult") {
       return fauxAssistantMessage(fauxToolCall("get_week", { date: THURSDAY }), { stopReason: "toolUse" });
     }
-    const week = JSON.parse(lastText(context)) as {
-      slots: { date: string; meal: string; recipe: { title: string } | null }[];
-    };
-    const dinner = week.slots.find((slot) => slot.date === THURSDAY && slot.meal === "dinner");
+    const week = JSON.parse(lastText(context)) as WeekForTheAgent;
+    const thursday = week.days.find((day) => day.date === THURSDAY);
+    const dinner = thursday?.meals.find((slot) => slot.meal === "dinner");
     return fauxAssistantMessage(`Thursday's dinner is ${dinner?.recipe?.title ?? "not planned"}.`);
   };
 }
@@ -117,6 +116,120 @@ describe("the agent", () => {
     const reply = await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
 
     expect(reply).toMatchObject({ ok: false, error: { code: "unanswered" } });
+  });
+});
+
+/** What the agent was given by the last tool it called, from a `caller` model's "Done: …" answer. */
+function lastResult(reply: unknown): unknown {
+  const text = (reply as { value?: { text?: string } }).value?.text ?? "";
+  if (!text.startsWith("Done: ")) throw new Error(`No tool result in ${JSON.stringify(reply)}`);
+  return JSON.parse(text.slice("Done: ".length));
+}
+
+// Given all 21 meals, each by ISO date alone, the agent listed six dinners for seven days, a day off (#142).
+describe("the Week as the agent reads it", () => {
+  test("goes day by day, each day named, with its dinner and only the breakfasts and lunches that hold something", async () => {
+    scriptModel(caller([["get_week", { date: THURSDAY }]]));
+    const household = await householdWithThursdayDinner();
+    await household.callTool("set_slot", { date: TUESDAY, meal: "lunch", kind: "eat_out" });
+
+    const week = lastResult(await household.chat("What's planned?", ON_THE_WEEK)) as WeekForTheAgent;
+
+    expect(week.days.map(({ date, weekday }) => `${weekday} ${date}`)).toEqual([
+      "Monday 2026-10-26",
+      "Tuesday 2026-10-27",
+      "Wednesday 2026-10-28",
+      "Thursday 2026-10-29",
+      "Friday 2026-10-30",
+      "Saturday 2026-10-31",
+      "Sunday 2026-11-01",
+    ]);
+    expect(week.days.map((day) => day.meals.map(({ meal, kind }) => `${meal} ${kind}`))).toEqual([
+      ["dinner unplanned"],
+      ["lunch eat_out", "dinner unplanned"],
+      ["dinner unplanned"],
+      ["dinner recipe"],
+      ["dinner unplanned"],
+      ["dinner unplanned"],
+      ["dinner unplanned"],
+    ]);
+    expect(week.days[3]?.meals[0]).toMatchObject({
+      recipe: { title: "Lemon chicken" },
+      reason: null,
+      pencilled: false,
+    });
+  });
+
+  test("is how a Proposal returns it too, with whether it changed a dinner", async () => {
+    scriptModel(caller([["propose_week", { date: THURSDAY }]]));
+    // Nine Recipes, so that Mise has some to choose; Thursday's dinner is chosen by hand.
+    const household = await familyHousehold();
+    await household.callTool("set_slot", { date: THURSDAY, meal: "dinner", kind: "recipe", recipeId: 2 });
+
+    const proposed = lastResult(await household.chat("Plan the week", ON_THE_WEEK)) as {
+      week: WeekForTheAgent;
+      changed: boolean;
+    };
+
+    expect(proposed.changed).toBe(true);
+    expect(proposed.week.days.map((day) => day.weekday)).toHaveLength(7);
+    const dinners = proposed.week.days.map((day) => day.meals.find(({ meal }) => meal === "dinner"));
+    expect(dinners[3], "Thursday's is the Household's own").toMatchObject({ reason: null, pencilled: false });
+    expect(dinners[0], "Monday's is pencilled").toMatchObject({ pencilled: true });
+    expect(dinners[0]?.reason).not.toBeNull();
+  });
+});
+
+/** A scripted model that answers "OK." to every turn, keeping each turn as the model is shown it in `seen`. */
+function seeing(seen: string[]): FauxResponseFactory {
+  return (context) => {
+    seen.push(lastUserText(context));
+    return fauxAssistantMessage("OK.");
+  };
+}
+
+// Changes made on a screen never reach the conversation, so the agent once called a dinner Kept on the
+// screen Mise's, and a breakfast cleared on the screen planned, from earlier turns (#142).
+describe("a turn from the Week screen", () => {
+  test("gives a dinner Kept on the screen since the last turn as the Household's own", async () => {
+    const seen: string[] = [];
+    scriptModel(seeing(seen));
+    const household = await familyHousehold();
+    await household.callTool("propose_week", { date: MONDAY });
+    const thursday = (await dinnerOn(household, THURSDAY))?.recipe?.title;
+
+    await household.chat("What's pencilled?", ON_THE_WEEK);
+    await household.callTool("keep_slot", { date: THURSDAY, meal: "dinner" });
+    await household.chat("And now?", ON_THE_WEEK);
+
+    expect(seen[0]).toContain(`Thursday ${THURSDAY}: dinner ${thursday} (pencilled)`);
+    expect(seen[1]).toContain(`Thursday ${THURSDAY}: dinner ${thursday} (the Household's own)`);
+  });
+
+  test("gives a Week cleared on the screen since the last turn as unplanned", async () => {
+    const seen: string[] = [];
+    scriptModel(seeing(seen));
+    const household = await familyHousehold();
+    const SUNDAY = "2026-11-01";
+    await household.callTool("set_slot", { date: SUNDAY, meal: "breakfast", kind: "recipe", recipeId: 2 });
+
+    await household.chat("What's for breakfast Sunday?", ON_THE_WEEK);
+    await household.callTool("clear_week", { date: MONDAY, confirm: true });
+    await household.chat("And now?", ON_THE_WEEK);
+
+    expect(seen[0]).toContain(`Sunday ${SUNDAY}: breakfast Rice bowl 2, dinner nothing planned`);
+    expect(seen[1]).toContain(`Sunday ${SUNDAY}: dinner nothing planned`);
+    expect(seen[1]).not.toContain("breakfast Rice bowl 2");
+  });
+
+  test("gives no Week from another screen, even one showing a Week", async () => {
+    const seen: string[] = [];
+    scriptModel(seeing(seen));
+    const household = await familyHousehold();
+
+    await household.chat("What do we need?", { screen: "grocery", week: MONDAY });
+
+    expect(seen[0]).not.toContain("The Week on screen");
   });
 });
 
@@ -298,7 +411,7 @@ describe("what the agent is told", () => {
 });
 
 describe("what the agent is told about pencilled dinners", () => {
-  test("a dinner with a reason is pencilled, and a Re-roll leaves the Household's own", async () => {
+  test("a dinner marked pencilled has a reason, and a Re-roll leaves the Household's own", async () => {
     const offered: { name: string; description: string }[][] = [];
     scriptModel((context) => {
       const system = context.messages.find((message) => (message.role as string) === "system") as
@@ -312,8 +425,8 @@ describe("what the agent is told about pencilled dinners", () => {
     await household.chat("Hello", ON_THE_WEEK);
 
     const described = (name: string) => offered[0]?.find((tool) => tool.name === name)?.description ?? "";
-    expect(described("get_week")).toMatch(/with a `reason` is pencilled/);
-    expect(described("get_week")).toMatch(/without one is the Household's own/);
+    expect(described("get_week")).toMatch(/with `pencilled: true` is pencilled/);
+    expect(described("get_week")).toMatch(/`pencilled: false` is the Household's own/);
     expect(described("propose_week")).toMatch(/leaves the Household's own dinners as they are/);
     expect(described("propose_week")).not.toMatch(/decided by hand/);
     expect(described("propose_dinner")).toMatch(/Let Mise choose Friday/);
@@ -433,7 +546,16 @@ describe("who is speaking", () => {
     vi.useRealTimers();
 
     expect(seen).toEqual([
-      "[Robin, writing on Tuesday 2026-10-27, on the Week screen, showing the Week of Monday 2026-10-26]\nWho am I?",
+      "[Robin, writing on Tuesday 2026-10-27, on the Week screen, showing the Week of Monday 2026-10-26]\n" +
+        "[The Week on screen, as it is now (a breakfast or lunch not named has nothing planned): " +
+        "Monday 2026-10-26: dinner nothing planned (the Household's own); " +
+        "Tuesday 2026-10-27: dinner nothing planned (the Household's own); " +
+        "Wednesday 2026-10-28: dinner nothing planned (the Household's own); " +
+        "Thursday 2026-10-29: dinner nothing planned (the Household's own); " +
+        "Friday 2026-10-30: dinner nothing planned (the Household's own); " +
+        "Saturday 2026-10-31: dinner nothing planned (the Household's own); " +
+        "Sunday 2026-11-01: dinner nothing planned (the Household's own)]" +
+        "\nWho am I?",
     ]);
     expect(reply).toEqual({ ok: true, value: { role: "agent", text: "You are robin@example.com." } });
     expect(await household.conversation()).toEqual([
