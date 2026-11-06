@@ -261,9 +261,9 @@ function screens(ids: Map<string, number>): Screen[] {
     await page.locator(".sheet button.button-row").last().click();
   };
   // The first of next Week's pencilled dinners that Keep is offered for, and the first with a Recipe, by its Cook.
-  const keepable = (page: Page) => page.locator("section.slot:has(.chip-plum):has(.row-end .slot-keep)").first();
+  const keepable = (page: Page) => page.locator("section.slot:has(.chip-plum):has(.slot-keep)").first();
   const keepableRecipe = (page: Page) =>
-    page.locator("section.slot:has(.chip-plum):has(.row-end .slot-keep):has(.slot-cook)").first();
+    page.locator("section.slot:has(.chip-plum):has(.slot-keep):has(.slot-cook)").first();
   // A dinner marked Ready-made: the chip beside its day that is neither Pencilled nor a Conflict.
   const readyMade = (page: Page) =>
     page.locator("section.slot:has(.slot-day .chip:not(.chip-plum):not(.chip-warn))").first();

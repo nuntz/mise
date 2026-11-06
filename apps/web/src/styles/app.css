@@ -124,7 +124,9 @@ button .icon {
 
 /* Five roles: primary, secondary, row, quiet and danger. Row is the hairline pill, and a bare button
  * takes it; primary, secondary, quiet and the inline link take the larger button type. Disabled is
- * none of them: a dashed outline in muted text, never a fill. */
+ * none of them: a dashed outline in muted text, never a fill. A screen or sheet has one primary, with
+ * one exception: on the Week, beside its own, each dinner card's Cook is its card's primary, an icon in
+ * the same fill (`.icon-button-primary`). */
 
 button:disabled,
 button[aria-disabled="true"] {
@@ -144,9 +146,6 @@ button[aria-disabled="true"] {
 
 .button-primary {
   min-height: var(--control);
-  border-color: var(--plum);
-  background: var(--plum);
-  color: var(--on-plum);
 }
 
 .button-secondary {
@@ -197,6 +196,14 @@ button[aria-disabled="true"] {
 .icon-button[aria-expanded="true"] {
   background: var(--ink);
   color: var(--surface);
+}
+
+/* The primary fill, after the icon button's ground so a card's Cook keeps it. */
+.button-primary,
+.icon-button-primary {
+  border-color: var(--plum);
+  background: var(--plum);
+  color: var(--on-plum);
 }
 
 input,
@@ -960,10 +967,11 @@ fieldset > .toggle-chip {
   width: 80%;
 }
 
+/* In under the card's name, as the strip is. */
 .sk-strip {
   height: 13px;
   width: 36%;
-  margin: 15px 0;
+  margin: 15px 0 15px calc(var(--thumb-slot) + var(--space-3));
 }
 
 .sk-tick {
@@ -1288,11 +1296,11 @@ fieldset > .toggle-chip {
   border-top: var(--hairline) solid var(--line);
 }
 
+/* A day is its dinner card and the strip under it, close together. */
 .day {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3) 0 0;
+  padding: 10px 0 0;
   border-bottom: var(--hairline) solid var(--line);
   scroll-margin-top: var(--space-4);
 }
@@ -1331,21 +1339,27 @@ fieldset > .toggle-chip {
   min-width: 0;
 }
 
-/* A dinner card's day, and beside it what marks the dinner: Pencilled, Ready-made, a Conflict. */
+/* A dinner card's day, and beside it what marks the dinner: Pencilled, Ready-made, Cooked, a Conflict. */
 .slot-day {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
+  gap: var(--space-1) 6px;
 }
 
 .slot-day .chip {
   min-height: 0;
-  padding: 2px var(--space-2);
+  gap: 3px;
+  padding: 1px 6px;
+}
+
+.slot-day .chip .icon {
+  width: 12px;
+  height: 12px;
 }
 
 .overline-today {
-  padding: 2px var(--space-2);
+  padding: 1px 6px;
   border-radius: var(--radius-full);
   background: var(--plum);
   color: var(--on-plum);
@@ -1404,23 +1418,35 @@ fieldset > .toggle-chip {
 }
 
 .compact .dish-title {
-  font: var(--type-title-xs);
+  font: var(--type-title-card);
+}
+
+/* Nothing planned is a gap, not a dish: its name in muted ink. */
+.dish-title.dish-title-none {
+  color: var(--ink-muted);
+}
+
+/* A Week card: what's under its line sits close to it. */
+.slot-card {
+  gap: 6px;
 }
 
 /* A Week card's square is the smaller thumb, so Keep and Cook fit beside its name. */
 .slot-card .thumb {
   width: var(--thumb-slot);
   height: var(--thumb-slot);
+  border-radius: 10px;
 }
 
-.slot-card .thumb-banded {
-  width: auto;
-  min-width: var(--thumb-slot);
-}
-
-/* Under a card, its banners and overridden Conflicts start where its name does. */
+/* Under a card, its banners and overridden Conflicts start where its name does, a banner tighter than a
+ * screen's. */
 .slot-card > :is(.banner, .chips) {
   margin-inline-start: calc(var(--thumb-slot) + var(--space-3));
+}
+
+.slot-card > .banner {
+  padding: 6px 10px;
+  border-radius: 10px;
 }
 
 /* A pencilled dinner's name, in italic as if in pencil: Mise chose it, and a Re-roll may change it. After
@@ -1444,11 +1470,22 @@ fieldset > .toggle-chip {
   display: none;
 }
 
-/* Cook on a card: the primary fill on an icon button. */
-.icon-button-primary {
-  border-color: var(--plum);
-  background: var(--plum);
-  color: var(--on-plum);
+/* Keep at a card's end is a hairline on the card's own ground, beside Cook's fill; its icons are the
+ * button-sized ones. */
+.compact > .row-end .icon-button:not(.icon-button-primary) {
+  background: transparent;
+}
+
+.compact > .row-end .icon-button .icon {
+  width: var(--icon-button);
+  height: var(--icon-button);
+}
+
+/* An end's chip, such as "Again", is drawn as the chips beside the day are. */
+.compact > .row-end .chip {
+  min-height: 0;
+  gap: 3px;
+  padding: 1px 6px;
 }
 
 .thumb {
@@ -1484,28 +1521,21 @@ fieldset > .toggle-chip {
   color: var(--chip-ink);
 }
 
-/* A thumb with a band grows wider than the square rather than wrap its band, as a long translation would. */
-.thumb-banded {
-  align-items: flex-end;
-  width: auto;
-  min-width: var(--thumb);
-}
-
-.thumb-banded > :is(.plate, img) {
+/* Leftovers: a reheat mark on the scrim in the square's corner, over the photo. */
+.thumb-corner {
   position: absolute;
-  inset: 0;
-  margin: auto;
-}
-
-.thumb-band {
-  position: relative;
-  flex: 1;
-  padding: var(--space-1);
+  inset-block-end: 0;
+  inset-inline-end: 0;
+  display: flex;
+  padding: 3px;
+  border-start-start-radius: 8px;
   background: var(--scrim);
   color: var(--on-photo);
-  font: var(--type-label);
-  text-align: center;
-  white-space: nowrap;
+}
+
+.thumb-corner .icon {
+  width: 12px;
+  height: 12px;
 }
 
 /* A row of actions on one line, in from the thumb: a Recipe's Edit and photo buttons in its sheet. */
@@ -1622,8 +1652,8 @@ fieldset > .toggle-chip {
 }
 
 .strip .icon {
-  width: var(--icon-button);
-  height: var(--icon-button);
+  width: 16px;
+  height: 16px;
   flex: none;
 }
 

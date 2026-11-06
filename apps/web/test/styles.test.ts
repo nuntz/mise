@@ -155,7 +155,7 @@ test.each(Object.entries(themes))("on-photo text reads at 4.5:1 on the scrim ove
   }
 });
 
-test("in kitchen mode the scrim stands off the page at 3:1 over any photo, so a Leftovers band shows", () => {
+test("in kitchen mode the scrim stands off the page at 3:1 over any photo, so a Leftovers thumb's corner mark shows", () => {
   const surface = parseHex(themes.kitchen.surface).rgb;
   for (const photo of photos) {
     expect(contrast(over(themes.kitchen.scrim, photo), surface)).toBeGreaterThanOrEqual(3);

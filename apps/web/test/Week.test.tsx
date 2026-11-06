@@ -21,6 +21,7 @@ import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { setPseudoLocale } from "../src/messages";
 import { createFakeClient } from "./fakeClient";
+import { primaries } from "./primaries";
 
 // The fixtures are the Week of Monday 26 October; on the Sunday before, none of its days is today.
 beforeEach(() => {
@@ -234,9 +235,11 @@ test("the Week opens first: each day's dinner as a compact card with its photo, 
   // The photo is the card's thumb, which the title names: the title opens the Recipe.
   expect(dinner.querySelector(".thumb img")?.getAttribute("src")).toBe("/photos/1?v=photos/pasta");
   // Who of the Household is eating is the day's strip, which doesn't count Guests: the card does.
-  expect(within(dinner).getByText("With 1 Guest.")).toBeTruthy();
+  expect(within(dinner).getByText("With 1 Guest")).toBeTruthy();
   expect(within(dinner).queryByText(/the Recipe makes/)).toBeNull();
-  expect(within(tuesday).getByRole("button", { name: "3 eating" })).toBeTruthy();
+  // The strip shows the count beside its icon; the whole phrase names it.
+  const eating = within(tuesday).getByRole("button", { name: "3 eating" });
+  expect(eating.querySelector("[aria-hidden='true']:not(svg)")?.textContent).toBe("3");
   expect(within(dinner).getByText("Use the fresh basil")).toBeTruthy();
   // Lock is retired (ADR 0030): a dinner is pencilled or the Household's own.
   expect(within(dinner).queryByText("Locked")).toBeNull();
@@ -247,7 +250,8 @@ test("the Week opens first: each day's dinner as a compact card with its photo, 
   expect(within(tuesday).queryByRole("region", { name: "Breakfast" })).toBeNull();
   const monday = within(screen.getByRole("region", { name: "Monday, October 26" }));
   expect(monday.getByText("Mon 26")).toBeTruthy();
-  expect(monday.getByRole("heading", { name: "Nothing planned" })).toBeTruthy();
+  // Nothing planned is a gap, not a dish: its name is muted.
+  expect(monday.getByRole("heading", { name: "Nothing planned" }).classList.contains("dish-title-none")).toBe(true);
 });
 
 /** This Week with Tuesday's dinner the Pasta for 6: the household and 3 Guests. */
@@ -1095,7 +1099,7 @@ test("a dinner cooked for its Leftovers says how many to cook for, and the Lefto
 
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
   // A meta line under the title, not a chip: chips are short labels.
-  expect(within(monday).getByText("Cook for 6, with Tuesday's Leftovers.").closest(".chip")).toBeNull();
+  expect(within(monday).getByText("For 6, with Tuesday's Leftovers").closest(".chip")).toBeNull();
   const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
   const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
   expect(within(dinner).getByRole("heading", { name: "Leftovers of Curry" })).toBeTruthy();
@@ -1130,9 +1134,9 @@ test("a dinner cooked for a lunch's Leftovers, or for several, says so in one se
   render(() => <App client={client} />);
 
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
-  expect(within(monday).getByText("Cook for 6, with Tuesday's lunch Leftovers.")).toBeTruthy();
+  expect(within(monday).getByText("For 6, with Tuesday's lunch Leftovers")).toBeTruthy();
   const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
-  expect(within(tuesday).getByText("Cook for 8, with Leftovers on Wednesday and Thursday.")).toBeTruthy();
+  expect(within(tuesday).getByText("For 8, with Leftovers on Wednesday and Thursday")).toBeTruthy();
 });
 
 test("in the pseudo-locale, the Cook-for line and Choose actions are each one message", async () => {
@@ -1149,7 +1153,7 @@ test("in the pseudo-locale, the Cook-for line and Choose actions are each one me
   render(() => <App client={client} />);
 
   const monday = await screen.findByRole("region", { name: /Monday/ });
-  const cookFor = within(monday).getByText(/^\[Çööķ ƒöŕ 6/);
+  const cookFor = within(monday).getByText(/^\[Ƒöŕ 6/);
   expect(cookFor.textContent).not.toMatch(/\[.*\[/);
   const tuesday = screen.getByRole("region", { name: /Tuesday/ });
   for (const choose of within(tuesday).getAllByRole("button", { name: /^\[Çĥööšé/ })) {
@@ -1815,6 +1819,8 @@ test("each dinner card has one action: Choose a dinner, then Cook, then Rate it,
   expect(wednesday.getByText("Cooked")).toBeTruthy();
   const thursday = within(screen.getByRole("region", { name: "Thursday, October 29" }));
   expect(thursday.getByText("Again")).toBeTruthy();
+  // The one exception to one primary a screen: beside the Week's own, each dinner card's Cook is its card's.
+  expect(primaries()).toEqual(["Propose dinners", "Cook"]);
 });
 
 /** Monday Leftovers, Tuesday a meal out, Wednesday no meal: decided, without a Recipe to cook. */
