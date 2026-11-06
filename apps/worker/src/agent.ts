@@ -73,10 +73,45 @@ export function agentCompaction({ models, model }: AgentModels): CompactionSetti
   };
 }
 
+/**
+ * Claude for the agent, calling with `apiKey`: the model `id`, the agent's own unless another is named.
+ *
+ * Every request leads with the system prompt and tools as they are now, and has no system message
+ * later. pi-durable keeps a changed prompt section or tool (the preamble's date every day, a deploy's
+ * new rule) as a system entry where it changed, and pi-ai sends that to a Claude model it marks as
+ * taking one mid-conversation, just before the next answer: after the person's words, where the model
+ * has recited or refused it as if it were theirs. With the two compat flags off, pi-ai folds every
+ * system entry into the leading one; the prompt cache is then rewritten after each change.
+ * Neither pi-ai nor pi-durable can override a model's compat, and pi-durable finds the model by
+ * provider and id, so the Anthropic provider is registered again under its own id, its models changed.
+ */
+export function claudeAgentModels(apiKey: string | undefined, id = AGENT_MODEL.id): AgentModels {
+  const models = anthropicModels(apiKey);
+  const anthropic = models.getProvider(AGENT_MODEL.provider);
+  if (!anthropic) throw new Error(`pi-ai has no provider ${AGENT_MODEL.provider}`);
+  const leadingSystemOnly = <M extends { type?: string; compat?: unknown }>(model: M): M =>
+    (model.type ?? "chat") === "chat"
+      ? {
+          ...model,
+          compat: {
+            ...(model.compat ?? {}),
+            supportsMidConvoSystemMessages: false,
+            supportsMidConvoToolChanges: false,
+          },
+        }
+      : model;
+  models.setProvider({
+    ...anthropic,
+    getModels: () => anthropic.getModels().map(leadingSystemOnly),
+    getAllModels: () => (anthropic.getAllModels?.() ?? anthropic.getModels()).map(leadingSystemOnly),
+  });
+  return { models, model: { provider: AGENT_MODEL.provider, id } };
+}
+
 /** Claude, with the deployment's Anthropic key (a Worker secret). */
 export function agentModels(env: Env): AgentModels {
   if (replacement) return replacement(env);
-  return { models: anthropicModels(env.ANTHROPIC_API_KEY), model: AGENT_MODEL };
+  return claudeAgentModels(env.ANTHROPIC_API_KEY);
 }
 
 /**

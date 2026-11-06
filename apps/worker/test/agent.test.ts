@@ -5,10 +5,11 @@ import {
   fauxAssistantMessage,
   fauxToolCall,
   type TranscriptContext,
+  Type,
 } from "@earendil-works/pi-ai";
 import type { ChatWhere } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { useAgentModels } from "../src/agent";
+import { agentModels, claudeAgentModels, useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
 import { caller, dinnerOn, familyHousehold, lastText, scriptModel, textOf, weekOf } from "./scripted";
 
@@ -749,6 +750,76 @@ describe("a new agent model", () => {
       ok: true,
       value: { role: "agent", text: "The new model answers." },
     });
+  });
+});
+
+describe("the agent's system prompt, as Claude takes it", () => {
+  // A section that changes (the date every day, a deploy's new rule) must not reach the model as a
+  // system message after the person's words: it has recited or refused one as if it were theirs.
+  test("the agent's model, and one the eval names, take no system message mid-conversation", () => {
+    for (const { models, model } of [agentModels(env), claudeAgentModels("a key", "claude-sonnet-5-5")]) {
+      expect(models.getModel(model.provider, model.id)?.compat, model.id).toMatchObject({
+        supportsMidConvoSystemMessages: false,
+        supportsMidConvoToolChanges: false,
+      });
+    }
+  });
+
+  // Claude's own provider builds the request, which is caught before it is sent: pi-ai hands it to
+  // `onPayload` first, and the throw there ends the stream, so no model is called.
+  test("a request after a section and a tool change leads with them, and holds no other system text", async () => {
+    const { models, model: ref } = claudeAgentModels("a key");
+    const model = models.getModel(ref.provider, ref.id);
+    if (!model) throw new Error(`pi-ai has no model ${ref.id}`);
+    const showStep = {
+      name: "show_step",
+      description: "Shows a step.",
+      parameters: Type.Object({ step: Type.Number() }),
+    };
+    let sent:
+      | { system?: { text: string }[]; tools?: { name: string }[]; messages: { role: string; content: unknown }[] }
+      | undefined;
+    const stream = models.stream(
+      model,
+      {
+        messages: [
+          {
+            role: "system",
+            content: "You help a family plan.",
+            sections: { voice: "<voice>Old rule.</voice>" },
+            toolsAdded: [{ ...showStep, name: "get_recipe", description: "One Recipe." }],
+            timestamp: 1,
+          },
+          { role: "user", content: "Hello", timestamp: 2 },
+          fauxAssistantMessage("Hello."),
+          {
+            role: "system",
+            content: "",
+            sections: { voice: "<voice>New rule.</voice>" },
+            toolsAdded: [showStep],
+            timestamp: 3,
+          },
+          { role: "user", content: "Next step", timestamp: 4 },
+        ],
+      },
+      {
+        onPayload: (payload) => {
+          sent = payload as typeof sent;
+          throw new Error("Not sent");
+        },
+      },
+    );
+    await stream.result();
+
+    const system = (sent?.system ?? []).map((block) => block.text).join("\n");
+    expect(system).toContain("You help a family plan.");
+    expect(system).toContain("<voice>New rule.</voice>");
+    expect(system).not.toContain("Old rule.");
+    expect(sent?.tools?.map((tool) => tool.name)).toEqual(["get_recipe", "show_step"]);
+    // The model's effort is set by empty system blocks between messages: none holds any text.
+    const later = sent?.messages.filter((message) => message.role === "system") ?? [];
+    expect(later.filter((message) => !Array.isArray(message.content) || message.content.length > 0)).toEqual([]);
+    expect(JSON.stringify(sent?.messages)).not.toMatch(/rule\.|system prompt|show_step/i);
   });
 });
 

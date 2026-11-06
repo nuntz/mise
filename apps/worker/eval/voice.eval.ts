@@ -8,9 +8,8 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ChatWhere, VoiceStartReply } from "@mise/domain";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, test, vi } from "vitest";
-import { AGENT_MODEL, type AgentModels, useAgentModels } from "../src/agent";
+import { type AgentModels, claudeAgentModels, useAgentModels } from "../src/agent";
 import { useLive } from "../src/live";
-import { anthropicModels } from "../src/llm";
 import { connectAs } from "../test/connect";
 import { pretendLive } from "../test/liveService";
 import { dinnerOn, familyHousehold, type HouseholdStub } from "../test/scripted";
@@ -32,8 +31,7 @@ const TURN_MS = 90_000;
 
 /** The real model, not a scripted one: the agent's, or the one `MISE_EVAL_MODEL` asks for. */
 function realModels(env: Env): AgentModels {
-  const id = inject("agentModel");
-  return { models: anthropicModels(env.ANTHROPIC_API_KEY), model: id ? { provider: "anthropic", id } : AGENT_MODEL };
+  return claudeAgentModels(env.ANTHROPIC_API_KEY, inject("agentModel") || undefined);
 }
 
 /**

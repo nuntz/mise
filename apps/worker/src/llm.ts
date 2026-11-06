@@ -1,4 +1,12 @@
-import { type Api, createModels, type Model, type Models, Type, type UserMessage } from "@earendil-works/pi-ai";
+import {
+  type Api,
+  createModels,
+  type Model,
+  type Models,
+  type MutableModels,
+  Type,
+  type UserMessage,
+} from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import {
   ALLERGENS,
@@ -20,7 +28,7 @@ import { z } from "zod";
 export const LLM_MODEL = "claude-sonnet-5-5";
 
 /** pi-ai's models with only Anthropic registered, calling with `apiKey`. */
-export function anthropicModels(apiKey: string | undefined): Models {
+export function anthropicModels(apiKey: string | undefined): MutableModels {
   const models = createModels({
     authContext: {
       env: async (name) => (name === "ANTHROPIC_API_KEY" ? apiKey : undefined),
