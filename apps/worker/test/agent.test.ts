@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ChatWhere, WeekForTheAgent } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { agentModels, claudeAgentModels, useAgentModels } from "../src/agent";
+import { AGENT_MODEL, agentModels, claudeAgentModels, useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
 import { caller, dinnerOn, familyHousehold, lastText, scriptModel, textOf, weekOf } from "./scripted";
 
@@ -839,9 +839,9 @@ describe("a long conversation", () => {
     expect(conversation[0]).toEqual({ role: "member", speaker: null, text: BIRTHDAY });
   });
 
-  test("on Haiku, with its million-token window, is compacted before a request reaches 80,000 tokens", async () => {
+  test("on the agent's model, with its million-token window, is compacted before a request reaches 80,000 tokens", async () => {
     const requests: string[] = [];
-    scriptModel(rememberer(requests), { provider: "anthropic", id: "claude-haiku-5-5", contextWindow: 1_000_000 });
+    scriptModel(rememberer(requests), { ...AGENT_MODEL, contextWindow: 1_000_000 });
     const household = env.Household.getByName(crypto.randomUUID());
     await household.callTool("setup_household", { name: "The Example Family" });
 

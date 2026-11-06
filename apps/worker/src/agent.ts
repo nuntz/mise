@@ -33,8 +33,11 @@ import type { PiModel } from "agents/harness/pi";
 import { z } from "zod";
 import { anthropicModels } from "./llm";
 
-/** The agent's model (SPEC §2): Haiku, until multi-constraint requests show it drops clauses. */
-export const AGENT_MODEL: PiModel = { provider: "anthropic", id: "claude-haiku-5-5" };
+/**
+ * The agent's model (SPEC §2): Sonnet. On Haiku, a turn whose Week on screen disagreed with earlier
+ * turns was answered with "Should I set it again?" rather than doing what was asked (#142).
+ */
+export const AGENT_MODEL: PiModel = { provider: "anthropic", id: "claude-sonnet-5-5" };
 
 /** The models the agent can run on, and the one a new conversation starts with. */
 export type AgentModels = { models: Models; model: PiModel };
@@ -49,7 +52,7 @@ export function useAgentModels(open: ((env: Env) => AgentModels) | undefined): v
   replacement = open;
 }
 
-/** The most of the conversation a request shows the model: well under the 100,000 tokens above which Claude costs more. */
+/** The most of the conversation a request shows the model, every token of which each turn pays for again. */
 const CONTEXT_LIMIT = 80_000;
 /** From how many tokens the conversation is summarised in the background, while the chat carries on. */
 const COMPACT_FROM = 50_000;
@@ -58,8 +61,8 @@ const KEEP_RECENT = 20_000;
 
 /**
  * Compaction for the agent's model. Pi measures its thresholds back from the model's context window,
- * so on Haiku's million tokens it would summarise only near a million, and every request above 100,000
- * costs more. Pi has no setting for the context to work in, so `reserveTokens` (the room kept for the
+ * so on the agent's million tokens it would summarise only near a million, and every request would
+ * carry the whole conversation. Pi has no setting for the context to work in, so `reserveTokens` (the room kept for the
  * answer) holds back all of the window but `CONTEXT_LIMIT`; a summary may then be as long as an answer.
  */
 export function agentCompaction({ models, model }: AgentModels): CompactionSettings {
