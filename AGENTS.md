@@ -23,6 +23,10 @@ Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, 
 
 Wording a brief or ticket decides for a screen: see `docs/agents/agent-briefs.md`.
 
+### Design canvases
+
+Drawing a screen's directions on a Claude Design canvas: see `docs/agents/design-canvas.md`.
+
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
