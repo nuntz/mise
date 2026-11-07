@@ -2063,7 +2063,7 @@ test("a cooked dinner's rating sits at its Recipe sheet's foot, with its note an
     within(foot)
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(["Edit dinner", "Cook"]);
+  ).toEqual(["Not cooked after all", "Edit dinner", "Cook"]);
 
   await user.click(within(form).getByRole("radio", { name: "Meh" }));
   expect(within(form).getByRole("textbox", { name: "Note (optional)" })).toBeTruthy();
@@ -2071,7 +2071,7 @@ test("a cooked dinner's rating sits at its Recipe sheet's foot, with its note an
     within(foot)
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(["Rate", "Edit dinner", "Cook"]);
+  ).toEqual(["Rate", "Not cooked after all", "Edit dinner", "Cook"]);
 });
 
 test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run out", async () => {

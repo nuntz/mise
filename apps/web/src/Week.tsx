@@ -311,7 +311,7 @@ export function WeekPage(props: {
                           <Show when={isKeepable(slot())}>
                             <KeepButton client={props.client} slot={slot()} />
                           </Show>
-                          <Show when={slot().recipe && slot().cookedAt === null}>
+                          <Show when={slot().recipe}>
                             <MarkCooked client={props.client} slot={slot()} />
                           </Show>
                           <Show when={slot().recipe}>
@@ -333,13 +333,7 @@ export function WeekPage(props: {
                 }
                 slotActions={
                   <Show when={slot().recipe}>
-                    <Cooking
-                      client={props.client}
-                      household={props.household}
-                      slot={slot()}
-                      readOnly={readOnly()}
-                      online={props.online}
-                    />
+                    <Cooking client={props.client} household={props.household} slot={slot()} online={props.online} />
                   </Show>
                 }
               >
@@ -946,21 +940,26 @@ function RateForm(props: {
   );
 }
 
-/** Marks a Slot with a Recipe cooked, from the foot of that Recipe's sheet. */
+/**
+ * Marks a Slot with a Recipe cooked, from the foot of that Recipe's sheet; once it is, "Not cooked after
+ * all" in its place takes that back.
+ */
 function MarkCooked(props: { client: MiseClient; slot: Slot }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
+  const cooked = () => props.slot.cookedAt !== null;
   const mark = async () => {
     setBusy(true);
     const where = { date: props.slot.date, meal: props.slot.meal };
-    setError((await outcomeOf(() => props.client.call("mark_cooked", where))).failure);
+    const input = cooked() ? { ...where, cooked: false } : where;
+    setError((await outcomeOf(() => props.client.call("mark_cooked", input))).failure);
     setBusy(false);
   };
   return (
     <>
       {/* No icon: beside Keep and Edit dinner in the foot, it fits their line in kitchen mode too. */}
-      <button type="button" class="button-row" disabled={busy()} onClick={mark}>
-        {t("cooking.mark")}
+      <button type="button" class={cooked() ? "button-quiet" : "button-row"} disabled={busy()} onClick={mark}>
+        {t(cooked() ? "cooking.unmark" : "cooking.mark")}
       </button>
       <Show when={error()}>
         <p class="banner banner-warn" role="alert">
@@ -973,21 +972,9 @@ function MarkCooked(props: { client: MiseClient; slot: Slot }) {
 
 /**
  * A Slot with a Recipe, in that Recipe's sheet, once it is cooked: what ran out and its Ratings. Rating
- * it again, marking it cooked and editing it are at the sheet's foot.
+ * it again, taking back that it was cooked and editing it are at the sheet's foot.
  */
-function Cooking(props: { client: MiseClient; household: Household; slot: Slot; readOnly: boolean; online: boolean }) {
-  const [busy, setBusy] = createSignal(false);
-  const [error, setError] = createSignal<string>();
-  const where = () => ({ date: props.slot.date, meal: props.slot.meal });
-
-  const call = async (write: () => Promise<ToolResult<unknown>>): Promise<boolean> => {
-    setBusy(true);
-    const outcome = await outcomeOf(write);
-    setBusy(false);
-    setError(outcome.failure);
-    return !outcome.failure;
-  };
-
+function Cooking(props: { client: MiseClient; household: Household; slot: Slot; online: boolean }) {
   const ratedText = (given: Slot["ratings"][number]) => {
     const params = {
       who: given.memberId === null ? t("cooking.someone") : whoName(given.memberId, props.household),
@@ -997,30 +984,15 @@ function Cooking(props: { client: MiseClient; household: Household; slot: Slot; 
   };
 
   return (
-    <>
-      <Show when={error()}>
-        <p class="banner banner-warn" role="alert">
-          {error()}
-        </p>
+    <Show when={props.slot.cookedAt}>
+      <p class="chips">
+        <CookedChip />
+      </p>
+      <Show when={props.slot.meal === "dinner" && props.slot.recipe}>
+        {(recipe) => <RunOut client={props.client} recipeId={recipe().id} online={props.online} />}
       </Show>
-      <Show when={props.slot.cookedAt}>
-        <p class="chips">
-          <CookedChip />
-        </p>
-        <Show when={props.slot.meal === "dinner" && props.slot.recipe}>
-          {(recipe) => <RunOut client={props.client} recipeId={recipe().id} online={props.online} />}
-        </Show>
-        <For each={props.slot.ratings}>{(given) => <p class="meta">{ratedText(given)}</p>}</For>
-        <button
-          type="button"
-          class="button-quiet"
-          disabled={busy() || props.readOnly}
-          onClick={() => call(() => props.client.call("mark_cooked", { ...where(), cooked: false }))}
-        >
-          {t("cooking.unmark")}
-        </button>
-      </Show>
-    </>
+      <For each={props.slot.ratings}>{(given) => <p class="meta">{ratedText(given)}</p>}</For>
+    </Show>
   );
 }
 
