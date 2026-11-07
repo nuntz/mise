@@ -1,0 +1,3 @@
+# The wizard library (above the STAGES marker in scripts/setup-deployment.sh, not hand-edited)
+# prints "$e[": a string, which SC1087 reads as an array.
+disable=SC1087

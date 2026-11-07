@@ -1,0 +1,4 @@
+# GitHub-hosted labels actionlint doesn't know yet.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

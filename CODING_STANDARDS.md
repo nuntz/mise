@@ -77,3 +77,12 @@ A dependency upgrade names, for every behaviour change in the upstream release n
 that reads the changed state or does what changed, or says that none does. A release note true of the
 library can be false of Mise: Pi 1.5 ends a run cut off too often "visibly", but Mise read only failed
 answers, so the turn still looked answered until the fix in #153.
+
+## A value the deploy log must not show is a secret
+
+The deploy log is public. GitHub masks a secret everywhere, but `::add-mask::` hides only what
+prints after it, and a step's `env:` and `with:` print in its header before its script runs: so a
+plain variable that a step masks has already shown in that step's header (#155). A value that
+names the deployment or its owner (a Pulumi user, an organization, a hostname) goes in a secret.
+A variable is for what is fine to show, or what a job-level `if:` must read, as secrets can't be
+read there.
