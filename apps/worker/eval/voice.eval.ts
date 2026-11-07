@@ -171,6 +171,21 @@ describe("a spoken turn", () => {
     3 * TURN_MS,
   );
 
+  // A transcript spells no hyphens: "stir fry" found nothing, and the agent said there was no such
+  // Recipe (#97).
+  test(
+    "a Recipe named without its hyphen is found and planned",
+    async () => {
+      const { household, say } = await robinTalking(ON_THE_PANTRY);
+      await household.callTool("update_recipe", { id: 9, title: "Beef and Broccoli Stir-Fry" });
+
+      await say("Put the stir fry on Thursday.");
+
+      expect(await dinnerTitle(household, "2026-11-05")).toBe("Beef and Broccoli Stir-Fry");
+    },
+    2 * TURN_MS,
+  );
+
   // The agent once copied its own earlier "Want the next three?" after the rule forbade it (#127).
   test(
     "a long list ends by saying “more”, even after earlier answers ended with “Want the next three?”",

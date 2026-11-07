@@ -434,6 +434,27 @@ describe("searching Recipes", () => {
     expect(titles(await household.callTool("search_recipes", { query: "scallions" }))).toEqual(["Garlic noodles"]);
   });
 
+  test("finds the Recipes with every word of the query in any field, those whose title has them first", async () => {
+    const household = await withRecipes();
+    await household.callTool("update_recipe", { id: 3, cuisine: "mexican", mainProtein: "beef", course: "main" });
+    await household.callTool("create_recipe", {
+      title: "Beef and Broccoli Stir-Fry",
+      baseServings: 4,
+      ingredients: ["1 lb flank steak", "2 cups broccoli florets"],
+    });
+    await household.callTool("create_recipe", {
+      title: "Aglio e olio",
+      baseServings: 2,
+      ingredients: ["200 g spaghetti", "4 cloves garlic"],
+    });
+    const found = async (query: string) => titles(await household.callTool("search_recipes", { query }));
+
+    expect(await found("stir fry")).toEqual(["Beef and Broccoli Stir-Fry"]);
+    expect(await found("beef mexican main")).toEqual(["Chili"]);
+    expect(await found("garlic")).toEqual(["Garlic noodles", "Aglio e olio"]);
+    expect(await found("garlic spaghetti scallions")).toEqual(["Garlic noodles"]);
+  });
+
   test("combines a query with a tag", async () => {
     const household = await withRecipes();
 

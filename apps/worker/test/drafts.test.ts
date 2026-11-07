@@ -161,6 +161,7 @@ describe("Drafts", () => {
     expect(drafts.map((draft) => draft.recipe.title)).toEqual(["Chana masala", "Grandma's dal"]);
     const search = succeeded<RecipeSummary[]>(await household.callTool("search_recipes", {}));
     expect(search.map((recipe) => recipe.title)).toEqual(["Toast"]);
+    expect(await household.callTool("search_recipes", { query: "masala" })).toEqual({ ok: true, value: [] });
   });
 
   test("that look like a Recipe already kept show it, and are flagged as an import's duplicates are", async () => {

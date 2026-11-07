@@ -137,7 +137,7 @@ export function normaliseItemName(name: string): string {
  * The singular of an English word, by the common rules. It need not be right, only consistent:
  * aliases go through it too, so "olives" and "olive" agree even though both become "olive".
  */
-function singular(word: string): string {
+export function singular(word: string): string {
   if (word.length <= 3) return word;
   if (word.endsWith("ies")) return `${word.slice(0, -3)}y`;
   if (word.endsWith("oes")) return word.slice(0, -2);

@@ -8,6 +8,7 @@ import {
   type RecipeSummary,
   type Recurrence,
   recipeAllergens,
+  searchRecipes,
   type ToolResult,
 } from "@mise/domain";
 import { readCatalogue } from "./items";
@@ -157,28 +158,10 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
   },
 
   search_recipes: (sql, input) => {
-    const query = input.query.toLowerCase();
-    const matching = new Set(
-      sql
-        .exec<{ id: number }>(
-          `SELECT id FROM recipe AS r
-           WHERE (?1 = ''
-               OR instr(lower(r.title), ?1) > 0
-               OR EXISTS (SELECT 1 FROM recipe_tag AS t WHERE t.recipe_id = r.id AND instr(t.tag, ?1) > 0)
-               OR EXISTS (SELECT 1 FROM recipe_ingredient AS i WHERE i.recipe_id = r.id
-                            AND (instr(lower(i.raw), ?1) > 0 OR i.item_id = ?2)))
-             AND (?3 IS NULL OR EXISTS (SELECT 1 FROM recipe_tag AS t WHERE t.recipe_id = r.id AND t.tag = ?3))`,
-          query,
-          readCatalogue(sql).match(query),
-          input.tag ?? null,
-        )
-        .toArray()
-        .map((row) => row.id),
+    const recipes = readRecipes(sql).filter(
+      (recipe) => !recipe.draft && (input.tag === undefined || recipe.tags.includes(input.tag)),
     );
-    return {
-      ok: true,
-      value: summaries(readRecipes(sql).filter((recipe) => !recipe.draft && matching.has(recipe.id))),
-    };
+    return { ok: true, value: searchRecipes(recipes, input.query, readCatalogue(sql)).map(summaryOf) };
   },
 
   list_untagged_recipes: (sql) => ({
@@ -191,20 +174,23 @@ export const recipeHandlers: Pick<Handlers, RecipeTools> = {
 
 /** What a list shows of each Recipe, in title order. */
 function summaries(recipes: Recipe[]): RecipeSummary[] {
-  return recipes
-    .sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id)
-    .map(({ id, title, tags, effortMinutes, cuisine, mainProtein, course, readyMade, allergens, photoKey }) => ({
-      id,
-      title,
-      tags,
-      effortMinutes,
-      cuisine,
-      mainProtein,
-      course,
-      readyMade,
-      allergens,
-      photoKey,
-    }));
+  return recipes.sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id).map(summaryOf);
+}
+
+/** What a list shows of a Recipe. */
+function summaryOf({
+  id,
+  title,
+  tags,
+  effortMinutes,
+  cuisine,
+  mainProtein,
+  course,
+  readyMade,
+  allergens,
+  photoKey,
+}: Recipe): RecipeSummary {
+  return { id, title, tags, effortMinutes, cuisine, mainProtein, course, readyMade, allergens, photoKey };
 }
 
 /** Replaces a Recipe's Ingredients, steps and tags with those given, parsing each Ingredient line. */

@@ -19,6 +19,7 @@ export * from "./proposals";
 export * from "./proposer";
 export * from "./push";
 export * from "./recipes";
+export * from "./search";
 export * from "./staples";
 export * from "./suggestions";
 export * from "./tickQueue";

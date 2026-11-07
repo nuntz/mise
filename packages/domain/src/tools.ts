@@ -218,7 +218,7 @@ export const tools = {
     changes: "recipes",
     confirm: "always",
   }),
-  /** Recipes in title order; Drafts are left out, for `list_drafts`. */
+  /** Recipes found by every word of a query, those whose title has them first, then in title order; Drafts are left out, for `list_drafts`. */
   search_recipes: defineTool({
     input: SearchRecipesInput,
     output: z.array(RecipeSummary),

@@ -83,7 +83,7 @@ Notes
 ## 4. Features
 
 ### 4.1 Recipes
-- CRUD, search (title, tag, ingredient), photo (R2), kitchen mode view (large type, wake-lock, step-by-step, timers).
+- CRUD, search (every word, by its first letters or singular, in the title, tags, Ingredients, cuisine, main protein or Course; title matches first), photo (R2), kitchen mode view (large type, wake-lock, step-by-step, timers).
 - Tags: cuisine, protein, effort/time, season (optional), diet flags.
 - Course: what the dish is served as (`main | side | dessert | drink | breakfast | snack`, or unknown). Worked out at import from categories, corrected by hand on the Recipe (ADR 0022).
 - Ready-made: a dish bought finished and only heated (a Costco lasagna) is a Recipe marked `readyMade`, whose one Ingredient is the product, a Household Item carrying its Allergens and Store Section. "Add a Ready-made dish" asks only for the title, product, Servings, Allergens and how to heat it, and `create_ready_made_recipe` makes the Item and the Recipe in one call; a product that already names an Item uses it. The Grocery List rounds packages, cans and jars up to whole ones (ADR 0026).

@@ -179,7 +179,8 @@ const AGENT_TOOLS: Partial<Record<ToolName, string>> = {
     "Replaces a Member's Constraints with the list given. Removing a Hard Constraint, or making one a dislike, " +
     "waits for the person's tap; adding one doesn't.",
   remove_member: "Removes a Member. Removing one with a Hard Constraint waits for the person's tap.",
-  search_recipes: "Recipes whose title matches `query`, or with `tag`, in title order. Drafts are left out.",
+  search_recipes:
+    "Recipes in which every word of `query` starts a word, or is its singular, in the title, tags, Ingredient lines, cuisine, main protein or Course, or names an Item used, small words like `the` skipped and title matches first; with `tag` if given; Drafts left out. If none, search again on the one most telling word, then with an empty `query` for every title, before saying a Recipe isn't there.",
   get_recipe: "One Recipe in full: Ingredients, steps, servings, time, Course and tags.",
   create_recipe: "Creates a Recipe from a title, base servings and Ingredient lines as written.",
   update_recipe: "Changes the fields given of a Recipe, or of a Draft before a person accepts it.",
