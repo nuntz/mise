@@ -91,6 +91,31 @@ describe("identity at the HTTP seam", () => {
   });
 
   test.each([
+    "/agents/household/household/rpc",
+    "/agents/household/household/%0A/rpc",
+    "/agents/household/household/%5C/rpc",
+    // Dot segments climbing out of the paths Access bypasses resolve to the Household.
+    "/cal/%2e%2e/agents/household/household",
+    "/kitchen-display/v1/%2e%2e/%2e%2e/agents/household/household",
+  ])("a path %s that resolves to the Household still requires Access", async (path) => {
+    const response = await exports.default.fetch(new URL(path, householdUrl).href);
+
+    expect(response.status).toBe(401);
+  });
+
+  test.each([
+    // An encoded slash is not a path separator, so these stay where Access is bypassed.
+    "/cal/..%2Fagents/household/household",
+    "/kitchen-display/..%2F..%2Fagents/household/household",
+    "/agents/household/householdx",
+    "/agents/household/another-household",
+  ])("a path %s that only looks like the Household never reaches it", async (path) => {
+    const response = await exports.default.fetch(new URL(path, householdUrl).href);
+
+    expect(response.status).toBe(404);
+  });
+
+  test.each([
     ["signed by someone other than Access", () => accessJwt({}, strangerKey)],
     ["for another Access application", () => accessJwt({ aud: ["another-application"] })],
     ["from another Access team", () => accessJwt({ iss: "https://elsewhere.cloudflareaccess.com" })],
