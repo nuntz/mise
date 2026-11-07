@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, onTestFinished, test } from "vitest";
 import { type MessageKey, nameText, setLocale, setPseudoLocale, t } from "../src/messages";
+import { literals, sources } from "./sources";
 
 afterEach(() => setPseudoLocale(false));
 
@@ -41,16 +42,19 @@ test("a name standing alone takes a capital for the Household's locale, and keep
 });
 
 test("every message is shown somewhere, so a screen's removal takes its words with it", () => {
-  const srcDir = join(import.meta.dirname, "../src");
-  const source = (file: string) => readFileSync(join(srcDir, file), "utf8");
-  const keys = [...source("messages.ts").matchAll(/^\s+"([\w.]+)":/gm)].map(([, key]) => key as string);
-  const components = readdirSync(srcDir, { recursive: true, encoding: "utf8" })
-    .filter((file) => /\.tsx?$/.test(file) && file !== "messages.ts")
-    .map(source)
-    .join("");
-  // A key built in a template, such as t(`slot.${kind}`), counts every key under its stem.
-  const stems = [...components.matchAll(/`([\w.]+\.)\$\{/g)].map(([, stem]) => stem as string);
-  expect(keys.filter((key) => !components.includes(`"${key}"`) && !stems.some((stem) => key.startsWith(stem)))).toEqual(
-    [],
-  );
+  const messages = readFileSync(join(import.meta.dirname, "../src/messages.ts"), "utf8");
+  const keys = [...messages.matchAll(/^\s+"([\w.]+)":/gm)].map(([, key]) => key as string);
+  const named = new Set(sources.flatMap(({ code }) => literals(code)));
+  // A key built in a template, such as `slot.${kind}.${meal}`, counts the keys with one word for each
+  // placeholder: slot.change.dinner, not slot.keep. One that starts with a key built earlier, such as
+  // `${key}.term`, counts the keys that end with what follows it.
+  const placeholder = /\$\{[^}]*\}/;
+  const built = [...named]
+    .filter((text) => placeholder.test(text) && /^(?:[a-zA-Z]+|\$\{[^}]*\})\.(?:[\w.]|\$\{[^}]*\})*$/.test(text))
+    .map((text) => {
+      const parts = text.split(placeholder).map((part) => part.replaceAll(".", "\\."));
+      const pattern = text.startsWith("${") ? `[\\w.]+${parts.slice(1).join("\\w+")}` : parts.join("\\w+");
+      return new RegExp(`^${pattern}$`);
+    });
+  expect(keys.filter((key) => !named.has(key) && !built.some((pattern) => pattern.test(key)))).toEqual([]);
 });

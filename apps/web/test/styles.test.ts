@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { literals, sources, withoutComments } from "./sources";
 
 /** The component styles, without their comments. */
 const appCss = readFileSync(join(import.meta.dirname, "../src/styles/app.css"), "utf8").replace(
@@ -51,31 +52,26 @@ test("every alert in the web components is a banner, so no error reads as body t
   ).toEqual([]);
 });
 
-/** Whether some component sets `name` as a class, literally or as the stem of a template such as `answer-${…}`. */
-function setByComponent(name: string): boolean {
-  return components.some(
-    ({ source }) =>
-      new RegExp(`(?<![\\w-])${name}(?![\\w-])`).test(source) ||
-      [...source.matchAll(/([\w-]+-)\$\{/g)].some(([, stem]) => name.startsWith(stem as string)),
-  );
-}
-
 test("every token is used, so a component's removal takes its tokens with it", () => {
   // The screen transition's duration and the out curve, described in the Design System's Motion, before anything uses them.
   const described = ["duration-screen", "ease-out"];
-  const tokens = tokensCss.replace(/\/\*[\s\S]*?\*\//g, "");
-  const used = new Set(
-    [...`${appCss}${tokens}${components.map(({ source }) => source).join("")}`.matchAll(/var\(--([\w-]+)/g)].map(
-      ([, name]) => name,
-    ),
-  );
+  const tokens = withoutComments(tokensCss);
+  const code = `${appCss}${tokens}${sources.map(({ code }) => code).join("")}`;
+  // A use reads a token, var(--name), or a component sets one as a style property, "--name".
+  const used = new Set([...code.matchAll(/var\(--([\w-]+)|["'`]--([\w-]+)/g)].map(([, read, set]) => read ?? set));
   const defined = [...new Set([...tokens.matchAll(/--([\w-]+)\s*:/g)].map(([, name]) => name as string))];
   expect(defined.filter((name) => !used.has(name) && !described.includes(name))).toEqual([]);
 });
 
 test("every class the styles name is one a component sets, so a component's removal takes its rules with it", () => {
+  const code = sources.map(({ code }) => code).join("");
+  // A class is set as a word of a string, or by a class template's stem, such as `answer-${status}`.
+  const words = new Set(literals(code).flatMap((text) => text.split(/\s+|\$\{[^}]*\}/)));
+  const stems = [...code.matchAll(/class(?:List)?=\{`([^`]*)`/g)].flatMap(([, template]) =>
+    [...(template ?? "").matchAll(/([\w-]+-)\$\{/g)].map(([, stem]) => stem as string),
+  );
   const classes = [...new Set([...appCss.matchAll(/\.([a-z][\w-]*)/g)].map(([, name]) => name as string))];
-  expect(classes.filter((name) => !setByComponent(name))).toEqual([]);
+  expect(classes.filter((name) => !words.has(name) && !stems.some((stem) => name.startsWith(stem)))).toEqual([]);
 });
 
 /** The declarations of the rule whose selector list is exactly `selector`. */
