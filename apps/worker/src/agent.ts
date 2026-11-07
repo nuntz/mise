@@ -1,13 +1,16 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models, StopReason } from "@earendil-works/pi-ai";
-import type {
-  CompactionSettings,
-  Conversation,
-  ConversationId,
-  Cursor,
-  EntryRecord,
-  Extension,
-  ToolRegistration,
+import {
+  type CompactionSettings,
+  type Conversation,
+  type ConversationId,
+  type Cursor,
+  type EntryId,
+  type EntryRecord,
+  type Extension,
+  LiveDoc,
+  type Session,
+  type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import {
   type Caller,
@@ -535,18 +538,31 @@ export async function turnBeingAnswered(conversation: Conversation): Promise<num
 }
 
 /**
- * Whether the newest Member's turn placed in the conversation went unanswered: its run failed. A turn
- * still being answered hasn't.
+ * Whether the newest Member's turn placed in the conversation went unanswered: its run failed, or Pi
+ * ended it without an answer. A turn still being answered hasn't.
  */
-export async function lastTurnUnanswered(conversation: Conversation): Promise<boolean> {
+export async function lastTurnUnanswered(pi: Session, conversation: Conversation): Promise<boolean> {
+  const failed = await failedRunStart(pi, conversation);
+  let lastAnswerRead = false;
   // A run's last answer comes before its turn.
   for await (const entry of newestFirst(conversation)) {
-    if (entry.kind === TURN_ENTRY) return false;
-    if (entry.kind !== "pi.assistant") continue;
+    if (entry.kind === TURN_ENTRY) return entry.id === failed;
+    if (lastAnswerRead || entry.kind !== "pi.assistant") continue;
     const answer = [...(entry.model ?? [])].reverse().find((message) => message.role === "assistant");
-    if (answer?.role === "assistant") return FAILED.has(answer.stopReason);
+    if (answer?.role !== "assistant") continue;
+    if (FAILED.has(answer.stopReason)) return true;
+    if (failed === undefined) return false;
+    lastAnswerRead = true;
   }
   return false;
+}
+
+/**
+ * The first entry of the newest run Pi ended without an answer, until a later run starts: for a run
+ * answering a Member, its turn. A run cut off too often ends so, with no failed answer in the transcript.
+ */
+async function failedRunStart(pi: Session, conversation: Conversation): Promise<EntryId | undefined> {
+  return (await pi.snapshot(LiveDoc, conversation.id, BACKGROUND_CONTEXT))?.runFailure?.first;
 }
 
 /**
@@ -588,10 +604,12 @@ export type ChatLookups = {
  * what compaction summarised for the model stays in the chat.
  */
 export async function recentChat(
+  pi: Session,
   conversation: Conversation,
   count: number,
   lookups: ChatLookups,
 ): Promise<ChatMessage[]> {
+  const failed = await failedRunStart(pi, conversation);
   let entries: EntryRecord[] = [];
   let messages: ChatMessage[] = [];
   let cursor: Cursor | undefined;
@@ -599,7 +617,7 @@ export async function recentChat(
     // Newest first. Read again as a whole: a turn and the run answering it may be on two pages.
     const page = await conversation.entries({}, 100, cursor, BACKGROUND_CONTEXT);
     entries = [...[...page.items].reverse(), ...entries];
-    messages = chatMessages(entries, lookups);
+    messages = chatMessages(entries, lookups, failed);
     cursor = page.next;
   } while (cursor && messages.length < count);
   return messages.slice(-count);
@@ -608,15 +626,17 @@ export async function recentChat(
 /**
  * Entries as the chat shows them, in their order: what Members said, the agent's answers, and the
  * confirmations its held calls wait for, where it made them. A turn whose run failed is marked
- * unanswered, whatever its run did before failing.
+ * unanswered, whatever its run did before failing, as is the turn `failed`: the one whose run Pi ended
+ * without an answer.
  */
-function chatMessages(entries: readonly EntryRecord[], lookups: ChatLookups): ChatMessage[] {
+function chatMessages(entries: readonly EntryRecord[], lookups: ChatLookups, failed?: EntryId): ChatMessage[] {
   const messages: ChatMessage[] = [];
   let latestTurn: Extract<ChatMessage, { role: "member" }> | undefined;
   for (const entry of entries) {
     if (entry.kind === TURN_ENTRY) {
       const { turn, text } = entry.data as TurnData;
       latestTurn = { role: "member", speaker: lookups.speakerOf(turn), text };
+      if (entry.id === failed) latestTurn.unanswered = true;
       messages.push(latestTurn);
       continue;
     }

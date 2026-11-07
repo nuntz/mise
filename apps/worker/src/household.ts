@@ -326,7 +326,8 @@ class HouseholdAgent extends Agent<Env> {
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
     const today = localDate(now, this.household()?.timezone ?? "UTC");
     // After a failed run, the turns it left waiting aren't answered with this one.
-    const afterUnanswered = await lastTurnUnanswered(await (await this.harness.pi()).root(BACKGROUND_CONTEXT));
+    const pi = await this.harness.pi();
+    const afterUnanswered = await lastTurnUnanswered(pi, await pi.root(BACKGROUND_CONTEXT));
     const presented = presentTurn({
       speaker: speakerOfTurn(sql, turn),
       today,
@@ -598,7 +599,7 @@ class HouseholdAgent extends Agent<Env> {
     // The harness opened Pi with its root conversation, so `root` finds it rather than making one.
     const pi = await this.harness.pi();
     const { sql } = this.ctx.storage;
-    return recentChat(await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS, {
+    return recentChat(pi, await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS, {
       speakerOf: (turn) => speakerOfTurn(sql, turn),
       confirmation: (id) => confirmationShown(sql, id),
     });
