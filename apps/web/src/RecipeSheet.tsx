@@ -1,5 +1,5 @@
 import { type Recipe, type RecipeId, scaledLines } from "@mise/domain";
-import { createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
+import { children, createSignal, createUniqueId, For, type JSX, Show } from "solid-js";
 import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
@@ -26,7 +26,7 @@ export function RecipeSheet(props: {
   onClose: () => void;
   /** What can be done with the Slot once cooked. */
   slotActions?: JSX.Element;
-  /** What the sheet's foot offers before Cook, such as rating it, Keep and Edit; undefined for nothing. */
+  /** What the sheet's foot offers before Cook, such as rating it, Keep and Edit; it may render nothing. */
   foot?: JSX.Element;
   children?: JSX.Element;
 }) {
@@ -45,6 +45,11 @@ export function RecipeSheet(props: {
       saveRecipe(result.value);
     },
   );
+
+  // The foot, resolved once so what it holds keeps its state, such as a rating being written; the sheet
+  // leaves room for it only while it shows something or there is Cook.
+  const foot = children(() => props.foot);
+  const footShows = () => foot.toArray().some((node) => node != null);
 
   return (
     <Sheet labelledBy={titleId} focusField={false} onEscape={() => props.onClose()}>
@@ -102,9 +107,9 @@ export function RecipeSheet(props: {
           )}
         </Show>
       </div>
-      <Show when={recipe() && (props.onCook || props.foot)}>
+      <Show when={recipe() && (props.onCook || footShows())}>
         <div class="sheet-foot">
-          {props.foot}
+          {foot()}
           <Show when={recipe()}>
             {(open) => (
               <Show when={props.onCook}>

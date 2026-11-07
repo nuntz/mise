@@ -7,9 +7,10 @@ criterion the implementer must meet word for word, so the wording has to hold up
   (`slot.edit.dinner` is "Edit dinner"), and say where it shows: on the card, in the dinner's sheet or
   in the Slot form.
 - **Every kind of Slot the wording reaches** (`SLOT_KINDS`). Each kind shows different controls: a
-  Recipe dinner's card shows Cook and its sheet shows "Edit dinner"; Leftovers, Eating out and No meal
-  show "Change" on the card; Nothing planned shows "Choose". A pencilled Recipe or Leftovers dinner also
-  shows Keep on the card, and its reason and Keep in its sheet (ADR 0032). Wording that tells someone
+  Recipe dinner's card shows Cook and its sheet shows "Edit dinner" at its foot; Leftovers, Eating out
+  and No meal show "Change" on the card; Nothing planned shows "Choose". A pencilled Recipe or Leftovers
+  dinner also shows Keep on the card, and in its sheet its reason under the title and Keep at the foot
+  (ADR 0032). Wording that tells someone
   what to tap covers each kind it can reach, or says which kinds it is for.
 - **What a dinner card's end shows.** Cook and Keep are icons, named by their labels. "Change" and
   "Choose" (`slot.changeShort`, `slot.chooseShort`) are named "Change dinner" and "Choose a dinner", the

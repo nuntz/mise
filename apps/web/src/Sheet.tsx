@@ -2,9 +2,9 @@ import type { JSX } from "solid-js";
 
 /**
  * A sheet over the page that holds the focus until it closes: a modal dialog, labelled by the
- * element with id `labelledBy`, that focuses its first field on opening, or itself when `focusField`
- * is false or the screen is touched by a finger, where a focused field brings up a keyboard over
- * what the sheet opened to show. Escape calls `onEscape`; Tab and Shift+Tab go round its controls,
+ * element with id `labelledBy`, that focuses on opening the control marked `autofocus`, if it was
+ * opened for one; else its first field, or itself when `focusField` is false or the screen is touched
+ * by a finger, where a focused field brings up a keyboard over what the sheet opened to show. Escape calls `onEscape`; Tab and Shift+Tab go round its controls,
  * not out to the page under it.
  */
 export function Sheet(props: {
@@ -16,9 +16,9 @@ export function Sheet(props: {
 }) {
   const focusFirst = (sheet: HTMLElement) =>
     queueMicrotask(() =>
-      (props.focusField === false || touch()
-        ? sheet
-        : sheet.querySelector<HTMLElement>("input, select, textarea")
+      (
+        sheet.querySelector<HTMLElement>("[autofocus]") ??
+        (props.focusField === false || touch() ? sheet : sheet.querySelector<HTMLElement>("input, select, textarea"))
       )?.focus(),
     );
 

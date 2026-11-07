@@ -23,3 +23,7 @@ The rule of ADR 0030 is unchanged: a dinner is pencilled exactly when it has a r
 ## Amendment: no day rail
 
 The Week has no day rail any more, so nothing puts a dot under a day: the Pencilled chip on each card, and the same chip leading the line under Re-roll, are the whole of the mark. The rail's other jobs were said twice already: today's card has its plum ring and "Tonight", and its jump is replaced by the Week opening at Tonight, on opening and on coming back from Next Week. It stays at its top on the Week's first day, where Tonight is the first card anyway, and while nothing is planned, when Propose dinners is the point. A refetch leaves the scroll where it is.
+
+## Amendment: the sheet's actions at its foot
+
+The reason stays under the Recipe sheet's title, but Keep no longer sits under it: it is at the sheet's foot, held at the bottom edge while a long Recipe scrolls, beside Mark cooked and Edit dinner and above Cook. Once the dinner is cooked, the foot holds the rating, Not cooked after all and Edit dinner instead. Keep still shows exactly when the dinner can be kept, and settling a dinner is still one tap, now within a thumb's reach.

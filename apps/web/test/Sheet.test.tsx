@@ -38,3 +38,17 @@ test("on a touch screen, every sheet opens on itself, not the keyboard", async (
   render(search);
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "Find" })));
 });
+
+test("a sheet opened for one control opens on it, even where it would open on itself", async () => {
+  render(() => (
+    <Sheet labelledBy="title" onEscape={() => {}} focusField={false}>
+      <h2 id="title">Pasta</h2>
+      <input aria-label="Note" />
+      <label>
+        <input type="radio" name="rating" autofocus />
+        Again
+      </label>
+    </Sheet>
+  ));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Again" })));
+});

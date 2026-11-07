@@ -301,35 +301,16 @@ export function WeekPage(props: {
                 }
                 onClose={() => setOpened(undefined)}
                 foot={
-                  (slot().recipe && slot().cookedAt) || (!readOnly() && (isKeepable(slot()) || slot().recipe)) ? (
-                    <>
-                      <Show when={slot().recipe && slot().cookedAt}>
-                        <RateForm client={props.client} slot={slot()} readOnly={readOnly()} rate={open.rate} />
-                      </Show>
-                      <Show when={!readOnly() && (isKeepable(slot()) || slot().recipe)}>
-                        <div class="sheet-foot-row">
-                          <Show when={isKeepable(slot())}>
-                            <KeepButton client={props.client} slot={slot()} />
-                          </Show>
-                          <Show when={slot().recipe}>
-                            <MarkCooked client={props.client} slot={slot()} />
-                          </Show>
-                          <Show when={slot().recipe}>
-                            <button
-                              type="button"
-                              class="button-row"
-                              onClick={() => {
-                                setOpened(undefined);
-                                edit(open.slot, true);
-                              }}
-                            >
-                              {t(`slot.edit.${slot().meal}`)}
-                            </button>
-                          </Show>
-                        </div>
-                      </Show>
-                    </>
-                  ) : undefined
+                  <SlotFoot
+                    client={props.client}
+                    slot={slot()}
+                    readOnly={readOnly()}
+                    rate={open.rate}
+                    onEdit={() => {
+                      setOpened(undefined);
+                      edit(open.slot, true);
+                    }}
+                  />
                 }
                 slotActions={
                   <Show when={slot().recipe}>
@@ -869,6 +850,33 @@ function CookedChip() {
 }
 
 /**
+ * What a Slot's Recipe sheet holds at its foot above Cook: once cooked, rating it; and, while the Week
+ * can be changed, Keep, Mark cooked or "Not cooked after all", and Edit. Nothing, when none applies.
+ */
+function SlotFoot(props: { client: MiseClient; slot: Slot; readOnly: boolean; rate: boolean; onEdit: () => void }) {
+  return (
+    <>
+      <Show when={props.slot.recipe && props.slot.cookedAt}>
+        <RateForm client={props.client} slot={props.slot} readOnly={props.readOnly} rate={props.rate} />
+      </Show>
+      <Show when={!props.readOnly && (isKeepable(props.slot) || props.slot.recipe)}>
+        <div class="sheet-foot-row">
+          <Show when={isKeepable(props.slot)}>
+            <KeepButton client={props.client} slot={props.slot} />
+          </Show>
+          <Show when={props.slot.recipe}>
+            <MarkCooked client={props.client} slot={props.slot} />
+            <button type="button" class="button-row" onClick={() => props.onEdit()}>
+              {t(`slot.edit.${props.slot.meal}`)}
+            </button>
+          </Show>
+        </div>
+      </Show>
+    </>
+  );
+}
+
+/**
  * Rates a cooked Slot's Recipe, at the foot of its sheet: the choices in one row, and the note and Rate
  * only once one is picked, so the foot leaves the Recipe room until then.
  */
@@ -901,17 +909,16 @@ function RateForm(props: {
   };
   return (
     <form class="rate-form" aria-label={t("cooking.prompt")} onSubmit={rate}>
-      <fieldset
-        class="field"
-        ref={(rating) => props.rate && queueMicrotask(() => rating.querySelector<HTMLInputElement>("input")?.focus())}
-      >
+      <fieldset class="field">
         <legend>{t("cooking.prompt")}</legend>
         <div class="rating-choices">
           <For each={RATINGS}>
             {(option) => (
               <label class="toggle-chip">
+                {/* Opened to rate it, the sheet opens on the first choice. */}
                 <input
                   type="radio"
+                  autofocus={props.rate && option === RATINGS[0]}
                   name={`rating-${props.slot.date}-${props.slot.meal}`}
                   checked={rating() === option}
                   onChange={() => setRating(option)}

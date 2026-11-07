@@ -2074,6 +2074,33 @@ test("a cooked dinner's rating sits at its Recipe sheet's foot, with its note an
   ).toEqual(["Rate", "Not cooked after all", "Edit dinner", "Cook"]);
 });
 
+test("a rating being written at the Recipe sheet's foot survives the Week being fetched again", async () => {
+  const cooked = emptyWeek("2026-10-26");
+  Object.assign(cooked.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T02:00:00.000Z",
+  });
+  const fake = fakeClient({ get_week: () => ({ ok: true, value: structuredClone(cooked) }) });
+  const user = userEvent.setup();
+  render(() => <App client={fake.client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const form = await within(sheet).findByRole("form", { name: "How was it?" });
+  await user.click(within(form).getByRole("radio", { name: "Meh" }));
+  await user.type(within(form).getByRole("textbox", { name: "Note (optional)" }), "A bit dry");
+
+  const fetched = fake.calls.filter((call) => call.name === "get_week").length;
+  fake.notify("plan");
+  await vi.waitFor(() => expect(fake.calls.filter((call) => call.name === "get_week").length).toBeGreaterThan(fetched));
+  await new Promise((resolve) => setTimeout(resolve));
+
+  const after = within(screen.getByRole("dialog", { name: "Pasta" })).getByRole("form", { name: "How was it?" });
+  expect((within(after).getByRole("radio", { name: "Meh" }) as HTMLInputElement).checked).toBe(true);
+  expect((within(after).getByRole("textbox", { name: "Note (optional)" }) as HTMLInputElement).value).toBe("A bit dry");
+});
+
 test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run out", async () => {
   const cooked = emptyWeek("2026-10-26");
   Object.assign(cooked.slots[5] as Slot, {
