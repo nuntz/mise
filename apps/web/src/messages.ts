@@ -258,7 +258,6 @@ const en = {
   "update.ready": "A newer Mise is ready.",
   "update.reload": "Reload",
   "recipes.lastViewed": "Last viewed: {title}",
-  "grocery.title": "Grocery List",
   "grocery.notSaved": "This Week's list wasn't loaded on this device before going offline.",
   "grocery.none": "No Grocery List for this Week yet.",
   "grocery.build": "Build the Grocery List",
@@ -289,7 +288,6 @@ const en = {
   "grocery.staplesChanged": "Some Staples have run low or out since this list was built. Rebuild it to add them.",
   "grocery.staple": "Staple",
 
-  "pantry.title": "Pantry",
   "pantry.bannerOne": "Pantry check: 1 Staple",
   "pantry.banner": "Pantry check: {count} Staples",
   "pantry.checkNow": "Check now",
@@ -639,7 +637,6 @@ const en = {
   "course.drink": "Drink",
   "course.breakfast": "Breakfast",
   "course.snack": "Snack",
-  "recipe.photo": "Photo",
   "recipe.photoAlt": "Photo of {title}",
   "recipe.photoUpload": "Add or replace photo",
   "recipe.photoRemove": "Remove photo",

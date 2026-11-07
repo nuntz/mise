@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, expect, onTestFinished, test } from "vitest";
 import { type MessageKey, nameText, setLocale, setPseudoLocale, t } from "../src/messages";
 
@@ -36,4 +38,19 @@ test("a name standing alone takes a capital for the Household's locale, and keep
   setLocale("tr");
   onTestFinished(() => setLocale("en-CA"));
   expect(nameText("ispanak")).toBe("İspanak");
+});
+
+test("every message is shown somewhere, so a screen's removal takes its words with it", () => {
+  const srcDir = join(import.meta.dirname, "../src");
+  const source = (file: string) => readFileSync(join(srcDir, file), "utf8");
+  const keys = [...source("messages.ts").matchAll(/^\s+"([\w.]+)":/gm)].map(([, key]) => key as string);
+  const components = readdirSync(srcDir, { recursive: true, encoding: "utf8" })
+    .filter((file) => /\.tsx?$/.test(file) && file !== "messages.ts")
+    .map(source)
+    .join("");
+  // A key built in a template, such as t(`slot.${kind}`), counts every key under its stem.
+  const stems = [...components.matchAll(/`([\w.]+\.)\$\{/g)].map(([, stem]) => stem as string);
+  expect(keys.filter((key) => !components.includes(`"${key}"`) && !stems.some((stem) => key.startsWith(stem)))).toEqual(
+    [],
+  );
 });

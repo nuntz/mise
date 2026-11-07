@@ -51,6 +51,33 @@ test("every alert in the web components is a banner, so no error reads as body t
   ).toEqual([]);
 });
 
+/** Whether some component sets `name` as a class, literally or as the stem of a template such as `answer-${…}`. */
+function setByComponent(name: string): boolean {
+  return components.some(
+    ({ source }) =>
+      new RegExp(`(?<![\\w-])${name}(?![\\w-])`).test(source) ||
+      [...source.matchAll(/([\w-]+-)\$\{/g)].some(([, stem]) => name.startsWith(stem as string)),
+  );
+}
+
+test("every token is used, so a component's removal takes its tokens with it", () => {
+  // The screen transition's duration and the out curve, described in the Design System's Motion, before anything uses them.
+  const described = ["duration-screen", "ease-out"];
+  const tokens = tokensCss.replace(/\/\*[\s\S]*?\*\//g, "");
+  const used = new Set(
+    [...`${appCss}${tokens}${components.map(({ source }) => source).join("")}`.matchAll(/var\(--([\w-]+)/g)].map(
+      ([, name]) => name,
+    ),
+  );
+  const defined = [...new Set([...tokens.matchAll(/--([\w-]+)\s*:/g)].map(([, name]) => name as string))];
+  expect(defined.filter((name) => !used.has(name) && !described.includes(name))).toEqual([]);
+});
+
+test("every class the styles name is one a component sets, so a component's removal takes its rules with it", () => {
+  const classes = [...new Set([...appCss.matchAll(/\.([a-z][\w-]*)/g)].map(([, name]) => name as string))];
+  expect(classes.filter((name) => !setByComponent(name))).toEqual([]);
+});
+
 /** The declarations of the rule whose selector list is exactly `selector`. */
 function declarations(selector: string): string {
   const rule = [...appCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find(
