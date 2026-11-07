@@ -191,26 +191,25 @@ function defined(attributes: PiAttributes | undefined): SpanAttributes {
 }
 
 type OnReport = NonNullable<HarnessOptions["onReport"]>;
-type ReportInfo = Parameters<OnReport>[1];
+type ReportInfo = Parameters<OnReport>[0];
 
 /** Sentry's `captureMessage`, as far as pi's reports use it. */
 export type CaptureMessage = (message: string, context: { level: "error"; tags: Record<string, string> }) => unknown;
 
 /**
- * pi's reports of its own failures (a failed session, a task that faulted or that its restart limit
- * parked, an extension or host callback that threw) as Sentry messages: what happened, and the task
- * kind, extension and callback it names, never the error, whose text can quote what someone said.
- * A parked task waits for `retry()`, run by hand.
+ * pi's reports of its own failures (failed storage, a task that faulted or was interrupted, an
+ * extension or host callback that threw) as Sentry messages: what happened, and the task kind,
+ * extension and callback it names, never the error, whose text can quote what someone said.
  */
 export function piReports(capture: CaptureMessage = Sentry.captureMessage as CaptureMessage): OnReport {
-  return (_error, info) => void capture(`pi ${info.type}`, { level: "error", tags: reportTags(info) });
+  return (info) => void capture(`pi ${info.kind}`, { level: "error", tags: reportTags(info) });
 }
 
 function reportTags(info: ReportInfo): Record<string, string> {
   const named = info as { task?: { kind: string }; extension?: string; reason?: string; callback?: string };
   return Object.fromEntries(
     Object.entries({
-      "pi.report": info.type,
+      "pi.report": info.kind,
       "pi.task": named.task?.kind,
       "pi.extension": named.extension,
       "pi.reason": named.reason,

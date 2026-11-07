@@ -285,19 +285,27 @@ describe("pi's own failures", () => {
     return { reports, capture };
   }
 
-  test("a task pi parked or that faulted reaches Sentry by its kind, never by its error", () => {
+  test("a task pi interrupted or that faulted reaches Sentry by its kind, never by its error", () => {
     const { reports, capture } = recordingCapture();
     const onReport = piReports(capture);
     const task = { id: 7 as never, kind: "pi.tool", conversationId: 1 as never };
 
-    onReport(new Error("Robin asked about peanuts"), {
-      type: "task_faulted",
+    onReport({
+      error: new Error("Robin asked about peanuts"),
+      kind: "task_faulted",
       task,
       extension: "mise",
       reason: "threw",
     });
-    onReport(new Error("Robin asked about peanuts"), { type: "task_parked", task, extension: "mise" });
-    onReport(new Error("Robin asked about peanuts"), { type: "session_failed" });
+    onReport({
+      error: new Error("Robin asked about peanuts"),
+      kind: "task_interrupted",
+      task,
+      extension: "mise",
+      reason: "restart_limit",
+      restarts: 3,
+    });
+    onReport({ error: new Error("Robin asked about peanuts"), kind: "storage_failed" });
 
     expect(reports).toEqual([
       {
@@ -308,10 +316,18 @@ describe("pi's own failures", () => {
         },
       },
       {
-        message: "pi task_parked",
-        context: { level: "error", tags: { "pi.report": "task_parked", "pi.task": "pi.tool", "pi.extension": "mise" } },
+        message: "pi task_interrupted",
+        context: {
+          level: "error",
+          tags: {
+            "pi.report": "task_interrupted",
+            "pi.task": "pi.tool",
+            "pi.extension": "mise",
+            "pi.reason": "restart_limit",
+          },
+        },
       },
-      { message: "pi session_failed", context: { level: "error", tags: { "pi.report": "session_failed" } } },
+      { message: "pi storage_failed", context: { level: "error", tags: { "pi.report": "storage_failed" } } },
     ]);
   });
 

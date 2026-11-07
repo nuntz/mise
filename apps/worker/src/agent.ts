@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { type Models, type StopReason, Type } from "@earendil-works/pi-ai";
+import type { Models, StopReason } from "@earendil-works/pi-ai";
 import type {
   CompactionSettings,
   Conversation,
@@ -297,11 +297,11 @@ function showStepTool(host: AgentHost): ToolRegistration {
     description:
       "In Kitchen mode, during a Voice Session: moves the screen to step `step`, counted from 1. Call it each time " +
       "you read a step aloud (“next step”, “back”, “repeat that”).",
-    parameters: Type.Unsafe({
+    parameters: {
       type: "object",
       properties: { step: { type: "integer", minimum: 1, description: "The step's number, from 1" } },
       required: ["step"],
-    }),
+    },
     replay: "safe",
     async execute(args, api) {
       const input = ShowStepInput.safeParse(args);
@@ -441,7 +441,7 @@ function agentTool(name: ToolName, description: string, host: AgentHost): ToolRe
   return {
     name,
     description,
-    parameters: Type.Unsafe(asOneObject(schema)),
+    parameters: asOneObject(schema),
     // A tool that only reads runs again if the household was evicted during it; one that changes
     // something is answered as interrupted instead, and never runs twice.
     replay: changeTopicOf(name) ? "unsafe" : "safe",
