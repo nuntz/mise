@@ -64,6 +64,13 @@ card's thumb, indent or rows changes its placeholder in the same diff, as the We
 `docs/agents/agent-briefs.md` names the words a screen shows, and briefs quote it word for word. A
 change to a control's label or where it shows updates every bullet there that names it (#147).
 
+## A token or a design rule changed puts the Design System behind
+
+The Design System is synced from `tokens.css` and nothing in CI can read it (ADR 0033). A change to a
+token, or to where a design rule applies (which screens carry the large photo, what a colour marks),
+says in its report that the Design System is due a re-sync, and which of its README's sections no
+longer reads true.
+
 ## An upgrade accounts for what upstream changed
 
 A dependency upgrade names, for every behaviour change in the upstream release notes, the Mise code

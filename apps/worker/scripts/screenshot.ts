@@ -1,6 +1,7 @@
 /**
  * Screenshots the Week for the README: builds the PWA, runs `wrangler dev` on a fresh, throwaway
- * store, seeds the fictional sample Household and its Week, and saves what a phone shows to
+ * store, seeds the fictional sample Household and its Week (its `photographed` Recipes with
+ * fixtures/photos/sample-dish.jpg), and saves what a phone shows to
  * docs/screenshots/. Nothing is committed: look the images over, then commit the ones to keep.
  * With `--screens`, saves every screen instead, as a phone shows it a screenful at a time, in
  * daylight, kitchen mode and the pseudo-locale, to dist/screens/ (never committed), for a design review.
@@ -18,7 +19,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addDays, HOUSEHOLD_AGENT, type Week } from "@mise/domain";
+import { addDays, HOUSEHOLD_AGENT, recipePhotoPath, type Week } from "@mise/domain";
 import { AgentClient } from "agents/client";
 import { type Browser, chromium, devices, type Locator, type Page } from "playwright";
 import sampleHousehold from "../../../fixtures/sample-household.json";
@@ -30,6 +31,20 @@ const host = `localhost:${PORT}`;
 const repo = join(import.meta.dir, "../../..");
 const out = join(repo, "docs/screenshots");
 const screensOut = join(repo, "dist/screens");
+
+// Anything else, `--help` included, prints the usage and takes nothing: a mistyped flag would otherwise
+// retake the README's screenshot over the committed one.
+const USAGE = "Usage: bun run screenshot [--screens [--only <words>] [--variants <names>] | --check]";
+const VALUED = ["--only", "--variants"];
+const args = process.argv.slice(2);
+const unknownArg = args.find(
+  (arg, index) => ![...VALUED, "--screens", "--check"].includes(arg) && !VALUED.includes(args[index - 1] ?? ""),
+);
+if (unknownArg !== undefined) {
+  console.error(unknownArg === "--help" ? USAGE : `Unknown argument ${unknownArg}. ${USAGE}`);
+  process.exit(unknownArg === "--help" ? 0 : 2);
+}
+
 const everyScreen = process.argv.includes("--screens");
 /** The comma-separated values after `flag`, or none. */
 function listArg(flag: string): string[] {
@@ -91,6 +106,18 @@ async function seed(): Promise<Map<string, number>> {
     for (const recipe of sampleWeek.recipes) {
       const created = (await call(agent, "create_recipe", recipe)) as { id: number };
       ids.set(recipe.title, created.id);
+    }
+    // Some dinners photographed and some not, so the screens show a dish's photo and its placeholder.
+    const photo = Bun.file(join(repo, "fixtures/photos/sample-dish.jpg"));
+    for (const title of sampleWeek.photographed) {
+      const id = ids.get(title);
+      if (id === undefined) throw new Error(`No sample Recipe ${title} to photograph`);
+      const response = await fetch(`http://${host}${recipePhotoPath(id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "image/jpeg" },
+        body: photo,
+      });
+      if (!response.ok) throw new Error(`Photographing ${title}: ${response.status}`);
     }
     const week = (await call(agent, "get_week", {})) as Week;
     const dates = [...new Set(week.slots.map((slot) => slot.date))];

@@ -9,12 +9,17 @@ most of the diff.
    `tokens.css` (ADR 0033), so a token the app has and it lacks means it is due a re-sync.
 2. **Copy the app's stylesheets in as support files**, verbatim: `apps/web/src/styles/tokens.css` and
    `apps/web/src/styles/app.css` at `project/tokens.css` and `project/app.css`, sent in the canvas's first
-   publish. Neither imports anything. Each board links them after its `support.js` line, then Google
-   Fonts' Fraunces (500, 600, italic 500) and Inter (400 to 800), which the token font stacks fall back to
-   where the app self-hosts the variable faces.
+   publish, its `files` naming the repository paths as their sources. Neither imports anything. Each
+   board links them after its `support.js` line, then Google Fonts' Fraunces (500, 600, italic 500) and
+   Inter (400 to 800), which the token font stacks fall back to where the app self-hosts the variable
+   faces.
 3. **Draw with the app's markup.** Copy the elements and class names from the component (`Week.tsx` for
    the Week), and every word from `messages.ts`, so a board reads as the screen does. Board-specific
-   data stays in the board's script.
+   data stays in the board's script. A dish's photo is `fixtures/photos/sample-dish.jpg`, uploaded to the
+   canvas as an asset.
+   A sheet or other overlay drawn on a board measures against the board's frame: give the board's root
+   `position: relative` and its size, and the board's `<style>` `.sheet-backdrop { position: absolute }`
+   and `.sheet { max-height: 92% }` in place of the app's `fixed` and `92dvh`, the same on every board.
 4. **Two tweaks on every board**: a theme enum (Daylight, Kitchen mode) that puts `data-theme="kitchen"`
    on the board's root, which is all `tokens.css` needs, and an enum for the case that changes most (for
    a Week card, what kind of Slot it is: Recipe, pencilled, Leftovers, Nothing planned). Every direction is

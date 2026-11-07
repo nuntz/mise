@@ -71,5 +71,6 @@
     { "day": 4, "recipe": "Pork Chops with Apples" },
     { "day": 5, "eatOut": "Grandma's" },
     { "day": 6, "recipe": "Salmon Teriyaki Bowls" }
-  ]
+  ],
+  "photographed": ["Sheet-Pan Lemon Chicken", "Beef and Broccoli Stir-Fry", "Salmon Teriyaki Bowls"]
 }
