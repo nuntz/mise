@@ -314,19 +314,26 @@ test("a Ready-made dish opened over the Week is heated whole, in as many package
   expect(within(ingredients).getByRole("listitem").textContent).toBe("2 packages frozen vegetable dumplings");
 });
 
-test("a Recipe sheet's Cook sits at its foot, after the Steps, where a thumb reaches it", async () => {
+test("a Recipe sheet's Keep, Mark cooked and Cook sit at its foot, after the Steps, where a thumb reaches them", async () => {
   const user = userEvent.setup();
-  const { client } = fakeClient();
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   render(() => <App client={client} />);
 
-  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
-  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
-  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
-  const cook = await within(sheet).findByRole("button", { name: "Cook" });
+  await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(within(dinnerOn("Monday, October 26")).getByRole("button", { name: "Curry" }));
+  const sheet = await screen.findByRole("dialog");
+  await within(sheet).findByRole("button", { name: "Cook" });
   const steps = within(sheet).getByRole("list", { name: "Steps" });
+  const foot = sheet.querySelector(".sheet-foot") as HTMLElement;
 
-  expect(steps.compareDocumentPosition(cook) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(cook.closest(".sheet-foot")?.parentElement).toBe(sheet);
+  expect(foot.parentElement).toBe(sheet);
+  expect(steps.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Cook last, nearest the thumb.
+  expect(
+    within(foot)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Keep", "Mark cooked", "Cook"]);
 });
 
 test("a Recipe opened over the Week is cooked from there, for as many as its Slot", async () => {
@@ -1410,7 +1417,7 @@ test("a proposed Week shows why each dinner was chosen, with nothing to mark rev
   const user = userEvent.setup();
   render(() => <App client={client} />);
 
-  // A pencilled Recipe says why in the sheet its title opens, with Keep under it.
+  // A pencilled Recipe says why in the sheet its title opens, with Keep at its foot.
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
   const dinner = within(monday).getByRole("region", { name: "Dinner" });
   await user.click(within(dinner).getByRole("button", { name: "Curry" }));

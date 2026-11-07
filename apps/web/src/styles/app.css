@@ -1075,9 +1075,25 @@ fieldset > .toggle-chip {
   bottom: 0;
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
   border-top: var(--hairline) solid var(--line);
   background: var(--surface);
+}
+
+/* Smaller actions side by side above the foot's primary, each taking its share of the line. */
+.sheet-foot-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sheet-foot-row > button {
+  flex: 1 1 8em;
+}
+
+.sheet-foot-row > .banner {
+  flex-basis: 100%;
 }
 
 /* ---------- Chat ---------- */

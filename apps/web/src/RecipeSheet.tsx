@@ -12,7 +12,8 @@ import { Sheet } from "./Sheet";
 /**
  * A Slot's Recipe, looked at over the Week: its Ingredients scaled to `servings`, what the Slot is
  * cooked for (its Leftovers included), after the `children` (the Slot's Conflicts) and what can be
- * done with the Slot. Cook is held at the sheet's foot, in reach of a thumb however long the Recipe.
+ * done with the Slot. Its `foot` and Cook are held at the sheet's foot, in reach of a thumb however
+ * long the Recipe.
  * The Recipe itself is read-only; Recipes are changed on the Recipes screen.
  */
 export function RecipeSheet(props: {
@@ -23,8 +24,10 @@ export function RecipeSheet(props: {
   /** Without it, nothing to cook: Leftovers are cooked on the Slot they're of. */
   onCook?: (recipe: RecipeId, servings: number) => void;
   onClose: () => void;
-  /** What can be done with the Slot: marking it cooked, rating it, editing it. */
+  /** What can be done with the Slot once cooked, and editing it. */
   slotActions?: JSX.Element;
+  /** What the sheet's foot offers before Cook, such as Keep and Mark cooked; undefined for nothing. */
+  foot?: JSX.Element;
   children?: JSX.Element;
 }) {
   const titleId = createUniqueId();
@@ -99,19 +102,24 @@ export function RecipeSheet(props: {
           )}
         </Show>
       </div>
-      <Show when={recipe()}>
-        {(open) => (
-          <Show when={props.onCook}>
-            {(cook) => (
-              <div class="sheet-foot">
-                <button type="button" class="button-primary" onClick={() => cook()(open().id, props.servings)}>
-                  <Icon name="pot" />
-                  {t("kitchen.cook")}
-                </button>
-              </div>
+      <Show when={recipe() && (props.onCook || props.foot)}>
+        <div class="sheet-foot">
+          <Show when={props.foot}>
+            <div class="sheet-foot-row">{props.foot}</div>
+          </Show>
+          <Show when={recipe()}>
+            {(open) => (
+              <Show when={props.onCook}>
+                {(cook) => (
+                  <button type="button" class="button-primary" onClick={() => cook()(open().id, props.servings)}>
+                    <Icon name="pot" />
+                    {t("kitchen.cook")}
+                  </button>
+                )}
+              </Show>
             )}
           </Show>
-        )}
+        </div>
       </Show>
     </Sheet>
   );

@@ -300,6 +300,18 @@ export function WeekPage(props: {
                     : undefined
                 }
                 onClose={() => setOpened(undefined)}
+                foot={
+                  !readOnly() && (isKeepable(slot()) || (slot().recipe && slot().cookedAt === null)) ? (
+                    <>
+                      <Show when={isKeepable(slot())}>
+                        <KeepButton client={props.client} slot={slot()} />
+                      </Show>
+                      <Show when={slot().recipe && slot().cookedAt === null}>
+                        <MarkCooked client={props.client} slot={slot()} />
+                      </Show>
+                    </>
+                  ) : undefined
+                }
                 slotActions={
                   <Show when={slot().recipe}>
                     <Cooking
@@ -317,13 +329,7 @@ export function WeekPage(props: {
                   </Show>
                 }
               >
-                <SlotReason
-                  client={props.client}
-                  household={props.household}
-                  items={items()}
-                  slot={slot()}
-                  readOnly={readOnly()}
-                />
+                <SlotReason household={props.household} items={items()} slot={slot()} />
                 <SlotConflicts household={props.household} slot={slot()} />
               </RecipeSheet>
             )}
@@ -685,16 +691,10 @@ function SlotView(props: {
 }
 
 /**
- * Why Mise pencilled a dinner, in its Recipe's sheet: the Pencilled chip, the reason, and Keep to make
- * it the Household's own.
+ * Why Mise pencilled a dinner, in its Recipe's sheet: the Pencilled chip and the reason. Keep, to make
+ * it the Household's own, is at the sheet's foot.
  */
-function SlotReason(props: {
-  client: MiseClient;
-  household: Household;
-  items: Map<ItemId, Item>;
-  slot: Slot;
-  readOnly: boolean;
-}) {
+function SlotReason(props: { household: Household; items: Map<ItemId, Item>; slot: Slot }) {
   return (
     <Show when={props.slot.reason}>
       {(reason) => (
@@ -703,9 +703,6 @@ function SlotReason(props: {
             <PencilledChip />
           </p>
           <p class="meta">{reasonText(reason(), props.household, props.items)}</p>
-          <Show when={!props.readOnly && isKeepable(props.slot)}>
-            <KeepButton client={props.client} slot={props.slot} />
-          </Show>
         </div>
       )}
     </Show>
@@ -714,7 +711,7 @@ function SlotReason(props: {
 
 /**
  * Keeps a pencilled dinner at once, making it the Household's own; the Week refetches without its reason. On
- * the card beside Cook, in the Recipe's sheet under the reason, and in the Slot form beside "Let Mise choose".
+ * the card beside Cook, at the foot of the Recipe's sheet, and in the Slot form beside "Let Mise choose".
  */
 function KeepButton(props: {
   client: MiseClient;
@@ -863,9 +860,34 @@ function CookedChip() {
   );
 }
 
+/** Marks a Slot with a Recipe cooked, from the foot of that Recipe's sheet. */
+function MarkCooked(props: { client: MiseClient; slot: Slot }) {
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const mark = async () => {
+    setBusy(true);
+    const where = { date: props.slot.date, meal: props.slot.meal };
+    setError((await outcomeOf(() => props.client.call("mark_cooked", where))).failure);
+    setBusy(false);
+  };
+  return (
+    <>
+      <button type="button" class="button-row" disabled={busy()} onClick={mark}>
+        <Icon name="check" />
+        {t("cooking.mark")}
+      </button>
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </>
+  );
+}
+
 /**
- * A Slot with a Recipe, in that Recipe's sheet: marking it cooked; once it is, what ran out, its
- * Ratings and a prompt for one more; and editing it.
+ * A Slot with a Recipe, in that Recipe's sheet, once it is cooked: what ran out, its Ratings and a
+ * prompt for one more; and editing it. Marking it cooked is at the sheet's foot.
  */
 function Cooking(props: {
   client: MiseClient;
@@ -917,22 +939,7 @@ function Cooking(props: {
           {error()}
         </p>
       </Show>
-      <Show
-        when={props.slot.cookedAt}
-        fallback={
-          <Show when={!props.readOnly}>
-            <button
-              type="button"
-              class="button-row"
-              disabled={busy()}
-              onClick={() => call(() => props.client.call("mark_cooked", where()))}
-            >
-              <Icon name="check" />
-              {t("cooking.mark")}
-            </button>
-          </Show>
-        }
-      >
+      <Show when={props.slot.cookedAt}>
         <p class="chips">
           <CookedChip />
         </p>
