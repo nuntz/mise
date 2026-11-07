@@ -1,8 +1,7 @@
 # November 6 dependency review
 
-This change addresses MISE-001 through MISE-003 in the
-[technology-debt tracker](https://docs.google.com/spreadsheets/d/1AtXbgMIpIJ9IZs-by5IAR3nItjEdmQOA59GLUnViW7Y/edit).
-The baseline is master `733439299dad21aaf9576be5f12e3b6b44b8b75c`.
+This change addresses three findings of the November 6 dependency review:
+Seroval, Undici and Hono versions inside published advisory ranges. The baseline is master `733439299dad21aaf9576be5f12e3b6b44b8b75c`.
 
 ## Resolutions and compatibility
 
@@ -47,8 +46,10 @@ not an independently retrieved production artifact.
 
 The Worker checks Access before `routeAgentRequest`; calendar and Day Sheet paths
 have their own token checks. Identity tests cover missing/invalid Access tokens
-and now also nested paths, encoded line terminators, encoded backslashes and dot
-segments beneath the household route. No production exploit path or Access bypass
+and now also paths that resolve to the Household: nested and encoded paths beneath
+it, and dot segments climbing out of the calendar and Day Sheet paths. Paths that
+only look like the Household (an encoded slash under a bypassed path, a near-miss
+name, another agent instance) get 404. No production exploit path or Access bypass
 has been established. Deployment and live-artifact verification remain separate.
 
 ## Local validation
@@ -57,7 +58,7 @@ Using Bun 1.4.4, `bun install --frozen-lockfile` and `bun run ci:summary` passed
 lint, workspace/script typechecks, private-value and web-call checks, 393 domain
 tests, the web build, 635 Worker tests and 397 web tests. One stored-export Worker
 test was skipped without a supplied export. No production data was fetched.
-The five new encoded/nested-path identity cases passed. Installed-package
+The new path identity cases passed. Installed-package
 resolution also confirmed Miniflare uses Undici 7.30.2, jsdom uses 8.12.4, and
 Solid uses Seroval 1.7.9 with plugins 1.7.8.
 
@@ -68,7 +69,7 @@ performed. See the PR checks for CI against the final commit.
 ## Audit follow-up
 
 `bun audit --json` no longer reports Undici after the update, but still exits 1
-for four pre-existing findings outside MISE-001 through MISE-003:
+for four pre-existing findings outside the three review findings:
 
 | Package | Path | Audit finding |
 | --- | --- | --- |
