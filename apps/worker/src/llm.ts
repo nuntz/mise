@@ -4,7 +4,6 @@ import {
   type Model,
   type Models,
   type MutableModels,
-  Type,
   type UserMessage,
 } from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
@@ -123,7 +122,7 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
             {
               name: READ_TOOL,
               description: "Gives the recipe read from the text or screenshots, or says there is none.",
-              parameters: Type.Unsafe(readParameters),
+              parameters: readParameters,
             },
           ],
         },
@@ -150,7 +149,7 @@ export function claudeLlm(models: Models, model: Model<Api>): Llm {
             {
               name: SUGGEST_TOOL,
               description: "Gives the answer for each name that is a food.",
-              parameters: Type.Unsafe(parameters),
+              parameters,
             },
           ],
         },

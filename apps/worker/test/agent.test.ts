@@ -5,7 +5,6 @@ import {
   fauxAssistantMessage,
   fauxToolCall,
   type TranscriptContext,
-  Type,
 } from "@earendil-works/pi-ai";
 import type { ChatWhere, WeekForTheAgent } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -896,7 +895,7 @@ describe("the agent's system prompt, as Claude takes it", () => {
     const showStep = {
       name: "show_step",
       description: "Shows a step.",
-      parameters: Type.Object({ step: Type.Number() }),
+      parameters: { type: "object", properties: { step: { type: "number" } }, required: ["step"] },
     };
     let sent:
       | { system?: { text: string }[]; tools?: { name: string }[]; messages: { role: string; content: unknown }[] }
