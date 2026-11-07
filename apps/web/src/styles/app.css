@@ -1286,13 +1286,13 @@ fieldset > .toggle-chip {
   gap: var(--space-2);
 }
 
-/* A recipe's hero photo, in its sheet. */
+/* A recipe's hero photo, at the top of its page. */
 .photo {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: var(--photo);
+  height: var(--photo-hero);
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--photo-placeholder);
@@ -2291,10 +2291,6 @@ form.row {
 /* A Recipe row: its thumb, then the title with its tags, time and Allergens under it. */
 .recipe-row .dish-title {
   font: var(--type-title-sm);
-}
-
-.hero {
-  height: var(--photo-hero);
 }
 
 .ingredients li {

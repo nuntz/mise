@@ -309,7 +309,7 @@ function RecipeDetail(props: {
       <Show when={recipe()}>
         {(current) => (
           <article class="screen" aria-labelledby="recipe-title">
-            <div class="photo hero">
+            <div class="photo">
               <Show when={current().photoKey} fallback={<PlateGlyph size={72} />}>
                 {(key) => (
                   <img

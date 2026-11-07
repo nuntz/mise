@@ -30,8 +30,6 @@
   --leaf: #2e6b33;
   --leaf-soft: #e3f2e4;
   --on-leaf: #ffffff;
-  --badge: #ffffff;
-  --badge-ink: #1a1714;
   --scrim: #000000c7;
   --photo-placeholder: #c8a98a;
   /* Text and glyphs on a photo or its placeholder, and on the scrim: white in both themes. */
@@ -78,7 +76,6 @@
   --control: 52px;
   --field: 48px;
   --nav: 64px;
-  --photo: 176px;
   --photo-hero: 220px;
   --thumb: 64px;
   /* A Week card's square: smaller than thumb, so the card's actions fit at its end. */
@@ -130,8 +127,6 @@
   --leaf: #9fe0a4;
   --leaf-soft: #11311a;
   --on-leaf: #0f0d0b;
-  --badge: #000000;
-  --badge-ink: #ffffff;
   /* Opaque and lighter than daylight's, as line-control: a black scrim vanishes into the near-black page. */
   --scrim: #6b645c;
   --photo-placeholder: #4a3b2e;
