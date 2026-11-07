@@ -416,6 +416,16 @@ function screens(ids: Map<string, number>): Screen[] {
       open: editDinner((page) => page.locator("section.slot").first()),
       overlay: true,
     },
+    {
+      name: "week-kept-choose-recipe",
+      // Choose a Recipe, opened from the Slot form's Recipe field, once the Recipes have arrived.
+      open: async (page) => {
+        await editDinner((page) => page.locator("section.slot").first())(page);
+        await page.locator(".recipe-field").click();
+        await page.locator(".recipe-picker .row-open").first().waitFor();
+      },
+      overlay: true,
+    },
     { name: "week-next-keep", path: "/?week=next", focus: keepable },
     { name: "week-next-pencilled-form", path: "/?week=next", open: editDinner(keepableRecipe), overlay: true },
     { name: "week-next-use-up", path: "/?week=next", open: openUseUp, overlay: true },

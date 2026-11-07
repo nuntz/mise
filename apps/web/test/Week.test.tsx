@@ -206,6 +206,13 @@ function fakeClient(answers: Record<string, Answer> = {}) {
   return { client, calls, notify, goOnline, goOffline };
 }
 
+/** Picks `title` in Choose a Recipe, opened from the Slot form's Recipe field. */
+async function chooseRecipe(user: ReturnType<typeof userEvent.setup>, form: HTMLElement, title: string) {
+  await user.click(within(form).getByRole("button", { name: /^Recipe / }));
+  const picker = await screen.findByRole("dialog", { name: "Choose a Recipe" });
+  await user.click(await within(picker).findByRole("button", { name: title }));
+}
+
 /** The text of what `control` names as its accessible description. */
 const description = (control: HTMLElement) =>
   document.getElementById(String(control.getAttribute("aria-describedby")))?.textContent;
@@ -497,8 +504,7 @@ test("editing a dinner sends what changed in one change to the Slot, with no Loc
   expect(screen.queryByRole("dialog", { name: "Pasta" })).toBeNull();
   expect(screen.getByRole("dialog", { name: "Edit dinner" })).toBeTruthy();
   const form = within(tuesday).getByRole("form", { name: "Dinner" });
-  await within(form).findByRole("option", { name: "Curry" });
-  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
+  await chooseRecipe(user, form, "Curry");
   await user.click(within(form).getByRole("checkbox", { name: "Everyone" }));
   await user.click(within(form).getByRole("checkbox", { name: "Alex" }));
   expect(within(form).queryByRole("checkbox", { name: "Locked" })).toBeNull();
@@ -518,6 +524,68 @@ test("editing a dinner sends what changed in one change to the Slot, with no Loc
       },
     },
   ]);
+});
+
+test("a dinner's Recipe shows in Edit dinner, and Choose a Recipe picks another from the Recipes", async () => {
+  const { client, calls } = fakeClient();
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Pasta" })).getByRole("button", { name: "Edit dinner" }),
+  );
+  const form = within(tuesday).getByRole("form", { name: "Dinner" });
+
+  await user.click(within(form).getByRole("button", { name: "Recipe Pasta" }));
+  const picker = await screen.findByRole("dialog", { name: "Choose a Recipe" });
+  // The Recipe chosen already is marked among the others.
+  expect((await within(picker).findByRole("button", { name: "Pasta" })).getAttribute("aria-current")).toBe("true");
+  expect(within(picker).getByRole("button", { name: "Curry" }).getAttribute("aria-current")).toBeNull();
+  await user.click(within(picker).getByRole("button", { name: "Curry" }));
+
+  expect(screen.queryByRole("dialog", { name: "Choose a Recipe" })).toBeNull();
+  expect(within(form).getByRole("button", { name: "Recipe Curry" })).toBeTruthy();
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+  await vi.waitFor(() => expect(within(tuesday).queryByRole("form")).toBeNull());
+  expect(writes(calls)).toEqual([
+    {
+      name: "set_slot",
+      input: { date: "2026-10-27", meal: "dinner", kind: "recipe", recipeId: 2, note: "Use the fresh basil" },
+    },
+  ]);
+});
+
+test("Choose a Recipe finds what Search Recipes is typed for, says when nothing matches, and closes keeping the Recipe", async () => {
+  const { client, calls } = fakeClient({
+    search_recipes: ({ query }) =>
+      query === "cur" ? { ok: true, value: [curry] } : query === "lasagne" ? { ok: true, value: [] } : undefined,
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
+
+  await user.click(within(form).getByRole("button", { name: "Recipe Choose a Recipe" }));
+  const picker = await screen.findByRole("dialog", { name: "Choose a Recipe" });
+  const search = within(picker).getByRole("searchbox", { name: "Search Recipes" });
+  expect(document.activeElement).toBe(search);
+  await within(picker).findByRole("button", { name: "Pasta" });
+  await user.type(search, "cur");
+  await vi.waitFor(() => expect(within(picker).queryByRole("button", { name: "Pasta" })).toBeNull());
+  expect(within(picker).getByRole("button", { name: "Curry" })).toBeTruthy();
+  expect(calls.filter((call) => call.name === "search_recipes").at(-1)?.input).toEqual({ query: "cur" });
+
+  await user.clear(search);
+  await user.type(search, "lasagne");
+  expect(await within(picker).findByText("No Recipes match.")).toBeTruthy();
+  await user.click(within(picker).getByRole("button", { name: "Close" }));
+
+  expect(screen.queryByRole("dialog", { name: "Choose a Recipe" })).toBeNull();
+  const field = within(form).getByRole("button", { name: "Recipe Choose a Recipe" });
+  expect(document.activeElement).toBe(field);
 });
 
 test("a late save closes only its own Slot's form, leaving another's open with what was typed", async () => {
@@ -751,8 +819,7 @@ test("a change refused for a Conflict names the person and the Allergen, and sav
   await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
-  await within(form).findByRole("option", { name: "Curry" });
-  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
+  await chooseRecipe(user, form, "Curry");
   await user.click(within(form).getByRole("button", { name: "Save" }));
 
   const warning = await within(form).findByRole("alert");
@@ -839,11 +906,10 @@ test("changing the Slot after a refusal takes the warning away, and its reasons 
   await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
   const form = within(monday).getByRole("form", { name: "Dinner" });
   await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
-  await within(form).findByRole("option", { name: "Curry" });
-  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Curry");
+  await chooseRecipe(user, form, "Curry");
   await user.click(within(form).getByRole("button", { name: "Save" }));
   await user.type(await within(form).findByRole("textbox", { name: "Why it's safe for Robin (Peanut)" }), "Hers apart");
-  await user.selectOptions(within(form).getByRole("combobox", { name: "Recipe" }), "Pasta");
+  await chooseRecipe(user, form, "Pasta");
 
   expect(within(form).queryByRole("alert")).toBeNull();
   await user.click(within(form).getByRole("button", { name: "Save" }));
@@ -1540,18 +1606,8 @@ test("saving a Use it up that changed no dinner says nothing that fits uses its 
   expect(note.classList).toContain("banner-plum");
 });
 
-test("the Slot sheet's Recipe list shows the dinner's Recipe once the Recipes arrive", async () => {
-  let arrive = () => {};
-  const recipes = new Promise<void>((resolve) => {
-    arrive = resolve;
-  });
-  const { client } = fakeClient({
-    get_week: () => ({ ok: true, value: proposedWeek() }),
-    search_recipes: async () => {
-      await recipes;
-      return { ok: true, value: [pasta, curry] };
-    },
-  });
+test("the Slot sheet shows the dinner's Recipe at once, searching the Recipes only once Choose a Recipe opens", async () => {
+  const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   const user = userEvent.setup();
   render(() => <App client={client} />);
   await screen.findByRole("region", { name: "Monday, October 26" });
@@ -1559,10 +1615,9 @@ test("the Slot sheet's Recipe list shows the dinner's Recipe once the Recipes ar
   await user.click(within(dinnerOn("Monday, October 26")).getByRole("button", { name: "Curry" }));
   await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit dinner" }));
   const form = within(dinnerOn("Monday, October 26")).getByRole("form", { name: "Dinner" });
-  arrive();
 
-  const list = (await within(form).findByRole("option", { name: "Curry" })).closest("select") as HTMLSelectElement;
-  expect(list.selectedOptions[0]?.textContent).toBe("Curry");
+  expect(within(form).getByRole("button", { name: "Recipe Curry" })).toBeTruthy();
+  expect(calls.filter((call) => call.name === "search_recipes")).toEqual([]);
 });
 
 test("“Let Mise choose” shows in the Slot sheet of the Household's own dinners, and proposes that dinner", async () => {

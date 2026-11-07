@@ -64,6 +64,7 @@ import {
   recurringNightText,
   whoName,
 } from "./Proposal";
+import { RecipePicker } from "./RecipePicker";
 import { RecipeSheet } from "./RecipeSheet";
 import { ReadyMadeChip } from "./Recipes";
 import { Sheet } from "./Sheet";
@@ -1024,7 +1025,8 @@ function SlotForm(props: {
 }) {
   const { slot } = props;
   const [kind, setKind] = createSignal<SlotKind>(slot.kind);
-  const [recipeId, setRecipeId] = createSignal(slot.recipe ? String(slot.recipe.id) : "");
+  const [recipe, setRecipe] = createSignal<ChosenRecipe | undefined>(slot.recipe ?? undefined);
+  const [picking, setPicking] = createSignal(false);
   // Which Slot its Leftovers are of, as `choiceValue` names it; "" for nothing planned in Mise.
   const linkedAtOpen = slot.leftoversOf ? choiceValue(slot.leftoversOf) : "";
   const [leftoversOf, setLeftoversOf] = createSignal(linkedAtOpen);
@@ -1050,10 +1052,17 @@ function SlotForm(props: {
       set(value);
     };
 
-  void props.client.call("search_recipes", {}).then(
-    (result) => result.ok && setRecipes(result.value),
-    () => setError(t("app.error")),
-  );
+  // Every Recipe, once Leftovers are chosen, to tell which Slots' Recipes can be linked; Choose a Recipe
+  // searches for itself.
+  let askedRecipes = false;
+  createEffect(() => {
+    if (kind() !== "leftovers" || askedRecipes) return;
+    askedRecipes = true;
+    void props.client.call("search_recipes", {}).then(
+      (result) => result.ok && setRecipes(result.value),
+      () => setError(t("app.error")),
+    );
+  });
   // The same meal a week back: the seven days before this meal are the meals after it. A dinner's
   // start the day after; any other meal's, on that day.
   const weekAgo = { date: addDays(slot.date, -7), meal: slot.meal };
@@ -1094,7 +1103,7 @@ function SlotForm(props: {
       Number(guests()) !== slot.guests || JSON.stringify(constraints) !== JSON.stringify(slot.guestConstraints);
     const slotChanged =
       kind() !== slot.kind ||
-      recipeId() !== String(slot.recipe?.id ?? "") ||
+      recipe()?.id !== slot.recipe?.id ||
       typedNote !== slot.note ||
       dinersChanged(dinersInput, slot) ||
       guestsChanged;
@@ -1110,7 +1119,7 @@ function SlotForm(props: {
       const chosen = kind();
       // No Recipe chosen sends 0, which the tool refuses by name.
       const input: ToolInput<"set_slot"> =
-        chosen === "recipe" ? { ...change, kind: chosen, recipeId: Number(recipeId()) } : { ...change, kind: chosen };
+        chosen === "recipe" ? { ...change, kind: chosen, recipeId: recipe()?.id ?? 0 } : { ...change, kind: chosen };
       writes.push(() => props.client.call("set_slot", input));
     }
     // After the rest of the change, so that its Conflicts are checked against the Slot as it ends up.
@@ -1156,10 +1165,7 @@ function SlotForm(props: {
     }
   };
 
-  const recipeTitle = () =>
-    kind() === "leftovers"
-      ? (chosenLink()?.recipe?.title ?? "")
-      : (recipes().find((recipe) => String(recipe.id) === recipeId())?.title ?? slot.recipe?.title ?? "");
+  const recipeTitle = () => (kind() === "leftovers" ? (chosenLink()?.recipe?.title ?? "") : (recipe()?.title ?? ""));
   const choiceText = (choice: LeftoversChoice) =>
     t(`slot.leftoversOfOption.${choice.meal}`, {
       day: formatDate(choice.date, props.household.locale, { weekday: "long" }),
@@ -1168,6 +1174,14 @@ function SlotForm(props: {
 
   const titleId = createUniqueId();
   const guestsId = createUniqueId();
+  const recipeLabelId = createUniqueId();
+  const recipeChosenId = createUniqueId();
+  let recipeField: HTMLButtonElement | undefined;
+  // Back to the Recipe field once Choose a Recipe closes, picked or not.
+  const closePicker = () => {
+    setPicking(false);
+    recipeField?.focus();
+  };
   const guestCount = () => Number(guests()) || 0;
   const stepGuests = (by: number) => changing(setGuests)(String(Math.min(50, Math.max(0, guestCount() + by))));
 
@@ -1224,22 +1238,44 @@ function SlotForm(props: {
             </select>
           </label>
           <Show when={kind() === "recipe"}>
-            <label>
-              <span>{t("slot.recipe")}</span>
-              <select onChange={(e) => changing(setRecipeId)(e.currentTarget.value)}>
-                <option value="" selected={recipeId() === ""}>
-                  {t("slot.chooseRecipe")}
-                </option>
-                {/* Selected option by option: the Recipes arrive after the list is drawn. */}
-                <For each={recipes()}>
-                  {(recipe) => (
-                    <option value={String(recipe.id)} selected={recipeId() === String(recipe.id)}>
-                      {recipe.title}
-                    </option>
+            {/* The Recipe chosen, by its photo and title, which opens Choose a Recipe to pick another. */}
+            <div class="field-row">
+              <span id={recipeLabelId}>{t("slot.recipe")}</span>
+              <button
+                type="button"
+                class="recipe-field"
+                ref={recipeField}
+                aria-labelledby={`${recipeLabelId} ${recipeChosenId}`}
+                aria-haspopup="dialog"
+                onClick={() => setPicking(true)}
+              >
+                <Show
+                  when={recipe()}
+                  fallback={
+                    <>
+                      <span class="thumb thumb-dashed" aria-hidden="true" />
+                      <span class="recipe-field-none" id={recipeChosenId}>
+                        {t("slot.chooseRecipe")}
+                      </span>
+                    </>
+                  }
+                >
+                  {(chosen) => (
+                    <>
+                      <span class="thumb" aria-hidden="true">
+                        <Show when={chosen().photoKey} fallback={<PlateGlyph size={22} />}>
+                          {(key) => <img src={props.client.photoUrl(chosen().id, key())} alt="" />}
+                        </Show>
+                      </span>
+                      <span class="recipe-field-title" id={recipeChosenId}>
+                        {chosen().title}
+                      </span>
+                    </>
                   )}
-                </For>
-              </select>
-            </label>
+                </Show>
+                <Icon name="chevronRight" />
+              </button>
+            </div>
           </Show>
           <Show when={kind() === "leftovers"}>
             <label>
@@ -1320,9 +1356,25 @@ function SlotForm(props: {
         />
         <FormButtons busy={busy()} refused={refused().length > 0} onCancel={() => props.onDone()} />
       </form>
+      {/* Outside the form, so that Enter in its search never saves the Slot. */}
+      <Show when={picking()}>
+        <RecipePicker
+          client={props.client}
+          overline={t("slot.formOverline", { day: props.day, meal: t(`meal.${slot.meal}`) })}
+          chosen={recipe()?.id}
+          onPick={(picked) => {
+            changing(setRecipe)(picked);
+            closePicker();
+          }}
+          onClose={closePicker}
+        />
+      </Show>
     </Sheet>
   );
 }
+
+/** The Recipe the Slot form has chosen, as the Slot holds it or as Choose a Recipe found it. */
+type ChosenRecipe = Pick<SlotRecipe, "id" | "title" | "photoKey">;
 
 /** Who is eating every meal of a day; it starts from who is eating dinner. */
 function DayDinersForm(props: {

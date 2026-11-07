@@ -156,50 +156,68 @@ function RecipeList(props: {
           >
             <ul class="rows">
               <For each={found()}>
-                {(recipe) => {
-                  const id = `recipe-${recipe.id}`;
-                  return (
-                    <li>
-                      {/* The whole row opens the Recipe, named by its title and described by its details. */}
-                      <button
-                        type="button"
-                        class="row row-open recipe-row"
-                        aria-labelledby={`${id}-title`}
-                        aria-describedby={`${id}-meta ${id}-allergens`}
-                        onClick={() => props.onOpen(recipe)}
-                      >
-                        <span class="row-lead thumb" aria-hidden="true">
-                          <Show when={recipe.photoKey} fallback={<PlateGlyph size={30} />}>
-                            {(key) => <img src={props.client.photoUrl(recipe.id, key())} alt="" />}
-                          </Show>
-                        </span>
-                        <span class="row-body">
-                          <span class="dish-title" id={`${id}-title`}>
-                            {recipe.title}
-                          </span>
-                          <span class="row-meta" id={`${id}-meta`}>
-                            {[...recipe.tags.map(nameText), effortText(recipe.effortMinutes)].join(" · ")}
-                          </span>
-                          <Show when={recipe.readyMade}>
-                            <ReadyMadeChip />
-                          </Show>
-                          <Show when={recipe.allergens.kind === "unknown"}>
-                            <span class="chip chip-amber">{t("recipe.allergensUnknownChip")}</span>
-                          </Show>
-                          <span class="row-meta" id={`${id}-allergens`}>
-                            {allergensText(recipe.allergens)}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                }}
+                {(recipe) => (
+                  <li>
+                    <RecipeRow client={props.client} recipe={recipe} onClick={() => props.onOpen(recipe)} />
+                  </li>
+                )}
               </For>
             </ul>
           </Show>
         )}
       </Show>
     </>
+  );
+}
+
+/**
+ * A Recipe as a row that is one button, named by its title and described by its details: its thumb, its
+ * tags and time, and its Allergens. `current` marks the Recipe chosen already, with a tick at its end.
+ */
+export function RecipeRow(props: {
+  client: MiseClient;
+  recipe: RecipeSummary;
+  current?: boolean;
+  onClick: () => void;
+}) {
+  const id = createUniqueId();
+  return (
+    <button
+      type="button"
+      class="row row-open recipe-row"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-meta ${id}-allergens`}
+      aria-current={props.current ? "true" : undefined}
+      onClick={() => props.onClick()}
+    >
+      <span class="row-lead thumb" aria-hidden="true">
+        <Show when={props.recipe.photoKey} fallback={<PlateGlyph size={30} />}>
+          {(key) => <img src={props.client.photoUrl(props.recipe.id, key())} alt="" />}
+        </Show>
+      </span>
+      <span class="row-body">
+        <span class="dish-title" id={`${id}-title`}>
+          {props.recipe.title}
+        </span>
+        <span class="row-meta" id={`${id}-meta`}>
+          {[...props.recipe.tags.map(nameText), effortText(props.recipe.effortMinutes)].join(" · ")}
+        </span>
+        <Show when={props.recipe.readyMade}>
+          <ReadyMadeChip />
+        </Show>
+        <Show when={props.recipe.allergens.kind === "unknown"}>
+          <span class="chip chip-amber">{t("recipe.allergensUnknownChip")}</span>
+        </Show>
+        <span class="row-meta" id={`${id}-allergens`}>
+          {allergensText(props.recipe.allergens)}
+        </span>
+      </span>
+      <Show when={props.current}>
+        <span class="row-end">
+          <Icon name="check" />
+        </span>
+      </Show>
+    </button>
   );
 }
 

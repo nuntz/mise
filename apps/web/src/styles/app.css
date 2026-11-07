@@ -1598,6 +1598,61 @@ fieldset > .toggle-chip {
   background: var(--surface);
 }
 
+/* The Slot form's Recipe: the chosen dish by its photo and title, a field that opens Choose a Recipe. */
+.recipe-field {
+  justify-content: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--field);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  border: 2px solid var(--line-control);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: var(--type-field);
+  text-align: start;
+}
+
+.recipe-field .thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+}
+
+.recipe-field-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.recipe-field-none {
+  flex: 1;
+  color: var(--ink-muted);
+}
+
+.recipe-field > .icon {
+  color: var(--ink-muted);
+}
+
+/* Choose a Recipe: as tall as a sheet gets, whatever it finds, so it never jumps while typing. */
+.recipe-picker {
+  height: 92dvh;
+}
+
+/* Its search stays at the top while the Recipes scroll under it. */
+.recipe-picker .sheet-body > label:first-child {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: var(--space-2);
+  background: var(--surface);
+}
+
+.recipe-picker .row-open[aria-current="true"] .row-end {
+  color: var(--plum);
+}
+
 /* Fields with their labels beside them, the labels in one column. */
 .field-grid {
   display: grid;
