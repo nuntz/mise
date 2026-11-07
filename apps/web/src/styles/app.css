@@ -1749,10 +1749,23 @@ fieldset > .toggle-chip {
   background: var(--surface);
 }
 
-.rating {
+/* A cooked dinner's rating at its Recipe sheet's foot: the choices share a line, and the note and Rate
+ * follow only once one is picked. */
+.rate-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rating-choices {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2);
+}
+
+.rating-choices > .toggle-chip {
+  flex: 1 1 auto;
+  justify-content: center;
 }
 
 /* Re-roll and Use it up side by side under the Week's switch; Use it up takes the rest of the line. */

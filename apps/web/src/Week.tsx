@@ -301,25 +301,32 @@ export function WeekPage(props: {
                 }
                 onClose={() => setOpened(undefined)}
                 foot={
-                  !readOnly() && (isKeepable(slot()) || slot().recipe) ? (
+                  (slot().recipe && slot().cookedAt) || (!readOnly() && (isKeepable(slot()) || slot().recipe)) ? (
                     <>
-                      <Show when={isKeepable(slot())}>
-                        <KeepButton client={props.client} slot={slot()} />
+                      <Show when={slot().recipe && slot().cookedAt}>
+                        <RateForm client={props.client} slot={slot()} readOnly={readOnly()} rate={open.rate} />
                       </Show>
-                      <Show when={slot().recipe && slot().cookedAt === null}>
-                        <MarkCooked client={props.client} slot={slot()} />
-                      </Show>
-                      <Show when={slot().recipe}>
-                        <button
-                          type="button"
-                          class="button-row"
-                          onClick={() => {
-                            setOpened(undefined);
-                            edit(open.slot, true);
-                          }}
-                        >
-                          {t(`slot.edit.${slot().meal}`)}
-                        </button>
+                      <Show when={!readOnly() && (isKeepable(slot()) || slot().recipe)}>
+                        <div class="sheet-foot-row">
+                          <Show when={isKeepable(slot())}>
+                            <KeepButton client={props.client} slot={slot()} />
+                          </Show>
+                          <Show when={slot().recipe && slot().cookedAt === null}>
+                            <MarkCooked client={props.client} slot={slot()} />
+                          </Show>
+                          <Show when={slot().recipe}>
+                            <button
+                              type="button"
+                              class="button-row"
+                              onClick={() => {
+                                setOpened(undefined);
+                                edit(open.slot, true);
+                              }}
+                            >
+                              {t(`slot.edit.${slot().meal}`)}
+                            </button>
+                          </Show>
+                        </div>
                       </Show>
                     </>
                   ) : undefined
@@ -332,7 +339,6 @@ export function WeekPage(props: {
                       slot={slot()}
                       readOnly={readOnly()}
                       online={props.online}
-                      rate={open.rate}
                     />
                   </Show>
                 }
@@ -868,6 +874,78 @@ function CookedChip() {
   );
 }
 
+/**
+ * Rates a cooked Slot's Recipe, at the foot of its sheet: the choices in one row, and the note and Rate
+ * only once one is picked, so the foot leaves the Recipe room until then.
+ */
+function RateForm(props: {
+  client: MiseClient;
+  slot: Slot;
+  readOnly: boolean;
+  /** Opened to rate it: the rating has the focus. */
+  rate: boolean;
+}) {
+  const [rating, setRating] = createSignal<Rating>();
+  const [note, setNote] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string>();
+  const rate = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const chosen = rating();
+    if (!chosen) return;
+    setBusy(true);
+    const where = { date: props.slot.date, meal: props.slot.meal };
+    const typed = note().trim() || null;
+    const failure = (await outcomeOf(() => props.client.call("rate_recipe", { ...where, rating: chosen, note: typed })))
+      .failure;
+    setBusy(false);
+    setError(failure);
+    if (!failure) {
+      setRating(undefined);
+      setNote("");
+    }
+  };
+  return (
+    <form class="rate-form" aria-label={t("cooking.prompt")} onSubmit={rate}>
+      <fieldset
+        class="field"
+        ref={(rating) => props.rate && queueMicrotask(() => rating.querySelector<HTMLInputElement>("input")?.focus())}
+      >
+        <legend>{t("cooking.prompt")}</legend>
+        <div class="rating-choices">
+          <For each={RATINGS}>
+            {(option) => (
+              <label class="toggle-chip">
+                <input
+                  type="radio"
+                  name={`rating-${props.slot.date}-${props.slot.meal}`}
+                  checked={rating() === option}
+                  onChange={() => setRating(option)}
+                />
+                {t(`rating.${option}`)}
+              </label>
+            )}
+          </For>
+        </div>
+      </fieldset>
+      <Show when={rating()}>
+        <label>
+          {t("cooking.note")}
+          <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
+        </label>
+        <button type="submit" class="button-secondary" disabled={busy() || props.readOnly}>
+          {t("cooking.rate")}
+        </button>
+      </Show>
+      <Show when={error()}>
+        <p class="banner banner-warn" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </form>
+  );
+}
+
 /** Marks a Slot with a Recipe cooked, from the foot of that Recipe's sheet. */
 function MarkCooked(props: { client: MiseClient; slot: Slot }) {
   const [busy, setBusy] = createSignal(false);
@@ -894,20 +972,10 @@ function MarkCooked(props: { client: MiseClient; slot: Slot }) {
 }
 
 /**
- * A Slot with a Recipe, in that Recipe's sheet, once it is cooked: what ran out, its Ratings and a
- * prompt for one more. Marking it cooked and editing it are at the sheet's foot.
+ * A Slot with a Recipe, in that Recipe's sheet, once it is cooked: what ran out and its Ratings. Rating
+ * it again, marking it cooked and editing it are at the sheet's foot.
  */
-function Cooking(props: {
-  client: MiseClient;
-  household: Household;
-  slot: Slot;
-  readOnly: boolean;
-  online: boolean;
-  /** Opened to rate it: the rating has the focus. */
-  rate: boolean;
-}) {
-  const [rating, setRating] = createSignal<Rating>();
-  const [note, setNote] = createSignal("");
+function Cooking(props: { client: MiseClient; household: Household; slot: Slot; readOnly: boolean; online: boolean }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const where = () => ({ date: props.slot.date, meal: props.slot.meal });
@@ -918,17 +986,6 @@ function Cooking(props: {
     setBusy(false);
     setError(outcome.failure);
     return !outcome.failure;
-  };
-
-  const rate = async (event: SubmitEvent) => {
-    event.preventDefault();
-    const chosen = rating();
-    if (!chosen) return;
-    const typed = note().trim() || null;
-    if (await call(() => props.client.call("rate_recipe", { ...where(), rating: chosen, note: typed }))) {
-      setRating(undefined);
-      setNote("");
-    }
   };
 
   const ratedText = (given: Slot["ratings"][number]) => {
@@ -954,36 +1011,6 @@ function Cooking(props: {
           {(recipe) => <RunOut client={props.client} recipeId={recipe().id} online={props.online} />}
         </Show>
         <For each={props.slot.ratings}>{(given) => <p class="meta">{ratedText(given)}</p>}</For>
-        <form class="slot-form" aria-label={t("cooking.prompt")} onSubmit={rate}>
-          <fieldset
-            class="rating"
-            ref={(rating) =>
-              props.rate && queueMicrotask(() => rating.querySelector<HTMLInputElement>("input")?.focus())
-            }
-          >
-            <legend>{t("cooking.prompt")}</legend>
-            <For each={RATINGS}>
-              {(option) => (
-                <label>
-                  <input
-                    type="radio"
-                    name={`rating-${props.slot.date}-${props.slot.meal}`}
-                    checked={rating() === option}
-                    onChange={() => setRating(option)}
-                  />
-                  {t(`rating.${option}`)}
-                </label>
-              )}
-            </For>
-          </fieldset>
-          <label>
-            {t("cooking.note")}
-            <input maxLength={500} value={note()} onInput={(e) => setNote(e.currentTarget.value)} />
-          </label>
-          <button type="submit" class="button-secondary" disabled={busy() || !rating() || props.readOnly}>
-            {t("cooking.rate")}
-          </button>
-        </form>
         <button
           type="button"
           class="button-quiet"

@@ -2040,6 +2040,40 @@ test("a cooked dinner's sheet shows its Ratings, asks for one, and can be unmark
   ]);
 });
 
+test("a cooked dinner's rating sits at its Recipe sheet's foot, with its note and Rate once a choice is picked", async () => {
+  const cooked = emptyWeek("2026-10-26");
+  Object.assign(cooked.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: null },
+    cookedAt: "2026-10-27T02:00:00.000Z",
+  });
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: cooked }) });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  await within(sheet).findByRole("button", { name: "Cook" });
+  const foot = sheet.querySelector(".sheet-foot") as HTMLElement;
+
+  const form = within(foot).getByRole("form", { name: "How was it?" });
+  expect(within(form).getAllByRole("radio")).toHaveLength(3);
+  expect(within(form).queryByRole("textbox")).toBeNull();
+  expect(
+    within(foot)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Edit dinner", "Cook"]);
+
+  await user.click(within(form).getByRole("radio", { name: "Meh" }));
+  expect(within(form).getByRole("textbox", { name: "Note (optional)" })).toBeTruthy();
+  expect(
+    within(foot)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Rate", "Edit dinner", "Cook"]);
+});
+
 test("a cooked dinner's sheet asks whether any Staple its Recipe uses has run out", async () => {
   const cooked = emptyWeek("2026-10-26");
   Object.assign(cooked.slots[5] as Slot, {

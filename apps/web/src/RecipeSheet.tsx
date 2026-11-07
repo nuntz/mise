@@ -26,7 +26,7 @@ export function RecipeSheet(props: {
   onClose: () => void;
   /** What can be done with the Slot once cooked. */
   slotActions?: JSX.Element;
-  /** What the sheet's foot offers before Cook, such as Keep, Mark cooked and Edit; undefined for nothing. */
+  /** What the sheet's foot offers before Cook, such as rating it, Keep and Edit; undefined for nothing. */
   foot?: JSX.Element;
   children?: JSX.Element;
 }) {
@@ -104,9 +104,7 @@ export function RecipeSheet(props: {
       </div>
       <Show when={recipe() && (props.onCook || props.foot)}>
         <div class="sheet-foot">
-          <Show when={props.foot}>
-            <div class="sheet-foot-row">{props.foot}</div>
-          </Show>
+          {props.foot}
           <Show when={recipe()}>
             {(open) => (
               <Show when={props.onCook}>
