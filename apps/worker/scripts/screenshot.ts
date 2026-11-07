@@ -79,6 +79,33 @@ async function run(command: string[], cwd: string) {
   if ((await child.exited) !== 0) throw new Error(`${command.join(" ")} failed`);
 }
 
+/**
+ * Passes `wrangler dev`'s errors on, less the one the seed causes on purpose: the DNS failure of the
+ * link it imports from a host that never resolves, and the stack line under it. Any later one shows.
+ */
+async function passOnErrors(stderr: ReadableStream<Uint8Array>) {
+  let expected = true;
+  let underIt = false;
+  let rest = "";
+  const decoder = new TextDecoder();
+  const reader = stderr.getReader();
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
+    const lines = (rest + decoder.decode(read.value, { stream: true })).split("\n");
+    rest = lines.pop() ?? "";
+    for (const line of lines) {
+      if (expected && line.includes("failed to lookup address information")) {
+        [expected, underIt] = [false, true];
+        continue;
+      }
+      // workerd puts a blank line between the error and its stack.
+      if (underIt && (line.trim() === "" || line.trimStart().startsWith("stack:"))) continue;
+      underIt = false;
+      process.stderr.write(`${line}\n`);
+    }
+  }
+  if (rest) process.stderr.write(rest);
+}
+
 async function waitForWorker() {
   for (let attempt = 0; attempt < 120; attempt++) {
     try {
@@ -168,6 +195,7 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
     steps: ["Soften the onion.", "Simmer with the tomatoes and stock, then blend."],
   });
   // A link Mise can't read becomes a link-only Draft; without a reachable model it may refuse instead.
+  // Its host never resolves, and the error workerd logs for that is the one `passOnErrors` leaves out.
   try {
     await call(agent, "import_url", { url: "https://recipes.example.invalid/grandmas-dumplings" });
   } catch (error) {
@@ -590,8 +618,9 @@ const worker = Bun.spawn(
     "--var",
     "DEV_CALLER_EMAIL:cook@example.com",
   ],
-  { cwd: join(import.meta.dir, ".."), stdout: "ignore", stderr: "inherit" },
+  { cwd: join(import.meta.dir, ".."), stdout: "ignore", stderr: "pipe" },
 );
+void passOnErrors(worker.stderr);
 let failures: string[] = [];
 try {
   await waitForWorker();
