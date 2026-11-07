@@ -880,8 +880,8 @@ function MarkCooked(props: { client: MiseClient; slot: Slot }) {
   };
   return (
     <>
+      {/* No icon: beside Keep and Edit dinner in the foot, it fits their line in kitchen mode too. */}
       <button type="button" class="button-row" disabled={busy()} onClick={mark}>
-        <Icon name="check" />
         {t("cooking.mark")}
       </button>
       <Show when={error()}>
