@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_response.filePath // .tool_input.file_path'); case \"$f\" in \"$CLAUDE_PROJECT_DIR\"/*) cd \"$CLAUDE_PROJECT_DIR\" && bunx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true \"$f\" >/dev/null 2>&1 ;; esac; exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

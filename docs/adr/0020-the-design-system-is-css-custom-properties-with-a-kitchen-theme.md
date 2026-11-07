@@ -13,3 +13,7 @@ The screens are checked against a pseudo-locale: `?pseudo` in the address makes 
 - Changing a token means changing `tokens.css` to match the Design System artifact. Nothing generates one from the other. The Daylight `surface` colour is also written in `index.html`'s `theme-color` and the web manifest, which are read before any CSS loads; the page sets `theme-color` from the token once it runs.
 - The service worker's shell includes every font subset Fontsource ships, a few hundred kilobytes, so the fonts work offline in any language.
 - Kitchen mode on one device doesn't change any other device.
+
+## Amended by ADR 0033
+
+`tokens.css` is the source of truth and the Design System is re-synced from it, rather than `tokens.css` being changed to match the Design System.
