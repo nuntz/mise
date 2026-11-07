@@ -1334,6 +1334,12 @@ fieldset > .toggle-chip {
   object-fit: cover;
 }
 
+/* In a Recipe's sheet over the Week, under its title: shorter, and never squeezed by the sheet's height. */
+.sheet-body > .photo {
+  flex: none;
+  height: var(--photo-sheet);
+}
+
 .dish {
   display: flex;
   flex-direction: column;

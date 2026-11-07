@@ -376,6 +376,29 @@ test("a Recipe opened over the Week shows how it's made, can't be changed there,
   expect(screen.getByRole("region", { name: "Tuesday, October 27" })).toBeTruthy();
 });
 
+test("a Recipe opened over the Week shows its photo under its title, and nothing in its place without one", async () => {
+  const user = userEvent.setup();
+  const withPhoto = fakeClient();
+  const { unmount } = render(() => <App client={withPhoto.client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const photo = await within(sheet).findByRole("img", { name: "Photo of Pasta" });
+  expect(photo.getAttribute("src")).toBe("/photos/1?v=photos/pasta");
+  expect(precedes(within(sheet).getByRole("heading", { name: "Pasta" }), photo)).toBe(true);
+  expect(precedes(photo, within(sheet).getByRole("list", { name: "Ingredients" }))).toBe(true);
+  unmount();
+
+  const withoutPhoto = fakeClient({ get_recipe: () => ({ ok: true, value: { ...pastaRecipe, photoKey: null } }) });
+  render(() => <App client={withoutPhoto.client} />);
+  const again = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(again).getByRole("button", { name: "Pasta" }));
+  const bare = await screen.findByRole("dialog", { name: "Pasta" });
+  await within(bare).findByRole("list", { name: "Ingredients" });
+  expect(bare.querySelector(".photo")).toBeNull();
+});
+
 test("a Recipe opened over the Week shows its chips as its page does, but not its tags", async () => {
   const user = userEvent.setup();
   const everyChip = {

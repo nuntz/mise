@@ -77,6 +77,8 @@
   --field: 48px;
   --nav: 64px;
   --photo-hero: 220px;
+  /* The hero in a Recipe's sheet over the Week: shorter, so its Ingredients start in view. */
+  --photo-sheet: 180px;
   --thumb: 64px;
   /* A Week card's square: smaller than thumb, so the card's actions fit at its end. */
   --thumb-slot: 48px;

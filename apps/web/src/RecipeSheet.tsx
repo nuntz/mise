@@ -10,7 +10,7 @@ import { RecipeChips, recipeChips } from "./Recipes";
 import { Sheet } from "./Sheet";
 
 /**
- * A Slot's Recipe, looked at over the Week: its Ingredients scaled to `servings`, what the Slot is
+ * A Slot's Recipe, looked at over the Week: its photo, its Ingredients scaled to `servings`, what the Slot is
  * cooked for (its Leftovers included), after the `children` (the Slot's Conflicts) and what can be
  * done with the Slot. Its `foot` and Cook are held at the sheet's foot, in reach of a thumb however
  * long the Recipe.
@@ -78,6 +78,17 @@ export function RecipeSheet(props: {
         <Show when={recipe()}>
           {(open) => (
             <>
+              {/* Under the title and what the Slot says first; without a photo, no placeholder takes its room. */}
+              <Show when={open().photoKey}>
+                {(key) => (
+                  <div class="photo">
+                    <img
+                      src={props.client.photoUrl(open().id, key())}
+                      alt={t("recipe.photoAlt", { title: open().title })}
+                    />
+                  </div>
+                )}
+              </Show>
               <Show when={open().prepAhead}>
                 {(note) => <p class="banner banner-plum">{t("recipe.prepAhead", { note: note() })}</p>}
               </Show>
