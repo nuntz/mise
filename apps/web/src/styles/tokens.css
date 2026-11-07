@@ -18,6 +18,8 @@
   --plum: #7a1f3d;
   --plum-ink: #6a1534;
   --plum-soft: #f7e4ea;
+  /* A dashed line on plum-soft: the dashed square of a Nothing planned dinner on today's day. */
+  --plum-line: #d9a9ba;
   --on-plum: #ffffff;
   --chip: #f1ebe2;
   --chip-ink: #3a332c;
@@ -118,6 +120,7 @@
   --plum: #ff9ebb;
   --plum-ink: #ffc9da;
   --plum-soft: #3a1522;
+  --plum-line: #6e2d44;
   --on-plum: #1a0a10;
   --chip: #2c2825;
   --chip-ink: #ffffff;

@@ -2449,6 +2449,25 @@ test("the Week's dates are its title, with no overline, and the day rail marks t
   }
 });
 
+test("today's day is marked as the date it is, and a Week without today marks none", async () => {
+  vi.setSystemTime(new Date("2026-10-28T12:00:00-07:00"));
+  const { client } = fakeClient(withCurryNextWeek);
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Wednesday, October 28" });
+  const marked = () =>
+    screen
+      .getAllByRole("region")
+      .filter((region) => region.getAttribute("aria-current") === "date")
+      .map((region) => region.getAttribute("aria-label"));
+
+  expect(marked()).toEqual(["Wednesday, October 28"]);
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByRole("region", { name: "Tuesday, November 3" });
+  expect(marked()).toEqual([]);
+});
+
 test("the Slot form is a sheet: Guests step either side, their Constraints show once there are Guests, and Escape closes it", async () => {
   const { client, calls } = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2026-10-26") }) });
   const user = userEvent.setup();

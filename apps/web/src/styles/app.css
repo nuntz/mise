@@ -1307,6 +1307,24 @@ fieldset > .toggle-chip {
   scroll-margin-top: var(--space-4);
 }
 
+/* Today's day: a plum-soft ground in a plum ring, out into the gutter by as much as it's in, so its card
+ * and strip stay in line with the other days'. Outlines on it take plum-ink and its dashed square
+ * plum-line, since line-control and line-dashed barely show on the tint. */
+.day[aria-current="date"] {
+  margin: var(--space-2) calc(-1 * var(--space-2));
+  padding: calc(var(--space-2) - 2px) calc(var(--space-2) - 2px) 0;
+  border: 2px solid var(--plum);
+  border-radius: var(--radius-lg);
+  background: var(--plum-soft);
+  --line-control: var(--plum-ink);
+  --line-dashed: var(--plum-line);
+}
+
+/* The Pencilled chip is plum-soft itself, so on today's ground it sits on the page's. */
+.day[aria-current="date"] .chip-plum {
+  background: var(--surface);
+}
+
 .slot {
   display: flex;
   flex-direction: column;

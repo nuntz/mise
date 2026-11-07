@@ -182,6 +182,23 @@ test("in kitchen mode the scrim stands off the page at 3:1 over any photo, so a 
   }
 });
 
+test.each(Object.entries(themes))(
+  "today's day is a plum-soft ground in a plum ring, and what's on it reads, %s",
+  (_, theme) => {
+    const today = declarations('.day[aria-current="date"]');
+    expect(today).toMatch(/background:\s*var\(--plum-soft\)/);
+    expect(today).toMatch(/border:\s*2px solid var\(--plum\)/);
+    // Keep, Change and Choose are outlined in plum-ink there: line-control is under 3:1 on plum-soft.
+    expect(today).toMatch(/--line-control:\s*var\(--plum-ink\)/);
+    const ground = parseHex(theme["plum-soft"]).rgb;
+    expect(contrast(parseHex(theme.ink).rgb, ground)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(parseHex(theme["ink-muted"]).rgb, ground)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(parseHex(theme["plum-ink"]).rgb, ground)).toBeGreaterThanOrEqual(3);
+    expect(contrast(parseHex(theme.plum).rgb, ground)).toBeGreaterThanOrEqual(3);
+    expect(contrast(parseHex(theme.plum).rgb, parseHex(theme.surface).rgb)).toBeGreaterThanOrEqual(3);
+  },
+);
+
 test("every mic is the chat sheet's, a field-sized circle, so none is smaller where you stand further off", () => {
   expect(declarations(".mic")).toMatch(/width:\s*var\(--field\)/);
   expect(declarations(".mic")).toMatch(/height:\s*var\(--field\)/);

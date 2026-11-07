@@ -445,7 +445,7 @@ function Day(props: {
   );
 
   return (
-    <section class="day" id={dayId(props.date)} aria-label={title()}>
+    <section class="day" id={dayId(props.date)} aria-label={title()} aria-current={props.today ? "date" : undefined}>
       <h2 class="visually-hidden">{title()}</h2>
       {view("dinner", true)}
       <div class="strip">
