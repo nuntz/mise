@@ -314,6 +314,21 @@ test("a Ready-made dish opened over the Week is heated whole, in as many package
   expect(within(ingredients).getByRole("listitem").textContent).toBe("2 packages frozen vegetable dumplings");
 });
 
+test("a Recipe sheet's Cook sits at its foot, after the Steps, where a thumb reaches it", async () => {
+  const user = userEvent.setup();
+  const { client } = fakeClient();
+  render(() => <App client={client} />);
+
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  const sheet = await screen.findByRole("dialog", { name: "Pasta" });
+  const cook = await within(sheet).findByRole("button", { name: "Cook" });
+  const steps = within(sheet).getByRole("list", { name: "Steps" });
+
+  expect(steps.compareDocumentPosition(cook) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(cook.closest(".sheet-foot")?.parentElement).toBe(sheet);
+});
+
 test("a Recipe opened over the Week is cooked from there, for as many as its Slot", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient({ get_week: () => ({ ok: true, value: pastaForSix() }) });

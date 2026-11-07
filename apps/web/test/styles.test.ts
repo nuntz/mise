@@ -101,6 +101,11 @@ test("the Week's actions leave the title's line while a banner tops the app, so 
   for (const selector of lifted) expect(selector.replace(/\s+/g, "")).toContain(":not(:has(>.banner-top,");
 });
 
+test("a sheet's foot stays in view at its bottom edge while the sheet scrolls", () => {
+  expect(declarations(".sheet-foot")).toMatch(/position:\s*sticky/);
+  expect(declarations(".sheet-foot")).toMatch(/bottom:\s*0/);
+});
+
 test("no list renders the browser's markers", () => {
   expect(declarations("ul, ol")).toMatch(/list-style:\s*none/);
   expect(appCss).not.toMatch(/list-style:\s*(?!none)[a-z]/);

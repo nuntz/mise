@@ -12,7 +12,8 @@ import { Sheet } from "./Sheet";
 /**
  * A Slot's Recipe, looked at over the Week: its Ingredients scaled to `servings`, what the Slot is
  * cooked for (its Leftovers included), after the `children` (the Slot's Conflicts) and what can be
- * done with the Slot. The Recipe itself is read-only; Recipes are changed on the Recipes screen.
+ * done with the Slot. Cook is held at the sheet's foot, in reach of a thumb however long the Recipe.
+ * The Recipe itself is read-only; Recipes are changed on the Recipes screen.
  */
 export function RecipeSheet(props: {
   client: MiseClient;
@@ -72,14 +73,6 @@ export function RecipeSheet(props: {
               <Show when={open().prepAhead}>
                 {(note) => <p class="banner banner-plum">{t("recipe.prepAhead", { note: note() })}</p>}
               </Show>
-              <Show when={props.onCook}>
-                {(cook) => (
-                  <button type="button" class="button-primary" onClick={() => cook()(open().id, props.servings)}>
-                    <Icon name="pot" />
-                    {t("kitchen.cook")}
-                  </button>
-                )}
-              </Show>
               {props.slotActions}
               <section class="stack" aria-labelledby={`${titleId}-ingredients`}>
                 <h3 id={`${titleId}-ingredients`}>{t("recipe.ingredients")}</h3>
@@ -106,6 +99,20 @@ export function RecipeSheet(props: {
           )}
         </Show>
       </div>
+      <Show when={recipe()}>
+        {(open) => (
+          <Show when={props.onCook}>
+            {(cook) => (
+              <div class="sheet-foot">
+                <button type="button" class="button-primary" onClick={() => cook()(open().id, props.servings)}>
+                  <Icon name="pot" />
+                  {t("kitchen.cook")}
+                </button>
+              </div>
+            )}
+          </Show>
+        )}
+      </Show>
     </Sheet>
   );
 }
