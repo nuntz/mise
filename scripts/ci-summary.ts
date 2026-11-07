@@ -27,6 +27,8 @@ if (!ci) {
 }
 const steps = ci.split("&&").map((step) => step.trim());
 
+// A writer doesn't truncate: a shorter run would leave the last run's tail, failures included.
+await Bun.write(LOG, "");
 const log = Bun.file(LOG).writer();
 let exitCode = 0;
 for (const step of steps) {

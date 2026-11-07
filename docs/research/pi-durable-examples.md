@@ -1,23 +1,50 @@
 # Pi Durable: the upstream examples against Mise's agent
 
-How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24.
+How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise has run Pi 1.5.0 since 2026-11-06 (#153): **Pi 1.5** below says what changed, and wins over the 1.4.0 citations in §1–§5.
 
 ## Decisions (2026-10-24)
 
 - **Compaction:** the agent's model gets its own thresholds, computed from its window: background from about 50k tokens, blocking at about 80k, keeping 20k as said. `reserveTokens` is stretched to do it (`modelOverrides`), rather than giving pi a model copy with a smaller window, which would also cap every answer's `max_tokens`.
 - **Model of an existing conversation:** on start, the household puts its conversation on `AGENT_MODEL` when it differs.
-- **onReport and wake errors:** reported to Sentry without content. A parked task is retried by hand, with no button in the app.
+- **onReport and wake errors:** reported to Sentry without content (`piReports`, `reportWakeErrors` in `apps/worker/src/observability.ts`). Since 1.5 no task is parked: a task cut off too often ends itself (see **Pi 1.5**).
 - **Tool order:** `toolExecution: "sequential"` for the whole harness.
 - **Small fixes:** read-only tools are `replay: "safe"`, a turn uses `submit` + `wait`, and `followUpMode: "one-at-a-time"` is set explicitly.
 - **Kept on purpose:** `afterFailedRun: "withdraw"`, for every speaker's queued turn.
 - **Not now:** splitting the preamble, an `operationId` per turn, `progress` intervals, a stream timeout, a `beforeCompact` prompt, reading `usage()`.
 - **Open questions settled since:** with `thinkingLevel: "off"`, Haiku 5.5 is sent `thinking: { type: "disabled" }`. Compaction spans carry no content, and their error text is already replaced by `internal_error`.
 
+## Pi 1.5 (2026-11-06)
+
+Mise moved from Pi 1.4.0 and `agents` 0.30.1 to Pi 1.5.0 and `agents` 0.33.0 in #153. Upstream: the [v1.5.0 release](https://github.com/earendil-works/pi/releases/tag/v1.5.0) and `packages/durable/CHANGELOG.md` at `v1.5.0`.
+
+**Reading the installed types.** The `.bun` directory names carry a hash that changes with each install, so find them rather than copying a path: `ls -d node_modules/.bun/@earendil-works+pi-durable@*/node_modules/@earendil-works/pi-durable/dist`. In there:
+
+- `types.d.ts`: `Session` (`snapshot`, `commit`), `EntryRecord`, `SubmissionRecord`, `ReportInfo` and `Report`.
+- `harness/types.d.ts`: `Conversation`, `HarnessSettings` (`restartLimit`, `afterFailedRun`), `AgentChange` (`maxTurns`).
+- `harness/live.d.ts`: `LiveDoc`, the `pi.live` state: `run`, `generation`, `runFailure` and `RunFailureReason`.
+
+**How a run ends without an answer.** Pi records why in `pi.live.runFailure` (`reason`: `model_error`, `restart_limit`, `interrupted`, `turn_limit` and others), read with `pi.snapshot(LiveDoc, conversationId, context)`.
+
+- `runFailure.first` is the run's first entry: for a Member's turn, the `mise.turn` entry itself.
+- Pi keeps only the newest failure, and removes it when the next run starts.
+- Only some reasons also leave a failed answer (`stopReason` `error` or `aborted`) in the transcript. A `model_error` does. A `restart_limit` does only when there is a partial answer to keep, and a `turn_limit` ends on a tool call.
+- So Mise reads both, in `lastTurnUnanswered` and `recentChat` (`apps/worker/src/agent.ts`). A turn that ended with no failed answer reads unanswered only until the next run starts.
+- In a test, `configure({ maxTurns: 1 })` with a model that only calls tools ends a run with `turn_limit`, which fails the same way as `restart_limit` (`apps/worker/test/agent.test.ts`).
+
+**What else changed for Mise.**
+
+- **Crash loops:** `retryTask` and the `parked` status are gone. After `settings.restartLimit` cut-offs in a row (default 5), a run ends with `runFailure` `restart_limit`, a tool call with an error result, a compaction in `pi.live.compactionFailure`, and any other task `faulted`.
+- **Reports:** `onReport(report)` takes one `Report`: a `ReportInfo` by `kind` (`storage_failed`, `task_faulted`, `task_interrupted`, `migration_failed`, `task_outdated`, `task_error`, `extension_error`, `host_error`, `listener_error`) plus its `error`. `piReports` tags only the fields it names, so the error stays out of Sentry.
+- **Tool schemas:** pi-ai no longer exports `Type`, so tools take plain JSON Schema; the `Type.Unsafe` wrapper in §3.3 and §4 is gone.
+- **Live progress:** `watchEvents()` and the state getters are gone. `Conversation.watch()` shows a window of the newest 50 entries; chat history pages `Conversation.entries()` and so sees everything.
+- **Rollback:** 1.5 moves `pi.live` to version 3 and bumps the tool and generation task versions, which Pi 1.4 can't read. A bad deploy past this release is fixed by rolling forward.
+- **Storage:** upstream's SQLite `schema.ts`, `migrations.ts` and `cloudflare.ts` are unchanged from 1.4.0, so `agentLog.ts`'s direct reads of `pi_entries` still hold.
+
 ## Sources and abbreviations
 
 - **Upstream `main`**: `earendil-works/pi` at `38ff99177fba21e9c57a670f4e95adcf407c99c7`. Links: `M/…` = `https://github.com/earendil-works/pi/blob/38ff99177fba21e9c57a670f4e95adcf407c99c7/packages/durable/…`.
 - **Upstream `v1.4.0`**: tag `v1.4.0` = `4a080252f06caf63a525d7873c5d94d3c23887e0` ("Release v1.4.0"). Links: `T/…` = `https://github.com/earendil-works/pi/blob/4a080252f06caf63a525d7873c5d94d3c23887e0/packages/durable/…`.
-- **Installed copies** (every recommendation below was checked against these):
+- **Installed copies** as of 2026-10-24, Pi 1.4.0 (every recommendation below was checked against these; for the installed 1.5 types see **Pi 1.5**):
   - `PD/…` = `node_modules/.bun/@earendil-works+pi-durable@1.4.0+147a41c250e9f430/node_modules/@earendil-works/pi-durable/dist/…`. Its `package.json` says `"version": "1.4.0"`. `apps/worker/node_modules/@earendil-works/pi-durable` resolves to it.
   - `AI/…` = `node_modules/.bun/@earendil-works+pi-ai@1.4.0+147a41c250e9f430/node_modules/@earendil-works/pi-ai/dist/…`.
   - `AG` = `node_modules/.bun/agents@0.30.1+2d099d35f6b34cd6/node_modules/agents/dist/harness/pi/index.js`, Cloudflare's `PiHarness`. Mise imports it from `agents/harness/pi` (`apps/worker/src/household.ts:60`). It resolves the same pi-durable 1.4.0 (`node_modules/.bun/agents@0.30.1+…/node_modules/@earendil-works/pi-durable` → the 1.4.0 copy).

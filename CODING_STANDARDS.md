@@ -63,3 +63,10 @@ card's thumb, indent or rows changes its placeholder in the same diff, as the We
 
 `docs/agents/agent-briefs.md` names the words a screen shows, and briefs quote it word for word. A
 change to a control's label or where it shows updates every bullet there that names it (#147).
+
+## An upgrade accounts for what upstream changed
+
+A dependency upgrade names, for every behaviour change in the upstream release notes, the Mise code
+that reads the changed state or does what changed, or says that none does. A release note true of the
+library can be false of Mise: Pi 1.5 ends a run cut off too often "visibly", but Mise read only failed
+answers, so the turn still looked answered until the fix in #153.

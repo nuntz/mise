@@ -27,6 +27,10 @@ Wording a brief or ticket decides for a screen: see `docs/agents/agent-briefs.md
 
 Drawing a screen's directions on a Claude Design canvas: see `docs/agents/design-canvas.md`.
 
+### Pi Durable
+
+Changing how the agent uses Pi's harness, its live state or reports, or upgrading Pi: see `docs/research/pi-durable-examples.md`.
+
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
