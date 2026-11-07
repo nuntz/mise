@@ -40,9 +40,46 @@ Each deployment is one Household at its own hostname, behind Cloudflare Access w
 bun run wizard
 ```
 
-The wizard walks you through Pulumi Cloud, a Cloudflare API token, a Google OAuth client, the ESC environment, Pulumi Cloud's trust in CI, and the GitHub secret and variables. Its answers stay in `~/.config/mise/deploy.env`. After that, every push to `master` runs `pulumi up` (Access, R2, the custom domain and its DNS record) and then `wrangler deploy`, which uploads the Worker secrets Pulumi computed. On a brand-new deployment the hostname binds on a second `pulumi up` in the same run, once the Worker exists.
+The wizard walks you through Pulumi Cloud, a Cloudflare API token, a Google OAuth client, the ESC environment, Pulumi Cloud's trust in CI, and the GitHub secrets and deploy flag. Its answers stay in `~/.config/mise/deploy.env`. After that, every push to `master` runs `pulumi up` (Access, R2, the custom domain and its DNS record) and then `wrangler deploy`, which uploads the Worker secrets Pulumi computed. On a brand-new deployment the hostname binds on a second `pulumi up` in the same run, once the Worker exists.
 
 The Worker checks the Access token on every request and passes the signed-in email into tool calls (ADR 0007). `/cal/*` skips sign-in. `/agent-log` has an Access application of its own, which admits only a service token Pulumi makes: `bun run transcript --deployed` reads the Household's conversation there, read-only, and no Member can. The wizard's stage for the agent log keeps the token in `~/.config/mise/deploy.env`.
+
+### Private deployment identifiers
+
+The deploy log is public. `PULUMI_ORG`, `PULUMI_STACK` (the full `organization/project/stack`),
+`PULUMI_ESC_ENVIRONMENT` and `PULUMI_CI_USER` are GitHub Actions **secrets**, along with
+`CLOUDFLARE_API_TOKEN`. GitHub masks them before a step's `env:` or `with:` header prints;
+`::add-mask::` in that step would be too late. `PULUMI_ORG` is stored separately so the organization
+is masked even when it appears without the rest of the stack name. The only plain variable is
+`DEPLOY_ENABLED=true`, since a job-level `if:` cannot read secrets.
+
+**Moving an existing deployment from plain variables.** Before merging this workflow change,
+copy the current identifiers to repository secrets and enable the new gate. From a trusted local
+checkout with `gh` signed in, run this without shell tracing (`set -x`):
+
+```sh
+set -o pipefail
+stack="$(gh variable get PULUMI_STACK)"
+esc="$(gh variable get PULUMI_ESC_ENVIRONMENT)"
+if [[ -n "$stack" && -n "$esc" && "$stack" == */*/* ]]; then
+  printf '%s' "${stack%%/*}" | gh secret set PULUMI_ORG &&
+    printf '%s' "$stack" | gh secret set PULUMI_STACK &&
+    printf '%s' "$esc" | gh secret set PULUMI_ESC_ENVIRONMENT &&
+    gh variable set DEPLOY_ENABLED --body true
+fi
+unset stack esc
+```
+
+Keep the existing `PULUMI_CI_USER` and `CLOUDFLARE_API_TOKEN` secrets. The wizard sets all five
+secrets for a new deployment and enables it only after they are saved. A failed wizard re-run
+does not disable an already-enabled flag. A missing flag skips deployment; a true flag with missing secrets fails before OIDC sign-in. There is no fallback to
+plain identifiers. This does not change Pulumi's OIDC trust or token permissions.
+
+After merging, verify a new push-to-master deploy masks the identifiers in both step headers and
+Pulumi output. Only then remove the old `PULUMI_STACK` and `PULUMI_ESC_ENVIRONMENT` variables if
+no other workflow uses them. Keep them until verification if a rollback may need the old workflow.
+Secrets do not redact past logs: any historical run-log cleanup is a separate decision. Do not
+re-run the old workflow to test masking, because it can expose the identifiers again.
 
 ### CI's sign-in to Pulumi Cloud
 

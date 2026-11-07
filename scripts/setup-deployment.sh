@@ -372,7 +372,7 @@ rm -f "$definition"
 note "infra/Pulumi.production.yaml now imports $ESC_ENV; it is gitignored."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Pulumi Cloud and GitHub: CI's sign-in, secret and variables"
+stage "Pulumi Cloud and GitHub: CI's sign-in, secrets and deploy flag"
 say "CI signs in to Pulumi Cloud through GitHub OIDC: Pulumi Cloud exchanges the deploy job's"
 say "GitHub ID token for a short-lived personal token, but only for this repository's deploy job"
 say "on a push to master. Other repositories' policies on the same issuer stay."
@@ -387,12 +387,20 @@ if confirm "Apply the policy above in $PULUMI_ORG?"; then
 else
   SKIPPED+=("Pulumi Cloud's trust in CI: bun run trust:pulumi-ci --org $PULUMI_ORG --user $PULUMI_CI_USER")
 fi
-say "The deploy job reads two secrets and two variables. The CI user is a secret so that"
-say "GitHub masks it in the public logs."
+say "The deploy job reads five secrets so GitHub masks the identifiers even in step headers."
+say "Only DEPLOY_ENABLED is a plain variable; it contains no deployment details."
+secrets_before=${#WRITTEN_SECRET[@]}
 set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
 set_secret PULUMI_CI_USER "$PULUMI_CI_USER"
-set_var PULUMI_STACK "$STACK"
-set_var PULUMI_ESC_ENVIRONMENT "$ESC_ENV"
+set_secret PULUMI_ORG "$PULUMI_ORG"
+set_secret PULUMI_STACK "$STACK"
+set_secret PULUMI_ESC_ENVIRONMENT "$ESC_ENV"
+if (( ${#WRITTEN_SECRET[@]} - secrets_before == 5 )); then
+  set_var DEPLOY_ENABLED true
+else
+  SKIPPED+=("GitHub variable DEPLOY_ENABLED: set to true after all five secrets are saved")
+  warn "Not enabling deployment: save the missing secrets first (README → Private deployment identifiers)."
+fi
 pause
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
