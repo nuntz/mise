@@ -30,10 +30,21 @@ import {
   type WeekSpan,
   weekDates,
 } from "@mise/domain";
-import { createEffect, createMemo, createSignal, createUniqueId, For, type JSX, Match, Show, Switch } from "solid-js";
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  type JSX,
+  Match,
+  Show,
+  Switch,
+} from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
-import { dayInitial, formatDate, shortDate } from "./dates";
+import { formatDate, shortDate } from "./dates";
 import { errorText } from "./errors";
 import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
@@ -46,6 +57,7 @@ import {
   EffortBudgetsEditor,
   type WeekHousehold as Household,
   marksPencilled,
+  nothingPlanned,
   PencilledChip,
   ProposalControls,
   reasonText,
@@ -82,6 +94,8 @@ export function WeekPage(props: {
   banner?: JSX.Element;
 }) {
   const [next, setNext] = createSignal(false);
+  // Whether This Week, once it shows, scrolls to Tonight: on opening and on coming back from Next Week.
+  let toTonight = true;
   const readOnly = () => !props.online;
   // The current Week kept on this device shows at once, and for as long as the household can't be
   // reached; not once it has ended, when it no longer is the current Week. One kept as next is the
@@ -91,6 +105,8 @@ export function WeekPage(props: {
     return savedWeeks().find((saved) => saved.endDate >= today);
   };
   const [week, setWeek] = createSignal<Week | undefined>(keptCurrent());
+  // Whether the Week shown is the household's as just fetched, rather than as kept on this device.
+  const [fetched, setFetched] = createSignal(false);
   // The Week after the current one starts the day after it ends: as loaded, or offline as kept.
   const [loadedNextStart, setNextStart] = createSignal<LocalDate>();
   const nextStart = () => {
@@ -147,7 +163,10 @@ export function WeekPage(props: {
           return;
         }
       }
-      setWeek(result.value);
+      batch(() => {
+        setWeek(result.value);
+        setFetched(true);
+      });
     },
     // Offline, the Week shown stands; reconnecting fetches it again.
     () => {
@@ -156,10 +175,14 @@ export function WeekPage(props: {
   );
 
   const show = (showNext: boolean) => {
-    setNext(showNext);
-    // Next Week shown as kept is the one loaded again on reconnecting.
-    if (showNext) setNextStart(nextStart());
-    setWeek(showNext ? (readOnly() ? keptNext() : undefined) : keptCurrent());
+    toTonight = !showNext;
+    batch(() => {
+      setNext(showNext);
+      // Next Week shown as kept is the one loaded again on reconnecting.
+      if (showNext) setNextStart(nextStart());
+      setWeek(showNext ? (readOnly() ? keptNext() : undefined) : keptCurrent());
+      setFetched(false);
+    });
     void refetch();
   };
 
@@ -174,7 +197,18 @@ export function WeekPage(props: {
   };
 
   const today = () => localDate(new Date(), props.household.timezone);
-  const jump = (date: LocalDate) => document.getElementById(dayId(date))?.scrollIntoView?.({ block: "start" });
+  // This Week opens at Tonight, as it does on coming back to it from Next Week; a refetch leaves the
+  // scroll where the Household has it. Not on the Week's first day, already at the top under the
+  // header, nor while nothing is planned, when the header's Propose dinners is the point. Online it
+  // waits for the household's Week: the one kept here may be out of date, or a link opens Next Week.
+  createEffect(() => {
+    const shown = week();
+    if (!shown || next() || !toTonight || !(fetched() || readOnly())) return;
+    toTonight = false;
+    const date = today();
+    if (date > shown.startDate && date <= shown.endDate && !nothingPlanned(shown))
+      document.getElementById(dayId(date))?.scrollIntoView?.({ block: "start" });
+  });
 
   return (
     <section class="screen week-screen" aria-labelledby="week-title">
@@ -194,37 +228,13 @@ export function WeekPage(props: {
         {props.banner}
         <Show when={week()}>
           {(shown) => (
-            <>
-              <nav class="day-rail" aria-label={t("week.jump")}>
-                <For each={weekDates(shown())}>
-                  {(date) => (
-                    <button
-                      type="button"
-                      aria-label={t("week.jumpTo", { day: dayTitle(date, props.household.locale) })}
-                      aria-current={date === today() ? "date" : undefined}
-                      onClick={() => jump(date)}
-                    >
-                      <span aria-hidden="true">{dayInitial(date, props.household.locale)}</span>
-                      <span class="numeral" aria-hidden="true">
-                        {Number(date.slice(8))}
-                      </span>
-                      {/* A dot under a day whose dinner is pencilled, so the rail shows what a Re-roll may change. */}
-                      <span
-                        class={pencilledOn(shown(), date) ? "day-rail-dot day-rail-dot-on" : "day-rail-dot"}
-                        aria-hidden="true"
-                      />
-                    </button>
-                  )}
-                </For>
-              </nav>
-              <ProposalControls
-                client={props.client}
-                week={shown()}
-                items={items()}
-                locale={props.household.locale}
-                online={props.online}
-              />
-            </>
+            <ProposalControls
+              client={props.client}
+              week={shown()}
+              items={items()}
+              locale={props.household.locale}
+              online={props.online}
+            />
           )}
         </Show>
       </header>
@@ -322,11 +332,6 @@ export function WeekPage(props: {
       </Show>
     </section>
   );
-}
-
-/** Whether the day's dinner is marked pencilled, as its card's chip says (ADR 0032). */
-function pencilledOn(week: Week, date: LocalDate): boolean {
-  return week.slots.some((slot) => slot.date === date && slot.meal === "dinner" && marksPencilled(slot));
 }
 
 /**
@@ -1586,7 +1591,7 @@ function choiceValue(slot: SlotKey): string {
   return `${slot.date}/${slot.meal}`;
 }
 
-/** Where the day rail jumps to. */
+/** Where the Week scrolls to open at Tonight. */
 function dayId(date: LocalDate): string {
   return `day-${date}`;
 }

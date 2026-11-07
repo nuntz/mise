@@ -19,3 +19,7 @@ The rule of ADR 0030 is unchanged: a dinner is pencilled exactly when it has a r
 - Chips in plum are Mise's own marks (`app.css`), so the Pencilled chip takes `chip-plum`, and needs no new token.
 - The agent still explains a dinner from its reason; nothing about `ProposalReason` changes.
 - This amends ADR 0030 ("That reason is the grey line on the Week, so the line is how anyone tells the two apart") and ADR 0031 ("A pencilled dinner's grey line is the only sign of what Mise chose and no one has settled"): the chip is that sign now, and the reason is in the sheet.
+
+## Amendment: no day rail
+
+The Week has no day rail any more, so nothing puts a dot under a day: the Pencilled chip on each card, and the same chip leading the line under Re-roll, are the whole of the mark. The rail's other jobs were said twice already: today's card has its plum ring and "Tonight", and its jump is replaced by the Week opening at Tonight, on opening and on coming back from Next Week. It stays at its top on the Week's first day, where Tonight is the first card anyway, and while nothing is planned, when Propose dinners is the point. A refetch leaves the scroll where it is.

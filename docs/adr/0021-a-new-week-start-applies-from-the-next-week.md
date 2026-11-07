@@ -14,3 +14,7 @@ A change that no Week has started under yet can be replaced. Changing the start 
 - "Today" is judged in the Household's timezone as of the change. A timezone and a week start changed together use the new timezone.
 - The changes are in the backup like every other table (ADR 0006), so a restored household has the same Weeks.
 - A Week made before the change and never stored (nothing planned, no Effort Budget override, no Grocery List) has no row. If it lies after the current Week, it is not kept: it is worked out under the new start day.
+
+## Amendment: no day rail
+
+The Week no longer has a day rail (ADR 0032's amendment). What this says of it holds for the Week's days, which go by its dates too.

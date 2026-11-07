@@ -1247,51 +1247,6 @@ fieldset > .toggle-chip {
   border-radius: var(--radius-md);
 }
 
-.day-rail {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--space-1);
-}
-
-.day-rail button {
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  height: var(--day-rail);
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  font: var(--type-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.day-rail .numeral {
-  font: var(--type-numeral);
-  letter-spacing: 0;
-}
-
-/* Under a day whose dinner is pencilled, a plum dot: the rail shows what a Re-roll may change. */
-.day-rail-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: var(--radius-full);
-}
-
-.day-rail-dot-on {
-  background: var(--plum);
-}
-
-.day-rail button[aria-current="date"] {
-  background: var(--plum);
-  color: var(--on-plum);
-}
-
-.day-rail button[aria-current="date"] .day-rail-dot-on {
-  background: var(--on-plum);
-}
-
 .days {
   display: flex;
   flex-direction: column;
@@ -1773,7 +1728,7 @@ fieldset > .toggle-chip {
   gap: var(--space-2) var(--space-4);
 }
 
-/* Re-roll and Use it up side by side under the day rail; Use it up takes the rest of the line. */
+/* Re-roll and Use it up side by side under the Week's switch; Use it up takes the rest of the line. */
 .proposal-tools {
   display: flex;
   flex-wrap: wrap;

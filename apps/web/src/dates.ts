@@ -5,7 +5,7 @@ export function formatDate(date: LocalDate, locale: Locale, options: Intl.DateTi
   return new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
 }
 
-/** The date's weekday initial, as the Week's day rail and Effort Budgets show it. */
+/** The date's weekday initial, as the Effort Budgets show it. */
 export function dayInitial(date: LocalDate, locale: Locale): string {
   return formatDate(date, locale, { weekday: "narrow" });
 }

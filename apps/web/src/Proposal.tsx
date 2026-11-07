@@ -47,8 +47,7 @@ export function ProposalControls(props: {
   // What the Use it up sheet has picked so far: stored only on saving or proposing, not on Cancel.
   const [draft, setDraft] = createSignal<ItemId[]>();
   const proposed = () => props.week.proposalSeed !== null;
-  const empty = () =>
-    !proposed() && props.week.slots.every((slot) => slot.meal !== "dinner" || slot.kind === "unplanned");
+  const empty = () => nothingPlanned(props.week);
 
   // What a Re-roll or a Use it up change that left every dinner as it was says about it.
   const [unchanged, setUnchanged] = createSignal<string>();
@@ -240,6 +239,11 @@ export function marksPencilled(slot: Slot): boolean {
   return isPencilled(slot) && isRerollable(slot);
 }
 
+/** Whether the Week is yet to be planned: never proposed, and no dinner chosen by hand. */
+export function nothingPlanned(week: Week): boolean {
+  return week.proposalSeed === null && week.slots.every((slot) => slot.meal !== "dinner" || slot.kind === "unplanned");
+}
+
 /** What marks a pencilled dinner on the Week: Mise chose it, and a Re-roll may change it (ADR 0032). */
 export function PencilledChip() {
   return (
@@ -384,7 +388,7 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
     setBusy(false);
   };
 
-  // The Week's own days, in its order, as the day rail above has them.
+  // The Week's own days, in its order, as its cards above have them.
   const days = () => Array.from({ length: 7 }, (_, offset) => addDays(props.week.startDate, offset));
   // This Week's budget where it differs from every Week's.
   const overridden = (weekday: Weekday) => props.week.effortBudgets[weekday] !== props.household.effortBudgets[weekday];

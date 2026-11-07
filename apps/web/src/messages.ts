@@ -714,8 +714,6 @@ const en = {
     "Every dinner is yours. To have Mise choose one, tap Change on its card, or open it and tap Edit dinner.",
   "week.title": "The Week",
   "week.range": "{from} to {to}",
-  "week.jump": "Jump to a day",
-  "week.jumpTo": "Jump to {day}",
   "week.tonight": "Tonight · {day}",
   "week.loading": "Loading the Week…",
   "week.otherMealsNone": "No breakfast or lunch",

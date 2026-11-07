@@ -1761,7 +1761,7 @@ test("a budget set to the same for this Week and every Week is no override for t
   );
 });
 
-test("Effort Budgets run in the Week's own order of days, as the day rail does", async () => {
+test("Effort Budgets run in the Week's own order of days, as its cards do", async () => {
   const { client } = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2026-10-25") }) });
   const user = userEvent.setup();
   render(() => <App client={client} />);
@@ -2420,7 +2420,7 @@ test("back online on next Week as kept, it stays shown until it has loaded again
   );
 });
 
-test("the Week's dates are its title, with no overline, and the day rail marks the pencilled dinners' days", async () => {
+test("the Week's dates are its title, with no overline and no day rail, and the Pencilled chip marks the dinners a Re-roll may change", async () => {
   const week = pencilledWeek();
   // Nobody is eating Saturday's, so Mise planned nothing a Re-roll would change.
   Object.assign(week.slots[17] as Slot, { diners: [], servings: 0, reason: { kind: "nobody_eating" } });
@@ -2430,23 +2430,106 @@ test("the Week's dates are its title, with no overline, and the day rail marks t
 
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Oct 26 to Nov 1");
   expect(screen.queryByText(/Mise · This week/i)).toBeNull();
-  const rail = screen.getByRole("navigation", { name: "Jump to a day" });
-  const marked = within(rail)
-    .getAllByRole("button")
-    .filter((day) => day.querySelector(".day-rail-dot-on"))
+  const header = document.querySelector(".week-screen .page-header") as HTMLElement;
+  expect(within(header).queryByRole("navigation")).toBeNull();
+  const marked = screen
+    .getAllByRole("region")
+    .filter((region) => region.classList.contains("day"))
+    .filter((day) => within(day).queryByText("Pencilled"))
     .map((day) => day.getAttribute("aria-label"));
   // Every dinner a Re-roll could change; Sunday's is the Household's own.
-  expect(marked).toEqual([
-    "Jump to Monday, October 26",
-    "Jump to Tuesday, October 27",
-    "Jump to Wednesday, October 28",
-    "Jump to Friday, October 30",
-  ]);
+  expect(marked).toEqual(["Monday, October 26", "Tuesday, October 27", "Wednesday, October 28", "Friday, October 30"]);
   // Pencilled, but cooked on Thursday and left unplanned on Saturday: the chip would promise a Re-roll changes them.
   for (const day of ["Thursday, October 29", "Saturday, October 31"]) {
     expect(within(dinnerOn(day)).queryByText("Pencilled")).toBeNull();
     expect(within(dinnerOn(day)).getByRole("heading").classList).not.toContain("dish-title-pencilled");
   }
+});
+
+/** The days the Week scrolled into view, in order, by name; jsdom has no scrolling of its own. */
+function watchScrolling() {
+  const scrolled: (string | null)[] = [];
+  Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this.getAttribute("aria-label"));
+  };
+  onTestFinished(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+  return scrolled;
+}
+
+test("This Week opens at Tonight, again on coming back from Next Week, but not when it refreshes", async () => {
+  vi.setSystemTime(new Date("2026-10-28T12:00:00-07:00"));
+  const scrolled = watchScrolling();
+  // Once the plan has changed, Wednesday's dinner is Curry.
+  let changed = false;
+  const fake = fakeClient({
+    get_week: (input) => {
+      if (input.date || !changed) return undefined;
+      const week = emptyWeek("2026-10-26");
+      Object.assign(week.slots[8] as Slot, { kind: "recipe", recipe: { ...curry, baseServings: 4 } });
+      return { ok: true, value: week };
+    },
+  });
+  const user = userEvent.setup();
+  render(() => <App client={fake.client} />);
+  await screen.findByRole("region", { name: "Wednesday, October 28" });
+  await vi.waitFor(() => expect(scrolled).toEqual(["Wednesday, October 28"]));
+
+  // A change to the plan fetches the Week again; where the Household has scrolled to stays.
+  changed = true;
+  fake.notify("plan");
+  await within(dinnerOn("Wednesday, October 28")).findByRole("heading", { name: "Curry" });
+  expect(scrolled).toEqual(["Wednesday, October 28"]);
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByRole("region", { name: "Tuesday, November 3" });
+  await user.click(screen.getByRole("button", { name: "This Week" }));
+  await screen.findByRole("region", { name: "Wednesday, October 28" });
+  await vi.waitFor(() => expect(scrolled).toEqual(["Wednesday, October 28", "Wednesday, October 28"]));
+});
+
+test("This Week opens at its top while nothing is planned, and on its first day", async () => {
+  vi.setSystemTime(new Date("2026-10-28T12:00:00-07:00"));
+  const scrolled = watchScrolling();
+  const { client } = fakeClient({ get_week: () => ({ ok: true, value: emptyWeek("2026-10-26") }) });
+  render(() => <App client={client} />);
+  await screen.findByRole("button", { name: "Propose dinners" });
+  expect(scrolled).toEqual([]);
+  cleanup();
+
+  // Monday's dinner is first under the header, so the title, the switch and Re-roll stay in view.
+  vi.setSystemTime(new Date("2026-10-26T12:00:00-07:00"));
+  render(() => <App client={fakeClient().client} />);
+  await screen.findByRole("region", { name: "Tuesday, October 27" });
+  expect(screen.getByRole("region", { name: "Monday, October 26" }).getAttribute("aria-current")).toBe("date");
+  expect(scrolled).toEqual([]);
+});
+
+test("This Week kept on this device opens at Tonight offline, and online waits for the household's", async () => {
+  await loadOnce();
+  vi.setSystemTime(new Date("2026-10-28T12:00:00-07:00"));
+  const scrolled = watchScrolling();
+
+  const offline = fakeClient();
+  offline.goOffline();
+  render(() => <App client={offline.client} />);
+  await screen.findByRole("region", { name: "Wednesday, October 28" });
+  await vi.waitFor(() => expect(scrolled).toEqual(["Wednesday, October 28"]));
+  cleanup();
+  scrolled.length = 0;
+
+  // The kept Week may be out of date: nothing planned on it any more, or a notification opening Next Week.
+  let answer: (result: ToolResult<unknown>) => void = () => {};
+  const { client } = fakeClient({
+    get_week: (input) => (input.date ? undefined : new Promise((resolve) => (answer = resolve))),
+  });
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Wednesday, October 28" });
+  expect(scrolled).toEqual([]);
+  answer({ ok: true, value: emptyWeek("2026-10-26") });
+  await screen.findByRole("button", { name: "Propose dinners" });
+  expect(scrolled).toEqual([]);
 });
 
 test("today's day is marked as the date it is, and a Week without today marks none", async () => {
