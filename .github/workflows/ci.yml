@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Only the deploy job adds `id-token: write`, to sign in to Pulumi Cloud through OIDC.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-26.04
@@ -18,18 +22,21 @@ jobs:
       # The same command runs locally before a push, so the two can't drift apart.
       - run: bun run ci
 
-  # Deployment values live in Pulumi ESC (ADR 0005); `bun run wizard` sets up the secrets and
+  # Deployment values live in Pulumi ESC (ADR 0005); `bun run wizard` sets up the secret and
   # variables this job reads; until then (and on forks) it is skipped. Logs are public, so every
-  # config value is masked before anything runs.
+  # config value is masked before anything runs. Pulumi Cloud trusts only this job on a push to
+  # master (README → CI's sign-in to Pulumi Cloud), so a run started by hand only tests.
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && vars.PULUMI_STACK != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.PULUMI_STACK != ''
     needs: test
     runs-on: ubuntu-26.04
     concurrency:
       group: deploy
       cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
     env:
-      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v7
@@ -42,15 +49,46 @@ jobs:
         with:
           pulumi-version: 3.270.0
 
+      # Before the next step's inputs and Pulumi's update URLs name them. PULUMI_CI_USER is a
+      # secret, so GitHub masks it everywhere.
+      - name: Mask the stack and its organization
+        id: names
+        env:
+          PULUMI_STACK: ${{ vars.PULUMI_STACK }}
+          PULUMI_CI_USER: ${{ secrets.PULUMI_CI_USER }}
+        run: |
+          echo "::add-mask::$PULUMI_STACK"
+          echo "::add-mask::${PULUMI_STACK%%/*}"
+          if [ -z "$PULUMI_CI_USER" ]; then
+            echo "::error::The PULUMI_CI_USER secret is not set: run 'bun run wizard' (README → CI's sign-in to Pulumi Cloud)"
+            exit 1
+          fi
+          echo "organization=${PULUMI_STACK%%/*}" >> "$GITHUB_OUTPUT"
+
+      # Exchanges this job's GitHub ID token for a personal token of PULUMI_CI_USER, exported as
+      # PULUMI_ACCESS_TOKEN; the action masks both. Pulumi Cloud grants it only to this job on a
+      # push to master (scripts/trust-pulumi-ci.ts). A deploy takes about a minute and a first one
+      # runs `pulumi up` twice: half an hour leaves room, as a token that expires mid-`pulumi up`
+      # leaves the stack locked. Pinned to the commit of v2.1.1.
+      - name: Sign in to Pulumi Cloud through OIDC
+        uses: pulumi/auth-actions@159c3e431aab767d4519b96f3f784d7d3d725622
+        with:
+          organization: ${{ steps.names.outputs.organization }}
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:${{ secrets.PULUMI_CI_USER }}
+          token-expiration: 1800
+
       - name: Select the stack and its ESC environment
         working-directory: infra
         env:
           PULUMI_STACK: ${{ vars.PULUMI_STACK }}
           PULUMI_ESC_ENVIRONMENT: ${{ vars.PULUMI_ESC_ENVIRONMENT }}
+          PULUMI_CI_USER: ${{ secrets.PULUMI_CI_USER }}
         run: |
-          # Pulumi prints update URLs naming the organization.
-          echo "::add-mask::$PULUMI_STACK"
-          echo "::add-mask::${PULUMI_STACK%%/*}"
+          if [ "$(pulumi whoami)" != "$PULUMI_CI_USER" ]; then
+            echo "::error::Signed in to Pulumi Cloud as someone other than PULUMI_CI_USER"
+            exit 1
+          fi
           pulumi stack select "$PULUMI_STACK"
           pulumi config env add "$PULUMI_ESC_ENVIRONMENT" --yes > /dev/null
           pulumi config --show-secrets --json | jq -r '.. | strings | select(length >= 4)' |

@@ -5,5 +5,5 @@ Pure domain logic (`packages/domain`) is tested with `bun test`. Anything touchi
 ## Consequences
 
 - `packages/domain` must stay free of Cloudflare and Bun imports so it runs in both runners and in production.
-- CI runs `bun test packages && bun run test:worker && bun run test:web`, not `bun test` alone (supersedes the CI line in SPEC.md §2).
+- CI runs `bun test packages ./scripts && bun run test:worker && bun run test:web`, not `bun test` alone (supersedes the CI line in SPEC.md §2). `./scripts` holds the tests of the scripts' own logic, such as Pulumi Cloud's trust in CI.
 - The SolidJS client (`apps/web`) is tested with Vitest too, in jsdom with `@solidjs/testing-library` (`bun run test:web`), because its JSX needs `vite-plugin-solid`'s compiler, which `bun test` can't run. These tests drive components through a fake `MiseClient`, never the Worker.

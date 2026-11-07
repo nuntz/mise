@@ -40,9 +40,33 @@ Each deployment is one Household at its own hostname, behind Cloudflare Access w
 bun run wizard
 ```
 
-The wizard walks you through Pulumi Cloud, a Cloudflare API token, a Google OAuth client, the ESC environment and the GitHub secrets and variables. Its answers stay in `~/.config/mise/deploy.env`. After that, every push to `master` runs `pulumi up` (Access, R2, the custom domain and its DNS record) and then `wrangler deploy`, which uploads the Worker secrets Pulumi computed. On a brand-new deployment the hostname binds on a second `pulumi up` in the same run, once the Worker exists.
+The wizard walks you through Pulumi Cloud, a Cloudflare API token, a Google OAuth client, the ESC environment, Pulumi Cloud's trust in CI, and the GitHub secret and variables. Its answers stay in `~/.config/mise/deploy.env`. After that, every push to `master` runs `pulumi up` (Access, R2, the custom domain and its DNS record) and then `wrangler deploy`, which uploads the Worker secrets Pulumi computed. On a brand-new deployment the hostname binds on a second `pulumi up` in the same run, once the Worker exists.
 
-The Worker checks the Access token on every request and passes the signed-in email into tool calls (ADR 0007). `/cal/*` skips sign-in. `/agent-log` has an Access application of its own, which admits only a service token Pulumi makes: `bun run transcript --deployed` reads the Household's conversation there, read-only, and no Member can. The wizard's last stage keeps the token in `~/.config/mise/deploy.env`.
+The Worker checks the Access token on every request and passes the signed-in email into tool calls (ADR 0007). `/cal/*` skips sign-in. `/agent-log` has an Access application of its own, which admits only a service token Pulumi makes: `bun run transcript --deployed` reads the Household's conversation there, read-only, and no Member can. The wizard's stage for the agent log keeps the token in `~/.config/mise/deploy.env`.
+
+### CI's sign-in to Pulumi Cloud
+
+GitHub holds no Pulumi token. The `deploy` job signs in through GitHub OIDC (`pulumi/auth-actions`, pinned by commit): Pulumi Cloud exchanges the job's GitHub ID token for a half-hour personal access token of the Pulumi user in the `PULUMI_CI_USER` secret (a secret so that GitHub masks the login in the public logs), and the job fails unless `pulumi whoami` is that user. The action masks both tokens. A personal token is the only kind of OIDC token every Pulumi edition offers (organization tokens need Essentials, team tokens Pro), and it carries all of that user's Pulumi permissions, in every organization the user belongs to, though no admin scope. The narrowest identity is therefore a Pulumi user that belongs only to the stack's organization; the wizard uses `pulumi whoami`.
+
+GitHub Actions is an OIDC issuer of the Pulumi organization, which other repositories of the same organization may share. Mise's allow policy on it requires every claim of this repository's deploy job on a push to master: the audience `urn:pulumi:org:<org>`, the numeric repository and owner IDs, the subject, `refs/heads/master`, the `push` event, `.github/workflows/ci.yml` on master and a GitHub-hosted runner. So pull requests, forks, other branches, workflows and runs started by hand get nothing; the job itself runs only on a push to master, so a run started by hand only tests. The job has no GitHub environment, so the subject is GitHub's default for a branch: `repo:<owner>@<owner id>/<name>@<repository id>:ref:refs/heads/master` for a repository made since July 2026 (the immutable subject), or `repo:<owner>/<name>:ref:refs/heads/master` for an older one. `ciTrustPolicies` in `scripts/trust-pulumi-ci.ts` is that list of claims, and the script applies it. It registers the issuer if there is none, replaces only this repository's allow policy, keeps deny policies and every other repository's, and warns about an allow policy that names no repository:
+
+```sh
+bun run trust:pulumi-ci --org <org> --user "$(pulumi whoami)" --dry-run   # then without --dry-run
+```
+
+It reads the repository's subject format from GitHub and refuses a customized subject template. Pulumi reads `*`, `?` and `.` in a rule as wildcards, so `ci.yml` also matches `ciXyml`; the numeric IDs keep that inside this repository. To check the trust, run the dry run: it prints the issuer's policies and says `This repository's policy is already in place.` A deploy's `Sign in to Pulumi Cloud through OIDC` step says `OIDC token exchange performed successfully.`
+
+**Moving a deployment from the access token to OIDC.** Before OIDC, CI signed in with a `mise-ci` personal access token in the `PULUMI_ACCESS_TOKEN` secret, and the wizard kept a copy in `~/.config/mise/deploy.env`. For such a deployment:
+
+1. Re-run `bun run wizard`, or apply the trust and set the secret by hand:
+   ```sh
+   bun run trust:pulumi-ci --org <org> --user "$(pulumi whoami)" --dry-run   # check, then without it
+   gh secret set PULUMI_CI_USER --body "$(pulumi whoami)"
+   ```
+2. Push the workflow change, then `bun run deployed`: the sign-in, stack, `pulumi up` and Wrangler steps go green.
+3. Only then retire the token: `gh secret delete PULUMI_ACCESS_TOKEN`, remove the `PULUMI_ACCESS_TOKEN=` line from `~/.config/mise/deploy.env`, and delete `mise-ci` at <https://app.pulumi.com/account/tokens> once its Last used shows nothing else signs in with it. The wizard's last stage does the first two once a green push to master has deployed through OIDC, and opens the tokens page for the third.
+
+**Rollback**, until step 3: revert the workflow change (`git revert`) and push; the secret is still there. To stop CI signing in at once, remove Mise's allow policy (Pulumi Cloud → Settings → Access Management → OIDC Issuers → `github-actions` → Policies), never the issuer, which other repositories may use. After step 3, a rollback needs a new personal access token in the `PULUMI_ACCESS_TOKEN` secret as well as the revert. Local `pulumi login` is unaffected throughout.
 
 ## Share to Mise from an iPhone
 

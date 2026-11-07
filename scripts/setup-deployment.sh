@@ -200,7 +200,7 @@ finish() {
 
 run_wizard() {
 
-TOTAL_STAGES=9
+TOTAL_STAGES=10
 
 # Deployment values are personal and Mise is open source (ADR 0005): keep them outside the repo.
 ENV_FILE="${MISE_DEPLOY_ENV:-${XDG_CONFIG_HOME:-$HOME/.config}/mise/deploy.env}"
@@ -216,8 +216,9 @@ banner "Deploy Mise to your own hostname"
 note "Values you enter are saved to $ENV_FILE, never to the repo."
 
 # ── 1 ─────────────────────────────────────────────────────────────────────
-stage "Pulumi Cloud: login and access token"
-say "Pulumi Cloud keeps the infrastructure state; CI signs in with an access token."
+stage "Pulumi Cloud: login"
+say "Pulumi Cloud keeps the infrastructure state. This wizard uses your 'pulumi login'; CI signs in"
+say "through GitHub OIDC, so there is no Pulumi token to make or store."
 for tool in pulumi gh bun; do
   command -v "$tool" >/dev/null 2>&1 || { warn "$tool is not installed: install it and re-run"; exit 1; }
 done
@@ -229,10 +230,6 @@ fi
 note "Signed in to Pulumi as $(pulumi whoami)."
 ask PULUMI_ORG "Pulumi organization to deploy under (your username for a personal account):"
 write_env PULUMI_ORG "$PULUMI_ORG"
-open_url "https://app.pulumi.com/account/tokens"
-step "Create token → Personal access token → name it 'mise-ci' → Create → copy it."
-ask_secret PULUMI_ACCESS_TOKEN "Paste the Pulumi access token:"
-write_env PULUMI_ACCESS_TOKEN "$PULUMI_ACCESS_TOKEN"
 
 # ── 2 ─────────────────────────────────────────────────────────────────────
 stage "Cloudflare: account, zone, hostname and Zero Trust team"
@@ -375,10 +372,25 @@ rm -f "$definition"
 note "infra/Pulumi.production.yaml now imports $ESC_ENV; it is gitignored."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "GitHub: secrets and variables for CI"
-say "The deploy job reads two secrets and two variables."
-set_secret PULUMI_ACCESS_TOKEN "$PULUMI_ACCESS_TOKEN"
+stage "Pulumi Cloud and GitHub: CI's sign-in, secret and variables"
+say "CI signs in to Pulumi Cloud through GitHub OIDC: Pulumi Cloud exchanges the deploy job's"
+say "GitHub ID token for a short-lived personal token, but only for this repository's deploy job"
+say "on a push to master. Other repositories' policies on the same issuer stay."
+PULUMI_CI_USER="$(pulumi whoami)"
+note "CI acts as $PULUMI_CI_USER, with all of that user's Pulumi permissions in every organization:"
+note "personal tokens are the only kind of OIDC token every Pulumi edition offers."
+if ! bun run trust:pulumi-ci --org "$PULUMI_ORG" --user "$PULUMI_CI_USER" --dry-run; then
+  warn "The dry run failed: fix what it names and re-run."; exit 1
+fi
+if confirm "Apply the policy above in $PULUMI_ORG?"; then
+  bun run trust:pulumi-ci --org "$PULUMI_ORG" --user "$PULUMI_CI_USER"
+else
+  SKIPPED+=("Pulumi Cloud's trust in CI: bun run trust:pulumi-ci --org $PULUMI_ORG --user $PULUMI_CI_USER")
+fi
+say "The deploy job reads two secrets and two variables. The CI user is a secret so that"
+say "GitHub masks it in the public logs."
 set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
+set_secret PULUMI_CI_USER "$PULUMI_CI_USER"
 set_var PULUMI_STACK "$STACK"
 set_var PULUMI_ESC_ENVIRONMENT "$ESC_ENV"
 pause
@@ -391,9 +403,17 @@ git fetch --quiet origin master 2>/dev/null || true
 if [[ -n "$(git rev-list origin/master..master 2>/dev/null)" ]]; then
   warn "Your master has commits GitHub doesn't have yet, and CI deploys what is on GitHub."
   confirm "Push master now? That starts the deploy." && git push origin master && started=1
-elif confirm "Run the CI workflow on master now?"; then
-  if gh workflow run ci.yml --ref master; then started=1
-  else warn "Couldn't start the workflow: push to master to deploy, then re-run this wizard."; fi
+else
+  # Pulumi Cloud trusts only a push, and a re-run keeps the event of the run it repeats. GitHub's
+  # master, not this checkout's, which may be behind: re-running an older push would roll back.
+  last_push="$(gh run list --workflow ci.yml --branch master --event push --commit "$(git rev-parse origin/master)" \
+    --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
+  if [[ -z "$last_push" ]]; then
+    warn "No CI run for GitHub's master: push a commit to master to deploy, then re-run this wizard."
+  elif confirm "Re-run the CI run of GitHub's master now?"; then
+    if gh run rerun "$last_push"; then started=1
+    else warn "Couldn't re-run it: push to master to deploy, then re-run this wizard."; fi
+  fi
 fi
 if (( started )); then
   note "Pick the run that just started (it can take a few seconds to appear)."
@@ -423,6 +443,55 @@ else
   warn "No service token yet: the deploy that makes it hasn't run. Re-run this wizard once it has."
 fi
 pause
+
+# ── 10 ────────────────────────────────────────────────────────────────────
+stage "Retire the old Pulumi access token"
+say "Before OIDC, CI signed in with a 'mise-ci' personal access token stored as the"
+say "PULUMI_ACCESS_TOKEN secret, and this wizard kept a copy in $ENV_FILE."
+has_secret=0
+gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx PULUMI_ACCESS_TOKEN && has_secret=1
+has_copy=0
+grep -q '^PULUMI_ACCESS_TOKEN=' "$ENV_FILE" 2>/dev/null && has_copy=1
+# The proof the token is no longer needed: a green push run on master whose workflow signed in
+# to Pulumi Cloud through OIDC and whose deploy job passed.
+oidc_deploy=""
+if (( has_secret || has_copy )); then
+  while read -r run_id sha; do
+    git cat-file -e "$sha^{commit}" 2>/dev/null || git fetch --quiet origin "$sha" 2>/dev/null || continue
+    git show "$sha:.github/workflows/ci.yml" 2>/dev/null | grep -q 'pulumi/auth-actions@' || continue
+    deploy="$(gh run view "$run_id" --json jobs -q '.jobs[] | select(.name == "deploy") | .conclusion' || true)"
+    [[ "$deploy" == success ]] || continue
+    oidc_deploy="$run_id"; break
+  done < <(gh run list --workflow ci.yml --branch master --event push --status success --limit 20 \
+    --json databaseId,headSha -q '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null)
+fi
+if (( ! has_secret && ! has_copy )); then
+  note "Neither is left: nothing to retire."
+elif grep -rqs 'secrets\.PULUMI_ACCESS_TOKEN' .github/; then
+  warn "A workflow in .github/ still reads secrets.PULUMI_ACCESS_TOKEN: keep the secret."
+  SKIPPED+=("retiring the old PULUMI_ACCESS_TOKEN: a workflow still reads it")
+elif [[ -z "$oidc_deploy" ]]; then
+  warn "No green deploy on master has signed in through OIDC yet. Keep the token: it is the"
+  warn "rollback (README → CI's sign-in to Pulumi Cloud). Re-run this wizard after one goes green."
+  SKIPPED+=("retiring the old PULUMI_ACCESS_TOKEN after a green OIDC deploy")
+elif confirm "Run $oidc_deploy deployed through OIDC. Delete the secret and the saved copy?"; then
+  if (( has_secret )); then
+    gh secret delete PULUMI_ACCESS_TOKEN
+    printf '  %s✓ deleted%s GitHub secret PULUMI_ACCESS_TOKEN\n' "$GREEN" "$RESET"
+  fi
+  if (( has_copy )); then
+    tmp=$(mktemp)
+    grep -v '^PULUMI_ACCESS_TOKEN=' "$ENV_FILE" > "$tmp" || true
+    cat "$tmp" > "$ENV_FILE"
+    rm -f "$tmp"
+    printf '  %s✓ removed%s PULUMI_ACCESS_TOKEN from %s\n' "$GREEN" "$RESET" "$ENV_FILE"
+  fi
+  open_url "https://app.pulumi.com/account/tokens"
+  step "Find 'mise-ci'. If nothing else uses it (its Last used is the last token deploy), Delete it."
+  pause
+else
+  SKIPPED+=("retiring the old PULUMI_ACCESS_TOKEN (secret, $ENV_FILE copy, 'mise-ci' token)")
+fi
 
 finish
 }
