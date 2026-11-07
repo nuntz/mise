@@ -1089,7 +1089,7 @@ fieldset > .toggle-chip {
 }
 
 .sheet-foot-row > button {
-  flex: 1 1 8em;
+  flex: 1 1 auto;
 }
 
 .sheet-foot-row > .banner {

@@ -314,7 +314,7 @@ test("a Ready-made dish opened over the Week is heated whole, in as many package
   expect(within(ingredients).getByRole("listitem").textContent).toBe("2 packages frozen vegetable dumplings");
 });
 
-test("a Recipe sheet's Keep, Mark cooked and Cook sit at its foot, after the Steps, where a thumb reaches them", async () => {
+test("a Recipe sheet's Keep, Mark cooked, Edit dinner and Cook sit at its foot, after the Steps, where a thumb reaches them", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient({ get_week: () => ({ ok: true, value: proposedWeek() }) });
   render(() => <App client={client} />);
@@ -333,7 +333,7 @@ test("a Recipe sheet's Keep, Mark cooked and Cook sit at its foot, after the Ste
     within(foot)
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(["Keep", "Mark cooked", "Cook"]);
+  ).toEqual(["Keep", "Mark cooked", "Edit dinner", "Cook"]);
 });
 
 test("a Recipe opened over the Week is cooked from there, for as many as its Slot", async () => {

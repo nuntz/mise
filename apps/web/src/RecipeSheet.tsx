@@ -24,9 +24,9 @@ export function RecipeSheet(props: {
   /** Without it, nothing to cook: Leftovers are cooked on the Slot they're of. */
   onCook?: (recipe: RecipeId, servings: number) => void;
   onClose: () => void;
-  /** What can be done with the Slot once cooked, and editing it. */
+  /** What can be done with the Slot once cooked. */
   slotActions?: JSX.Element;
-  /** What the sheet's foot offers before Cook, such as Keep and Mark cooked; undefined for nothing. */
+  /** What the sheet's foot offers before Cook, such as Keep, Mark cooked and Edit; undefined for nothing. */
   foot?: JSX.Element;
   children?: JSX.Element;
 }) {

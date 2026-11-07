@@ -301,13 +301,25 @@ export function WeekPage(props: {
                 }
                 onClose={() => setOpened(undefined)}
                 foot={
-                  !readOnly() && (isKeepable(slot()) || (slot().recipe && slot().cookedAt === null)) ? (
+                  !readOnly() && (isKeepable(slot()) || slot().recipe) ? (
                     <>
                       <Show when={isKeepable(slot())}>
                         <KeepButton client={props.client} slot={slot()} />
                       </Show>
                       <Show when={slot().recipe && slot().cookedAt === null}>
                         <MarkCooked client={props.client} slot={slot()} />
+                      </Show>
+                      <Show when={slot().recipe}>
+                        <button
+                          type="button"
+                          class="button-row"
+                          onClick={() => {
+                            setOpened(undefined);
+                            edit(open.slot, true);
+                          }}
+                        >
+                          {t(`slot.edit.${slot().meal}`)}
+                        </button>
                       </Show>
                     </>
                   ) : undefined
@@ -321,10 +333,6 @@ export function WeekPage(props: {
                       readOnly={readOnly()}
                       online={props.online}
                       rate={open.rate}
-                      onEdit={() => {
-                        setOpened(undefined);
-                        edit(open.slot, true);
-                      }}
                     />
                   </Show>
                 }
@@ -887,7 +895,7 @@ function MarkCooked(props: { client: MiseClient; slot: Slot }) {
 
 /**
  * A Slot with a Recipe, in that Recipe's sheet, once it is cooked: what ran out, its Ratings and a
- * prompt for one more; and editing it. Marking it cooked is at the sheet's foot.
+ * prompt for one more. Marking it cooked and editing it are at the sheet's foot.
  */
 function Cooking(props: {
   client: MiseClient;
@@ -897,7 +905,6 @@ function Cooking(props: {
   online: boolean;
   /** Opened to rate it: the rating has the focus. */
   rate: boolean;
-  onEdit: () => void;
 }) {
   const [rating, setRating] = createSignal<Rating>();
   const [note, setNote] = createSignal("");
@@ -984,11 +991,6 @@ function Cooking(props: {
           onClick={() => call(() => props.client.call("mark_cooked", { ...where(), cooked: false }))}
         >
           {t("cooking.unmark")}
-        </button>
-      </Show>
-      <Show when={!props.readOnly}>
-        <button type="button" class="button-row" onClick={() => props.onEdit()}>
-          {t(`slot.edit.${props.slot.meal}`)}
         </button>
       </Show>
     </>
