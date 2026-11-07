@@ -1,5 +1,6 @@
-import { evictDurableObject } from "cloudflare:test";
+import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
   type FauxResponseFactory,
   fauxAssistantMessage,
@@ -7,6 +8,7 @@ import {
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import type { ChatWhere, WeekForTheAgent } from "@mise/domain";
+import type { PiHarness } from "agents/harness/pi";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AGENT_MODEL, agentModels, claudeAgentModels, useAgentModels } from "../src/agent";
 import { connectAs } from "./connect";
@@ -305,6 +307,30 @@ describe("after a failed turn", () => {
     // Only the turn sent after the failure is told to answer alone; the others read as they were sent.
     const users = (seen.at(-1)?.messages ?? []).filter((message) => message.role === "user").map(textOf);
     expect(users.map((text) => /answer only this message/.test(text))).toEqual([false, false, true, false]);
+  });
+
+  test("a run Pi ended without a failed answer leaves its turn unanswered, as one cut off too often does", async () => {
+    const seen: TranscriptContext[] = [];
+    scriptModel((context) => {
+      seen.push(context);
+      if (/Plan Friday$/.test(lastUserText(context))) return fauxAssistantMessage("Answering: Plan Friday");
+      // Reads the Week every round, and never answers.
+      return fauxAssistantMessage(fauxToolCall("get_week", { date: THURSDAY }), { stopReason: "toolUse" });
+    });
+    const household = await householdWithThursdayDinner();
+    // One tool round per run: the run ends `turn_limit`, its last answer a tool call, not a failure.
+    await runInDurableObject(household, async (instance) => {
+      const pi = await (instance as unknown as { harness: PiHarness }).harness.pi();
+      await (await pi.root(BACKGROUND_CONTEXT)).configure({ maxTurns: 1 }, BACKGROUND_CONTEXT);
+    });
+
+    await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
+    await evictDurableObject(household);
+    const unanswered = { role: "member", speaker: null, text: "What's for dinner Thursday?", unanswered: true };
+    expect(await household.conversation()).toEqual([unanswered]);
+
+    await household.chat("Plan Friday", ON_THE_WEEK);
+    expect(/answer only this message/.test(lastUserText(seen.at(-1) as TranscriptContext))).toBe(true);
   });
 });
 

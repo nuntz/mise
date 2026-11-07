@@ -1,5 +1,5 @@
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
-import type { HarnessOptions } from "@earendil-works/pi-durable";
+import type { HarnessOptions, Report } from "@earendil-works/pi-durable";
 import type { CloudflareOptions, Event } from "@sentry/cloudflare";
 import * as Sentry from "@sentry/cloudflare";
 
@@ -191,7 +191,6 @@ function defined(attributes: PiAttributes | undefined): SpanAttributes {
 }
 
 type OnReport = NonNullable<HarnessOptions["onReport"]>;
-type ReportInfo = Parameters<OnReport>[0];
 
 /** Sentry's `captureMessage`, as far as pi's reports use it. */
 export type CaptureMessage = (message: string, context: { level: "error"; tags: Record<string, string> }) => unknown;
@@ -202,14 +201,15 @@ export type CaptureMessage = (message: string, context: { level: "error"; tags: 
  * extension and callback it names, never the error, whose text can quote what someone said.
  */
 export function piReports(capture: CaptureMessage = Sentry.captureMessage as CaptureMessage): OnReport {
-  return (info) => void capture(`pi ${info.kind}`, { level: "error", tags: reportTags(info) });
+  return (report) => void capture(`pi ${report.kind}`, { level: "error", tags: reportTags(report) });
 }
 
-function reportTags(info: ReportInfo): Record<string, string> {
-  const named = info as { task?: { kind: string }; extension?: string; reason?: string; callback?: string };
+/** The report's tags: only the fields named here, so its `error` never reaches Sentry. */
+function reportTags(report: Report): Record<string, string> {
+  const named = report as { task?: { kind: string }; extension?: string; reason?: string; callback?: string };
   return Object.fromEntries(
     Object.entries({
-      "pi.report": info.kind,
+      "pi.report": report.kind,
       "pi.task": named.task?.kind,
       "pi.extension": named.extension,
       "pi.reason": named.reason,
