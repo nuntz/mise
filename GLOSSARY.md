@@ -111,6 +111,12 @@ A verdict on a Recipe after cooking it for a Slot: again, meh or never, with an 
 The run of days from the Household's week start that is planned and shopped together; seven days, except the one Week a change of week start makes run on to the new start day (ADR 0021).
 _Avoid_: Plan (when meaning the week itself)
 
+**This Week**:
+The Week holding today in the Household's timezone; "this week" means it whichever Week a screen shows.
+
+**Next Week**:
+The Week after This Week; "next week" means it whichever Week a screen shows, so said with Next Week on screen it is the Week on screen. "Last week" is likewise the Week before This Week.
+
 **Slot**:
 One meal on one date (for example, dinner on 2026-10-26); there is exactly one Slot per date and meal.
 _Avoid_: Meal (when meaning the planned occurrence), entry
