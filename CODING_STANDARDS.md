@@ -82,7 +82,9 @@ answers, so the turn still looked answered until the fix in #153.
 
 The deploy log is public. GitHub masks a secret everywhere, but `::add-mask::` hides only what
 prints after it, and a step's `env:` and `with:` print in its header before its script runs: so a
-plain variable that a step masks has already shown in that step's header (#155). A value that
-names the deployment or its owner (a Pulumi user, an organization, a hostname) goes in a secret.
-A variable is for what is fine to show, or what a job-level `if:` must read, as secrets can't be
-read there.
+plain variable that a step masks has already shown in that step's header. A value that leads to
+the deployment or signs in to it (a hostname, a Pulumi user, an account id) goes in a secret. A
+variable is for what is fine to show, or what a job-level `if:` must read, as secrets can't be
+read there. The Pulumi stack and its organization are variables: they grant nothing, the job's
+`if:` reads the stack, and a mask would cover them only after the first header showed them (#155).
+Don't mask a variable: a mask that half-works claims a secrecy the log doesn't keep.

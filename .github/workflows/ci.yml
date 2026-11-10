@@ -49,16 +49,15 @@ jobs:
         with:
           pulumi-version: 3.270.0
 
-      # Before the next step's inputs and Pulumi's update URLs name them. PULUMI_CI_USER is a
-      # secret, so GitHub masks it everywhere.
-      - name: Mask the stack and its organization
+      # The stack and its organization are fine to show (CODING_STANDARDS.md → A value the deploy
+      # log must not show is a secret, #155). PULUMI_CI_USER is a secret, so GitHub masks it
+      # everywhere.
+      - name: Check the CI user and read the organization
         id: names
         env:
           PULUMI_STACK: ${{ vars.PULUMI_STACK }}
           PULUMI_CI_USER: ${{ secrets.PULUMI_CI_USER }}
         run: |
-          echo "::add-mask::$PULUMI_STACK"
-          echo "::add-mask::${PULUMI_STACK%%/*}"
           if [ -z "$PULUMI_CI_USER" ]; then
             echo "::error::The PULUMI_CI_USER secret is not set: run 'bun run wizard' (README → CI's sign-in to Pulumi Cloud)"
             exit 1
