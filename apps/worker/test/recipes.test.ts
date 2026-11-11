@@ -542,6 +542,76 @@ describe("Recipe photos", () => {
     expect((await household.fetch(photoUrl(1))).headers.get("Content-Type")).toBe("image/png");
   });
 
+  /** A GET of the photo, as `MiseClient.photoUrl` names it: under its key, in `v`. */
+  function getPhoto(
+    household: ReturnType<typeof freshHousehold>,
+    { v, headers }: { v?: string; headers?: HeadersInit } = {},
+  ) {
+    const url = new URL(photoUrl(1));
+    if (v !== undefined) url.searchParams.set("v", v);
+    return household.fetch(url.toString(), { headers });
+  }
+
+  async function withPhoto() {
+    const household = await setUpHousehold();
+    await household.callTool("create_recipe", pancakes);
+    await putPhoto(household, 1, jpeg);
+    const key = (await photoKeyOf(household)) as string;
+    onTestFinished(() => env.BUCKET.delete(key));
+    return { household, key };
+  }
+
+  test("a photo under its current key is cached for good", async () => {
+    const { household, key } = await withPhoto();
+
+    const served = await getPhoto(household, { v: key });
+
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Cache-Control")).toBe("private, max-age=31536000, immutable");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(jpeg);
+  });
+
+  test("a photo asked for without its key, or under an old one, is revalidated every time", async () => {
+    const { household } = await withPhoto();
+
+    for (const v of [undefined, "photos/recipe-1-old"]) {
+      const served = await getPhoto(household, { v });
+      expect(served.status).toBe(200);
+      expect(served.headers.get("Cache-Control")).toBe("private, no-cache");
+      expect(new Uint8Array(await served.arrayBuffer())).toEqual(jpeg);
+    }
+  });
+
+  test("a photo the browser already has answers 304 with no body", async () => {
+    const { household, key } = await withPhoto();
+    const etag = (await getPhoto(household, { v: key })).headers.get("ETag") as string;
+
+    const unchanged = await getPhoto(household, { v: key, headers: { "If-None-Match": etag } });
+    const changed = await getPhoto(household, { v: key, headers: { "If-None-Match": '"another"' } });
+    const weak = await getPhoto(household, { v: key, headers: { "If-None-Match": `"x", W/${etag}` } });
+    expect(weak.status).toBe(304);
+
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get("ETag")).toBe(etag);
+    expect(unchanged.headers.get("Cache-Control")).toBe("private, max-age=31536000, immutable");
+    expect(await unchanged.text()).toBe("");
+    expect(changed.status).toBe(200);
+    expect(new Uint8Array(await changed.arrayBuffer())).toEqual(jpeg);
+  });
+
+  test("a new photo's key is cached for good, and the old key no longer is", async () => {
+    const { household, key: first } = await withPhoto();
+
+    await putPhoto(household, 1, new Uint8Array([0x89, 0x50, 0x4e, 0x47]), "image/png");
+    const second = (await photoKeyOf(household)) as string;
+    onTestFinished(() => env.BUCKET.delete(second));
+
+    expect((await getPhoto(household, { v: first })).headers.get("Cache-Control")).toBe("private, no-cache");
+    expect((await getPhoto(household, { v: second })).headers.get("Cache-Control")).toBe(
+      "private, max-age=31536000, immutable",
+    );
+  });
+
   test("a photo can be removed", async () => {
     const household = await setUpHousehold();
     await household.callTool("create_recipe", pancakes);

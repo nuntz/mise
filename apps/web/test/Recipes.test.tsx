@@ -197,6 +197,15 @@ test("the Recipes are listed, and searching narrows them", async () => {
   expect(calls.filter((call) => call.name === "search_recipes").at(-1)?.input).toEqual({ query: "ric" });
 });
 
+test("the Recipes list loads its photos only as they scroll into view", async () => {
+  const { client } = fakeClient([{ ...toast, photoKey: "photos/toast" }, rice]);
+  await openRecipes(client);
+
+  const photo = (await screen.findByRole("button", { name: "Toast" })).querySelector(".thumb img");
+  expect(photo?.getAttribute("loading")).toBe("lazy");
+  expect(photo?.getAttribute("decoding")).toBe("async");
+});
+
 test("tapping anywhere on a Recipe row opens the Recipe", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient([toast, rice]);

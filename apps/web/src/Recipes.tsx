@@ -192,7 +192,7 @@ export function RecipeRow(props: {
     >
       <span class="row-lead thumb" aria-hidden="true">
         <Show when={props.recipe.photoKey} fallback={<PlateGlyph size={30} />}>
-          {(key) => <img src={props.client.photoUrl(props.recipe.id, key())} alt="" />}
+          {(key) => <img src={props.client.photoUrl(props.recipe.id, key())} alt="" loading="lazy" decoding="async" />}
         </Show>
       </span>
       <span class="row-body">

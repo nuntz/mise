@@ -819,7 +819,7 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
         {(recipe) => (
           <span class="thumb" aria-hidden="true">
             <Show when={recipe().photoKey} fallback={<PlateGlyph size={24} />}>
-              {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
+              {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" loading="lazy" decoding="async" />}
             </Show>
           </span>
         )}
@@ -834,7 +834,9 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
           <Show when={props.slot.leftoversOf?.recipe} fallback={<PlateGlyph size={24} />}>
             {(recipe) => (
               <Show when={recipe().photoKey} fallback={<PlateGlyph size={24} />}>
-                {(key) => <img src={props.client.photoUrl(recipe().id, key())} alt="" />}
+                {(key) => (
+                  <img src={props.client.photoUrl(recipe().id, key())} alt="" loading="lazy" decoding="async" />
+                )}
               </Show>
             )}
           </Show>

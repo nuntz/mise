@@ -240,7 +240,11 @@ test("the Week opens first: each day's dinner as a compact card with its photo, 
   const dinner = within(tuesday).getByRole("region", { name: "Dinner" });
   expect(within(dinner).getByRole("heading", { name: "Pasta" })).toBeTruthy();
   // The photo is the card's thumb, which the title names: the title opens the Recipe.
-  expect(dinner.querySelector(".thumb img")?.getAttribute("src")).toBe("/photos/1?v=photos/pasta");
+  const photo = dinner.querySelector(".thumb img");
+  expect(photo?.getAttribute("src")).toBe("/photos/1?v=photos/pasta");
+  // It loads only as the card scrolls into view.
+  expect(photo?.getAttribute("loading")).toBe("lazy");
+  expect(photo?.getAttribute("decoding")).toBe("async");
   // Who of the Household is eating is the day's strip, which doesn't count Guests: the card does.
   expect(within(dinner).getByText("With 1 Guest")).toBeTruthy();
   expect(within(dinner).queryByText(/the Recipe makes/)).toBeNull();

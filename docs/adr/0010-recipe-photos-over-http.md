@@ -8,4 +8,5 @@ This is an exception to "tools are the API" (SPEC.md §2), and was the only one 
 
 - `PUT` and `DELETE` are not simple requests, so another site cannot send them without a CORS preflight, which the household refuses. Only JPEG, PNG, WebP, GIF and AVIF up to 10 MB are accepted.
 - A new photo gets a new key, so its URL changes and caches never show the old one. The old object is deleted after the new key is committed.
+- So a photo's URL, which names its key in `v`, is cached as `immutable` for a year: a browser asks the household for each photo about once. A URL naming no key, or an old one, gets the current photo with `no-cache`, and a matching `If-None-Match` gets a 304 without reading the photo from R2.
 - An upload that fails after the object is stored can leave an orphan in R2. The export lists every key under `photos/` (ADR 0006), so orphans are visible and harmless.

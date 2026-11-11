@@ -1350,15 +1350,22 @@ class HouseholdAgent extends Agent<Env> {
     const { sql } = this.ctx.storage;
     if (request.method === "GET") {
       const key = photoKeyOf(sql, recipeId);
-      const object = key ? await this.env.BUCKET.get(key) : null;
+      // R2 leaves out the body when `If-None-Match` names the object's ETag, so a 304 costs no read.
+      const ifNoneMatch = request.headers.get("If-None-Match");
+      const object = key
+        ? await this.env.BUCKET.get(key, ifNoneMatch ? { onlyIf: new Headers({ "If-None-Match": ifNoneMatch }) } : {})
+        : null;
       if (!object) return new Response("Not found", { status: 404 });
-      return new Response(object.body, {
-        headers: {
-          "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
-          "Cache-Control": "private, no-cache",
-          ETag: object.httpEtag,
-        },
-      });
+      // A new photo gets a new key, so a URL naming the current key never names another photo
+      // (ADR 0010). Any other URL is an old one, or names no key: it gets the current photo, revalidated.
+      const namesCurrentKey = new URL(request.url).searchParams.get("v") === key;
+      const headers = {
+        "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+        "Cache-Control": namesCurrentKey ? "private, max-age=31536000, immutable" : "private, no-cache",
+        ETag: object.httpEtag,
+      };
+      if (!("body" in object)) return new Response(null, { status: 304, headers });
+      return new Response(object.body, { headers });
     }
     if (request.method === "PUT") {
       const type = request.headers.get("Content-Type")?.split(";")[0]?.trim() ?? "";
