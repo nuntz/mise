@@ -28,7 +28,7 @@ Mise moved from Pi 1.4.0 and `agents` 0.30.1 to Pi 1.5.0 and `agents` 0.33.0 in 
 - `runFailure.first` is the run's first entry: for a Member's turn, the `mise.turn` entry itself.
 - Pi keeps only the newest failure, and removes it when the next run starts.
 - Only some reasons also leave a failed answer (`stopReason` `error` or `aborted`) in the transcript. A `model_error` does. A `restart_limit` does only when there is a partial answer to keep, and a `turn_limit` ends on a tool call.
-- So Mise reads both, in `lastTurnUnanswered` and `recentChat` (`apps/worker/src/agent.ts`). A turn that ended with no failed answer reads unanswered only until the next run starts.
+- So Mise reads both, in `keepUnansweredMarked` and `recentChat` (`apps/worker/src/agent.ts`). To keep a turn with no failed answer marked after the next run starts, the turn flow writes a passive `mise.unanswered` entry naming the turn's entry (`keepUnansweredMarked`) just before it submits the next turn, while `runFailure` still exists. A passive write is a `Conversation.submit` `write` of only `kind` and `data`: Pi appends it at once, even mid-run, and the model never sees it.
 - In a test, `configure({ maxTurns: 1 })` with a model that only calls tools ends a run with `turn_limit`, which fails the same way as `restart_limit` (`apps/worker/test/agent.test.ts`).
 
 **What else changed for Mise.**

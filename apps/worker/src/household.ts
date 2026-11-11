@@ -88,7 +88,7 @@ import {
   agentCompaction,
   agentModels,
   confirmationsSince,
-  lastTurnUnanswered,
+  keepUnansweredMarked,
   miseExtension,
   recentChat,
   TURN_ENTRY,
@@ -329,7 +329,7 @@ class HouseholdAgent extends Agent<Env> {
     const today = localDate(now, household?.timezone ?? "UTC");
     // After a failed run, the turns it left waiting aren't answered with this one.
     const pi = await this.harness.pi();
-    const afterUnanswered = await lastTurnUnanswered(pi, await pi.root(BACKGROUND_CONTEXT));
+    const afterUnanswered = await keepUnansweredMarked(pi, await pi.root(BACKGROUND_CONTEXT));
     const presented = presentTurn({
       speaker: speakerOfTurn(sql, turn),
       today,

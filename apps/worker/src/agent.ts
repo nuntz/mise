@@ -136,6 +136,14 @@ export function agentModels(env: Env): AgentModels {
 export const TURN_ENTRY = "mise.turn";
 export type TurnData = { turn: number; text: string };
 
+/**
+ * The transcript entry that marks a Member's turn unanswered for good: Pi forgets why a run ended once
+ * the next one starts, and a run ended without a failed answer leaves nothing in the transcript to say
+ * so. Its data names the turn's entry. A passive entry: the model never sees it.
+ */
+const UNANSWERED_ENTRY = "mise.unanswered";
+type UnansweredData = { turn: EntryId };
+
 /** A tool call from the agent: its result, or the confirmation it waits for, held instead of run (ADR 0024). */
 export type AgentCallResult = ToolResult<unknown> | { held: PendingConfirmation };
 
@@ -565,23 +573,41 @@ export async function turnBeingAnswered(conversation: Conversation): Promise<num
 }
 
 /**
- * Whether the newest Member's turn placed in the conversation went unanswered: its run failed, or Pi
- * ended it without an answer. A turn still being answered hasn't.
+ * Whether the newest Member's turn placed in the conversation went unanswered, marking it so for as long
+ * as the chat shows it (`UNANSWERED_ENTRY`). Called just before the next turn is submitted: Pi forgets
+ * why a run ended once the next run starts. The mark is written at once, even mid-run, and changes
+ * nothing the model sees; marking a turn twice writes once.
  */
-export async function lastTurnUnanswered(pi: Session, conversation: Conversation): Promise<boolean> {
+export async function keepUnansweredMarked(pi: Session, conversation: Conversation): Promise<boolean> {
+  const turn = await unansweredTurn(pi, conversation);
+  if (turn === null) return false;
+  const data: UnansweredData = { turn };
+  await conversation.submit(
+    { type: "write", requestId: `${UNANSWERED_ENTRY}:${turn}`, entry: { kind: UNANSWERED_ENTRY, data } },
+    BACKGROUND_CONTEXT,
+  );
+  return true;
+}
+
+/**
+ * The entry of the newest Member's turn placed in the conversation, if it went unanswered: its run
+ * failed, or Pi ended it without an answer. A turn still being answered hasn't.
+ */
+async function unansweredTurn(pi: Session, conversation: Conversation): Promise<EntryId | null> {
   const failed = await failedRunStart(pi, conversation);
+  let answerFailed = false;
   let lastAnswerRead = false;
   // A run's last answer comes before its turn.
   for await (const entry of newestFirst(conversation)) {
-    if (entry.kind === TURN_ENTRY) return entry.id === failed;
+    if (entry.kind === TURN_ENTRY) return answerFailed || entry.id === failed ? entry.id : null;
     if (lastAnswerRead || entry.kind !== "pi.assistant") continue;
     const answer = [...(entry.model ?? [])].reverse().find((message) => message.role === "assistant");
     if (answer?.role !== "assistant") continue;
-    if (FAILED.has(answer.stopReason)) return true;
-    if (failed === undefined) return false;
+    answerFailed = FAILED.has(answer.stopReason);
+    if (!answerFailed && failed === undefined) return null;
     lastAnswerRead = true;
   }
-  return false;
+  return null;
 }
 
 /**
@@ -650,21 +676,30 @@ export async function recentChat(
   return messages.slice(-count);
 }
 
+type MemberMessage = Extract<ChatMessage, { role: "member" }>;
+
 /**
  * Entries as the chat shows them, in their order: what Members said, the agent's answers, and the
  * confirmations its held calls wait for, where it made them. A turn whose run failed is marked
- * unanswered, whatever its run did before failing, as is the turn `failed`: the one whose run Pi ended
- * without an answer.
+ * unanswered, whatever its run did before failing, as are a turn marked so (`keepUnansweredMarked`) and the
+ * turn `failed`: the one whose run Pi ended without an answer, until the next run starts.
  */
 function chatMessages(entries: readonly EntryRecord[], lookups: ChatLookups, failed?: EntryId): ChatMessage[] {
   const messages: ChatMessage[] = [];
-  let latestTurn: Extract<ChatMessage, { role: "member" }> | undefined;
+  const turns = new Map<EntryId, MemberMessage>();
+  let latestTurn: MemberMessage | undefined;
   for (const entry of entries) {
     if (entry.kind === TURN_ENTRY) {
       const { turn, text } = entry.data as TurnData;
       latestTurn = { role: "member", speaker: lookups.speakerOf(turn), text };
       if (entry.id === failed) latestTurn.unanswered = true;
+      turns.set(entry.id, latestTurn);
       messages.push(latestTurn);
+      continue;
+    }
+    if (entry.kind === UNANSWERED_ENTRY) {
+      const marked = turns.get((entry.data as UnansweredData).turn);
+      if (marked) marked.unanswered = true;
       continue;
     }
     if (entry.kind !== "pi.assistant" && entry.kind !== "pi.tool-result") continue;

@@ -96,6 +96,19 @@ describe("the agent", () => {
     ]);
   });
 
+  test("marks no turn unanswered when every turn was answered", async () => {
+    scriptModel(dinnerReader());
+    const household = await householdWithThursdayDinner();
+
+    await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
+    await household.chat("And Thursday again?", ON_THE_WEEK);
+
+    const kinds = (await household.agentLog(2)).pi_entries.map(
+      (entry) => (JSON.parse(entry.record) as { kind: string }).kind,
+    );
+    expect(kinds.filter((kind) => kind.startsWith("mise."))).toEqual(["mise.turn", "mise.turn"]);
+  });
+
   test("refuses an empty message, or one sent from nowhere, without asking the model", async () => {
     const faux = scriptModel(dinnerReader());
     const household = await householdWithThursdayDinner();
@@ -331,6 +344,18 @@ describe("after a failed turn", () => {
 
     await household.chat("Plan Friday", ON_THE_WEEK);
     expect(/answer only this message/.test(lastUserText(seen.at(-1) as TranscriptContext))).toBe(true);
+    // Its run has ended, and the next run has started since: the turn still reads unanswered.
+    const afterNext = [
+      unanswered,
+      { role: "member", speaker: null, text: "Plan Friday" },
+      { role: "agent", text: "Answering: Plan Friday" },
+    ];
+    expect(await household.conversation()).toEqual(afterNext);
+    await evictDurableObject(household);
+    expect(await household.conversation()).toEqual(afterNext);
+    // Marking it shows the model nothing: the first turn's run, then the next turn.
+    const roles = (seen.at(-1)?.messages ?? []).map((message) => message.role as string);
+    expect(roles.filter((role) => role !== "system")).toEqual(["user", "assistant", "toolResult", "user"]);
   });
 });
 
