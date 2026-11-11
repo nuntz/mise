@@ -76,7 +76,8 @@ longer reads true.
 A dependency upgrade names, for every behaviour change in the upstream release notes, the Mise code
 that reads the changed state or does what changed, or says that none does. A release note true of the
 library can be false of Mise: Pi 1.5 ends a run cut off too often "visibly", but Mise read only failed
-answers, so the turn still looked answered until the fix in #153.
+answers, so the turn still looked answered until the fix in #153. `bun run upstream-notes <package>
+<from> <to>` prints the release notes in between, cut to the entries that concern the package.
 
 ## A value the deploy log must not show is a secret
 

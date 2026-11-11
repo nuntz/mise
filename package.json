@@ -29,7 +29,8 @@
     "ci:summary": "bun scripts/ci-summary.ts",
     "deployed": "bun scripts/deployed.ts",
     "transcript": "bun scripts/transcript.ts",
-    "sentry": "bun scripts/sentry.ts"
+    "sentry": "bun scripts/sentry.ts",
+    "upstream-notes": "bun scripts/upstream-notes.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
