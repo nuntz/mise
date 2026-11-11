@@ -1480,6 +1480,9 @@ export function ConflictOverrides(props: {
     const people = overridable(props.conflicts);
     const [only] = people;
     if (people.length !== 1 || !only) return t("conflict.sheetTitleMany");
+    // "the Guests" is said mid-sentence; a title starts with them.
+    if (only.who === "guests")
+      return t(only.cause === "contains" ? "conflict.sheetTitleGuests" : "conflict.sheetTitleGuestsMaybe");
     const who = whoName(only.who, props.household);
     return t(only.cause === "contains" ? "conflict.sheetTitle" : "conflict.sheetTitleMaybe", { who });
   };

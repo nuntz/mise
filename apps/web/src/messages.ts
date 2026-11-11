@@ -869,6 +869,8 @@ const en = {
   "conflict.overline": "Not safe",
   "conflict.sheetTitle": "{who} can't eat this",
   "conflict.sheetTitleMaybe": "{who} may not be able to eat this",
+  "conflict.sheetTitleGuests": "The Guests can't eat this",
+  "conflict.sheetTitleGuestsMaybe": "The Guests may not be able to eat this",
   "conflict.sheetTitleMany": "Not safe for everyone eating",
   "conflict.changeIt": "Change it",
 

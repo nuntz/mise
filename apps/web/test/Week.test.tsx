@@ -844,6 +844,39 @@ test("a change refused for a Conflict names the person and the Allergen, and sav
   });
 });
 
+test.each([
+  ["contains", "The Guests can't eat this", "Not safe for the Guests (Milk, Allergy)"],
+  ["unknown", "The Guests may not be able to eat this", "Maybe not safe for the Guests (Milk, Allergy)"],
+] as const)(
+  "a change refused for the Guests (%s) starts its sheet's title with a capital, and says them mid-sentence",
+  async (cause, title, line) => {
+    const { client } = fakeClient({
+      set_slot: () => ({
+        ok: false,
+        error: {
+          code: "constraint_conflict",
+          message: "Refused",
+          conflicts: [
+            { date: "2026-10-26", meal: "dinner", who: "guests", allergen: "milk", constraint: "allergy", cause },
+          ],
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    render(() => <App client={client} />);
+    const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+    await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+    const form = within(monday).getByRole("form", { name: "Dinner" });
+    await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
+    await chooseRecipe(user, form, "Curry");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    const sheet = await screen.findByRole("dialog", { name: title });
+    expect(within(sheet).getByRole("alert").textContent).toContain(line);
+  },
+);
+
 test("who's eating for a day is refused and overridden the same way", async () => {
   const { client, calls } = fakeClient({
     set_diners: (input) =>
