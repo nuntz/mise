@@ -2394,6 +2394,35 @@ form.row {
   font: var(--type-title-sm);
 }
 
+/* Plan it's day list: each day a row laid out like the Week's card, its thumb and title at the card's
+   size. A day that can't be picked, such as a cooked one, goes muted; a row has no outline to dash. */
+.plan-row .thumb {
+  width: var(--thumb-slot);
+  height: var(--thumb-slot);
+}
+
+.plan-row .dish-title {
+  font: var(--type-title-card);
+}
+
+.plan-row:disabled {
+  color: var(--ink-muted);
+}
+
+/* Replacing one of the Household's own: the question and its buttons, under the day's title. */
+.plan-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-1) calc(var(--thumb-slot) + var(--space-3));
+}
+
+.plan-confirm > .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .ingredients li {
   display: flex;
   flex-wrap: wrap;

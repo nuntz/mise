@@ -202,6 +202,12 @@ export function App(props: { client: MiseClient; voice?: OpenVoice; updates?: Up
     window.scrollTo?.({ top: 0 });
   };
   const cook = (id: RecipeId, servings?: number, slot?: SlotKey) => setInKitchen({ id, servings, slot });
+  // The Week, at Next Week when `next`, as a notification's link opens it.
+  const week = (next: boolean) => {
+    setOpening(next ? { page: "week", next: true } : undefined);
+    setPage("week");
+    window.scrollTo?.({ top: 0 });
+  };
   const resolve = (at?: string) => {
     setOpening({ page: "household", setting: "resolve", at });
     setPage("household");
@@ -320,10 +326,12 @@ export function App(props: { client: MiseClient; voice?: OpenVoice; updates?: Up
                   <Match when={page() === "recipes"}>
                     <RecipesPage
                       client={props.client}
+                      household={household()}
                       online={online()}
                       open={openedRecipe()}
                       onCook={cook}
                       onResolve={resolve}
+                      onWeek={week}
                     />
                   </Match>
                   <Match when={page() === "household"}>

@@ -16,5 +16,10 @@ criterion the implementer must meet word for word, so the wording has to hold up
   "Choose" (`slot.changeShort`, `slot.chooseShort`) are named "Change dinner" and "Choose a dinner", the
   full labels (`slot.change.dinner`, `slot.choose.dinner`). Copy that tells someone to tap one on the
   card says the word the card shows.
+- **Plan it, on a Recipe's page.** Its "Which day?" sheet lists the days from today with what each
+  Slot holds: Nothing planned and a pencilled dinner are planned in one tap; the Household's own (a
+  Recipe, Leftovers, Eating out, No meal) asks "{title} is yours. Replace it with {recipe}?" with
+  "Replace {title}"; a cooked one can't be picked. Once planned, the page's "On the plan" line has
+  "Show the Week". Wording that tells someone to plan from a Recipe names these.
 - **English only.** The pseudo-locale is generated from the English messages (`pseudoText` in
   `messages.ts`), so a change to a message changes it there too.

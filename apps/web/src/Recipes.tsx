@@ -20,6 +20,8 @@ import { keepFresh } from "./fresh";
 import { Icon, PlateGlyph } from "./icons";
 import { nameText, t } from "./messages";
 import { lastRecipe, savedRecipe, saveRecipe } from "./offline";
+import { createPlanWeeks, OnThePlan, PlanIt } from "./PlanIt";
+import type { WeekHousehold } from "./Proposal";
 import { ReadyMadeForm } from "./ReadyMadeForm";
 import { RecipeForm } from "./RecipeForm";
 
@@ -33,11 +35,14 @@ type View =
 /** Recipes: list and search them, view one, create and edit them. Opens on the list, or on the Recipe `open`. */
 export function RecipesPage(props: {
   client: MiseClient;
+  household: WeekHousehold;
   online: boolean;
   open?: RecipeId;
   onCook: (recipe: RecipeId) => void;
   /** Opens Resolve Ingredients, at the Unresolved group `text` when given. */
   onResolve: (text?: string) => void;
+  /** Opens This Week, or Next Week when `next`. */
+  onWeek: (next: boolean) => void;
 }) {
   const [view, setView] = createSignal<View>(props.open ? { kind: "recipe", id: props.open } : { kind: "list" });
   const list = () => setView({ kind: "list" });
@@ -70,10 +75,13 @@ export function RecipesPage(props: {
           {(open) => (
             <RecipeDetail
               client={props.client}
+              household={props.household}
+              online={props.online}
               id={open().id}
               onBack={list}
               onCook={props.onCook}
               onResolve={props.onResolve}
+              onWeek={props.onWeek}
               onEdit={(recipe) => setView({ kind: "edit", recipe })}
             />
           )}
@@ -276,16 +284,21 @@ function RecipeEdit(props: {
 
 function RecipeDetail(props: {
   client: MiseClient;
+  household: WeekHousehold;
+  online: boolean;
   id: RecipeId;
   onBack: () => void;
   onCook: (recipe: RecipeId) => void;
   onResolve: (text?: string) => void;
+  onWeek: (next: boolean) => void;
   onEdit: (recipe: Recipe) => void;
 }) {
   // The last Recipe viewed is kept on this device, so it stays readable if the connection drops mid-cook.
   const [recipe, setRecipe] = createSignal<Recipe | undefined>(savedRecipe(props.id));
   const [error, setError] = createSignal<string>();
   const [busy, setBusy] = createSignal(false);
+  // Where it's planned, and what each day it could go on holds now.
+  const weeks = createPlanWeeks(props.client);
 
   keepFresh(
     props.client,
@@ -369,11 +382,31 @@ function RecipeDetail(props: {
                 </button>
               </div>
             </Show>
+            {/* A Draft is never planned: a person accepts it first. */}
+            <Show when={!current().draft && weeks()}>
+              {(planWeeks) => (
+                <OnThePlan
+                  household={props.household}
+                  weeks={planWeeks()}
+                  recipe={current().id}
+                  onWeek={props.onWeek}
+                />
+              )}
+            </Show>
             <Show when={current().steps.length > 0}>
               <button type="button" class="button-primary" onClick={() => props.onCook(current().id)}>
                 <Icon name="pot" />
                 {t("recipe.cook")}
               </button>
+            </Show>
+            <Show when={!current().draft}>
+              <PlanIt
+                client={props.client}
+                household={props.household}
+                online={props.online}
+                recipe={current()}
+                weeks={weeks()}
+              />
             </Show>
 
             <section class="stack" aria-labelledby="ingredients">

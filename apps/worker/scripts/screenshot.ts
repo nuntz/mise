@@ -325,6 +325,11 @@ function screens(ids: Map<string, number>): Screen[] {
   // The Week's controls, from its title down.
   const weekControls = (page: Page) => page.locator(".week-screen .page-header");
   const openUseUp = (page: Page) => page.locator(".proposal-use-up").click();
+  // A Recipe's Plan it, the article's one secondary, and its day list once the Week has loaded.
+  const planIt = async (page: Page) => {
+    await page.locator("article button.button-secondary").first().click();
+    await page.locator(".plan-row").first().waitFor();
+  };
   return [
     { name: "week" },
     { name: "week-dinner", open: (page) => page.locator(".dish-open").first().click(), overlay: true },
@@ -346,6 +351,23 @@ function screens(ids: Map<string, number>): Screen[] {
     { name: "recipes", open: nav(1) },
     { name: "recipe", path: `/?recipe=${recipe}` },
     { name: "recipe-resolving", path: `/?recipe=${ids.get("Shiso Rice Bowls")}` },
+    {
+      name: "recipe-on-the-plan",
+      // The Week's last dinner, never before today: its On the plan line, from the title down.
+      path: `/?recipe=${ids.get(sampleWeek.dinners.at(-1)?.recipe ?? "")}`,
+      focus: (page) => page.locator("article .page-heading"),
+    },
+    { name: "recipe-plan", path: `/?recipe=${recipe}`, open: planIt, overlay: true },
+    {
+      name: "recipe-plan-replace",
+      path: `/?recipe=${recipe}`,
+      // The sample dinners are the Household's own, so the first day that can be picked asks first.
+      open: async (page) => {
+        await planIt(page);
+        await page.locator(".plan-row:enabled").first().click();
+      },
+      overlay: true,
+    },
     {
       name: "kitchen",
       path: `/?recipe=${recipe}`,

@@ -806,7 +806,7 @@ function SlotConflicts(props: { household: Household; slot: Slot }) {
  * A card's square: the dish's photo, with a reheat mark in its corner for Leftovers; a solid fork and knife
  * for eating out; or a dashed box for nothing decided. The card's name says Leftovers in words.
  */
-function SlotThumb(props: { client: MiseClient; slot: Slot }) {
+export function SlotThumb(props: { client: MiseClient; slot: Slot }) {
   return (
     <Switch
       fallback={
@@ -849,7 +849,7 @@ function SlotThumb(props: { client: MiseClient; slot: Slot }) {
   );
 }
 
-function CookedChip() {
+export function CookedChip() {
   return (
     <span class="chip chip-leaf">
       <Icon name="check" size={16} />
@@ -1464,7 +1464,7 @@ function DayDinersForm(props: {
  * the Allergen, and a reason to give for each person and Allergen before saving anyway. Rendered in
  * the form it refuses, so saving anyway submits it.
  */
-function ConflictOverrides(props: {
+export function ConflictOverrides(props: {
   household: Household;
   conflicts: RefusedConflict[];
   describe: (conflict: RefusedConflict) => string;
@@ -1554,7 +1554,7 @@ function overrideKey(conflict: Pick<Conflict, "who" | "allergen">): string {
 }
 
 /** The Overrides the reasons given make; null while one is missing. */
-function overridesOf(conflicts: RefusedConflict[], reasons: Record<string, string>): Override[] | null {
+export function overridesOf(conflicts: RefusedConflict[], reasons: Record<string, string>): Override[] | null {
   const overrides = overridable(conflicts).map((conflict) => ({
     who: conflict.who,
     allergen: conflict.allergen,
@@ -1614,7 +1614,7 @@ function dinersChanged(diners: MemberId[] | null, slot: Slot): boolean {
   return slot.dinersAreDefault || diners.join() !== slot.diners.join();
 }
 
-function slotTitle(slot: Slot): string {
+export function slotTitle(slot: Slot): string {
   const cooked = slot.leftoversOf?.recipe;
   if (cooked) return t("slot.leftoversOf", { title: cooked.title });
   return slot.recipe?.title ?? t(`slotKind.${slot.kind}`);
@@ -1652,7 +1652,7 @@ function cookedForText(slot: Slot, household: Household): string | undefined {
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
-function sameSlot(slot: SlotKey, other: SlotKey): boolean {
+export function sameSlot(slot: SlotKey, other: SlotKey): boolean {
   return slot.date === other.date && slot.meal === other.meal;
 }
 
@@ -1672,7 +1672,7 @@ function dayId(date: LocalDate): string {
 }
 
 /** The day as its card says it: "Mon 26", or "Tonight · Mon 26". */
-function dayLabel(date: LocalDate, locale: Locale, today: boolean): string {
+export function dayLabel(date: LocalDate, locale: Locale, today: boolean): string {
   const day = formatDate(date, locale, { weekday: "short", day: "numeric" });
   return today ? t("week.tonight", { day }) : day;
 }
@@ -1706,7 +1706,7 @@ function conflictParams(conflict: Conflict, household: Household): Record<string
 }
 
 /** A Conflict of `title` with someone's Hard Constraint, naming them and the Allergen. */
-function conflictText(conflict: Conflict, household: Household, title: string): string {
+export function conflictText(conflict: Conflict, household: Household, title: string): string {
   return t(conflict.cause === "contains" ? "conflict.contains" : "conflict.unknown", {
     ...conflictParams(conflict, household),
     title,
@@ -1717,7 +1717,7 @@ function conflictText(conflict: Conflict, household: Household, title: string): 
  * Makes a tool call. A refusal for Conflicts comes back as those Conflicts; any other refusal, or no
  * answer at all, as what to show. Neither, if it succeeded.
  */
-async function outcomeOf(
+export async function outcomeOf(
   call: () => Promise<ToolResult<unknown>>,
 ): Promise<{ failure?: string; conflicts?: RefusedConflict[] }> {
   try {

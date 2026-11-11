@@ -653,6 +653,18 @@ const en = {
   "recipe.importedDoc": "Read by AI from a Google Doc in the Drive folder: {url}.",
   "recipe.draft": "That Recipe is a Draft: accept it on the Review screen to plan it.",
 
+  "plan.planIt": "Plan it",
+  "plan.title": "Which day?",
+  "plan.today": "Today · {day}",
+  "plan.yours": "{title} is yours. Replace it with {recipe}?",
+  "plan.replace": "Replace {title}",
+  "plan.nextNotProposed": "Mise hasn't proposed Next Week yet. A dinner you plan here stays yours when it does.",
+  "plan.onThePlan": "On the plan: {slots}.",
+  "plan.slot.breakfast": "breakfast on {day}",
+  "plan.slot.lunch": "lunch on {day}",
+  "plan.slot.dinner": "dinner on {day}",
+  "plan.showWeek": "Show the Week",
+
   "recipeForm.title": "Title",
   "recipeForm.baseServings": "Servings",
   "recipeForm.ingredients": "Ingredients",
