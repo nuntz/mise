@@ -6,9 +6,11 @@
  *
  *   bun run deployed [commit]    (defaults to HEAD)
  *
- * Once it passes, Settings in Mise shows the same short SHA as the build it runs.
+ * Once it passes, Settings in Mise shows the same short SHA as the build it runs, and this prints
+ * what each `pulumi up` changed ("pulumi up: 13 unchanged").
  */
 import { $ } from "bun";
+import { resourceSummaries } from "./pulumi-resources";
 
 const WORKFLOW = "ci.yml";
 const BRANCH = "master";
@@ -18,7 +20,7 @@ const POLL_MS = 10_000;
 /** Test and deploy together take a few minutes; give up well after that. */
 const RUN_TIMEOUT_MS = 30 * 60_000;
 
-type Job = { name: string; status: string; conclusion: string | null };
+type Job = { databaseId: number; name: string; status: string; conclusion: string | null };
 type Run = { databaseId: number; headSha: string; status: string; conclusion: string | null; url: string };
 
 const ref = process.argv[2] ?? "HEAD";
@@ -72,6 +74,10 @@ while (!done) {
 const deploy = jobs.find((job) => job.name === "deploy");
 if (deploy?.conclusion === "success") {
   console.log(`Deployed: ${short}. Settings in Mise shows this build once the app reloads.`);
+  const log = await $`gh run view ${run.databaseId} --log --job ${deploy.databaseId}`.nothrow().text();
+  const summaries = resourceSummaries(log);
+  for (const summary of summaries) console.log(`  ${summary}`);
+  if (summaries.length === 0) console.log("  The deploy log has no Pulumi Resources summary.");
   process.exit(0);
 }
 const failed = jobs.filter((job) => job.conclusion === "failure").map((job) => job.name);
