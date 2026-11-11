@@ -16,9 +16,9 @@
  */
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { addDays, HOUSEHOLD_AGENT, recipePhotoPath, type Week } from "@mise/domain";
 import { AgentClient } from "agents/client";
 import { type Browser, chromium, devices, type Locator, type Page } from "playwright";
@@ -537,9 +537,9 @@ const MAX_SCREENFULS = 6;
 
 /**
  * Opens the screen's path (with the variant's query), lets it settle, and saves it a screenful at a
- * time as `<base>-1.png`, `<base>-2.png`…
+ * time as `<base>-1.png`, `<base>-2.png`…; returns the files saved.
  */
-async function capture(page: Page, screen: Screen, query: string, base: string) {
+async function capture(page: Page, screen: Screen, query: string, base: string): Promise<string[]> {
   const url = new URL(screen.path ?? "/", `http://${host}`);
   if (query) url.searchParams.set(query, "");
   await page.goto(url.toString());
@@ -563,14 +563,26 @@ async function capture(page: Page, screen: Screen, query: string, base: string) 
       });
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${base}-1.png` });
-    return;
+    return [`${base}-1.png`];
   }
   const screenfuls = screen.overlay ? 1 : Math.min(MAX_SCREENFULS, Math.ceil(scroll / view));
+  const saved: string[] = [];
   for (let index = 0; index < screenfuls; index++) {
     await page.evaluate((y) => window.scrollTo(0, y), index * view);
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${base}-${index + 1}.png` });
+    saved.push(`${base}-${index + 1}.png`);
   }
+  return saved;
+}
+
+/**
+ * Removes a screen's files from earlier runs: its number is its place in the list, which moves as
+ * screens are added, and a file left under an old number reads as the screen as it is now.
+ */
+async function removeEarlier(dir: string, name: string) {
+  const earlier = new RegExp(`^\\d+-${name}-\\d+\\.png$`);
+  for (const file of await readdir(dir)) if (earlier.test(file)) await rm(join(dir, file));
 }
 
 /** Saves every wanted screen in each variant taken; returns the ones not saved, as "variant/screen: error". */
@@ -580,6 +592,7 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
   const failures: string[] = [];
   // A screen that failed once fails the same way in every variant: its wait would only time out again.
   const failed = new Set<string>();
+  const saved: string[] = [];
   for (const variant of variants) {
     const dir = join(screensOut, variant.name);
     await mkdir(dir, { recursive: true });
@@ -589,7 +602,8 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
       const page = await context.newPage();
       const base = join(dir, `${String(index + 1).padStart(2, "0")}-${screen.name}`);
       try {
-        await capture(page, screen, variant.query, base);
+        await removeEarlier(dir, screen.name);
+        saved.push(...(await capture(page, screen, variant.query, base)));
         taken[`${variant.name}/${screen.name}`] = source;
       } catch (error) {
         failed.add(screen.name);
@@ -601,7 +615,8 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
   }
   await Bun.write(takenFile, JSON.stringify(taken, null, 2));
   const which = only.length > 0 ? `the screens matching ${only.join(", ")}` : "every screen";
-  console.log(`Saved ${failures.length > 0 ? `the rest of ${which}` : which} to ${screensOut}`);
+  console.log(`Saved ${failures.length > 0 ? `the rest of ${which}` : which}:`);
+  for (const file of saved) console.log(`  ${relative(repo, file)}`);
   return failures;
 }
 

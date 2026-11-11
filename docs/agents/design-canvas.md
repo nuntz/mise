@@ -30,3 +30,12 @@ most of the diff.
 
 Done when every direction is a board, each differing from "Now" only by its own `<style>` rules and any
 markup change it names, and each reads in both themes.
+
+## Building the chosen board
+
+The board's markup is the spec as much as its `<style>` rules. Build it class by class: a component the
+app already has, reused where the board drew an element, keeps the classes the board puts on it, or
+adds a wrapper that carries them. The layout rules key on those classes: a `.row`'s child without
+`row-lead`, `row-body` or `row-end` wraps under it at full width, which is how Plan it's day thumb once
+filled its row (#159). The issue's words win over the board's, which can predate the last decision.
+Check it with `bun run screenshot --screens --only <screen>` beside the board, in each of its variants.

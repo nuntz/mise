@@ -1,16 +1,13 @@
 import {
-  addDays,
   DEFAULT_EFFORT_BUDGETS,
   type Household,
   ITEMS,
-  MEALS,
   type Member,
   type Recipe,
   type RecipeSummary,
   type Slot,
   STORE_SECTIONS,
   type ToolResult,
-  type Week,
 } from "@mise/domain";
 import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
@@ -18,6 +15,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import { createFakeClient } from "./fakeClient";
 import { primaries } from "./primaries";
+import { emptyWeek, weekStore } from "./weeks";
 
 // Today is Wednesday 11 November: This Week runs Monday 9 to Sunday 15, Next Week 16 to 22.
 beforeEach(() => {
@@ -86,40 +84,6 @@ const summaryOf = (recipe: Recipe): RecipeSummary => ({
   photoKey: recipe.photoKey,
 });
 
-function emptyWeek(startDate: string): Week {
-  return {
-    startDate,
-    endDate: addDays(startDate, 6),
-    slots: Array.from({ length: 7 }, (_, day) => addDays(startDate, day)).flatMap((date) =>
-      MEALS.map(
-        (meal): Slot => ({
-          date,
-          meal,
-          kind: "unplanned",
-          recipe: null,
-          note: null,
-          diners: [1, 2],
-          dinersAreDefault: true,
-          guests: 0,
-          guestConstraints: [],
-          servings: 2,
-          cookFor: 0,
-          leftoversOf: null,
-          leftovers: [],
-          conflicts: [],
-          reason: null,
-          cookedAt: null,
-          ratings: [],
-        }),
-      ),
-    ),
-    effortBudgets: DEFAULT_EFFORT_BUDGETS,
-    effortBudgetOverrides: {},
-    proposalSeed: null,
-    useUp: [],
-  };
-}
-
 const dish = (id: number, title: string) => ({ id, title, baseServings: 4, photoKey: null, readyMade: false });
 const pencil: Slot["reason"] = { kind: "chosen", candidates: 12, factors: [] };
 
@@ -129,22 +93,20 @@ const pencil: Slot["reason"] = { kind: "chosen", candidates: 12, factors: [] };
  * pencilled Shakshuka. Next Week isn't proposed yet; its Wednesday dinner is the Household's own Fish tacos.
  */
 function weeks() {
-  const thisWeek: Week = { ...emptyWeek("2026-11-09"), proposalSeed: 3 };
-  const nextWeek = emptyWeek("2026-11-16");
-  const set = (week: Week, date: string, meal: Slot["meal"], change: Partial<Slot>) =>
-    Object.assign(week.slots.find((slot) => slot.date === date && slot.meal === meal) as Slot, change);
-  set(thisWeek, "2026-11-11", "dinner", { kind: "recipe", recipe: dish(1, "Lemon chicken") });
-  set(thisWeek, "2026-11-12", "dinner", {
+  const weeks = weekStore({ ...emptyWeek("2026-11-09", [1, 2]), proposalSeed: 3 }, emptyWeek("2026-11-16", [1, 2]));
+  const { set } = weeks;
+  set("2026-11-11", "dinner", { kind: "recipe", recipe: dish(1, "Lemon chicken") });
+  set("2026-11-12", "dinner", {
     kind: "recipe",
     recipe: dish(2, "Chickpea curry"),
     reason: pencil,
     guests: 2,
     servings: 4,
   });
-  set(thisWeek, "2026-11-14", "dinner", { kind: "eat_out" });
-  set(thisWeek, "2026-11-15", "dinner", { kind: "recipe", recipe: dish(3, "Shakshuka"), reason: pencil });
-  set(nextWeek, "2026-11-18", "dinner", { kind: "recipe", recipe: dish(4, "Fish tacos") });
-  return { thisWeek, nextWeek, set };
+  set("2026-11-14", "dinner", { kind: "eat_out" });
+  set("2026-11-15", "dinner", { kind: "recipe", recipe: dish(3, "Shakshuka"), reason: pencil });
+  set("2026-11-18", "dinner", { kind: "recipe", recipe: dish(4, "Fish tacos") });
+  return weeks;
 }
 
 type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefined;
@@ -154,7 +116,7 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefine
  * the household does: the Slot becomes the Household's own, and the plan's change notice follows.
  */
 function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = {}) {
-  const { thisWeek, nextWeek, set } = weeks();
+  const store = weeks();
   const calls: { name: string; input: Record<string, unknown> }[] = [];
   const fake = createFakeClient(async (name: string, input: Record<string, unknown>) => {
     calls.push({ name, input });
@@ -166,8 +128,7 @@ function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = 
       case "get_caller":
         return { ok: true, value: null };
       case "get_week":
-        // A fresh copy each time, as the household sends: a screen holding an old one shows it old.
-        return { ok: true, value: structuredClone((input.date ?? "") >= nextWeek.startDate ? nextWeek : thisWeek) };
+        return { ok: true, value: store.get(input.date as string | undefined) };
       case "search_recipes":
         return { ok: true, value: [summaryOf(recipe)] };
       case "get_recipe":
@@ -181,9 +142,7 @@ function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = 
       case "list_untagged_recipes":
         return { ok: true, value: [] };
       case "set_slot": {
-        const date = String(input.date);
-        const week = date >= nextWeek.startDate ? nextWeek : thisWeek;
-        const slot = set(week, date, input.meal as Slot["meal"], {
+        const slot = store.set(String(input.date), input.meal as Slot["meal"], {
           kind: "recipe",
           recipe: dish(recipe.id, recipe.title),
           reason: null,
@@ -195,7 +154,7 @@ function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = 
         throw new Error(`Unexpected tool ${name}`);
     }
   });
-  return { ...fake, calls, thisWeek, nextWeek, set };
+  return { ...fake, calls, weeks: store };
 }
 
 async function openRecipe(client: ReturnType<typeof fakeClient>["client"]) {
@@ -302,7 +261,7 @@ test("a dinner of the Household's own asks once more before it is replaced", asy
 
 test("a cooked dinner can't be picked", async () => {
   const fake = fakeClient();
-  fake.set(fake.thisWeek, "2026-11-11", "dinner", { cookedAt: "2026-11-11T19:00:00.000Z" });
+  fake.weeks.set("2026-11-11", "dinner", { cookedAt: "2026-11-11T19:00:00.000Z" });
   const user = await openRecipe(fake.client);
   const sheet = await openSheet(user);
 
@@ -354,9 +313,9 @@ test("a refused Conflict asks for a reason, and Save anyway plans it with the Ov
 
 test("On the plan lists every meal it's in from today to the end of Next Week, and leads to the Week holding the first", async () => {
   const fake = fakeClient();
-  fake.set(fake.thisWeek, "2026-11-09", "dinner", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
-  fake.set(fake.nextWeek, "2026-11-18", "lunch", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
-  fake.set(fake.nextWeek, "2026-11-20", "dinner", {
+  fake.weeks.set("2026-11-09", "dinner", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
+  fake.weeks.set("2026-11-18", "lunch", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
+  fake.weeks.set("2026-11-20", "dinner", {
     kind: "recipe",
     recipe: dish(7, "Sesame noodles"),
     reason: pencil,
@@ -375,8 +334,8 @@ test("On the plan lists every meal it's in from today to the end of Next Week, a
 
 test("On the plan names This Week's days before Next Week's, and leads to This Week when it holds the first", async () => {
   const fake = fakeClient();
-  fake.set(fake.thisWeek, "2026-11-13", "dinner", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
-  fake.set(fake.nextWeek, "2026-11-18", "lunch", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
+  fake.weeks.set("2026-11-13", "dinner", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
+  fake.weeks.set("2026-11-18", "lunch", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
   const user = await openRecipe(fake.client);
 
   const banner = (await screen.findByText("On the plan: dinner on Fri 13 and lunch on Wed 18.")).closest(
@@ -390,7 +349,7 @@ test("On the plan names This Week's days before Next Week's, and leads to This W
 test("the sheet opens on Next Week once This Week has no day left to plan", async () => {
   const fake = fakeClient();
   for (const date of ["2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15"])
-    fake.set(fake.thisWeek, date, "dinner", { cookedAt: `${date}T19:00:00.000Z` });
+    fake.weeks.set(date, "dinner", { cookedAt: `${date}T19:00:00.000Z` });
   const user = await openRecipe(fake.client);
 
   const sheet = await openSheet(user);
@@ -435,7 +394,7 @@ test("Plan it is disabled offline, with the reason under it", async () => {
 
 test("a Draft Recipe has no Plan it and no On the plan line: it is never planned", async () => {
   const fake = fakeClient({ ...noodles, draft: true });
-  fake.set(fake.thisWeek, "2026-11-13", "dinner", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
+  fake.weeks.set("2026-11-13", "dinner", { kind: "recipe", recipe: dish(7, "Sesame noodles") });
   await openRecipe(fake.client);
   // Long enough for both Weeks to load, as they would for a Recipe that isn't a Draft.
   await new Promise((resolve) => setTimeout(resolve, 20));

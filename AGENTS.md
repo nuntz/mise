@@ -27,7 +27,7 @@ Wording a brief or ticket decides for a screen: see `docs/agents/agent-briefs.md
 
 ### Design canvases
 
-Drawing a screen's directions on a Claude Design canvas: see `docs/agents/design-canvas.md`.
+Drawing a screen's directions on a Claude Design canvas, or building the one chosen: see `docs/agents/design-canvas.md`.
 
 ### Pi Durable
 

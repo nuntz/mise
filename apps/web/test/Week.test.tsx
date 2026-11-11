@@ -1,9 +1,7 @@
 import {
-  addDays,
   DEFAULT_EFFORT_BUDGETS,
   type Household,
   ITEMS,
-  MEALS,
   type Member,
   parseIngredient,
   type Recipe,
@@ -22,6 +20,7 @@ import type { MiseClient } from "../src/client";
 import { setPseudoLocale } from "../src/messages";
 import { createFakeClient } from "./fakeClient";
 import { primaries } from "./primaries";
+import { emptyWeek } from "./weeks";
 
 // The fixtures are the Week of Monday 26 October; on the Sunday before, none of its days is today.
 beforeEach(() => {
@@ -80,40 +79,6 @@ const pastaRecipe: Recipe = {
   lastCookedAt: null,
   cookCount: 0,
 };
-
-function emptyWeek(startDate: string): Week {
-  return {
-    startDate,
-    endDate: addDays(startDate, 6),
-    slots: Array.from({ length: 7 }, (_, day) => addDays(startDate, day)).flatMap((date) =>
-      MEALS.map(
-        (meal): Slot => ({
-          date,
-          meal,
-          kind: "unplanned",
-          recipe: null,
-          note: null,
-          diners: [1, 2, 3],
-          dinersAreDefault: true,
-          guests: 0,
-          guestConstraints: [],
-          servings: 3,
-          cookFor: 0,
-          leftoversOf: null,
-          leftovers: [],
-          conflicts: [],
-          reason: null,
-          cookedAt: null,
-          ratings: [],
-        }),
-      ),
-    ),
-    effortBudgets: DEFAULT_EFFORT_BUDGETS,
-    effortBudgetOverrides: {},
-    proposalSeed: null,
-    useUp: [],
-  };
-}
 
 /**
  * This Week as proposed with seed 7, with Monday's Effort Budget overridden:

@@ -1,13 +1,10 @@
 import {
-  addDays,
   type ChatMessage,
   type ChatWhere,
   DEFAULT_EFFORT_BUDGETS,
   type Household,
-  MEALS,
   parseIngredient,
   type Recipe,
-  type Slot,
   STORE_SECTIONS,
   type Week,
 } from "@mise/domain";
@@ -23,6 +20,7 @@ import { createFakeClient } from "./fakeClient";
 import { fakeServiceWorkers } from "./fakeServiceWorkers";
 import { fakeVoice } from "./fakeVoice";
 import { fakeWakeLock } from "./fakeWakeLock";
+import { emptyWeek, setSlot } from "./weeks";
 
 const household: Household = {
   name: "The Tremblays",
@@ -70,46 +68,15 @@ const curry: Recipe = {
 
 /** This Week, with Monday's dinner the Curry cooked for 6: 4 eating and Tuesday's Leftovers. */
 function week(): Week {
-  const startDate = "2026-10-26";
-  const slots = Array.from({ length: 7 }, (_, day) => addDays(startDate, day)).flatMap((date) =>
-    MEALS.map(
-      (meal): Slot => ({
-        date,
-        meal,
-        kind: "unplanned",
-        recipe: null,
-        note: null,
-        diners: [1],
-        dinersAreDefault: true,
-        guests: 0,
-        guestConstraints: [],
-        servings: 1,
-        cookFor: 0,
-        leftoversOf: null,
-        leftovers: [],
-        conflicts: [],
-        reason: null,
-        cookedAt: null,
-        ratings: [],
-      }),
-    ),
-  );
-  Object.assign(slots[2] as Slot, {
+  const week = emptyWeek("2026-10-26", [1]);
+  setSlot(week, "2026-10-26", "dinner", {
     kind: "recipe",
-    recipe: { id: 2, title: "Curry", baseServings: 4, photoKey: null },
+    recipe: { id: 2, title: "Curry", baseServings: 4, photoKey: null, readyMade: false },
     servings: 4,
     cookFor: 6,
     leftovers: [{ date: "2026-10-27", meal: "dinner" }],
   });
-  return {
-    startDate,
-    endDate: addDays(startDate, 6),
-    slots,
-    effortBudgets: DEFAULT_EFFORT_BUDGETS,
-    effortBudgetOverrides: {},
-    proposalSeed: null,
-    useUp: [],
-  };
+  return week;
 }
 
 function fakeClient(): MiseClient {
