@@ -76,7 +76,7 @@ for four pre-existing findings outside the three review findings:
 | body-parser 2.3.0 | MCP SDK → Express | [GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828), high | Resolved: #153 dropped the MCP SDK, so neither Express nor body-parser is in `bun.lock` (#149) |
 | glob 13.0.6 | Pulumi → npm tooling | [GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4), moderate | Open: #150 |
 | minimatch 10.2.6 | Pulumi → npm tooling | [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), moderate | Open: #150 |
-| zod 4.6.5 | @cloudflare/vitest-plugin | [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), high | Open: #151 |
+| zod 4.6.5 | @cloudflare/vitest-plugin | [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), high | Resolved: @cloudflare/vitest-plugin 1.8.0 pins zod 4.6.6, with wrangler 4.160.1 to match (#151) |
 
 Application Zod remains 4.6.7. The local Worker bundle contains none of the first
 three packages; the affected Zod copy belongs to test tooling. These findings need
