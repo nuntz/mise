@@ -4,12 +4,13 @@ import { type ChatReply, type ChatWhere, isPencilled, WEEKDAYS, weekdayOf } from
 import { afterAll, afterEach, beforeAll, describe, expect, inject, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { connectAs } from "../test/connect";
-import { dinnerOn, familyHousehold, weekOf } from "../test/scripted";
+import { dinnerOn, familyHousehold, type HouseholdStub, weekOf } from "../test/scripted";
 import { answeredFirst, realModels } from "./models";
 
 /**
- * Typed turns about a Week on the real agent model: which Week a day name means, and reading a Week's
- * dinners on their right days (#142). Calls Claude with the key in `.dev.vars`, so it runs only by hand:
+ * Typed turns about a Week on the real agent model: which Week a day name means, which Weeks “this
+ * week” and “next week” mean whatever Week is shown (#146), and reading a Week's dinners on their
+ * right days (#142). Calls Claude with the key in `.dev.vars`, so it runs only by hand:
  *
  *   bun run eval:agent
  */
@@ -20,6 +21,9 @@ const THIS_WEDNESDAY = "2026-11-04";
 const NEXT_MONDAY = "2026-11-09";
 const NEXT_WEDNESDAY = "2026-11-11";
 const NEXT_THURSDAY = "2026-11-12";
+const THIS_SUNDAY = "2026-11-08";
+const NEXT_SUNDAY = "2026-11-15";
+const SUNDAY_AFTER = "2026-11-22";
 const ON_THIS_WEEK: ChatWhere = { screen: "week", week: "2026-11-02" };
 const ON_NEXT_WEEK: ChatWhere = { screen: "week", week: NEXT_MONDAY };
 // How long a turn may take: the agent may read the Week and make several calls first.
@@ -138,7 +142,7 @@ describe("a typed turn about a Week", () => {
         "sunday",
       ]);
 
-      const answer = await write("What's pencilled this week, day by day?", ON_NEXT_WEEK);
+      const answer = await write("What's pencilled next week, day by day?", ON_NEXT_WEEK);
 
       for (const dinner of pencilled) {
         const title = dinner.recipe?.title;
@@ -156,4 +160,36 @@ describe("a typed turn about a Week", () => {
     },
     3 * TURN_MS,
   );
+});
+
+/** What the breakfast of `date` holds now. */
+async function breakfastOn(household: HouseholdStub, date: string) {
+  return (await weekOf(household, date)).slots.find((slot) => slot.date === date && slot.meal === "breakfast")?.kind;
+}
+
+// With Next Week shown, the agent once took “Sunday next week” for the Sunday after the one on screen,
+// setting 2026-11-22, and asked which Friday “Friday next week” meant. “this week” and “next week”
+// count from today, as the This Week and Next Week tabs do, whichever Week is shown (#146).
+describe("“this week” and “next week” in a typed turn", () => {
+  const cases: [name: string, where: ChatWhere, which: "this" | "next", sunday: string][] = [
+    ["with Next Week shown, “Sunday next week” is the Sunday on screen", ON_NEXT_WEEK, "next", NEXT_SUNDAY],
+    ["with This Week shown, “Sunday next week” is Next Week's Sunday", ON_THIS_WEEK, "next", NEXT_SUNDAY],
+    ["with Next Week shown, “Sunday this week” is This Week's Sunday", ON_NEXT_WEEK, "this", THIS_SUNDAY],
+  ];
+  for (const [name, where, which, sunday] of cases) {
+    test(
+      `${name}, without asking which`,
+      async () => {
+        const { household, write } = await robinWriting();
+
+        await write(`We're eating out for breakfast on Sunday ${which} week.`, where);
+
+        expect(await breakfastOn(household, sunday), `breakfast on ${sunday}`).toBe("eat_out");
+        for (const other of [THIS_SUNDAY, NEXT_SUNDAY, SUNDAY_AFTER].filter((date) => date !== sunday)) {
+          expect(await breakfastOn(household, other), `breakfast on ${other}`).toBe("unplanned");
+        }
+      },
+      TURN_MS,
+    );
+  }
 });

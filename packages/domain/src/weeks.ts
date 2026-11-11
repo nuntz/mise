@@ -91,6 +91,18 @@ export function nextWeekStart(week: WeekSpan): LocalDate {
   return addDays(week.endDate, 1);
 }
 
+/** This Week and Next Week: the Weeks the This Week and Next Week tabs show (GLOSSARY.md). */
+export type ThisAndNextWeek = { thisWeek: WeekSpan; nextWeek: WeekSpan };
+
+/**
+ * This Week and Next Week on `today`, by the Household's own Weeks: Next Week starts the day after
+ * This Week ends, even when a change of week start makes This Week run on past seven days (ADR 0021).
+ */
+export function thisAndNextWeek(today: LocalDate, calendar: WeekCalendar): ThisAndNextWeek {
+  const thisWeek = weekOf(today, calendar);
+  return { thisWeek, nextWeek: weekOf(nextWeekStart(thisWeek), calendar) };
+}
+
 /** Whether someone has started the Week: any of its dinners is planned, by hand or by a Proposal. */
 export function isStarted(week: Week): boolean {
   return week.slots.some((slot) => slot.meal === "dinner" && slot.kind !== "unplanned");

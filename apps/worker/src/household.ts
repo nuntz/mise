@@ -74,6 +74,7 @@ import {
   type ToolName,
   type ToolOutput,
   type ToolResult,
+  thisAndNextWeek,
   VOICE_START_CHARGE_SECONDS,
   type VoiceAvailability,
   type VoiceStartReply,
@@ -324,7 +325,8 @@ class HouseholdAgent extends Agent<Env> {
     const turn = recordTurn(sql, speaker, now.toISOString());
     if (spoken) this.spokenTurns.add(turn);
     // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
-    const today = localDate(now, this.household()?.timezone ?? "UTC");
+    const household = this.household();
+    const today = localDate(now, household?.timezone ?? "UTC");
     // After a failed run, the turns it left waiting aren't answered with this one.
     const pi = await this.harness.pi();
     const afterUnanswered = await lastTurnUnanswered(pi, await pi.root(BACKGROUND_CONTEXT));
@@ -338,6 +340,7 @@ class HouseholdAgent extends Agent<Env> {
       afterUnanswered,
       waiting: pendingConfirmations(sql),
       week: this.weekShownAt(where),
+      thisAndNext: household ? thisAndNextWeek(today, household) : undefined,
       text,
     });
     const entry: TurnData = { turn, text };

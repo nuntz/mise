@@ -571,7 +571,7 @@ describe("who is speaking", () => {
     vi.useRealTimers();
 
     expect(seen).toEqual([
-      "[Robin, writing on Tuesday 2026-10-27, on the Week screen, showing the Week of Monday 2026-10-26]\n" +
+      "[Robin, writing on Tuesday 2026-10-27, on the Week screen, showing This Week, the Week of Monday 2026-10-26]\n" +
         "[The Week on screen, as it is now (a breakfast or lunch not named has nothing planned): " +
         "Monday 2026-10-26: dinner nothing planned (the Household's own); " +
         "Tuesday 2026-10-27: dinner nothing planned (the Household's own); " +

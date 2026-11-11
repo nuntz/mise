@@ -82,6 +82,53 @@ describe("presentTurn", () => {
     );
   });
 
+  describe("names the Week on screen as the tabs do, so “next week” has one meaning (#146)", () => {
+    const turn = {
+      speaker: "Robin",
+      today: "2026-11-05",
+      thisAndNext: {
+        thisWeek: { startDate: "2026-11-02", endDate: "2026-11-08" },
+        nextWeek: { startDate: "2026-11-09", endDate: "2026-11-15" },
+      },
+      spoken: false,
+      text: "breakfast on Sunday next week",
+    };
+
+    test("Next Week, from the Week screen", () => {
+      expect(presentTurn({ ...turn, where: { screen: "week", week: "2026-11-09" } })).toBe(
+        "[Robin, writing on Thursday 2026-11-05, on the Week screen, showing Next Week, the Week of Monday 2026-11-09]\n" +
+          "breakfast on Sunday next week",
+      );
+    });
+
+    test("This Week, from the Week screen", () => {
+      expect(presentTurn({ ...turn, where: { screen: "week", week: "2026-11-02" } })).toBe(
+        "[Robin, writing on Thursday 2026-11-05, on the Week screen, showing This Week, the Week of Monday 2026-11-02]\n" +
+          "breakfast on Sunday next week",
+      );
+    });
+
+    test("Next Week, in a spoken turn", () => {
+      expect(presentTurn({ ...turn, where: { screen: "week", week: "2026-11-09" }, spoken: true })).toStartWith(
+        "[Robin, speaking on Thursday 2026-11-05, on the Week screen, showing Next Week, the Week of Monday 2026-11-09; ",
+      );
+    });
+
+    test("This Week, from the Grocery List", () => {
+      expect(presentTurn({ ...turn, where: { screen: "grocery", week: "2026-11-02" } })).toBe(
+        "[Robin, writing on Thursday 2026-11-05, on the Grocery List screen, showing This Week, the Week of Monday 2026-11-02]\n" +
+          "breakfast on Sunday next week",
+      );
+    });
+
+    test("a Week that is neither, such as one left open across a week start, by its date alone", () => {
+      expect(presentTurn({ ...turn, where: { screen: "week", week: "2026-10-26" } })).toBe(
+        "[Robin, writing on Thursday 2026-11-05, on the Week screen, showing the Week of Monday 2026-10-26]\n" +
+          "breakfast on Sunday next week",
+      );
+    });
+  });
+
   test("leaves the Week out when the screen shows none", () => {
     const presented = presentTurn({
       speaker: "Sam",

@@ -13,6 +13,7 @@ import {
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import {
+  addDays,
   type Caller,
   type ChatMessage,
   type ConfirmationStatus,
@@ -21,16 +22,20 @@ import {
   changeTopicOf,
   type Household,
   ItemId,
+  type LocalDate,
   localDate,
   offerLongList,
   type PendingConfirmation,
   ProposedWeek,
   type ToolName,
   type ToolResult,
+  thisAndNextWeek,
   tools,
   Week,
+  type WeekSpan,
   weekdayOf,
   weekForTheAgent,
+  weekOf,
 } from "@mise/domain";
 import type { PiModel } from "agents/harness/pi";
 import { z } from "zod";
@@ -351,6 +356,23 @@ const SPOKEN_TURNS = [
     "(“That's the Check-in done: cumin's out and paprika's low.”).",
 ].join("\n");
 
+/**
+ * The preamble's line saying which dates This Week, Next Week and last week run on `today`, by the
+ * Household's own Weeks, so that the model never counts days for them, even across the one a change
+ * of week start stretches (ADR 0021).
+ */
+function weeksLine(today: LocalDate, household: Household): string {
+  const { thisWeek, nextWeek } = thisAndNextWeek(today, household);
+  const lastWeek = weekOf(addDays(thisWeek.startDate, -1), household);
+  return `This Week runs ${spanOf(thisWeek)}; Next Week runs ${spanOf(nextWeek)}; last week ran ${spanOf(lastWeek)}.`;
+}
+
+/** "Monday 2026-11-09 to Sunday 2026-11-15" */
+function spanOf(week: WeekSpan): string {
+  const day = (date: LocalDate) => `${capitalised(weekdayOf(date))} ${date}`;
+  return `${day(week.startDate)} to ${day(week.endDate)}`;
+}
+
 function preamble(household: Household | null): string {
   if (!household) return "You are Mise, a family meal planner. This Household is not set up yet.";
   const today = localDate(new Date(), household.timezone);
@@ -360,6 +382,7 @@ function preamble(household: Household | null): string {
       "and never mention ids; just answer once you have done it.",
     `Today is ${capitalised(weekdayOf(today))} ${today} in the Household's timezone (${household.timezone}). ` +
       `Weeks start on ${capitalised(household.weekStartsOn)}; dinner is at ${household.dinnerTime}.`,
+    weeksLine(today, household),
     "Members:",
     ...(household.members.length > 0
       ? household.members.map((member) => `- ${member.name} (Member ${member.id})${constraintsOf(member.constraints)}`)
@@ -368,9 +391,12 @@ function preamble(household: Household | null): string {
     "Each message starts, in brackets, with who is speaking, the day they wrote it, and the screen (and Week) " +
       "they are looking at. From the Week screen, a line in brackets then gives that Week as it is now, day by " +
       "day: each dinner, pencilled or the Household's own, and the breakfasts and lunches that hold something. " +
-      "“I”, “me” and “us” mean that speaker; “this week” and day names mean the Week they see, even when " +
-      "earlier turns were about another Week. " +
-      "“Today”, “tonight” and “tomorrow” count from the day the message was written, whatever Week they see.",
+      "“I”, “me” and “us” mean that speaker. " +
+      "“Today”, “tonight” and “tomorrow” count from the day the message was written, whatever Week they see, " +
+      "and so do “this week”, “next week” and “last week”: This Week, Next Week and the Week before This Week. " +
+      "So with Next Week on screen, “next week” is the Week they see and “this week” the one before it. " +
+      "Take them so without asking which Week is meant. " +
+      "A day name on its own means that day of the Week they see, even when earlier turns were about another Week.",
     "Change things only through the tools. Answer from what they return: never guess what is planned, read it. " +
       "Don't say why something happened, or what a Week or list holds, unless a tool you just called, or this " +
       "message's Week, says so; " +

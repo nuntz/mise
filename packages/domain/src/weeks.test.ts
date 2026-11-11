@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { Weekday } from "./household";
-import { addDays, changeWeekStart, currentWeek, type LocalDate, type WeekCalendar, weekOf, weekStartOf } from "./weeks";
+import {
+  addDays,
+  changeWeekStart,
+  currentWeek,
+  type LocalDate,
+  thisAndNextWeek,
+  type WeekCalendar,
+  weekOf,
+  weekStartOf,
+} from "./weeks";
 
 describe("weekStartOf", () => {
   test("a date on the week start starts its own Week", () => {
@@ -72,6 +81,15 @@ describe("changing the week start", () => {
     expect(weekOf("2026-11-04", thursdays)).toEqual({ startDate: "2026-10-26", endDate: "2026-11-04" });
     expect(weekOf("2026-11-05", thursdays)).toEqual({ startDate: "2026-11-05", endDate: "2026-11-11" });
     expect(weekOf("2026-12-01", thursdays)).toEqual({ startDate: "2026-11-26", endDate: "2026-12-02" });
+  });
+
+  test("This Week runs on to the new start day, and Next Week starts on it, as the tabs show them (#146)", () => {
+    const thursdays = changed(mondays, "thursday", wednesday);
+
+    expect(thisAndNextWeek(wednesday, thursdays)).toEqual({
+      thisWeek: { startDate: "2026-10-26", endDate: "2026-11-04" },
+      nextWeek: { startDate: "2026-11-05", endDate: "2026-11-11" },
+    });
   });
 
   test("earlier Weeks keep their dates", () => {

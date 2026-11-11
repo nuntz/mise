@@ -4,7 +4,16 @@ import { scaledLines } from "./ingredients";
 import { type Recipe, RecipeId } from "./recipes";
 import type { Staple } from "./staples";
 import { type ToolName, thingsListed } from "./tools";
-import { addDays, isPencilled, LocalDate, type Slot, SlotRef, type Week, weekdayOf } from "./weeks";
+import {
+  addDays,
+  isPencilled,
+  LocalDate,
+  type Slot,
+  SlotRef,
+  type ThisAndNextWeek,
+  type Week,
+  weekdayOf,
+} from "./weeks";
 
 /** The longest message a Member can send the agent. */
 export const MAX_CHAT_MESSAGE = 4000;
@@ -31,9 +40,9 @@ export const KitchenWhere = z
 export type KitchenWhere = z.infer<typeof KitchenWhere>;
 
 /**
- * Where the chat was opened from, sent with each message so that "this week" and "Thursday" mean
- * what the person sees: the screen, and the Week it shows, if it shows one; or Kitchen mode, where
- * only a Voice Session is heard from.
+ * Where the chat was opened from, sent with each message so that "Thursday" means the day the person
+ * sees: the screen, and the Week it shows, if it shows one; or Kitchen mode, where only a Voice
+ * Session is heard from.
  */
 export const ChatWhere = z.union([z.object({ screen: ChatScreen, week: LocalDate.optional() }).strict(), KitchenWhere]);
 export type ChatWhere = z.infer<typeof ChatWhere>;
@@ -93,6 +102,9 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * seven days, so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
  * A spoken turn from the Pantry screen is given the Staples due, `checkIn`, in the order the Pantry's
  * cards ask about them, with their Items to record each answer by, so that it can lead the Check-in.
+ * A turn from a screen showing a Week names it This Week or Next Week when it is one, by the two the
+ * Household gives, `thisAndNext` (none before it is set up): "next week" counts from today
+ * whatever Week is on screen, so the model must know whether that is the Week on screen (#146).
  * A turn from the Week screen is given the `week` it shows, as it is when the turn is presented: changes
  * made on a screen never reach the conversation, so the agent once kept this Week's Wednesday with next
  * Week shown, called a Kept dinner Mise's, and said a cleared breakfast was planned, all from earlier
@@ -113,6 +125,7 @@ export function presentTurn(turn: {
   afterUnanswered?: boolean;
   waiting?: readonly PendingConfirmation[];
   week?: Week;
+  thisAndNext?: ThisAndNextWeek;
   text: string;
 }): string {
   const { where } = turn;
@@ -123,7 +136,7 @@ export function presentTurn(turn: {
   const kitchen = where.screen === "kitchen" ? kitchenLines(where, turn.cooking) : undefined;
   if (where.screen === "kitchen") parts.push(...(kitchen?.parts ?? ["in Kitchen mode"]));
   else parts.push(`on the ${SCREEN_NAMES[where.screen]} screen`);
-  if ("week" in where && where.week) parts.push(`showing the Week of ${dayOf(where.week)}`);
+  if ("week" in where && where.week) parts.push(`showing ${weekNamed(where.week, turn.thisAndNext)}`);
   else if (turn.spoken) {
     const coming = Array.from({ length: 7 }, (_, days) => dayOf(addDays(turn.today, days)));
     parts.push(`so day names mean the coming days: ${coming.join(", ")}`);
@@ -136,6 +149,17 @@ export function presentTurn(turn: {
   const waiting = turn.waiting ? [waitingLine(turn.waiting)] : [];
   const lines = kitchen?.lines ?? (checkIn ? [checkInLine(checkIn)] : turn.week ? [weekLine(turn.week)] : []);
   return [`[${header.join("; ")}]`, ...waiting, ...lines, turn.text].join("\n");
+}
+
+/** The Week starting on `start`, as the tabs name it when it is This Week or Next Week, and by its date. */
+function weekNamed(start: LocalDate, thisAndNext: ThisAndNextWeek | undefined): string {
+  const tab =
+    start === thisAndNext?.thisWeek.startDate
+      ? "This Week"
+      : start === thisAndNext?.nextWeek.startDate
+        ? "Next Week"
+        : null;
+  return `${tab ? `${tab}, ` : ""}the Week of ${dayOf(start)}`;
 }
 
 /** What a turn from Kitchen mode says of the Recipe `cooking`: in its header, and on lines of their own. */
