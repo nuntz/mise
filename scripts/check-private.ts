@@ -12,7 +12,7 @@ import { $ } from "bun";
 /** Domains reserved for documentation (RFC 2606), and the commit trailers' no-reply addresses. */
 const PLACEHOLDER_EMAIL = /(@example\.(com|org|net)|@users\.noreply\.github\.com|^noreply@anthropic\.com)$/i;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
-/** A package at a version, as in Bun's patch files (`patches/@sentry%2Fcloudflare@11.4.0.patch`). */
+/** A package at a version, as in Bun's patch file names (`patches/@scope%2Fname@1.2.3.patch`). */
 const PACKAGE_VERSION = /@\d+\.\d+\.\d+/;
 /** Shorter values would match everywhere; so would booleans and numbers, which identify no one. */
 const MIN_LENGTH = 4;

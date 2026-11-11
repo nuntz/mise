@@ -44,8 +44,5 @@
     "miniflare": {
       "undici": "7.30.2"
     }
-  },
-  "patchedDependencies": {
-    "@sentry/cloudflare@11.4.0": "patches/@sentry%2Fcloudflare@11.4.0.patch"
   }
 }

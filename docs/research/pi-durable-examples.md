@@ -49,7 +49,7 @@ Mise moved from Pi 1.4.0 and `agents` 0.30.1 to Pi 1.5.0 and `agents` 0.33.0 in 
   - `AI/…` = `node_modules/.bun/@earendil-works+pi-ai@1.4.0+147a41c250e9f430/node_modules/@earendil-works/pi-ai/dist/…`.
   - `AG` = `node_modules/.bun/agents@0.30.1+2d099d35f6b34cd6/node_modules/agents/dist/harness/pi/index.js`, Cloudflare's `PiHarness`. Mise imports it from `agents/harness/pi` (`apps/worker/src/household.ts:60`). It resolves the same pi-durable 1.4.0 (`node_modules/.bun/agents@0.30.1+…/node_modules/@earendil-works/pi-durable` → the 1.4.0 copy).
 - **Mise paths** are relative to the repo root.
-- **Patches**: `patches/` holds only `@sentry%2Fcloudflare@11.4.0.patch`. No pi package is patched.
+- **Patches**: none. The `@sentry/cloudflare` patch was dropped when Sentry 11.12.0 shipped its fix (#42), and no pi package is patched.
 
 ### v1.4.0 compared with `main`
 
