@@ -18,7 +18,9 @@ import { App } from "../src/App";
 import type { MiseClient } from "../src/client";
 import { KitchenMode } from "../src/Kitchen";
 import { saveRecipe } from "../src/offline";
+import type { Updates } from "../src/Update";
 import { createFakeClient } from "./fakeClient";
+import { fakeServiceWorkers } from "./fakeServiceWorkers";
 import { fakeVoice } from "./fakeVoice";
 import { fakeWakeLock } from "./fakeWakeLock";
 
@@ -175,15 +177,42 @@ function householdClient(startVoice?: MiseClient["startVoice"]) {
   return { ...fake, voice, conversation, confirmed, cancelled, settle };
 }
 
-async function cookMonday() {
+async function cookMonday(updates?: Updates) {
   const user = userEvent.setup();
-  render(() => <App client={fakeClient()} />);
+  render(() => <App client={fakeClient()} updates={updates} />);
   const monday = await screen.findByRole("region", { name: "Monday, October 26" });
   await user.click(within(monday).getByRole("button", { name: "Cook" }));
   const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
   await within(kitchen).findByRole("heading", { name: "Curry" });
   return { user, kitchen };
 }
+
+test("a newer build taking over the page while cooking offers a reload in kitchen mode, and reloads when asked", async () => {
+  const workers = fakeServiceWorkers(true);
+  const reload = vi.fn();
+  const { user, kitchen } = await cookMonday({ container: workers.container, reload });
+
+  workers.claim();
+
+  const banner = await within(kitchen).findByRole("status");
+  expect(banner.textContent).toContain("A newer Mise is ready");
+  await user.click(within(banner).getByRole("button", { name: "Reload" }));
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+test("a newer build offered before cooking shows in the app, and again once kitchen mode covers it", async () => {
+  const user = userEvent.setup();
+  const workers = fakeServiceWorkers(true);
+  render(() => <App client={fakeClient()} updates={{ container: workers.container, reload: vi.fn() }} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+
+  workers.claim();
+
+  expect(await screen.findByText(/A newer Mise is ready/)).toBeTruthy();
+  await user.click(within(monday).getByRole("button", { name: "Cook" }));
+  const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
+  expect(within(kitchen).getByText(/A newer Mise is ready/)).toBeTruthy();
+});
 
 test("kitchen mode loads its Recipe when another was the last one viewed", async () => {
   saveRecipe({ ...curry, id: 7, title: "Toast", steps: ["Butter it."] });
@@ -359,7 +388,17 @@ test("kitchen mode cooked from a Recipe's page talks from the Recipe alone, with
   const fake = householdClient();
   const calls = fakeVoice();
   // As the Recipe's page opens it: no Slot, so no servings.
-  render(() => <KitchenMode client={fake.client} id={2} locale="en-CA" voice={calls.open} onClose={() => {}} />);
+  render(() => (
+    <KitchenMode
+      client={fake.client}
+      id={2}
+      locale="en-CA"
+      voice={calls.open}
+      newBuild={false}
+      onReload={() => {}}
+      onClose={() => {}}
+    />
+  ));
   const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
 
   await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
@@ -420,7 +459,17 @@ test("only a change held during the Voice Session shows over the step, and it st
   const calls = fakeVoice();
   // Held from a chat before kitchen mode was opened.
   fake.conversation.push({ role: "confirmation", id: 3, summary: "Delete “Toast”", status: "pending" });
-  render(() => <KitchenMode client={fake.client} id={2} locale="en-CA" voice={calls.open} onClose={() => {}} />);
+  render(() => (
+    <KitchenMode
+      client={fake.client}
+      id={2}
+      locale="en-CA"
+      voice={calls.open}
+      newBuild={false}
+      onReload={() => {}}
+      onClose={() => {}}
+    />
+  ));
   const kitchen = await screen.findByRole("region", { name: "Kitchen mode" });
   await user.click(await within(kitchen).findByRole("button", { name: "Talk to Mise" }));
   await within(kitchen).findByText("Listening. Talk to Mise.");

@@ -38,7 +38,7 @@ import { SetupForm } from "./SetupForm";
 import { SwitchRow } from "./SwitchRow";
 import { TagRecipes } from "./TagRecipes";
 import { createKitchenMode } from "./theme";
-import { UpdateBanner } from "./Update";
+import { browserUpdates, UpdateBanner, type Updates, watchForNewBuild } from "./Update";
 import type { OpenVoice } from "./voice";
 import { type SlotKey, WeekPage } from "./Week";
 
@@ -128,8 +128,13 @@ function openFromLink(): Opening | undefined {
   return opening;
 }
 
-/** `voice` is the browser's WebRTC for Voice Sessions; without it, the chat has no mic. */
-export function App(props: { client: MiseClient; voice?: OpenVoice }) {
+/**
+ * `voice` is the browser's WebRTC for Voice Sessions; without it, the chat has no mic. `updates` is the
+ * browser's own unless a test stands in for it.
+ */
+export function App(props: { client: MiseClient; voice?: OpenVoice; updates?: Updates }) {
+  const updates = props.updates ?? browserUpdates();
+  const newBuild = watchForNewBuild(updates.container);
   // The Household saved on this device, if any, shows at once: the household may be out of reach.
   const saved = savedHousehold();
   const [status, setStatus] = createSignal<"loading" | "error" | "ready">(saved ? "ready" : "loading");
@@ -228,15 +233,14 @@ export function App(props: { client: MiseClient; voice?: OpenVoice }) {
                   voice={props.voice}
                   online={online()}
                   household={household()}
+                  newBuild={newBuild()}
+                  onReload={updates.reload}
                   onClose={() => setInKitchen(undefined)}
                 />
               )}
             </Show>
             <div class="app" inert={inKitchen() !== undefined}>
-              <UpdateBanner
-                container={"serviceWorker" in navigator ? navigator.serviceWorker : undefined}
-                reload={() => window.location.reload()}
-              />
+              <UpdateBanner ready={newBuild()} reload={updates.reload} />
               <Show when={!online()}>
                 <div class="banner banner-amber banner-top" role="status">
                   <Icon name="wifiOff" />

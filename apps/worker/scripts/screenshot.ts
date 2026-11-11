@@ -352,6 +352,18 @@ function screens(ids: Map<string, number>): Screen[] {
       open: (page) => page.locator(".page button.button-primary").first().click(),
       overlay: true,
     },
+    {
+      name: "kitchen-update",
+      path: `/?recipe=${recipe}`,
+      // A newer build taking over while cooking: the first claim is the first install, the second a newer build.
+      open: async (page) => {
+        await page.locator(".page button.button-primary").first().click();
+        await page.evaluate(() => {
+          for (let claim = 0; claim < 2; claim++) navigator.serviceWorker.dispatchEvent(new Event("controllerchange"));
+        });
+      },
+      overlay: true,
+    },
     { name: "recipes-ready-made-new", open: readyMadeForm("Frozen Pierogi", "frozen potato pierogi") },
     {
       name: "recipes-ready-made-known",

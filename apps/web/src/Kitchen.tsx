@@ -5,6 +5,7 @@ import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
 import { savedRecipe, saveRecipe } from "./offline";
+import { UpdateBanner } from "./Update";
 import { HeldDuringVoice, MicButton, VoiceListening, VoiceProblem } from "./VoiceControls";
 import type { OpenVoice } from "./voice";
 import { createVoiceSession, type VoiceRefusal } from "./voiceSession";
@@ -32,6 +33,9 @@ export function KitchenMode(props: {
   voice?: OpenVoice;
   online?: boolean;
   household?: Household | null;
+  /** A newer build of Mise has taken over the page: Kitchen mode covers the app's own offer. */
+  newBuild: boolean;
+  onReload: () => void;
   onClose: () => void;
 }) {
   // The Recipe kept on this device shows at once, and while the connection is down.
@@ -96,6 +100,7 @@ export function KitchenMode(props: {
 
   return (
     <section class="kitchen" data-theme="kitchen" aria-label={t("kitchen.title")}>
+      <UpdateBanner ready={props.newBuild} reload={() => props.onReload()} />
       <div class="kitchen-inner">
         <header class="page-header-row">
           <div class="page-heading">
