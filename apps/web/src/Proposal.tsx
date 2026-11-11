@@ -327,10 +327,16 @@ function UseUpPicker(props: { items: Map<ItemId, Item>; picked: ItemId[]; onChan
 }
 
 /**
- * The Effort Budgets, folded to one line that says them. Open, a grid of the week's days: a row for this
- * Week, whose differences from the Household's override them, and a row for every Week, with one Save.
+ * The Effort Budgets, folded to one line that says them. Open, a grid of the week's days: a row for the
+ * Week shown, whose differences from the Household's override them, and a row for every Week, with one Save.
  */
-export function EffortBudgetsEditor(props: { client: MiseClient; household: WeekHousehold; week: Week }) {
+export function EffortBudgetsEditor(props: {
+  client: MiseClient;
+  household: WeekHousehold;
+  week: Week;
+  /** Whether the Week shown is under the Next Week tab, which its row and key are then named for. */
+  next: boolean;
+}) {
   const [typed, setTyped] = createSignal<{
     week: Partial<Record<Weekday, string>>;
     every: Partial<Record<Weekday, string>>;
@@ -390,11 +396,11 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
 
   // The Week's own days, in its order, as its cards above have them.
   const days = () => Array.from({ length: 7 }, (_, offset) => addDays(props.week.startDate, offset));
-  // This Week's budget where it differs from every Week's.
+  // The Week shown's budget where it differs from every Week's.
   const overridden = (weekday: Weekday) => props.week.effortBudgets[weekday] !== props.household.effortBudgets[weekday];
   const row = (which: "week" | "every") => (
     <fieldset class="field budget-row">
-      <legend>{t(which === "week" ? "effort.thisWeek" : "effort.everyWeek")}</legend>
+      <legend>{t(which === "every" ? "effort.everyWeek" : props.next ? "effort.nextWeek" : "effort.thisWeek")}</legend>
       <div class="budget-cells">
         <For each={days().map(weekdayOf)}>
           {(weekday) => (
@@ -436,7 +442,7 @@ export function EffortBudgetsEditor(props: { client: MiseClient; household: Week
         <div class="budget-foot">
           <p class="meta">
             <span class="budget-key" aria-hidden="true" />
-            {t("effort.overriddenKey")}
+            {t(props.next ? "effort.overriddenKeyNext" : "effort.overriddenKey")}
           </p>
           <button type="submit" class="button-secondary" disabled={busy()}>
             {busy() ? t("slot.saving") : t("slot.save")}

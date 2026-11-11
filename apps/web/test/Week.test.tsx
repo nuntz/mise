@@ -712,6 +712,38 @@ test("clearing the Week asks first, in Mise's own sheet", async () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+test("on Next Week, clearing the Week and its own Effort Budgets name Next Week", async () => {
+  const nextWeek = emptyWeek("2026-11-02");
+  Object.assign(nextWeek.slots[2] as Slot, { note: "Pizza night" });
+  const { client, calls } = fakeClient({
+    get_week: (input) => (input.date === "2026-11-02" ? { ok: true, value: nextWeek } : undefined),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(screen.getByRole("heading", { level: 2, name: "Effort Budgets" }));
+  expect(
+    within(screen.getByRole("form", { name: "Effort Budgets" })).getByRole("group", { name: "This Week" }),
+  ).toBeTruthy();
+  expect(screen.getByText("Only this Week")).toBeTruthy();
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+  await screen.findByRole("region", { name: "Monday, November 2" });
+  const form = screen.getByRole("form", { name: "Effort Budgets" });
+  expect(within(form).getByRole("group", { name: "Next Week" })).toBeTruthy();
+  expect(within(form).queryByRole("group", { name: "This Week" })).toBeNull();
+  expect(within(form).getByText("Only Next Week")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Clear this Week" })).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "Clear Next Week" }));
+  const sheet = screen.getByRole("dialog", { name: "Clear Next Week?" });
+  await user.click(within(sheet).getByRole("button", { name: "Clear Next Week" }));
+
+  await vi.waitFor(() =>
+    expect(writes(calls)).toEqual([{ name: "clear_week", input: { date: "2026-11-02", confirm: true } }]),
+  );
+});
+
 const robinsPeanut = { who: 1, allergen: "peanut", constraint: "allergy", cause: "contains" } as const;
 
 test("a breakfast that isn't safe unfolds its Day's strip, which can still be folded", async () => {

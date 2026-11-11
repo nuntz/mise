@@ -132,6 +132,39 @@ test("a Week without a Grocery List offers to build one", async () => {
   expect(calls.find((call) => call.name === "build_grocery_list")?.input).toHaveProperty("date");
 });
 
+test("Next Week without a Grocery List says Next Week has none", async () => {
+  const thisWeek = currentWeek(new Date(), household).startDate;
+  const { client } = fakeClient({
+    get_grocery_list: (input) => ({ ok: true, value: input.date === thisWeek ? list : null }),
+  });
+  const user = await openGroceryList(client);
+  await screen.findByRole("checkbox", { name: "3 clove garlic" });
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+
+  expect(await screen.findByText("No Grocery List for Next Week yet.")).toBeTruthy();
+  expect(screen.queryByText("No Grocery List for this Week yet.")).toBeNull();
+});
+
+test("offline, a Week whose list wasn't kept on this device says which Week it is", async () => {
+  const answers = { get_grocery_list: () => ({ ok: false, error: { code: "not_found", message: "" } }) as const };
+  // Loaded once online, the Household is kept on this device, but neither Week's list is.
+  const online = fakeClient(answers);
+  render(() => <App client={online.client} />);
+  await screen.findByRole("button", { name: "Groceries" });
+  await waitFor(() => expect(online.calls.some((call) => call.name === "get_grocery_list")).toBe(true));
+  await new Promise((resolve) => setTimeout(resolve));
+  cleanup();
+
+  const user = await openGroceryList(fakeClient(answers, { online: false }).client);
+  expect(await screen.findByText("This Week's list wasn't loaded on this device before going offline.")).toBeTruthy();
+
+  await user.click(screen.getByRole("button", { name: "Next Week" }));
+
+  expect(await screen.findByText("Next Week's list wasn't loaded on this device before going offline.")).toBeTruthy();
+  expect(screen.queryByText("This Week's list wasn't loaded on this device before going offline.")).toBeNull();
+});
+
 test("lines are grouped by Store Section, with what they're for, and say when the plan changed", async () => {
   const { client, calls } = fakeClient();
   const user = await openGroceryList(client);

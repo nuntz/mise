@@ -188,9 +188,15 @@ export function WeekPage(props: {
   };
 
   const confirm = createConfirm();
+  // Named for the tab selected: "this Week" is always the Week holding today.
+  const clearLabel = () => t(next() ? "week.clearNext" : "week.clear");
   const clear = async (shown: Week) => {
     const lost = t("week.clearLost", { date: dayTitle(shown.startDate, props.household.locale) });
-    const confirmed = await confirm.ask({ title: t("week.clearTitle"), lost, action: t("week.clear") });
+    const confirmed = await confirm.ask({
+      title: t(next() ? "week.clearNextTitle" : "week.clearTitle"),
+      lost,
+      action: clearLabel(),
+    });
     if (!confirmed) return;
     setError(
       (await outcomeOf(() => props.client.call("clear_week", { date: shown.startDate, confirm: true }))).failure,
@@ -275,10 +281,10 @@ export function WeekPage(props: {
               </For>
             </div>
             <Show when={!readOnly()}>
-              <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} />
+              <EffortBudgetsEditor client={props.client} household={props.household} week={shown()} next={next()} />
               <Show when={shown().slots.some(clearable)}>
                 <button type="button" class="button-danger" onClick={() => clear(shown())}>
-                  {t("week.clear")}
+                  {clearLabel()}
                 </button>
               </Show>
             </Show>

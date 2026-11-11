@@ -145,14 +145,17 @@ export function GroceryPage(props: {
         </p>
       </Show>
       <Show when={list() === undefined}>
-        <Show when={props.online} fallback={<p class="empty">{t("grocery.notSaved")}</p>}>
+        <Show
+          when={props.online}
+          fallback={<p class="empty">{t(next() ? "grocery.notSavedNext" : "grocery.notSaved")}</p>}
+        >
           <GroceryLoading />
         </Show>
       </Show>
       <Show when={list() === null}>
         <div class="empty">
           <Icon name="basket" />
-          <p class="empty-title">{t("grocery.none")}</p>
+          <p class="empty-title">{t(next() ? "grocery.noneNext" : "grocery.none")}</p>
           <p>{t("grocery.emptyBody")}</p>
           <button type="button" class="button-primary" disabled={busy() || !props.online} onClick={build}>
             {t("grocery.build")}
