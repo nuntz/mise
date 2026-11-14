@@ -31,6 +31,19 @@ most of the diff.
 Done when every direction is a board, each differing from "Now" only by its own `<style>` rules and any
 markup change it names, and each reads in both themes.
 
+## The app icon
+
+The icon isn't a screen: it has no markup or `app.css`, and kitchen mode never shows it, so steps 2 to 5
+give way to these. Each direction is its own 512 board, the full-bleed drawing that becomes `icon.svg`,
+taking a `size` and a corner `radius` as props. One comparison board `<dc-import>`s every direction, "Now,
+as built" first, at the sizes it ships at: a home screen's 60 with its label, iOS's 180, Android's circle
+crop (the maskable safe zone is the middle 80%), and the 32 and 16 favicons. Its tweak is the
+surroundings, a light and a dark wallpaper and tab bar, in place of the theme. Colours are tokens'
+values: `icon.svg` takes daylight hexes, as `styles.test.ts` checks.
+
+Building the chosen one: put its drawing in `apps/web/public/icons/icon.svg` (a font's letters as
+outlines), run `bun run icons` to render the PNGs, and commit them together.
+
 ## Building the chosen board
 
 The board's markup is the spec as much as its `<style>` rules. Build it class by class: a component the

@@ -6,6 +6,7 @@
     "dev": "wrangler dev",
     "seed": "bun scripts/seed.ts",
     "screenshot": "bun scripts/screenshot.ts",
+    "icons": "bun scripts/icons.ts",
     "eval": "bun scripts/eval.ts",
     "eval:agent": "vitest run --config vitest.eval.config.ts",
     "test": "vitest run",
