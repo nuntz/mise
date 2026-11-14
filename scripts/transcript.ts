@@ -1,7 +1,8 @@
 /**
  * Prints the Household's recent conversation with its agent: each Member turn (typed or spoken), the
  * tool calls it led to with ok/error, the agent's answer, the Pending Confirmations held along the
- * way, what GPT-Live heard and said in each exchange of a Voice Session, and recent Voice Sessions.
+ * way, what GPT-Live heard and said in each exchange of a Voice Session, and the Voice Sessions from the
+ * first shown turn's day on, newest first (every one, from a local database).
  * Read-only.
  *
  *   bun run transcript [--turns N] [--costs] [--results] [--db <file.sqlite> | --deployed]
@@ -126,7 +127,7 @@ function localLog(file: string): { source: string; log: AgentLog } {
       ),
       voice_session: rows(
         "voice_session",
-        `SELECT id, day, seconds, confirmed${running ? ", running" : ""} FROM voice_session ORDER BY rowid DESC LIMIT 5`,
+        `SELECT id, day, seconds, confirmed${running ? ", running" : ""} FROM voice_session ORDER BY rowid DESC`,
       ),
       voice_exchange: rows("voice_exchange", "SELECT * FROM voice_exchange ORDER BY at, id"),
     },
@@ -152,7 +153,7 @@ type Entry = { id: number; kind: string; model: Message[]; data?: { turn?: numbe
 
 /**
  * The lines that show `log`'s latest `turns` Member turns, with what happened in and between them,
- * and its latest Voice Sessions.
+ * and its Voice Sessions.
  */
 export function format(log: AgentLog, options: { turns: number; costs: boolean; results: boolean }): string[] {
   const entries = log.pi_entries.map((row) => JSON.parse(row.record) as Entry);
@@ -287,7 +288,7 @@ export function format(log: AgentLog, options: { turns: number; costs: boolean; 
   }
 
   if (log.voice_session.length > 0) {
-    lines.push("", "Latest Voice Sessions:");
+    lines.push("", "Voice Sessions:");
     for (const s of log.voice_session) {
       lines.push(
         `  ${s.day} ${s.id}: ${s.seconds}s${s.confirmed ? ", confirmed" : ""}${s.running ? ", still running" : ""}`,

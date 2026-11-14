@@ -1,3 +1,4 @@
+import { localDate } from "@mise/domain";
 import { TURN_ENTRY } from "./agent";
 import type { VoiceExchange } from "./voice";
 
@@ -40,9 +41,6 @@ export function turnsAsked(url: URL): number | null {
 /** How many exchanges are kept: enough for the last few days of a Household's talk. */
 export const KEPT_EXCHANGES = 300;
 
-/** How many of the latest Voice Sessions the log shows. */
-const SESSIONS_SHOWN = 5;
-
 /** Records what GPT-Live heard and said in one exchange, and forgets those past the latest `KEPT_EXCHANGES`. */
 export function recordExchange(sql: SqlStorage, exchange: VoiceExchange): void {
   sql.exec(
@@ -62,19 +60,23 @@ export function recordExchange(sql: SqlStorage, exchange: VoiceExchange): void {
 
 /**
  * The log from the latest `turns` Member turns on: their entries, the confirmations held and the
- * exchanges since the first of them, with the latest Voice Sessions. All of it while there are fewer.
+ * exchanges since the first of them, and the Voice Sessions from its day in `timezone` on, newest
+ * first. All of it while there are fewer.
  */
-export function agentLog(sql: SqlStorage, turns: number): AgentLog {
-  const voice_session = sql
-    .exec<AgentLog["voice_session"][number]>(
-      "SELECT id, day, seconds, confirmed, running FROM voice_session ORDER BY rowid DESC LIMIT ?",
-      SESSIONS_SHOWN,
-    )
-    .toArray();
+export function agentLog(sql: SqlStorage, turns: number, timezone: string): AgentLog {
+  // A Voice Session keeps only the local day it started on, so the first turn's whole day is given.
+  const voiceSessionsFrom = (day: string) =>
+    sql
+      .exec<AgentLog["voice_session"][number]>(
+        "SELECT id, day, seconds, confirmed, running FROM voice_session WHERE day >= ? ORDER BY rowid DESC",
+        day,
+      )
+      .toArray();
   // Pi makes its tables with the Household's first turn.
   const hasConversation =
     sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pi_entries'").toArray().length > 0;
-  if (!hasConversation) return { pi_entries: [], pending_confirmation: [], voice_session, voice_exchange: [] };
+  if (!hasConversation)
+    return { pi_entries: [], pending_confirmation: [], voice_session: voiceSessionsFrom(""), voice_exchange: [] };
   const earliestTurn = sql
     .exec<{ id: number; turn: number; at: number }>(
       `SELECT id, json_extract(record, '$.data.turn') AS turn, json_extract(record, '$.model[0].timestamp') AS at
@@ -84,7 +86,8 @@ export function agentLog(sql: SqlStorage, turns: number): AgentLog {
       turns - 1,
     )
     .toArray()[0];
-  const since = earliestTurn ? new Date(earliestTurn.at).toISOString() : "";
+  const firstTurnAt = earliestTurn ? new Date(earliestTurn.at) : undefined;
+  const since = firstTurnAt?.toISOString() ?? "";
   return {
     pi_entries: sql
       .exec<AgentLog["pi_entries"][number]>(
@@ -98,7 +101,7 @@ export function agentLog(sql: SqlStorage, turns: number): AgentLog {
         since,
       )
       .toArray(),
-    voice_session,
+    voice_session: voiceSessionsFrom(firstTurnAt ? localDate(firstTurnAt, timezone) : ""),
     // A turn's own exchange began a moment before the turn was recorded.
     voice_exchange: sql
       .exec<AgentLog["voice_exchange"][number]>(

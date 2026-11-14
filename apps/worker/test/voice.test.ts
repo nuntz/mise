@@ -1,13 +1,14 @@
-import { abortAllDurableObjects } from "cloudflare:test";
+import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { type FauxResponseFactory, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { JsonObject } from "@earendil-works/pi-durable";
-import type { ChatWhere, VoiceStartReply } from "@mise/domain";
+import type { ChatWhere, LocalDate, VoiceStartReply } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
 import { KEPT_EXCHANGES } from "../src/agentLog";
 import { openAiLive, useLive } from "../src/live";
 import { FAILURE_LINE, VOICE_TIME_WARNING, type VoiceExchange, VoiceSession } from "../src/voice";
+import { recordVoiceUsage } from "../src/voiceUsage";
 import { connectAs } from "./connect";
 import { type PretendSession, pretendLive } from "./liveService";
 import { caller, dinnerOn, familyHousehold, type HouseholdStub, lastText, scriptModel, textOf } from "./scripted";
@@ -1391,4 +1392,91 @@ describe("the agent log", () => {
     ]);
     expect(log.voice_session).toMatchObject([{ id: session.id }]);
   });
+
+  test("gives the Voice Sessions from the Household-local day of the first turn asked for on", async () => {
+    const household = await torontoHousehold();
+    await typedTurnAt(household, "2026-11-09T12:00:00-05:00");
+    await typedTurnAt(household, "2026-11-11T09:00:00-05:00");
+    await typedTurnAt(household, "2026-11-12T09:00:00-05:00");
+    await voiceSessionsOn(household, [
+      "2026-11-08",
+      "2026-11-09",
+      "2026-11-10",
+      "2026-11-11",
+      "2026-11-11",
+      "2026-11-12",
+    ]);
+
+    const log = await household.agentLog(2);
+
+    expect(log.voice_session.map((s) => s.day)).toEqual(["2026-11-12", "2026-11-11", "2026-11-11"]);
+  });
+
+  test("decides the first turn's day by the Household's clock, not UTC's", async () => {
+    const household = await torontoHousehold();
+    // 22:00 in Toronto on the 11th is 03:00 UTC on the 12th.
+    await typedTurnAt(household, "2026-11-11T22:00:00-05:00");
+    await voiceSessionsOn(household, ["2026-11-10", "2026-11-11", "2026-11-12"]);
+    await typedTurnAt(household, "2026-11-12T09:00:00-05:00");
+
+    const log = await household.agentLog(2);
+
+    expect(log.voice_session.map((s) => s.day)).toEqual(["2026-11-12", "2026-11-11"]);
+  });
+
+  test("gives every Voice Session when asked for more turns than there are", async () => {
+    const household = await torontoHousehold();
+    await typedTurnAt(household, "2026-11-12T09:00:00-05:00");
+    const days = ["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11"];
+    await voiceSessionsOn(household, days);
+
+    const log = await household.agentLog(10);
+
+    expect(log.voice_session.map((s) => s.day)).toEqual([...days].reverse());
+  });
+
+  test("gives every Voice Session before there is any conversation", async () => {
+    const household = await torontoHousehold();
+    const days = ["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11"];
+    await voiceSessionsOn(household, days);
+
+    const log = await household.agentLog(1);
+
+    expect(log.voice_session.map((s) => s.day)).toEqual([...days].reverse());
+  });
 });
+
+/** The family Household, moved to Toronto, with the agent answering every turn. */
+async function torontoHousehold() {
+  scriptModel(() => fauxAssistantMessage("Noted."));
+  const household = await familyHousehold();
+  await household.callTool("update_household_settings", { timezone: "America/Toronto" });
+  return household;
+}
+
+/** A typed Member turn, recorded as made at `at`. */
+async function typedTurnAt(household: HouseholdStub, at: string) {
+  await household.chat("We're out of rice.", ON_THE_WEEK);
+  // Pi stamps the turn with the real clock, which fake timers don't reach.
+  await runInDurableObject(household, (_instance, state) => {
+    state.storage.sql.exec(
+      `UPDATE pi_entries SET record = json_set(record, '$.model[0].timestamp', ?)
+       WHERE id = (SELECT max(id) FROM pi_entries WHERE json_extract(record, '$.kind') = 'mise.turn')`,
+      new Date(at).getTime(),
+    );
+  });
+}
+
+/** One ended Voice Session started on each of `days`, in order. */
+async function voiceSessionsOn(household: HouseholdStub, days: string[]) {
+  await runInDurableObject(household, (_instance, state) => {
+    for (const [index, day] of days.entries()) {
+      recordVoiceUsage(state.storage.sql, day as LocalDate, {
+        id: `session_${index}`,
+        seconds: 60,
+        confirmed: true,
+        running: false,
+      });
+    }
+  });
+}

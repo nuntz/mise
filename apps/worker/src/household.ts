@@ -1207,7 +1207,8 @@ class HouseholdAgent extends Agent<Env> {
    * reaches; never callable over the WebSocket.
    */
   async agentLog(turns: number): Promise<AgentLog> {
-    return agentLog(this.ctx.storage.sql, turns);
+    // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
+    return agentLog(this.ctx.storage.sql, turns, this.household()?.timezone ?? "UTC");
   }
 
   /**
