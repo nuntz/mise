@@ -1687,7 +1687,8 @@ function weekRange(week: WeekSpan, locale: Locale): string {
 
 /** A Conflict nobody has overridden, as the flag on its dinner: "Robin · Peanut". */
 function conflictChip(conflict: Conflict, household: Household): string {
-  return t("conflict.chip", conflictParams(conflict, household));
+  // "the Guests" is said mid-sentence; the chip starts with them.
+  return t(conflict.who === "guests" ? "conflict.chipGuests" : "conflict.chip", conflictParams(conflict, household));
 }
 
 /** A date as the Household reads it, such as "Tuesday, October 27". */

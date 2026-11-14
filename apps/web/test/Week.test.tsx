@@ -767,6 +767,33 @@ test("each Slot shows its Conflicts: blocking ones as warnings, overridden ones 
   );
 });
 
+test("a dinner with a Conflict nobody has overridden is flagged with who and the Allergen, the Guests with a capital", async () => {
+  const { client } = fakeClient({
+    get_week: (input) => {
+      if (input.date) return undefined;
+      const week = emptyWeek("2026-10-26");
+      Object.assign(week.slots[2] as Slot, {
+        kind: "recipe",
+        recipe: { id: 1, title: "Satay", baseServings: 4, photoKey: null },
+        conflicts: [{ ...robinsPeanut, override: null }],
+      });
+      Object.assign(week.slots[5] as Slot, {
+        kind: "recipe",
+        recipe: { id: 4, title: "Stew", baseServings: 4, photoKey: null },
+        guests: 1,
+        conflicts: [{ who: "guests", allergen: "milk", constraint: "allergy", cause: "contains", override: null }],
+      });
+      return { ok: true, value: week };
+    },
+  });
+  render(() => <App client={client} />);
+
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  const tuesday = screen.getByRole("region", { name: "Tuesday, October 27" });
+  expect(within(monday).getByText("Robin · Peanut").className).toBe("chip chip-warn");
+  expect(within(tuesday).getByText("The Guests · Milk").className).toBe("chip chip-warn");
+});
+
 test("a Recipe opened over the Week shows its Slot's Conflicts first, overridden ones with their reason", async () => {
   const user = userEvent.setup();
   const { client } = fakeClient({

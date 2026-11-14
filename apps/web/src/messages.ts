@@ -866,6 +866,7 @@ const en = {
   "conflict.reason": "Why it's safe for {who} ({allergen})",
   "conflict.saveAnyway": "Save anyway",
   "conflict.chip": "{who} · {allergen}",
+  "conflict.chipGuests": "The Guests · {allergen}",
   "conflict.overline": "Not safe",
   "conflict.sheetTitle": "{who} can't eat this",
   "conflict.sheetTitleMaybe": "{who} may not be able to eat this",
