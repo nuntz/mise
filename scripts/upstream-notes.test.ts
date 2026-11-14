@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { entriesFor, releasesBetween, scopesOf, shortenLinks } from "./upstream-notes";
+import { changelogBetween, entriesFor, metaOf, releasesBetween, scopesOf, shortenLinks } from "./upstream-notes";
 
 test("releasesBetween keeps the releases after `from` up to `to`, oldest first, without prereleases", () => {
   const tags = ["11.12.0", "11.12.0-alpha.1", "10.78.0", "11.11.0", "11.4.0", "11.3.0", "11.13.0"];
@@ -59,4 +59,48 @@ test("shortenLinks turns a GitHub link to an issue or pull request into its numb
     "fix (#25851)",
   );
   expect(shortenLinks("([#11679](https://github.com/earendil-works/pi/issues/11679))")).toBe("(#11679)");
+});
+
+test("metaOf reads the repository, its folder and the dependencies from npm's manifest, as an object or a list of one", () => {
+  const manifest = {
+    name: "@earendil-works/pi-schema",
+    repository: { url: "git+https://github.com/earendil-works/pi.git", type: "git", directory: "packages/schema" },
+  };
+  const read = { repo: "earendil-works/pi", directory: "packages/schema", dependencies: [] };
+  expect(metaOf(manifest)).toEqual(read);
+  expect(metaOf([manifest])).toEqual(read);
+  expect(
+    metaOf({
+      repository: "git+https://github.com/getsentry/sentry-javascript.git",
+      dependencies: { "@sentry/core": "1" },
+    }),
+  ).toEqual({ repo: "getsentry/sentry-javascript", directory: undefined, dependencies: ["@sentry/core"] });
+  expect(metaOf({ repository: "https://gitlab.com/a/b.git" }).repo).toBeUndefined();
+});
+
+const CHANGELOG = `# Changelog
+
+## [Unreleased]
+
+- Not out yet.
+
+## [1.5.2] - 2026-11-10
+
+## [1.5.1] - 2026-11-09
+
+### Fixed
+
+- Lost completion notifications.
+
+## [1.5.0] - 2026-11-02
+
+- Older.
+`;
+
+test("changelogBetween keeps the changelog's sections after `from` up to `to`, as written", () => {
+  expect(changelogBetween(CHANGELOG, "1.5.0", "v1.5.2")).toBe(
+    "## [1.5.2] - 2026-11-10\n\n## [1.5.1] - 2026-11-09\n\n### Fixed\n\n- Lost completion notifications.",
+  );
+  expect(changelogBetween("## 2.0.0\n\n- New.\n\n## 1.0.0\n\n- Old.\n", "1.0.0", "2.0.0")).toBe("## 2.0.0\n\n- New.");
+  expect(changelogBetween(CHANGELOG, "1.5.2", "1.5.2")).toBe("");
 });

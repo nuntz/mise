@@ -1,6 +1,6 @@
 # Pi Durable: the upstream examples against Mise's agent
 
-How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise moved to Pi 1.5.0 on 2026-11-06 (#153) and pins 1.5.2 as of 2026-11-14. **Pi 1.5.2** and **Pi 1.5** below say what changed, and win over the 1.4.0 citations in §1–§5.
+How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise moved to Pi 1.5.0 on 2026-11-06 (#153) and pins 1.5.2 as of 2026-11-14. **Pi 1.5.2** and **Pi 1.5** below say what changed, and win over the 1.4.0 citations in §1–§5. The agent's model is `AGENT_MODEL` in `apps/worker/src/agent.ts`: Sonnet 5.5 since 2026-11-05 (#142). §1–§5 were written when it was Haiku 5.5, so their Haiku figures are history.
 
 ## Decisions (2026-10-24)
 
