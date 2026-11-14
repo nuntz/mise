@@ -658,6 +658,8 @@ const en = {
   "plan.today": "Today · {day}",
   "plan.yours": "{title} is yours. Replace it with {recipe}?",
   "plan.replace": "Replace {title}",
+  "plan.unsafe": "{recipe} isn't safe here for {who} ({allergen})",
+  "plan.unsafeMaybe": "{recipe} may not be safe here for {who} ({allergen})",
   "plan.nextNotProposed": "Mise hasn't proposed Next Week yet. A dinner you plan here stays yours when it does.",
   "plan.onThePlan": "On the plan: {slots}.",
   "plan.slot.breakfast": "breakfast on {day}",

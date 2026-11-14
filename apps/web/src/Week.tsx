@@ -1686,7 +1686,7 @@ function weekRange(week: WeekSpan, locale: Locale): string {
 }
 
 /** A Conflict nobody has overridden, as the flag on its dinner: "Robin · Peanut". */
-function conflictChip(conflict: Conflict, household: Household): string {
+export function conflictChip(conflict: Conflict, household: Household): string {
   // "the Guests" is said mid-sentence; the chip starts with them.
   return t(conflict.who === "guests" ? "conflict.chipGuests" : "conflict.chip", conflictParams(conflict, household));
 }
@@ -1701,7 +1701,8 @@ function blocking(slot: Slot): boolean {
   return slot.conflicts.some((conflict) => conflict.override === null);
 }
 
-function conflictParams(conflict: Conflict, household: Household): Record<string, string> {
+/** Who a Conflict is about, its Allergen and the kind of Constraint, as messages name them. */
+export function conflictParams(conflict: Conflict, household: Household): Record<string, string> {
   return {
     who: whoName(conflict.who, household),
     allergen: t(`allergen.${conflict.allergen}`),

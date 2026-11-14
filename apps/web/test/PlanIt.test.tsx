@@ -115,7 +115,7 @@ type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefine
  * A client over `recipe` and the two Weeks, recording every tool call made. `set_slot` plans a Recipe as
  * the household does: the Slot becomes the Household's own, and the plan's change notice follows.
  */
-function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = {}) {
+function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = {}, home: Household = household) {
   const store = weeks();
   const calls: { name: string; input: Record<string, unknown> }[] = [];
   const fake = createFakeClient(async (name: string, input: Record<string, unknown>) => {
@@ -124,7 +124,7 @@ function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = 
     if (answer) return answer;
     switch (name) {
       case "get_household":
-        return { ok: true, value: household };
+        return { ok: true, value: home };
       case "get_caller":
         return { ok: true, value: null };
       case "get_week":
@@ -175,6 +175,15 @@ async function openSheet(user: ReturnType<typeof userEvent.setup>) {
 function row(sheet: HTMLElement, day: string) {
   return within(sheet).getByRole("button", { name: new RegExp(day) });
 }
+
+/** The Household with Robin allergic to sesame. */
+const robinAllergic: Household = {
+  ...household,
+  members: [{ ...robin, constraints: [{ kind: "allergy", allergen: "sesame" }] }, alex],
+};
+
+/** The Conflict chip in a day's row, if it has one. */
+const chip = (dayRow: HTMLElement) => dayRow.querySelector(".slot-day .chip-warn")?.textContent ?? null;
 
 const slotSets = (calls: { name: string; input: Record<string, unknown> }[]) =>
   calls.filter((call) => call.name === "set_slot").map((call) => call.input);
@@ -402,4 +411,129 @@ test("a Draft Recipe has no Plan it and no On the plan line: it is never planned
   expect(screen.getByRole("button", { name: "Cook in kitchen mode" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Plan it" })).toBeNull();
   expect(screen.queryByText(/On the plan/)).toBeNull();
+});
+
+test("a Recipe with an Allergen a Diner can't eat flags every pickable day they eat, before it's tapped", async () => {
+  const fake = fakeClient(noodles, {}, robinAllergic);
+  // Robin isn't eating Friday's dinner.
+  fake.weeks.set("2026-11-13", "dinner", { diners: [2], dinersAreDefault: false });
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  await waitFor(() => expect(chip(row(sheet, "Wed 11"))).toBe("Robin · Sesame"));
+  expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Sesame");
+  expect(chip(row(sheet, "Fri 13"))).toBeNull();
+  // After the day's other chips.
+  const chips = [...row(sheet, "Thu 12").querySelectorAll(".slot-day .chip")].map((each) => each.textContent);
+  expect(chips).toEqual(["Pencilled", "Robin · Sesame"]);
+  expect(slotSets(fake.calls)).toEqual([]);
+
+  // It follows the meal chosen.
+  await user.click(within(sheet).getByRole("button", { name: "Lunch" }));
+  await waitFor(() => expect(chip(row(sheet, "Fri 13"))).toBe("Robin · Sesame"));
+});
+
+test("a day with Guests whose Constraints the Recipe breaks is flagged for the Guests, and one without Guests isn't", async () => {
+  const fake = fakeClient();
+  const sesameFree = [{ kind: "allergy", allergen: "sesame" }] as const;
+  fake.weeks.set("2026-11-12", "dinner", { guests: 2, guestConstraints: [...sesameFree] });
+  // Their Constraints count only while there are Guests.
+  fake.weeks.set("2026-11-13", "dinner", { guests: 0, guestConstraints: [...sesameFree] });
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("The Guests · Sesame"));
+  expect(chip(row(sheet, "Fri 13"))).toBeNull();
+  expect(chip(row(sheet, "Wed 11"))).toBeNull();
+});
+
+test("a day whose dinner already has the same Conflict is still flagged: planning there drops its Override", async () => {
+  const fake = fakeClient(noodles, {}, robinAllergic);
+  fake.weeks.set("2026-11-12", "dinner", {
+    conflicts: [
+      { who: 1, allergen: "sesame", constraint: "allergy", cause: "contains", override: "Sauce on the side" },
+    ],
+  });
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Sesame"));
+});
+
+test("a Recipe with Unresolved Ingredients flags every day where someone eating has a Hard Constraint", async () => {
+  const unresolved: Recipe = { ...noodles, allergens: { kind: "unknown", atLeast: [], unresolved: 1 } };
+  const home: Household = {
+    ...household,
+    members: [
+      { ...robin, constraints: [{ kind: "intolerance", allergen: "milk" }] },
+      // A dislike is Soft: it never conflicts.
+      { ...alex, constraints: [{ kind: "dislike", allergen: "fish" }] },
+    ],
+  };
+  const fake = fakeClient(unresolved, {}, home);
+  fake.weeks.set("2026-11-13", "dinner", { diners: [2], dinersAreDefault: false });
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Milk"));
+  expect(chip(row(sheet, "Fri 13"))).toBeNull();
+  expect(
+    within(sheet).getAllByRole("button", { name: /Sesame noodles may not be safe here for Robin \(Milk\)/ }),
+  ).toContain(row(sheet, "Thu 12"));
+});
+
+test("a flagged day's name says the Recipe planned isn't safe there, not the dish it holds now", async () => {
+  const fake = fakeClient(noodles, {}, robinAllergic);
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Sesame"));
+  const named = within(sheet).getAllByRole("button", { name: /Sesame noodles isn't safe here for Robin \(Sesame\)/ });
+  expect(named).toContain(row(sheet, "Thu 12"));
+  expect(within(sheet).getByRole("button", { name: /Thu 12.*Chickpea curry/ })).toBe(row(sheet, "Thu 12"));
+  expect(within(sheet).queryAllByRole("button", { name: /Robin · Sesame/ })).toEqual([]);
+});
+
+test("tapping a flagged day still asks the household, and its refusal opens the Override sheet", async () => {
+  const fake = fakeClient(
+    noodles,
+    {
+      set_slot: () => ({
+        ok: false,
+        error: {
+          code: "constraint_conflict",
+          message: "Refused",
+          conflicts: [
+            {
+              date: "2026-11-13",
+              meal: "dinner",
+              who: 1,
+              allergen: "sesame",
+              constraint: "allergy",
+              cause: "contains",
+            },
+          ],
+        },
+      }),
+    },
+    robinAllergic,
+  );
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+  await waitFor(() => expect(chip(row(sheet, "Fri 13"))).toBe("Robin · Sesame"));
+
+  await user.click(row(sheet, "Fri 13"));
+
+  expect(await screen.findByRole("dialog", { name: "Robin can't eat this" })).toBeTruthy();
+  expect(slotSets(fake.calls)).toEqual([{ date: "2026-11-13", meal: "dinner", kind: "recipe", recipeId: 7 }]);
+});
+
+test("a cooked day, which can't be picked, isn't flagged", async () => {
+  const fake = fakeClient(noodles, {}, robinAllergic);
+  fake.weeks.set("2026-11-11", "dinner", { cookedAt: "2026-11-11T19:00:00.000Z" });
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Sesame"));
+  expect(chip(row(sheet, "Wed 11"))).toBeNull();
 });

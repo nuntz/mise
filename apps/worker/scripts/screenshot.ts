@@ -359,6 +359,13 @@ function screens(ids: Map<string, number>): Screen[] {
     },
     { name: "recipe-plan", path: `/?recipe=${recipe}`, open: planIt, overlay: true },
     {
+      name: "recipe-plan-unsafe",
+      // Its Unresolved Ingredients might hold what Alex and Sam can't eat, so every day is flagged.
+      path: `/?recipe=${ids.get("Shiso Rice Bowls")}`,
+      open: planIt,
+      overlay: true,
+    },
+    {
       name: "recipe-plan-replace",
       path: `/?recipe=${recipe}`,
       // The sample dinners are the Household's own, so the first day that can be picked asks first.
