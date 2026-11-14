@@ -4,12 +4,11 @@
 import * as cloudflare from "@pulumi/cloudflare";
 import * as pulumi from "@pulumi/pulumi";
 
-/** Must match `name` and the R2 `bucket_name` in apps/worker/wrangler.jsonc. */
+// Copies, as Pulumi's Node can't load the domain package: scripts/deploy-copies.test.ts keeps them in
+// step with apps/worker/wrangler.jsonc and packages/domain.
 const WORKER_NAME = "mise";
 const BUCKET_NAME = "mise";
-/** Must match `DAY_SHEET_PATH` in packages/domain; apps/worker/wrangler.jsonc runs the Worker first for it. */
 const DAY_SHEET_PATH = "/kitchen-display/v1/day-sheet";
-/** Must match `AGENT_LOG_PATH` in apps/worker/src/agentLog.ts, which wrangler.jsonc runs the Worker first for. */
 const AGENT_LOG_PATH = "/agent-log";
 
 const config = new pulumi.Config("mise");

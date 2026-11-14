@@ -1,4 +1,8 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type AgentLog, KEPT_EXCHANGES } from "@mise/domain";
 import { format, formatTotals, totals } from "./transcript";
 
@@ -306,4 +310,58 @@ test("--totals counts a model call cut short as failed, as one that errored", ()
     ].map((entry, id) => ({ id, record: JSON.stringify(entry) })),
   };
   expect(totals(log, WINDOW, TORONTO).models.all).toMatchObject({ calls: 1, failed: 1 });
+});
+
+test("--totals reads a local Household database, by the Household's days, and prints none of its text", async () => {
+  const file = join(mkdtempSync(join(tmpdir(), "transcript-")), "household.sqlite");
+  const db = new Database(file);
+  db.run("CREATE TABLE household (id INTEGER PRIMARY KEY, timezone TEXT NOT NULL)");
+  db.run("INSERT INTO household VALUES (1, ?)", [TORONTO]);
+  db.run("CREATE TABLE pi_entries (id INTEGER PRIMARY KEY, record TEXT NOT NULL)");
+  for (const row of fixture.pi_entries) db.run("INSERT INTO pi_entries VALUES (?, ?)", [row.id, row.record]);
+  db.run("CREATE TABLE pending_confirmation (id INTEGER PRIMARY KEY, tool, summary, status, created_at)");
+  for (const c of fixture.pending_confirmation) {
+    db.run("INSERT INTO pending_confirmation VALUES (?, ?, ?, ?, ?)", [
+      c.id,
+      c.tool,
+      c.summary,
+      c.status,
+      c.created_at,
+    ]);
+  }
+  // A store from before Voice Sessions were marked running.
+  db.run("CREATE TABLE voice_session (id TEXT, day TEXT, seconds INTEGER, confirmed INTEGER)");
+  for (const s of [...fixture.voice_session].reverse()) {
+    db.run("INSERT INTO voice_session VALUES (?, ?, ?, ?)", [s.id, s.day, s.seconds, s.confirmed]);
+  }
+  db.run("CREATE TABLE voice_exchange (id INTEGER PRIMARY KEY, session_id, at, heard, said, delegated, turn)");
+  for (const e of fixture.voice_exchange) {
+    db.run("INSERT INTO voice_exchange VALUES (?, ?, ?, ?, ?, ?, ?)", [
+      e.id,
+      e.session_id,
+      e.at,
+      e.heard,
+      e.said,
+      e.delegated,
+      e.turn,
+    ]);
+  }
+  db.close();
+
+  const run = Bun.spawn(
+    ["bun", "scripts/transcript.ts", "--totals", "--db", file, "--since", "2026-11-10", "--until", "2026-11-12"],
+    { cwd: join(import.meta.dir, ".."), stdout: "pipe", stderr: "pipe" },
+  );
+  const [out, err, exit] = await Promise.all([
+    new Response(run.stdout).text(),
+    new Response(run.stderr).text(),
+    run.exited,
+  ]);
+
+  expect({ exit, err }).toEqual({ exit: 0, err: "" });
+  const lines = out.split("\n");
+  expect(lines).toContain("Totals from 2026-11-10 05:00Z until 2026-11-12 05:00Z, by day in America/Toronto");
+  expect(lines).toContain("Member turns: 3 (2 spoken, 1 typed)");
+  expect(lines).toContain("Voice Sessions: 3, 180s");
+  expect(printedMarker(lines)).toBeUndefined();
 });

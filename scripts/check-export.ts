@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
 
-/** Must match the R2 `bucket_name` in apps/worker/wrangler.jsonc. */
+/** The R2 `bucket_name` in apps/worker/wrangler.jsonc, as scripts/deploy-copies.test.ts checks. */
 const BUCKET = "mise";
 /** Exports are named by the Household's local date (`exportKey`), which can be a day either side of UTC. */
 const DAYS_BACK = 2;

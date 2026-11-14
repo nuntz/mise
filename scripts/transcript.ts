@@ -48,59 +48,6 @@ const SPOKEN = "(Spoken aloud and transcribed, so it may contain mistakes.) ";
 /** How far back `--totals` looks when not given `--since`. */
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-if (import.meta.main) {
-  const { values } = parseArgs({
-    options: {
-      turns: { type: "string" },
-      costs: { type: "boolean", default: false },
-      results: { type: "boolean", default: false },
-      totals: { type: "boolean", default: false },
-      since: { type: "string" },
-      until: { type: "string" },
-      db: { type: "string" },
-      deployed: { type: "boolean", default: false },
-    },
-  });
-  if (values.deployed && values.db) refuse("Pick one of --db and --deployed.");
-
-  if (values.totals) {
-    if (values.turns !== undefined || values.costs || values.results) {
-      refuse("--totals prints aggregates only: it takes no --turns, --costs or --results.");
-    }
-    const sinceEdge = values.since === undefined ? undefined : edgeAsked("--since", values.since);
-    const untilEdge = values.until === undefined ? { at: new Date() } : edgeAsked("--until", values.until);
-    const windowIn = (timezone: string) => {
-      const until = edgeIn(untilEdge, timezone);
-      return { since: sinceEdge ? edgeIn(sinceEdge, timezone) : new Date(until.getTime() - WEEK_MS), until };
-    };
-    // Until the Household's timezone is known, the earliest the window can start: a date begins
-    // earliest where the clock is furthest ahead of UTC.
-    const earliest = windowIn("Etc/GMT-14").since;
-
-    const { source, log, timezone } = values.deployed
-      ? await deployedLog(`since=${encodeURIComponent(earliest.toISOString())}`)
-      : localLog(values.db ?? localDatabase());
-    if (!timezone) {
-      refuse("The agent log didn't say the Household's timezone: is the deploy that added --totals done?");
-    }
-    const window = windowIn(timezone);
-    if (window.since >= window.until) refuse("--since must be before --until.");
-    console.log(source);
-    for (const line of formatTotals(totals(log, window, timezone))) console.log(line);
-  } else {
-    if (values.since !== undefined || values.until !== undefined) refuse("--since and --until go with --totals.");
-    const turnCount = Number(values.turns ?? "10");
-    if (!Number.isInteger(turnCount) || turnCount <= 0) refuse("--turns takes a positive whole number.");
-
-    const { source, log } = values.deployed
-      ? await deployedLog(`turns=${turnCount}`)
-      : localLog(values.db ?? localDatabase());
-    console.log(source);
-    for (const line of format(log, { turns: turnCount, costs: values.costs, results: values.results }))
-      console.log(line);
-  }
-}
-
 /** Says why the command can't run as asked, and stops. */
 function refuse(why: string): never {
   console.error(why);
@@ -653,4 +600,57 @@ function time(ms: number | undefined): string {
 
 function k(tokens: number): string {
   return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
+}
+
+if (import.meta.main) {
+  const { values } = parseArgs({
+    options: {
+      turns: { type: "string" },
+      costs: { type: "boolean", default: false },
+      results: { type: "boolean", default: false },
+      totals: { type: "boolean", default: false },
+      since: { type: "string" },
+      until: { type: "string" },
+      db: { type: "string" },
+      deployed: { type: "boolean", default: false },
+    },
+  });
+  if (values.deployed && values.db) refuse("Pick one of --db and --deployed.");
+
+  if (values.totals) {
+    if (values.turns !== undefined || values.costs || values.results) {
+      refuse("--totals prints aggregates only: it takes no --turns, --costs or --results.");
+    }
+    const sinceEdge = values.since === undefined ? undefined : edgeAsked("--since", values.since);
+    const untilEdge = values.until === undefined ? { at: new Date() } : edgeAsked("--until", values.until);
+    const windowIn = (timezone: string) => {
+      const until = edgeIn(untilEdge, timezone);
+      return { since: sinceEdge ? edgeIn(sinceEdge, timezone) : new Date(until.getTime() - WEEK_MS), until };
+    };
+    // Until the Household's timezone is known, the earliest the window can start: a date begins
+    // earliest where the clock is furthest ahead of UTC.
+    const earliest = windowIn("Etc/GMT-14").since;
+
+    const { source, log, timezone } = values.deployed
+      ? await deployedLog(`since=${encodeURIComponent(earliest.toISOString())}`)
+      : localLog(values.db ?? localDatabase());
+    if (!timezone) {
+      refuse("The agent log didn't say the Household's timezone: is the deploy that added --totals done?");
+    }
+    const window = windowIn(timezone);
+    if (window.since >= window.until) refuse("--since must be before --until.");
+    console.log(source);
+    for (const line of formatTotals(totals(log, window, timezone))) console.log(line);
+  } else {
+    if (values.since !== undefined || values.until !== undefined) refuse("--since and --until go with --totals.");
+    const turnCount = Number(values.turns ?? "10");
+    if (!Number.isInteger(turnCount) || turnCount <= 0) refuse("--turns takes a positive whole number.");
+
+    const { source, log } = values.deployed
+      ? await deployedLog(`turns=${turnCount}`)
+      : localLog(values.db ?? localDatabase());
+    console.log(source);
+    for (const line of format(log, { turns: turnCount, costs: values.costs, results: values.results }))
+      console.log(line);
+  }
 }
