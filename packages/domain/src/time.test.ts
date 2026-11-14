@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localDate, nextOccurrence, offsetTransitions, zonedTimestamp } from "./time";
+import { localDate, nextOccurrence, offsetTransitions, startOfLocalDate, zonedTimestamp } from "./time";
 
 describe("nextOccurrence", () => {
   test("a time already past today is tomorrow", () => {
@@ -99,5 +99,13 @@ describe("zonedTimestamp", () => {
 
   test("an offset with minutes", () => {
     expect(zonedTimestamp(new Date("2026-10-26T00:00:00Z"), "Asia/Kolkata")).toBe("2026-10-26T05:30:00+05:30");
+  });
+});
+
+describe("startOfLocalDate", () => {
+  test("is the instant the date begins on the wall clock in the timezone", () => {
+    expect(startOfLocalDate("2026-11-10", "America/Toronto").toISOString()).toBe("2026-11-10T05:00:00.000Z");
+    expect(startOfLocalDate("2026-07-10", "America/Toronto").toISOString()).toBe("2026-07-10T04:00:00.000Z");
+    expect(startOfLocalDate("2026-11-10", "Asia/Tokyo").toISOString()).toBe("2026-11-09T15:00:00.000Z");
   });
 });

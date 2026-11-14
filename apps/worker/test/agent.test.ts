@@ -103,7 +103,7 @@ describe("the agent", () => {
     await household.chat("What's for dinner Thursday?", ON_THE_WEEK);
     await household.chat("And Thursday again?", ON_THE_WEEK);
 
-    const kinds = (await household.agentLog(2)).pi_entries.map(
+    const kinds = (await household.agentLog({ turns: 2 })).pi_entries.map(
       (entry) => (JSON.parse(entry.record) as { kind: string }).kind,
     );
     expect(kinds.filter((kind) => kind.startsWith("mise."))).toEqual(["mise.turn", "mise.turn"]);

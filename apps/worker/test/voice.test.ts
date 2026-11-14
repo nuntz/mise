@@ -2,10 +2,10 @@ import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { type FauxResponseFactory, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { JsonObject } from "@earendil-works/pi-durable";
-import type { ChatWhere, LocalDate, VoiceStartReply } from "@mise/domain";
+import { type AgentLog, type ChatWhere, KEPT_EXCHANGES, type LocalDate, type VoiceStartReply } from "@mise/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useAgentModels } from "../src/agent";
-import { KEPT_EXCHANGES } from "../src/agentLog";
+import { recordExchange } from "../src/agentLog";
 import { openAiLive, useLive } from "../src/live";
 import { FAILURE_LINE, VOICE_TIME_WARNING, type VoiceExchange, VoiceSession } from "../src/voice";
 import { recordVoiceUsage } from "../src/voiceUsage";
@@ -1247,7 +1247,7 @@ afterEach(() => useLive(undefined));
 
 /** The Voice Sessions' exchanges as the agent log gives them, oldest first. */
 async function exchanges(household: HouseholdStub) {
-  return (await household.agentLog(10)).voice_exchange;
+  return (await household.agentLog({ turns: 10 })).voice_exchange;
 }
 
 describe("what GPT-Live heard and said", () => {
@@ -1284,7 +1284,7 @@ describe("what GPT-Live heard and said", () => {
     await robin.rpc("endVoice", []);
 
     await vi.waitFor(async () => expect(await exchanges(household)).toHaveLength(2));
-    const turn = (await household.agentLog(10)).pi_entries
+    const turn = (await household.agentLog({ turns: 10 })).pi_entries
       .map((entry) => JSON.parse(entry.record) as { kind: string; data?: { turn: number } })
       .find((entry) => entry.kind === "mise.turn")?.data?.turn;
     expect(turn).toEqual(expect.any(Number));
@@ -1378,9 +1378,9 @@ describe("the agent log", () => {
     session.serverSends({ type: "session.input_transcript.delta", delta: "Thanks." });
     session.serverSends({ type: "session.output_transcript.delta", delta: "Anytime." });
     await robin.rpc("endVoice", []);
-    await vi.waitFor(async () => expect((await household.agentLog(10)).voice_exchange).toHaveLength(4));
+    await vi.waitFor(async () => expect((await household.agentLog({ turns: 10 })).voice_exchange).toHaveLength(4));
 
-    const log = await household.agentLog(1);
+    const log = await household.agentLog({ turns: 1 });
 
     const turns = log.pi_entries
       .map((entry) => JSON.parse(entry.record) as { kind: string; data?: { text: string } })
@@ -1407,7 +1407,7 @@ describe("the agent log", () => {
       "2026-11-12",
     ]);
 
-    const log = await household.agentLog(2);
+    const log = await household.agentLog({ turns: 2 });
 
     expect(log.voice_session.map((s) => s.day)).toEqual(["2026-11-12", "2026-11-11", "2026-11-11"]);
   });
@@ -1419,7 +1419,7 @@ describe("the agent log", () => {
     await voiceSessionsOn(household, ["2026-11-10", "2026-11-11", "2026-11-12"]);
     await typedTurnAt(household, "2026-11-12T09:00:00-05:00");
 
-    const log = await household.agentLog(2);
+    const log = await household.agentLog({ turns: 2 });
 
     expect(log.voice_session.map((s) => s.day)).toEqual(["2026-11-12", "2026-11-11"]);
   });
@@ -1430,9 +1430,39 @@ describe("the agent log", () => {
     const days = ["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11"];
     await voiceSessionsOn(household, days);
 
-    const log = await household.agentLog(10);
+    const log = await household.agentLog({ turns: 10 });
 
     expect(log.voice_session.map((s) => s.day)).toEqual([...days].reverse());
+  });
+
+  test("gives the turns from the time asked for on, and the rows since", async () => {
+    const household = await torontoHousehold();
+    await typedTurnAt(household, "2026-11-09T12:00:00-05:00");
+    await typedTurnAt(household, "2026-11-11T09:00:00-05:00");
+    await typedTurnAt(household, "2026-11-12T09:00:00-05:00");
+    await voiceSessionsOn(household, ["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"]);
+    await exchangesAt(household, ["2026-11-09T12:00:00-05:00", "2026-11-11T08:00:00-05:00"]);
+    await confirmationsAt(household, ["2026-11-09T12:00:00-05:00", "2026-11-12T09:00:00-05:00"]);
+
+    const log = await household.agentLog({ since: new Date("2026-11-11T00:00:00-05:00") });
+
+    expect(turnTimes(log)).toEqual([Date.parse("2026-11-11T09:00:00-05:00"), Date.parse("2026-11-12T09:00:00-05:00")]);
+    expect(log.voice_session.map((s) => s.day)).toEqual(["2026-11-12", "2026-11-11"]);
+    expect(log.voice_exchange.map((e) => Date.parse(e.at))).toEqual([Date.parse("2026-11-11T08:00:00-05:00")]);
+    expect(log.pending_confirmation.map((c) => Date.parse(c.created_at))).toEqual([
+      Date.parse("2026-11-12T09:00:00-05:00"),
+    ]);
+  });
+
+  test("gives no turns when none were made since the time asked for, but the rows since", async () => {
+    const household = await torontoHousehold();
+    await typedTurnAt(household, "2026-11-09T12:00:00-05:00");
+    await exchangesAt(household, ["2026-11-09T12:00:00-05:00", "2026-11-12T08:00:00-05:00"]);
+
+    const log = await household.agentLog({ since: new Date("2026-11-11T00:00:00-05:00") });
+
+    expect(log.pi_entries).toEqual([]);
+    expect(log.voice_exchange.map((e) => Date.parse(e.at))).toEqual([Date.parse("2026-11-12T08:00:00-05:00")]);
   });
 
   test("gives every Voice Session before there is any conversation", async () => {
@@ -1440,7 +1470,7 @@ describe("the agent log", () => {
     const days = ["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11"];
     await voiceSessionsOn(household, days);
 
-    const log = await household.agentLog(1);
+    const log = await household.agentLog({ turns: 1 });
 
     expect(log.voice_session.map((s) => s.day)).toEqual([...days].reverse());
   });
@@ -1464,6 +1494,43 @@ async function typedTurnAt(household: HouseholdStub, at: string) {
        WHERE id = (SELECT max(id) FROM pi_entries WHERE json_extract(record, '$.kind') = 'mise.turn')`,
       new Date(at).getTime(),
     );
+  });
+}
+
+/** When each of the log's Member turns was made, oldest first. */
+function turnTimes(log: AgentLog): number[] {
+  return log.pi_entries
+    .map((entry) => JSON.parse(entry.record) as { kind: string; model: { timestamp: number }[] })
+    .filter((entry) => entry.kind === "mise.turn")
+    .map((entry) => entry.model[0]?.timestamp ?? 0);
+}
+
+/** An exchange GPT-Live answered by itself at each of `times`, in order. */
+async function exchangesAt(household: HouseholdStub, times: string[]) {
+  await runInDurableObject(household, (_instance, state) => {
+    for (const at of times) {
+      recordExchange(state.storage.sql, {
+        session: "session_0",
+        at: new Date(at).toISOString(),
+        heard: "Thanks.",
+        said: "You're welcome.",
+        delegated: false,
+        turn: null,
+      });
+    }
+  });
+}
+
+/** A Pending Confirmation held at each of `times`, in order. */
+async function confirmationsAt(household: HouseholdStub, times: string[]) {
+  await runInDurableObject(household, (_instance, state) => {
+    for (const at of times) {
+      state.storage.sql.exec(
+        `INSERT INTO pending_confirmation (tool, input, summary, state, status, created_at)
+         VALUES ('delete_recipe', '{}', 'Delete a recipe', '{}', 'pending', ?)`,
+        new Date(at).toISOString(),
+      );
+    }
   });
 }
 

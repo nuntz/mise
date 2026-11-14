@@ -6,6 +6,7 @@
       "name": "mise",
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
+        "@mise/domain": "workspace:*",
         "@types/bun": "1.4.4",
         "typescript": "5.9.3",
       },

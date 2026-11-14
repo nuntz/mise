@@ -1,4 +1,5 @@
 import { env, exports } from "cloudflare:workers";
+import { AGENT_LOG_TIMEZONE_HEADER } from "@mise/domain";
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from "jose";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
@@ -191,6 +192,26 @@ describe("the agent log", () => {
   test("refuses a number of turns that isn't a positive whole number", async () => {
     for (const turns of ["0", "-1", "2.5", "many"]) {
       expect((await agentLog(await serviceTokenJwt(), `?turns=${turns}`)).status).toBe(400);
+    }
+  });
+
+  test("answers a time to give the conversation since", async () => {
+    const response = await agentLog(await serviceTokenJwt(), "?since=2026-11-06T08:00:00.000Z");
+
+    expect(response.status).toBe(200);
+    // The log's days are the Household's, which `--totals` counts by.
+    expect(response.headers.get(AGENT_LOG_TIMEZONE_HEADER)).toBe("UTC");
+    expect(Object.keys(await response.json()).sort()).toEqual([
+      "pending_confirmation",
+      "pi_entries",
+      "voice_exchange",
+      "voice_session",
+    ]);
+  });
+
+  test("refuses a time that isn't an ISO 8601 one, and both a time and a number of turns", async () => {
+    for (const query of ["?since=yesterday", "?since=2026-13-40", "?since=", "?since=2026-11-06&turns=3"]) {
+      expect((await agentLog(await serviceTokenJwt(), query)).status).toBe(400);
     }
   });
 });

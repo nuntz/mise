@@ -1,6 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { type ConversationId, createRegistry, Harness } from "@earendil-works/pi-durable";
 import {
+  type AgentLog,
   addDays,
   BACKUP_PREFIX,
   backupsToPrune,
@@ -95,7 +96,7 @@ import {
   type TurnData,
   turnBeingAnswered,
 } from "./agent";
-import { type AgentLog, agentLog, recordExchange } from "./agentLog";
+import { type AgentLogAsked, agentLog, recordExchange } from "./agentLog";
 import { exportHousehold, type RestoreError, restoreHousehold } from "./backup";
 import { readCalendarFeed, readPrepAhead } from "./calendar";
 import {
@@ -1202,13 +1203,21 @@ class HouseholdAgent extends Agent<Env> {
   }
 
   /**
-   * The conversation from the latest `turns` Member turns on, for `bun run transcript --deployed`.
+   * The conversation from the latest turns asked for on, or since the time asked for, for
+   * `bun run transcript --deployed`.
    * Called by the Worker over RPC for `AGENT_LOG_PATH`, which only the agent log's service token
    * reaches; never callable over the WebSocket.
    */
-  async agentLog(turns: number): Promise<AgentLog> {
-    // Before the Household is set up there is no timezone yet: UTC's day is the nearest guess.
-    return agentLog(this.ctx.storage.sql, turns, this.household()?.timezone ?? "UTC");
+  async agentLog(asked: AgentLogAsked): Promise<AgentLog> {
+    return agentLog(this.ctx.storage.sql, asked, await this.agentLogTimezone());
+  }
+
+  /**
+   * The timezone whose days the agent log's Voice Sessions are, for `bun run transcript --totals
+   * --deployed` to count by: the Household's, or before it is set up UTC's, the nearest guess.
+   */
+  async agentLogTimezone(): Promise<string> {
+    return this.household()?.timezone ?? "UTC";
   }
 
   /**

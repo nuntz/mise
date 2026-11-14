@@ -8,6 +8,12 @@ export function nextOccurrence(now: Date, localTime: string, timezone: string): 
   }
 }
 
+/** The instant `date` (YYYY-MM-DD) begins on the wall clock in `timezone`. */
+export function startOfLocalDate(date: string, timezone: string): Date {
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  return zonedInstant(Date.UTC(year, month - 1, day), timezone);
+}
+
 /** The calendar date, YYYY-MM-DD, that the wall clock in `timezone` shows at `instant`. */
 export function localDate(instant: Date, timezone: string): string {
   const { year, month, day } = wallClock(instant, timezone);
