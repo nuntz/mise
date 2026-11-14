@@ -45,6 +45,14 @@ edited" state closed on completion closes whatever is open by then and throws aw
 a one-off target kept after its opening sends a later visit to a stale place (#77). Each change looks
 right alone; check what else can be current when the promise or the history entry resolves.
 
+## A partial refresh owes what the last one missed
+
+A full reload heals whatever went wrong before it; a refresh that fetches only what a notice
+named does not. Once a load can skip work, what a failed, overtaken or skipped load was asked
+for carries into the next one, as `keepFresh`'s owed request and `keepPlannedRecipes`'s
+`behind` set do (#165). A filter that decides from state another module saves also accounts
+for that module's loads still in flight.
+
 ## Writes that stand or fall together are one tool call
 
 A tool call runs in one transaction, the only all-or-nothing unit there is. When one write means
