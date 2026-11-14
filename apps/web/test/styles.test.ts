@@ -160,6 +160,18 @@ function colours(selector: string): Record<string, string> {
 const daylight = colours(":root");
 const themes = { daylight, kitchen: { ...daylight, ...colours('[data-theme="kitchen"]') } };
 
+test("the app icon and the manifest's colours are daylight tokens, so the home screen matches the app", () => {
+  const publicDir = join(import.meta.dirname, "../public");
+  const tokenValues = new Set(Object.values(daylight).map((hex) => hex.toLowerCase()));
+  const offPalette = ["icons/icon.svg", "manifest.webmanifest"].flatMap((file) =>
+    [...readFileSync(join(publicDir, file), "utf8").matchAll(/#[0-9a-fA-F]{6}\b/g)]
+      .map(([hex]) => hex.toLowerCase())
+      .filter((hex) => !tokenValues.has(hex))
+      .map((hex) => `${file}: ${hex}`),
+  );
+  expect(offPalette).toEqual([]);
+});
+
 type Rgb = [number, number, number];
 
 /** A hex colour token as sRGB channels 0–255 and its alpha 0–1; fails the test if the token isn't a hex. */
