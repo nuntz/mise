@@ -9,7 +9,8 @@
  *     (a WebSocket connection counts as one request, open as long as the connection)
  *   - spans that failed without raising an issue (a failed request the Worker answered itself)
  *   - the busiest minutes for tool calls (5-minute periods past 7 days), where a refetch storm shows
- *     before it resets anything
+ *     before it resets anything, and for the stretch around the busiest one, its tools by who called
+ *     them and how much of it the heaviest traces (one per WebSocket connection) carried
  *
  * Exits 0 when there is nothing to look at, 1 when there is, 2 when it can't ask Sentry.
  *
@@ -145,6 +146,46 @@ const busy = counted.filter((minute) => minute.count > 0);
 console.log(`\nBusiest ${buckets} for tool calls (${total} calls, in ${busy.length} ${buckets})`);
 for (const minute of busy.sort((a, b) => b.count - a.count).slice(0, BUSIEST)) {
   console.log(`  ${time(minute.at)}  ${minute.count}`);
+}
+const top = busy[0];
+if (top) {
+  // The busiest minute's stretch: the busy minutes around it with no gap over `INCIDENT_GAP_MS`.
+  const stretch = incidents(busy.map((minute) => minute.at)).find(
+    (group) => group.first <= top.at && top.at <= group.last,
+  );
+  if (stretch) {
+    const to = stretch.last + bucketMinutes * 60_000;
+    const [traces] = await spans(
+      "span.op:mise.tool",
+      stretch.first,
+      to,
+      ["count_unique(trace)"],
+      "-count_unique(trace)",
+      1,
+    );
+    const tools = await spans(
+      "span.op:mise.tool",
+      stretch.first,
+      to,
+      ["span.description", "mise.called_by", "count()"],
+      "-count()",
+      8,
+    );
+    const heaviest = await spans("span.op:mise.tool", stretch.first, to, ["trace", "count()"], "-count()", 3);
+    const calls = tools.reduce((sum, row) => sum + Number(row["count()"]), 0);
+    console.log(
+      `\n  busiest stretch ${time(stretch.first)} to ${clock(to).slice(0, 5)}Z, over ${traces?.["count_unique(trace)"] ?? 0} traces:`,
+    );
+    // Who called (`agent`, or `client`: a screen or RPC from inside the deployment) tells a screen's
+    // refetch storm from an agent's loop; a write among the reads is what set it off.
+    console.log(
+      `    ${tools.map((row) => `${row["count()"]} ${toolName(row)} by ${row["mise.called_by"]}`).join(", ")}`,
+    );
+    if (calls > 0) {
+      const share = heaviest.map((row) => `${Math.round((Number(row["count()"]) / calls) * 100)}%`).join(", ");
+      console.log(`    heaviest traces carried ${share} of those calls`);
+    }
+  }
 }
 
 console.log(
