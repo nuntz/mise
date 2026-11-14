@@ -8,7 +8,7 @@ Family meal planner. See `SPEC.md` for the product and architecture spec.
 - **Screens**: `bun run screenshot --screens --only <words> [--variants daylight,kitchen,pseudo]` saves each matching screen of the real app, seeded, as a phone shows it to `dist/screens/`: read the PNGs to see a UI change or where something sits. `--check` lists the screens older than the web source.
 - **Deploy**: after a push, `bun run deployed` waits for that commit's CI run and exits 0 once its `deploy` job succeeds, then prints what each `pulumi up` changed.
 - **Upgrades**: `bun run upstream-notes <package> <from> <to>` prints the package's changelog and release notes in between; the commit message accounts for each entry (`CODING_STANDARDS.md` → "An upgrade accounts for what upstream changed").
-- **Production**: `bun run sentry [--days N]` is the weekly Sentry sweep: unresolved issues grouped into incidents with the tool calls and slow requests around each, failed spans, and the busiest minutes for tool calls. Exits 1 when there is something to look at; file what needs code as a GitHub issue, then `/triage`.
+- **Production**: the weekly Prod Review of production is the `/prod-review mise` skill; it inspects only.
 - **Agent turns**: `bun run transcript` prints the local Household's recent turns, tool calls (ok/error), held confirmations and what GPT-Live heard and said, including what it answered without handing on; `--costs` adds tokens and cost. `--deployed` reads the deployed Household instead. When a voice or agent hand test fails, run `bun run transcript --deployed` before asking the person anything. Its output is the Household's conversation: keep it out of commits, issues and Sentry.
 
 ## Agent skills
