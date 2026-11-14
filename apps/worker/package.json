@@ -12,10 +12,10 @@
     "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p scripts"
   },
   "dependencies": {
-    "@earendil-works/chord": "1.5.0",
-    "@earendil-works/pi-ai": "1.5.0",
-    "@earendil-works/pi-durable": "1.5.0",
-    "@earendil-works/pi-schema": "1.5.0",
+    "@earendil-works/chord": "1.5.2",
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-durable": "1.5.2",
+    "@earendil-works/pi-schema": "1.5.2",
     "@mise/domain": "workspace:*",
     "@sentry/cloudflare": "11.12.0",
     "agents": "0.33.0",

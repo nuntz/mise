@@ -1,6 +1,6 @@
 # Pi Durable: the upstream examples against Mise's agent
 
-How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise has run Pi 1.5.0 since 2026-11-06 (#153): **Pi 1.5** below says what changed, and wins over the 1.4.0 citations in §1–§5.
+How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise moved to Pi 1.5.0 on 2026-11-06 (#153) and pins 1.5.2 as of 2026-11-14. **Pi 1.5.2** and **Pi 1.5** below say what changed, and win over the 1.4.0 citations in §1–§5.
 
 ## Decisions (2026-10-24)
 
@@ -12,6 +12,16 @@ How the official `@earendil-works/pi-durable` examples set up and use the Harnes
 - **Kept on purpose:** `afterFailedRun: "withdraw"`, for every speaker's queued turn.
 - **Not now:** splitting the preamble, an `operationId` per turn, `progress` intervals, a stream timeout, a `beforeCompact` prompt, reading `usage()`.
 - **Open questions settled since:** with `thinkingLevel: "off"`, Haiku 5.5 is sent `thinking: { type: "disabled" }`. Compaction spans carry no content, and their error text is already replaced by `internal_error`.
+
+## Pi 1.5.2 (2026-11-14)
+
+The four direct Pi dependencies (`pi-durable`, `pi-ai`, `pi-schema`, `chord`) and the transitive `pi-codemode` and `pi-telemetry` move together from 1.5.0 to 1.5.2. `agents` stays at 0.33.0: its `~1.5.0` peers accept this patch. Sources: the [1.5.1](https://github.com/earendil-works/pi/releases/tag/v1.5.1) and [1.5.2](https://github.com/earendil-works/pi/releases/tag/v1.5.2) releases and each package's `CHANGELOG.md` at `v1.5.2`.
+
+- **Chord compatibility:** 1.5.1 moves v2 to the root and removes v1. Mise's `agent.ts`, `household.ts` and `agent.test.ts` already import only `/context`; none uses the removed root API or Chord's host, plugin, worker or UI systems.
+- **Durable storage and scheduling:** `household.ts`'s `PiHarness` uses the optimized SQLite group commits and the fix for lost task-completion notifications. `agentLog.ts` still reads `pi_entries`; no application storage migration is introduced. The existing Worker tests exercise turns, tool calls, compaction, failures and stored history.
+- **Compaction and submissions:** the new per-conversation compaction override and `Tx.submission()` are unused. `agentCompaction()` remains the harness policy. Mise uses neither JSONL storage nor deferred-tool search or code mode.
+- **Anthropic threads:** Durable supplies a persisted provider session ID to generation. With `anthropicModels()` this enables pi-ai's new message threads; changed earlier context falls back to a full request. Compaction explicitly sends `cacheRetention: "none"`, so it does not use threads. Standalone `llm.ts` requests supply no session ID. Mise enables no cache warmer and keeps its explicit models: Sonnet 5.5 for both the agent (`AGENT_MODEL`) and `llm.ts` (`LLM_MODEL`). Tests use faux models, so they do not verify the live Anthropic thread protocol.
+- **Provider and schema fixes:** dropped-stream retry and connection-error reporting affect the existing model calls; `piReports` and `sentryTelemetry` still scrub failures. Anthropic now preserves root `$defs`/`definitions`; `asOneObject()` is still needed for root unions. The schema validator fixes apply beneath Pi's tool validation, while Mise continues validating arguments with Zod. Mise uses API-key auth, not Anthropic OAuth, and registers no OpenAI-compatible, Azure, Bedrock or OpenCode provider.
 
 ## Pi 1.5 (2026-11-06)
 
