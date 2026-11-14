@@ -7,7 +7,8 @@
  *   bun run transcript [--turns N] [--costs] [--results] [--db <file.sqlite> | --deployed]
  *
  *   --turns N    how many of the latest Member turns to show (default 10)
- *   --costs      each turn's model calls, tokens and cost
+ *   --costs      each turn's model calls, tokens and cost, and what pi-ai noted on them (a thread
+ *                fallback, dropped thinking): a thread that worked leaves no note
  *   --results    each tool call's result, not only failed ones
  *   --db         a Household database other than the local one `wrangler dev` stored
  *   --deployed   the deployed Household's, read from its agent log with the service token that
@@ -30,7 +31,7 @@ const AGENT_LOG_PATH = "/agent-log";
 const SPOKEN = "(Spoken aloud and transcribed, so it may contain mistakes.) ";
 
 /** The agent log's rows, as the deployed route answers them and as read from a local store. */
-type AgentLog = {
+export type AgentLog = {
   pi_entries: { id: number; record: string }[];
   pending_confirmation: { id: number; tool: string; summary: string; status: string; created_at: string }[];
   voice_session: { id: string; day: string; seconds: number; confirmed: number; running?: number }[];
@@ -45,28 +46,30 @@ type AgentLog = {
   }[];
 };
 
-const { values } = parseArgs({
-  options: {
-    turns: { type: "string", default: "10" },
-    costs: { type: "boolean", default: false },
-    results: { type: "boolean", default: false },
-    db: { type: "string" },
-    deployed: { type: "boolean", default: false },
-  },
-});
-const turnCount = Number(values.turns);
-if (!Number.isInteger(turnCount) || turnCount <= 0) {
-  console.error("--turns takes a positive whole number.");
-  process.exit(2);
-}
-if (values.deployed && values.db) {
-  console.error("Pick one of --db and --deployed.");
-  process.exit(2);
-}
+if (import.meta.main) {
+  const { values } = parseArgs({
+    options: {
+      turns: { type: "string", default: "10" },
+      costs: { type: "boolean", default: false },
+      results: { type: "boolean", default: false },
+      db: { type: "string" },
+      deployed: { type: "boolean", default: false },
+    },
+  });
+  const turnCount = Number(values.turns);
+  if (!Number.isInteger(turnCount) || turnCount <= 0) {
+    console.error("--turns takes a positive whole number.");
+    process.exit(2);
+  }
+  if (values.deployed && values.db) {
+    console.error("Pick one of --db and --deployed.");
+    process.exit(2);
+  }
 
-const { source, log } = values.deployed ? await deployedLog(turnCount) : localLog(values.db ?? localDatabase());
-console.log(source);
-for (const line of format(log, { turns: turnCount, costs: values.costs, results: values.results })) console.log(line);
+  const { source, log } = values.deployed ? await deployedLog(turnCount) : localLog(values.db ?? localDatabase());
+  console.log(source);
+  for (const line of format(log, { turns: turnCount, costs: values.costs, results: values.results })) console.log(line);
+}
 
 /** The deployed Household's log, from its agent log route. */
 async function deployedLog(turns: number): Promise<{ source: string; log: AgentLog }> {
@@ -142,6 +145,8 @@ type Message = {
   toolName?: string;
   isError?: boolean;
   usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } };
+  /** What pi-ai noted while making the call, such as `anthropic_thread_fallback` with its reason. */
+  diagnostics?: { type: string; details?: { reason?: unknown } }[];
 };
 type Entry = { id: number; kind: string; model: Message[]; data?: { turn?: number; text?: string } };
 
@@ -149,7 +154,7 @@ type Entry = { id: number; kind: string; model: Message[]; data?: { turn?: numbe
  * The lines that show `log`'s latest `turns` Member turns, with what happened in and between them,
  * and its latest Voice Sessions.
  */
-function format(log: AgentLog, options: { turns: number; costs: boolean; results: boolean }): string[] {
+export function format(log: AgentLog, options: { turns: number; costs: boolean; results: boolean }): string[] {
   const entries = log.pi_entries.map((row) => JSON.parse(row.record) as Entry);
 
   // Results are printed with the call that asked for them.
@@ -163,14 +168,21 @@ function format(log: AgentLog, options: { turns: number; costs: boolean; results
   type Turn = { kind: "turn" | "exchange"; at: number; turn?: number; lines: string[] };
   const turns: Turn[] = [];
   let calls = { count: 0, input: 0, cached: 0, output: 0, cost: 0, model: "" };
+  // Each note pi-ai left on the turn's calls, by type and reason, and how many calls had it.
+  const notes = new Map<string, number>();
   const flushCosts = () => {
     const turn = turns.at(-1);
     if (options.costs && turn && calls.count > 0) {
       turn.lines.push(
         `  [${calls.model}: ${calls.count} call${calls.count === 1 ? "" : "s"}, ${k(calls.input + calls.cached)} in (${k(calls.cached)} cached), ${calls.output} out, $${calls.cost.toFixed(4)}]`,
       );
+      if (notes.size > 0) {
+        const named = [...notes].map(([note, count]) => (count > 1 ? `${note} ×${count}` : note));
+        turn.lines.push(`  [pi-ai noted: ${named.join(", ")}]`);
+      }
     }
     calls = { count: 0, input: 0, cached: 0, output: 0, cost: 0, model: "" };
+    notes.clear();
   };
 
   for (const entry of entries) {
@@ -211,6 +223,10 @@ function format(log: AgentLog, options: { turns: number; costs: boolean; results
       calls.output += message.usage.output;
       calls.cost += message.usage.cost.total;
       calls.model = message.model ?? calls.model;
+    }
+    for (const { type, details } of message.diagnostics ?? []) {
+      const note = typeof details?.reason === "string" ? `${type} (${details.reason})` : type;
+      notes.set(note, (notes.get(note) ?? 0) + 1);
     }
     if (message.stopReason === "error") {
       turn.lines.push(`  ✗ model error: ${message.errorMessage ?? "unknown"}`);
