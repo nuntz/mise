@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { addDays, HOUSEHOLD_AGENT, recipePhotoPath, type Week } from "@mise/domain";
 import { AgentClient } from "agents/client";
 import { type Browser, chromium, devices, type Locator, type Page } from "playwright";
@@ -623,7 +623,8 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
   await Bun.write(takenFile, JSON.stringify(taken, null, 2));
   const which = only.length > 0 ? `the screens matching ${only.join(", ")}` : "every screen";
   console.log(`Saved ${failures.length > 0 ? `the rest of ${which}` : which}:`);
-  for (const file of saved) console.log(`  ${relative(repo, file)}`);
+  // Absolute: the workspace filter prefixes each line with the worker's name, so a relative path misleads.
+  for (const file of saved) console.log(`  ${file}`);
   return failures;
 }
 
