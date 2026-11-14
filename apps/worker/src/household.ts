@@ -13,6 +13,7 @@ import {
   type ChatReply,
   ChatWhere,
   type Cooking,
+  changedRecipesOf,
   changeTopicOf,
   checkInMessage,
   DRIVE_SYNC_TIME,
@@ -715,7 +716,7 @@ class HouseholdAgent extends Agent<Env> {
     const { result, revision } = outcome;
 
     if (topic && revision !== undefined) {
-      this.notify(topic, revision);
+      this.notify(topic, revision, result.ok ? changedRecipesOf(toolName, parsed.value, result.value) : undefined);
       // The Household's timezone decides when the export and the morning run.
       if (topic === "household") await this.scheduleDailyRuns();
     }
@@ -1406,7 +1407,7 @@ class HouseholdAgent extends Agent<Env> {
       return set && { previous: set.previous, revision: this.bumpRevision() };
     });
     if (!changed) return false;
-    this.notify("recipes", changed.revision);
+    this.notify("recipes", changed.revision, [recipeId]);
     await this.deletePhoto(changed.previous);
     return true;
   }
@@ -1471,8 +1472,13 @@ class HouseholdAgent extends Agent<Env> {
     return keys;
   }
 
-  private notify(topic: ChangeTopic, revision: number): void {
-    this.broadcast(JSON.stringify({ type: "mise:change", topic, revision } satisfies ChangeNotice));
+  /**
+   * Tells every connected client `topic` changed. A `recipes` change names `recipes` when those
+   * alone changed; left out, any Recipe may have, and clients reload as for any other change.
+   */
+  private notify(topic: ChangeTopic, revision: number, recipes?: RecipeId[]): void {
+    const notice: ChangeNotice = { type: "mise:change", topic, revision, ...(recipes && { recipes }) };
+    this.broadcast(JSON.stringify(notice));
   }
 
   /** The revision as it stands, for a notice of a change that isn't to the Household's data. */

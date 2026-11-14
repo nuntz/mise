@@ -12,8 +12,8 @@ import {
   type Week,
 } from "@mise/domain";
 import { createRoot } from "solid-js";
-import { afterEach, expect, test } from "vitest";
-import { keepPlannedRecipes, savedRecipe, savedWeeks, saveRecipe, saveWeek } from "../src/offline";
+import { afterEach, describe, expect, test } from "vitest";
+import { keepGroceryLists, keepPlannedRecipes, savedRecipe, savedWeeks, saveRecipe, saveWeek } from "../src/offline";
 import { createFakeClient } from "./fakeClient";
 
 const household: HouseholdClock = {
@@ -58,6 +58,7 @@ const dal = recipe(1, "Dal");
 const tacos = recipe(2, "Tacos");
 const curry = recipe(3, "Curry");
 const soup = recipe(4, "Soup");
+const stew = recipe(7, "Stew");
 
 const slotRecipe = ({ id, title, baseServings, photoKey, readyMade }: Recipe) => ({
   id,
@@ -117,12 +118,21 @@ type Answers = {
   failing?: RecipeId[];
   /** Never answered: the call rejects, as one does when it times out. */
   timingOut?: RecipeId[];
+  /** Answered only once this settles. */
+  weeksWait?: Promise<void>;
 };
 
-/** Keeps the planned Recipes the way the app does, answering from `answers`, which a test may change. */
-function keep(answers: Answers) {
+/**
+ * Keeps the planned Recipes the way the app does, and with `groceryLists` the Grocery Lists too,
+ * answering from `answers`, which a test may change. `calls` are the calls made, in order.
+ */
+function keep(answers: Answers, { groceryLists = false } = {}) {
+  const calls: Array<[string, Record<string, unknown>]> = [];
   const fake = createFakeClient(async (name, input): Promise<ToolResult<unknown>> => {
+    calls.push([name, input]);
+    if (name === "get_grocery_list") return { ok: true, value: null };
     if (name === "get_week") {
+      await answers.weeksWait;
       const found = answers.weeks[input.date as LocalDate];
       return found === "fails" || !found
         ? { ok: false, error: { code: "not_found", message: "No" } }
@@ -138,11 +148,12 @@ function keep(answers: Answers) {
     throw new Error(`Unexpected tool ${name}`);
   });
   const dispose = createRoot((dispose) => {
+    if (groceryLists) keepGroceryLists(fake.client, () => household);
     keepPlannedRecipes(fake.client, () => household);
     return dispose;
   });
   disposers.push(dispose);
-  return fake;
+  return { ...fake, calls };
 }
 
 const disposers: (() => void)[] = [];
@@ -187,6 +198,131 @@ test("a Recipe replanned away drops off this device, and the one planned in its 
   expect(savedRecipe(curry.id)).toBeUndefined();
   expect(savedRecipe(tacos.id)?.title).toBe("Tacos");
   expect(savedRecipe(soup.id)?.title).toBe("Soup");
+});
+
+/** How many calls to each tool, and which Recipes `get_recipe` was called for, since `from`. */
+function made(calls: Array<[string, Record<string, unknown>]>, from = 0) {
+  const since = calls.slice(from);
+  const count = (tool: string) => since.filter(([name]) => name === tool).length;
+  return {
+    get_week: count("get_week"),
+    get_grocery_list: count("get_grocery_list"),
+    get_recipe: since.flatMap(([name, input]) => (name === "get_recipe" ? [input.id] : [])).sort(),
+  };
+}
+
+describe("a change to Recipes named in its notice", () => {
+  /** Curry (3) planned this Week, and Leftovers of Stew (7) next Week. */
+  const planned = (): Answers => ({
+    weeks: { [thisWeek]: week(thisWeek, [cooking(curry)]), [nextWeek]: week(nextWeek, [leftoversOf(stew)]) },
+    recipes: [dal, curry, stew],
+  });
+
+  test("costs the keepers no load when neither Week plans one of them", async () => {
+    const answers: Answers = {
+      ...planned(),
+      weeks: { [thisWeek]: week(thisWeek, [cooking(curry)]), [nextWeek]: week(nextWeek) },
+    };
+    const { notify, calls } = keep(answers, { groceryLists: true });
+    await settled();
+    const before = calls.length;
+
+    notify("recipes", [stew.id]);
+    notify("recipes", [dal.id, stew.id]);
+    await settled();
+
+    expect(made(calls, before)).toEqual({ get_week: 0, get_grocery_list: 0, get_recipe: [] });
+  });
+
+  test("reloads both Weeks and Grocery Lists when one is planned, and only the planned Recipes named", async () => {
+    const answers = planned();
+    const { notify, calls } = keep(answers, { groceryLists: true });
+    await settled();
+    const before = calls.length;
+
+    answers.recipes = [dal, { ...curry, title: "Green curry" }, { ...stew, title: "Beef stew" }];
+    notify("recipes", [dal.id, stew.id]);
+    await settled();
+
+    expect(made(calls, before)).toEqual({ get_week: 2, get_grocery_list: 2, get_recipe: [stew.id] });
+    expect(savedRecipe(stew.id)?.title).toBe("Beef stew");
+    // Its notice named Stew alone, so Curry's saved copy stands.
+    expect(savedRecipe(curry.id)?.title).toBe("Curry");
+  });
+
+  test("reloads the Grocery Lists when one is planned in a Week still loading", async () => {
+    const answers: Answers = {
+      ...planned(),
+      weeks: { [thisWeek]: week(thisWeek, [cooking(curry)]), [nextWeek]: week(nextWeek) },
+    };
+    const { notify, calls } = keep(answers, { groceryLists: true });
+    await settled();
+    const before = calls.length;
+
+    let answerWeeks!: () => void;
+    answers.weeksWait = new Promise((resolve) => {
+      answerWeeks = resolve;
+    });
+    answers.weeks[nextWeek] = week(nextWeek, [cooking(stew)]);
+    notify("plan");
+    await settled();
+    notify("recipes", [stew.id]);
+    await settled();
+    answerWeeks();
+    await settled();
+
+    expect(made(calls, before)).toMatchObject({ get_grocery_list: 4 });
+  });
+
+  test("reloads a planned Recipe that failed to load last time, named or not", async () => {
+    const answers = planned();
+    const { notify } = keep(answers, { groceryLists: true });
+    await settled();
+
+    answers.recipes = [dal, { ...curry, title: "Green curry" }, stew];
+    answers.timingOut = [curry.id];
+    notify("recipes");
+    await settled();
+    expect(savedRecipe(curry.id)?.title).toBe("Curry");
+
+    answers.timingOut = [];
+    notify("recipes", [stew.id]);
+    await settled();
+    expect(savedRecipe(curry.id)?.title).toBe("Green curry");
+  });
+
+  test("reloads everything when another notice names none, alone or in the same burst", async () => {
+    const answers = planned();
+    const { notify } = keep(answers, { groceryLists: true });
+    await settled();
+
+    answers.recipes = [dal, { ...curry, title: "Green curry" }, stew];
+    notify("recipes");
+    await settled();
+    expect(savedRecipe(curry.id)?.title).toBe("Green curry");
+
+    answers.recipes = [dal, { ...curry, title: "Red curry" }, stew];
+    notify("recipes", [stew.id]);
+    notify("recipes");
+    notify("recipes", [dal.id]);
+    await settled();
+    expect(savedRecipe(curry.id)?.title).toBe("Red curry");
+  });
+
+  test("leaves a reconnect reloading everything", async () => {
+    const answers = planned();
+    const { goOffline, goOnline, calls } = keep(answers, { groceryLists: true });
+    await settled();
+    goOffline();
+    const before = calls.length;
+
+    answers.recipes = [dal, { ...curry, title: "Green curry" }, { ...stew, title: "Beef stew" }];
+    goOnline();
+    await settled();
+
+    expect(made(calls, before)).toEqual({ get_week: 2, get_grocery_list: 2, get_recipe: [curry.id, stew.id] });
+    expect(savedRecipe(curry.id)?.title).toBe("Green curry");
+  });
 });
 
 test("a Recipe no longer planned but last viewed still opens", async () => {

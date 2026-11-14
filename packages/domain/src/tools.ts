@@ -42,6 +42,7 @@ import {
   NewReadyMadeRecipe,
   NewRecipe,
   Recipe,
+  RecipeId,
   RecipeSummary,
   SearchRecipesInput,
   UnresolvedGroup,
@@ -115,6 +116,12 @@ type ToolDefinition = {
    * notification settings, which no other screen shows.
    */
   changes?: ChangeTopic;
+  /**
+   * For a tool that changes `recipes`: the Recipes a successful call changed, and none other, which
+   * its notice names. Absent where the change can reach Recipes the call doesn't name (an Item's
+   * Allergens reach every Recipe using it), and its notice names none: any Recipe may have changed.
+   */
+  changedRecipes?: (input: never, output: never) => RecipeId[];
   /** When a call from the agent needs a person's tap; absent for tools that never do. */
   confirm?: ConfirmationCase;
   /**
@@ -124,6 +131,9 @@ type ToolDefinition = {
    */
   listed?: (output: never) => number;
 };
+
+/** The one Recipe a call answers with, which is the one it changed. */
+const answeredRecipe = (_input: unknown, output: Recipe) => [output.id];
 
 /** A list tool's count: its result's length. */
 const length = (output: readonly unknown[]) => output.length;
@@ -191,11 +201,13 @@ export const tools = {
     input: NewRecipe,
     output: Recipe,
     changes: "recipes",
+    changedRecipes: answeredRecipe,
   }),
   /**
    * Creates the product's Household Item, unless the product already names one, and the Ready-made
    * Recipe. Refuses a new product without its Allergens stated (`invalid_input`), and one naming an
-   * Item that is weighed or measured rather than bought whole (`measured_item`).
+   * Item that is weighed or measured rather than bought whole (`measured_item`). Its notice names no
+   * Recipe: a new Item resolves other Recipes' lines that name the product, as `create_item` does.
    */
   create_ready_made_recipe: defineTool({
     input: NewReadyMadeRecipe,
@@ -210,12 +222,14 @@ export const tools = {
     input: UpdateRecipeInput,
     output: Recipe,
     changes: "recipes",
+    changedRecipes: answeredRecipe,
   }),
   /** Requires `confirm: true`. Returns the Recipe as it was before deletion. */
   delete_recipe: defineTool({
     input: DeleteRecipeInput,
     output: Recipe,
     changes: "recipes",
+    changedRecipes: answeredRecipe,
     confirm: "always",
   }),
   /** Recipes found by every word of a query, those whose title has them first, then in title order; Drafts are left out, for `list_drafts`. */
@@ -371,6 +385,7 @@ export const tools = {
     input: DraftInput,
     output: Recipe,
     changes: "recipes",
+    changedRecipes: answeredRecipe,
   }),
   /** Import runs, newest first. */
   list_import_runs: defineTool({
@@ -682,6 +697,15 @@ export function changeTopicOf(name: ToolName): ChangeTopic | undefined {
   return definition.changes;
 }
 
+/**
+ * The Recipes a successful call to this tool changed, when it changed those alone; undefined when
+ * any Recipe may have changed, or the tool changes no Recipe.
+ */
+export function changedRecipesOf(name: ToolName, input: unknown, output: unknown): RecipeId[] | undefined {
+  const definition: ToolDefinition = tools[name];
+  return (definition.changedRecipes as ((input: unknown, output: unknown) => RecipeId[]) | undefined)?.(input, output);
+}
+
 /** When a call to this tool from the agent needs a person's tap, if it ever does. */
 export function confirmationCaseOf(name: ToolName): ConfirmationCase | undefined {
   const definition: ToolDefinition = tools[name];
@@ -726,5 +750,10 @@ export const ChangeNotice = z.object({
   type: z.literal("mise:change"),
   topic: ChangeTopic,
   revision: z.number().int().nonnegative(),
+  /**
+   * On a `recipes` notice, the Recipes it changed, and none other; absent, any Recipe may have
+   * changed. Named only where that's exact: a Recipe changed but not named leaves a device stale.
+   */
+  recipes: z.array(RecipeId).optional(),
 });
 export type ChangeNotice = z.infer<typeof ChangeNotice>;

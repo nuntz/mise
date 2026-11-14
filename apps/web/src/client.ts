@@ -25,10 +25,11 @@ export type MiseClient = {
   call<N extends ToolName>(name: N, input: ToolInput<N>): Promise<ToolResult<ToolOutput<N>>>;
   /**
    * Runs `refetch` straight away if connected (else once the connection opens), whenever any of
-   * `topics` changes, and once on every reconnect so nothing missed while offline goes stale. Use
+   * `topics` changes, and once on every reconnect so nothing missed while offline goes stale. Each
+   * change hands it its notice; connecting hands it none, as anything may have changed. Use
    * `keepFresh` rather than calling this directly. Returns an unsubscribe function.
    */
-  subscribe(topics: readonly ChangeTopic[], refetch: () => void): () => void;
+  subscribe(topics: readonly ChangeTopic[], refetch: (notice?: ChangeNotice) => void): () => void;
   /**
    * Calls `listener` with whether the household is reachable: now, and whenever that changes. Until
    * the first attempt to connect fails, it counts as reachable. Returns an unsubscribe function.
@@ -189,12 +190,16 @@ async function upload(path: string, file: Blob, type: string): Promise<string | 
 export type ChangeSource = Pick<EventTarget, "addEventListener" | "removeEventListener"> & { readyState: number };
 
 /** `MiseClient.subscribe`, over `socket`. */
-export function subscribeTo(socket: ChangeSource, topics: readonly ChangeTopic[], refetch: () => void): () => void {
+export function subscribeTo(
+  socket: ChangeSource,
+  topics: readonly ChangeTopic[],
+  refetch: (notice?: ChangeNotice) => void,
+): () => void {
   const onMessage = (event: Event) => {
     const { data } = event as MessageEvent;
     if (typeof data !== "string") return;
     const notice = ChangeNotice.safeParse(safeJson(data));
-    if (notice.success && topics.includes(notice.data.topic)) refetch();
+    if (notice.success && topics.includes(notice.data.topic)) refetch(notice.data);
   };
   const onOpen = () => refetch();
   socket.addEventListener("message", onMessage);

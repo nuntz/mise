@@ -495,7 +495,27 @@ describe("change notices", () => {
 
     await household.callTool("create_recipe", pancakes);
 
-    expect(await notice.next).toEqual({ type: "mise:change", topic: "recipes", revision: 2 });
+    expect(await notice.next).toEqual({ type: "mise:change", topic: "recipes", revision: 2, recipes: [1] });
+  });
+
+  test("a Recipe's change names that Recipe, and none other", async () => {
+    const household = await setUpHousehold();
+    for (let i = 0; i < 7; i++) await household.callTool("create_recipe", { ...pancakes, title: `Pancakes ${i + 1}` });
+    const notice = await nextNotice(household);
+
+    await household.callTool("update_recipe", { id: 7, tags: ["brunch"] });
+
+    expect(await notice.next).toEqual({ type: "mise:change", topic: "recipes", revision: 9, recipes: [7] });
+  });
+
+  test("an Item's change names no Recipe: every Recipe using it may have changed", async () => {
+    const household = await setUpHousehold();
+    await household.callTool("create_recipe", pancakes);
+    const notice = await nextNotice(household);
+
+    await household.callTool("update_item", { id: "flour", aliases: ["pancake flour"] });
+
+    expect(await notice.next).toEqual({ type: "mise:change", topic: "recipes", revision: 3 });
   });
 });
 
@@ -662,7 +682,7 @@ describe("Recipe photos", () => {
     await putPhoto(household, 1, jpeg);
 
     onTestFinished(async () => env.BUCKET.delete((await photoKeyOf(household)) as string));
-    expect(await notice.next).toEqual({ type: "mise:change", topic: "recipes", revision: 3 });
+    expect(await notice.next).toEqual({ type: "mise:change", topic: "recipes", revision: 3, recipes: [1] });
   });
 });
 

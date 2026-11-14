@@ -1,4 +1,4 @@
-import type { ChangeTopic } from "@mise/domain";
+import type { ChangeNotice, ChangeTopic, RecipeId } from "@mise/domain";
 import { createRoot } from "solid-js";
 import { expect, onTestFinished, test } from "vitest";
 import type { MiseClient } from "../src/client";
@@ -119,4 +119,92 @@ test("a refetch asked for while a load is in flight resolves once its own load h
   await loaded;
 
   expect(list.shown).toEqual(["get_grocery_list #2"]);
+});
+
+/**
+ * Keeps Recipes fresh as the offline keepers do, wanting only the notices `wanted` takes, and returns
+ * which Recipes each load was asked for: those named, or "all".
+ */
+function keepRecipes(client: MiseClient, wanted?: (notice: ChangeNotice) => boolean) {
+  const asked: Array<RecipeId[] | "all"> = [];
+  createRoot((dispose) => {
+    onTestFinished(dispose);
+    keepFresh(
+      client,
+      ["recipes", "plan"],
+      (named) => {
+        asked.push(named ? [...named].sort((a, b) => a - b) : "all");
+        return client.call("get_recipe", { id: 1 });
+      },
+      () => {},
+      () => {},
+      { wanted },
+    );
+  });
+  return asked;
+}
+
+test("a notice it doesn't want loads nothing, unless it lands while a load is in flight", async () => {
+  const household = slowHousehold();
+  const asked = keepRecipes(household.client, (notice) => notice.recipes?.includes(3) ?? true);
+  await household.answer();
+
+  household.notify("recipes", [7]);
+  expect(household.calls("get_recipe")).toBe(1);
+
+  household.notify("recipes", [3]);
+  household.notify("recipes", [7]);
+  await household.answer();
+  await household.answer();
+
+  // The load in flight may have read Recipe 7 before it changed.
+  expect(asked).toEqual(["all", [3], [3, 7]]);
+});
+
+test("a load is asked for the Recipes named in the notices it answers, and for all on any other", async () => {
+  const household = slowHousehold();
+  const asked = keepRecipes(household.client);
+  await household.answer();
+
+  household.notify("recipes", [7]);
+  household.notify("recipes", [8]);
+  household.notify("recipes", [9]);
+  await household.answer();
+  await household.answer();
+
+  household.notify("recipes", [1]);
+  household.notify("recipes");
+  await household.answer();
+  await household.answer();
+
+  household.notify("recipes", [1]);
+  household.notify("plan");
+  await household.answer();
+  await household.answer();
+
+  household.goOffline();
+  household.goOnline();
+  await household.answer();
+
+  // The load in flight is overtaken, so the one after answers its notice as well as those since.
+  expect(asked).toEqual(["all", [7], [7, 8, 9], [1], "all", [1], "all", "all"]);
+});
+
+test("a load that fails leaves what it was asked for to the next", async () => {
+  const answers: Array<{ resolve: (value: string) => void; reject: (error: Error) => void }> = [];
+  const fake = createFakeClient(() => new Promise((resolve, reject) => answers.push({ resolve, reject })));
+  const asked = keepRecipes(fake.client);
+  const answered = () => new Promise((resolve) => setTimeout(resolve, 0));
+  answers[0]?.resolve("loaded");
+  await answered();
+
+  fake.notify("recipes");
+  answers[1]?.reject(new Error("Durable Object is overloaded"));
+  await answered();
+  fake.notify("recipes", [7]);
+  answers[2]?.resolve("loaded");
+  await answered();
+  fake.notify("recipes", [8]);
+
+  expect(asked).toEqual(["all", "all", "all", [8]]);
 });

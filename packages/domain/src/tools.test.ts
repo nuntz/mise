@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isHardConstraint } from "./members";
-import { parseToolInput } from "./tools";
+import { ChangeNotice, parseToolInput } from "./tools";
 
 describe("parseToolInput", () => {
   test("setting up a Household with only a name fills in the defaults", () => {
@@ -149,6 +149,25 @@ describe("Members", () => {
     expect(parseToolInput("add_member", { name: "Alex", email: "alex" })).toMatchObject({
       ok: false,
       error: { code: "invalid_input", issues: [{ path: "email" }] },
+    });
+  });
+});
+
+describe("ChangeNotice", () => {
+  test("a recipes notice may name the Recipes it changed", () => {
+    expect(ChangeNotice.parse({ type: "mise:change", topic: "recipes", revision: 4, recipes: [7] })).toEqual({
+      type: "mise:change",
+      topic: "recipes",
+      revision: 4,
+      recipes: [7],
+    });
+  });
+
+  test("a notice naming no Recipes, as every older one, still parses", () => {
+    expect(ChangeNotice.parse({ type: "mise:change", topic: "recipes", revision: 4 })).toEqual({
+      type: "mise:change",
+      topic: "recipes",
+      revision: 4,
     });
   });
 });

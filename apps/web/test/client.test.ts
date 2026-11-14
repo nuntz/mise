@@ -1,12 +1,18 @@
-import { type ChangeTopic, HOUSEHOLD_PATH, SCREENSHOT_UPLOAD_PATH } from "@mise/domain";
+import {
+  type ChangeNotice,
+  type ChangeTopic,
+  HOUSEHOLD_PATH,
+  type RecipeId,
+  SCREENSHOT_UPLOAD_PATH,
+} from "@mise/domain";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { type ChangeSource, createMiseClient, listenForSteps, subscribeTo } from "../src/client";
 import { createFakeClient } from "./fakeClient";
 
 /** A way to subscribe, and to drive the connection under it. */
 type Harness = {
-  subscribe(topics: readonly ChangeTopic[], refetch: () => void): () => void;
-  notify(topic: ChangeTopic): void;
+  subscribe(topics: readonly ChangeTopic[], refetch: (notice?: ChangeNotice) => void): () => void;
+  notify(topic: ChangeTopic, recipes?: RecipeId[]): void;
   goOffline(): void;
   goOnline(): void;
 };
@@ -18,8 +24,8 @@ function realClient({ online }: { online: boolean }): Harness {
   });
   return {
     subscribe: (topics, refetch) => subscribeTo(socket as ChangeSource, topics, refetch),
-    notify(topic) {
-      const notice = { type: "mise:change", topic, revision: 1 };
+    notify(topic, recipes) {
+      const notice = { type: "mise:change", topic, revision: 1, ...(recipes && { recipes }) };
       socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(notice) }));
     },
     goOffline() {
@@ -67,6 +73,23 @@ describe.each([
     harness.goOffline();
     harness.goOnline();
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("hands it each notice, the Recipes named in it included, and nothing on connecting", () => {
+    const harness = connect({ online: false });
+    const refetch = vi.fn();
+    harness.subscribe(["recipes"], refetch);
+    harness.goOnline();
+    harness.notify("recipes", [7]);
+    harness.notify("recipes");
+    harness.goOffline();
+    harness.goOnline();
+    expect(refetch.mock.calls).toEqual([
+      [],
+      [expect.objectContaining({ topic: "recipes", recipes: [7] })],
+      [expect.not.objectContaining({ recipes: expect.anything() })],
+      [],
+    ]);
   });
 
   test("stops once unsubscribed", () => {

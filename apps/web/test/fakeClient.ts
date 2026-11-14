@@ -1,4 +1,4 @@
-import type { ChangeTopic } from "@mise/domain";
+import type { ChangeNotice, ChangeTopic, RecipeId } from "@mise/domain";
 import type { MiseClient } from "../src/client";
 
 type Call = (name: string, input: Record<string, unknown>) => unknown;
@@ -39,7 +39,8 @@ export function createFakeClient(
   > = {},
 ) {
   const connection = { online };
-  const subscriptions = new Set<{ topics: readonly ChangeTopic[]; refetch: () => void }>();
+  const subscriptions = new Set<{ topics: readonly ChangeTopic[]; refetch: (notice?: ChangeNotice) => void }>();
+  let revision = 0;
   const listeners = new Set<(online: boolean) => void>();
   const stepListeners = new Set<(step: number) => void>();
   const setOnline = (value: boolean) => {
@@ -48,9 +49,12 @@ export function createFakeClient(
     for (const listener of listeners) listener(value);
     if (reconnected) for (const subscription of [...subscriptions]) subscription.refetch();
   };
-  const notifyAll = (topic: ChangeTopic) => {
+  const notifyAll = (topic: ChangeTopic, recipes?: RecipeId[]) => {
     if (!connection.online) return;
-    for (const subscription of [...subscriptions]) if (subscription.topics.includes(topic)) subscription.refetch();
+    revision += 1;
+    const notice: ChangeNotice = { type: "mise:change", topic, revision, ...(recipes && { recipes }) };
+    for (const subscription of [...subscriptions])
+      if (subscription.topics.includes(topic)) subscription.refetch(notice);
   };
   const client: MiseClient = {
     call: (async (name: string, input: Record<string, unknown>) => {
@@ -124,7 +128,7 @@ export function createFakeClient(
   };
   return {
     client,
-    /** A change notice for `topic`. */
+    /** A change notice for `topic`, naming `recipes` if given. */
     notify: notifyAll,
     /** The household telling this device's Voice Session to show `step`; it arrives only while connected. */
     showStep(step: number) {

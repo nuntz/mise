@@ -1,5 +1,6 @@
 import {
   addDays,
+  type ChangeNotice,
   createTickQueue,
   currentWeek,
   GroceryList,
@@ -97,11 +98,14 @@ function read<T>(key: string, schema: z.ZodType<T>): T | undefined {
   }
 }
 
-function write(key: string, value: unknown): void {
+/** Whether it was kept. */
+function write(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
     // Storage full or blocked: Mise still works online, only not offline.
+    return false;
   }
 }
 
@@ -156,8 +160,29 @@ function keptWeeks(household: HouseholdClock): LocalDate[] {
 }
 
 /**
+ * Whether the Weeks saved are no older than `keepPlannedRecipes`'s last load of them, with none in
+ * flight or failed since: the plan may have changed under them otherwise. (The Week screen saves the
+ * Week it shows too, which is as new.) Shared, as the Grocery Lists' keeper reads the same Weeks.
+ */
+let weeksSaved = false;
+
+/**
+ * Whether `notice` could change what the keepers keep: any notice but one naming only Recipes that
+ * neither kept Week plans as last saved, as a Slot's Recipe or the Recipe its Leftovers are of. With
+ * the Weeks not both saved, or behind the plan, there's no telling.
+ */
+function changesKept(notice: ChangeNotice, household: HouseholdClock): boolean {
+  if (notice.topic !== "recipes" || !notice.recipes || !weeksSaved) return true;
+  const kept = keptWeeks(household);
+  const saved = savedWeeks().filter((week) => kept.includes(week.startDate));
+  if (saved.length < kept.length) return true;
+  const planned = new Set(saved.flatMap((week) => week.slots.flatMap(linkedRecipe)));
+  return notice.recipes.some((id) => planned.has(id));
+}
+
+/**
  * Keeps the current and next Week's Grocery Lists on this device, loaded again on every connect and
- * whenever anything they're built from changes.
+ * whenever anything they're built from changes: a change to Recipes neither Week plans changes none.
  */
 export function keepGroceryLists(client: MiseClient, household: () => HouseholdClock): void {
   // Offline, what was saved is kept.
@@ -173,21 +198,27 @@ export function keepGroceryLists(client: MiseClient, household: () => HouseholdC
       for (const [date, result] of results) if (result.ok) lists[date] = result.value;
       write(KEYS.groceryLists, lists);
     },
+    undefined,
+    { wanted: (notice) => changesKept(notice, household()) },
   );
 }
 
 /**
  * Keeps the current and next Week, and every Recipe planned in them, on this device, so either Week
  * and any of those Recipes opens offline, loaded again on every connect and whenever the plan or a
- * Recipe changes. Each load replaces what was kept, so a Recipe no longer planned goes; one that
- * fails to load keeps its earlier copy.
+ * planned Recipe changes. A change naming its Recipes reloads the Weeks, which show them, and only
+ * those of them planned, and any planned with no copy kept or whose last load failed. Each load replaces what was kept, so
+ * a Recipe no longer planned goes; one that fails to load, or isn't loaded, keeps its earlier copy.
  */
 export function keepPlannedRecipes(client: MiseClient, household: () => HouseholdClock): void {
   // Offline, or with either Week failing to load, what was saved is kept.
+  /** Planned Recipes whose copy kept may be out of date: the last load of them failed. */
+  let behind = new Set<RecipeId>();
   keepFresh(
     client,
     ["plan", "recipes", "household"],
-    async () => {
+    async (named) => {
+      weeksSaved = false;
       const weeks = await Promise.all(
         keptWeeks(household()).map(async (date) => {
           const result = await client.call("get_week", { date });
@@ -196,24 +227,28 @@ export function keepPlannedRecipes(client: MiseClient, household: () => Househol
         }),
       );
       const ids = [...new Set(weeks.flatMap((week) => week.slots.flatMap(linkedRecipe)))];
+      const changed = named ? ids.filter((id) => named.has(id) || behind.has(id) || !plannedRecipe(id)) : ids;
       const results = await Promise.all(
-        ids.map(async (id) => {
+        changed.map(async (id) => {
           // One that times out is as one that fails: its earlier copy stands in.
           const result = await client.call("get_recipe", { id }).catch(() => undefined);
           return [id, result?.ok ? result.value : undefined] as const;
         }),
       );
-      return { weeks, results };
+      return { weeks, ids, loaded: new Map(results) };
     },
-    ({ weeks, results }) => {
-      write(KEYS.weeks, weeks);
+    ({ weeks, ids, loaded }) => {
+      weeksSaved = write(KEYS.weeks, weeks);
+      behind = new Set([...loaded].flatMap(([id, recipe]) => (recipe ? [] : [id])));
       const recipes: Record<string, Recipe> = {};
-      for (const [id, loaded] of results) {
-        const recipe = loaded ?? plannedRecipe(id);
+      for (const id of ids) {
+        const recipe = loaded.get(id) ?? plannedRecipe(id);
         if (recipe) recipes[id] = recipe;
       }
       write(KEYS.plannedRecipes, recipes);
     },
+    undefined,
+    { wanted: (notice) => behind.size > 0 || changesKept(notice, household()) },
   );
 }
 
