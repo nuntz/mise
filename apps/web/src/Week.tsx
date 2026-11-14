@@ -1,6 +1,7 @@
 import {
   addDays,
   type Conflict,
+  Constraint,
   canHandBack,
   type Item,
   type ItemId,
@@ -24,6 +25,7 @@ import {
   type SlotKind,
   type SlotRecipe,
   sameConflict,
+  slotConflicts,
   type ToolInput,
   type ToolResult,
   type Week,
@@ -66,7 +68,7 @@ import {
 } from "./Proposal";
 import { RecipePicker } from "./RecipePicker";
 import { RecipeSheet } from "./RecipeSheet";
-import { ReadyMadeChip } from "./Recipes";
+import { ReadyMadeChip, type RecipeFlag } from "./Recipes";
 import { Sheet } from "./Sheet";
 
 /** Which Slot of the Week: its day and meal. */
@@ -1191,6 +1193,25 @@ function SlotForm(props: {
     recipeField?.focus();
   };
   const guestCount = () => Number(guests()) || 0;
+  // The Conflict a Recipe would bring the Slot, as the Week's card would flag it once saved: with who is
+  // eating as the form has them, saved or not, a Constraint still being filled in counting for nothing.
+  // The Recipe the Slot holds keeps its Overrides; any other drops them (ADR 0012).
+  const flag = (found: RecipeSummary): RecipeFlag | undefined => {
+    const draft = diners();
+    const kept = found.id === slot.recipe?.id ? slot.conflicts.filter((conflict) => conflict.override !== null) : [];
+    const conflict = slotConflicts({
+      allergens: found.allergens,
+      diners: props.household.members.filter((member) => draft.everyone || draft.diners.includes(member.id)),
+      guests: guestCount(),
+      guestConstraints: constraintsOf(guestConstraints()).filter((each) => Constraint.safeParse(each).success),
+    }).find((each) => !kept.some((overridden) => sameConflict(overridden, each)));
+    if (!conflict) return undefined;
+    const description = t(
+      conflict.cause === "contains" ? "slot.recipeUnsafe" : "slot.recipeUnsafeMaybe",
+      conflictParams(conflict, props.household),
+    );
+    return { chip: conflictChip(conflict, props.household), description };
+  };
   const stepGuests = (by: number) => changing(setGuests)(String(Math.min(50, Math.max(0, guestCount() + by))));
 
   return (
@@ -1370,6 +1391,7 @@ function SlotForm(props: {
           client={props.client}
           overline={t("slot.formOverline", { day: props.day, meal: t(`meal.${slot.meal}`) })}
           chosen={recipe()?.id}
+          flag={flag}
           onPick={(picked) => {
             changing(setRecipe)(picked);
             closePicker();

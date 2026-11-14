@@ -459,9 +459,15 @@ function screens(ids: Map<string, number>): Screen[] {
     },
     {
       name: "week-kept-choose-recipe",
-      // Choose a Recipe, opened from the Slot form's Recipe field, once the Recipes have arrived.
+      // Choose a Recipe, opened from the Slot form's Recipe field, once the Recipes have arrived. A Guest
+      // allergic to sesame, added to the form unsaved, flags Frozen Dumplings in view: the seed's only
+      // other Recipe that conflicts, Shiso Rice Bowls, sorts below the fold. By markup, not by name, as
+      // the pseudo variant renames every control.
       open: async (page) => {
         await editDinner((page) => page.locator("section.slot").first())(page);
+        await page.locator(".stepper input").fill("1");
+        await page.locator("fieldset > button").click();
+        await page.locator("fieldset .row-fields select").nth(1).selectOption("sesame");
         await page.locator(".recipe-field").click();
         await page.locator(".recipe-picker .row-open").first().waitFor();
       },

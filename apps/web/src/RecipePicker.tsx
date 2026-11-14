@@ -4,19 +4,21 @@ import type { MiseClient } from "./client";
 import { keepFresh } from "./fresh";
 import { Icon } from "./icons";
 import { t } from "./messages";
-import { RecipeRow } from "./Recipes";
+import { type RecipeFlag, RecipeRow } from "./Recipes";
 import { Sheet } from "./Sheet";
 
 /**
  * Choose a Recipe: a sheet over the Slot form that finds Recipes as Search Recipes is typed in, as the
  * Recipes screen does, with the Recipe `chosen` already marked. Picking one hands it to `onPick`. The
  * search takes the focus on opening, keyboard and all: finding the Recipe is what the sheet is for.
+ * `flag` says, of each Recipe found, the Conflict it would bring the Slot, if any.
  */
 export function RecipePicker(props: {
   client: MiseClient;
   /** What the sheet is for, such as "Tonight · Mon 26 · Dinner". */
   overline: string;
   chosen: RecipeId | undefined;
+  flag: (recipe: RecipeSummary) => RecipeFlag | undefined;
   onPick: (recipe: RecipeSummary) => void;
   onClose: () => void;
 }) {
@@ -80,6 +82,7 @@ export function RecipePicker(props: {
                         client={props.client}
                         recipe={recipe}
                         current={recipe.id === props.chosen}
+                        flag={props.flag(recipe)}
                         onClick={() => props.onPick(recipe)}
                       />
                     </li>

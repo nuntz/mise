@@ -815,6 +815,8 @@ const en = {
   "slot.kind": "What",
   "slot.recipe": "Recipe",
   "slot.chooseRecipe": "Choose a Recipe",
+  "slot.recipeUnsafe": "Not safe here for {who} ({allergen})",
+  "slot.recipeUnsafeMaybe": "May not be safe here for {who} ({allergen})",
   "slot.leftoversOfMeal": "Leftovers of",
   "slot.leftoversOfNothing": "Nothing planned here",
   "slot.leftoversOfOption.breakfast": "{day}'s breakfast, {title}",

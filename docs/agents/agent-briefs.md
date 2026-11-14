@@ -22,5 +22,8 @@ criterion the implementer must meet word for word, so the wording has to hold up
   "Replace {title}"; a cooked one can't be picked. A day the Recipe isn't safe for carries the Week's
   Conflict chip ("Robin · Peanut") before it's tapped, and can still be tapped. Once planned, the
   page's "On the plan" line has "Show the Week". Wording that tells someone to plan from a Recipe names these.
+- **Choose a Recipe, from the Slot form's Recipe field.** A Recipe that would bring the Slot a
+  Conflict, with the Diners and Guests as the form has them (saved or not), carries the Week's
+  Conflict chip ("Robin · Peanut") on its row, and can still be picked.
 - **English only.** The pseudo-locale is generated from the English messages (`pseudoText` in
   `messages.ts`), so a change to a message changes it there too.

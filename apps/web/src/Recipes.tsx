@@ -178,23 +178,29 @@ function RecipeList(props: {
   );
 }
 
+/** A Conflict a Recipe would bring, in words: its chip, and the description it gives the Recipe's row. */
+export type RecipeFlag = { chip: string; description: string };
+
 /**
  * A Recipe as a row that is one button, named by its title and described by its details: its thumb, its
  * tags and time, and its Allergens. `current` marks the Recipe chosen already, with a tick at its end.
+ * `flag` is a Conflict it would bring, in words: its chip, and what it describes the row with.
  */
 export function RecipeRow(props: {
   client: MiseClient;
   recipe: RecipeSummary;
   current?: boolean;
+  flag?: RecipeFlag;
   onClick: () => void;
 }) {
   const id = createUniqueId();
+  const describedBy = () => [`${id}-meta`, `${id}-allergens`, ...(props.flag ? [`${id}-flag`] : [])].join(" ");
   return (
     <button
       type="button"
       class="row row-open recipe-row"
       aria-labelledby={`${id}-title`}
-      aria-describedby={`${id}-meta ${id}-allergens`}
+      aria-describedby={describedBy()}
       aria-current={props.current ? "true" : undefined}
       onClick={() => props.onClick()}
     >
@@ -215,6 +221,18 @@ export function RecipeRow(props: {
         </Show>
         <Show when={props.recipe.allergens.kind === "unknown"}>
           <span class="chip chip-amber">{t("recipe.allergensUnknownChip")}</span>
+        </Show>
+        <Show when={props.flag}>
+          {(flag) => (
+            <>
+              <span class="chip chip-warn" aria-hidden="true">
+                {flag().chip}
+              </span>
+              <span class="visually-hidden" id={`${id}-flag`}>
+                {flag().description}
+              </span>
+            </>
+          )}
         </Show>
         <span class="row-meta" id={`${id}-allergens`}>
           {allergensText(props.recipe.allergens)}

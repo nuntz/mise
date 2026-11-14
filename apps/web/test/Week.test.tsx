@@ -557,6 +557,206 @@ test("Choose a Recipe finds what Search Recipes is typed for, says when nothing 
   expect(document.activeElement).toBe(field);
 });
 
+/** The Household with Robin allergic to sesame. */
+const robinAllergic: Household = {
+  ...household,
+  members: [{ ...robin, constraints: [{ kind: "allergy", allergen: "sesame" }] }, alex, sam],
+};
+const noodles: RecipeSummary = {
+  ...curry,
+  id: 3,
+  title: "Noodles",
+  allergens: { kind: "known", allergens: ["sesame"] },
+};
+
+/** Choose a Recipe, opened from Monday's empty dinner as A Recipe, offering Curry and Noodles. */
+async function openMondayPicker(home: Household = household, answers: Record<string, Answer> = {}) {
+  const fake = fakeClient({
+    get_household: () => ({ ok: true, value: home }),
+    search_recipes: () => ({ ok: true, value: [curry, noodles] }),
+    ...answers,
+  });
+  const user = userEvent.setup();
+  render(() => <App client={fake.client} />);
+  const monday = await screen.findByRole("region", { name: "Monday, October 26" });
+  await user.click(within(monday).getByRole("button", { name: "Choose a dinner" }));
+  const form = within(monday).getByRole("form", { name: "Dinner" });
+  await user.selectOptions(within(form).getByRole("combobox", { name: "What" }), "A Recipe");
+  const open = async () => {
+    await user.click(within(form).getByRole("button", { name: /^Recipe / }));
+    const picker = await screen.findByRole("dialog", { name: "Choose a Recipe" });
+    await within(picker).findByRole("button", { name: "Noodles" });
+    return picker;
+  };
+  const close = async (picker: HTMLElement) => user.click(within(picker).getByRole("button", { name: "Close" }));
+  return { ...fake, user, monday, form, open, close };
+}
+
+/** The Conflict chip on a Recipe's row in Choose a Recipe, if it has one. */
+const pickerChip = (picker: HTMLElement, title: string) =>
+  within(picker).getByRole("button", { name: title }).querySelector(".chip-warn")?.textContent ?? null;
+
+test("Choose a Recipe flags a Recipe with an Allergen a Diner can't eat, and not one without it", async () => {
+  const { open } = await openMondayPicker(robinAllergic);
+  const picker = await open();
+
+  expect(pickerChip(picker, "Noodles")).toBe("Robin · Sesame");
+  expect(pickerChip(picker, "Curry")).toBeNull();
+});
+
+test("Choose a Recipe flags for the Diners as the Slot form has them, unsaved", async () => {
+  const { user, form, open, close, calls } = await openMondayPicker(robinAllergic);
+  await user.click(within(form).getByRole("checkbox", { name: "Robin" }));
+  const without = await open();
+  expect(pickerChip(without, "Noodles")).toBeNull();
+  await close(without);
+
+  await user.click(within(form).getByRole("checkbox", { name: "Robin" }));
+  expect(pickerChip(await open(), "Noodles")).toBe("Robin · Sesame");
+  expect(writes(calls)).toEqual([]);
+});
+
+test("Choose a Recipe flags for the Guests' Constraints while there are Guests, and not with none", async () => {
+  const { user, form, open, close } = await openMondayPicker();
+  await user.click(within(form).getByRole("button", { name: "One Guest more" }));
+  await user.click(within(form).getByRole("button", { name: "Add a Constraint" }));
+  await user.selectOptions(within(form).getByRole("combobox", { name: "Allergen" }), "Sesame");
+  const withGuests = await open();
+  expect(pickerChip(withGuests, "Noodles")).toBe("The Guests · Sesame");
+  expect(pickerChip(withGuests, "Curry")).toBeNull();
+  await close(withGuests);
+
+  await user.click(within(form).getByRole("button", { name: "One Guest fewer" }));
+  expect(pickerChip(await open(), "Noodles")).toBeNull();
+});
+
+test("Choose a Recipe flags a Recipe with Unresolved Ingredients for anyone eating with a Hard Constraint", async () => {
+  const unresolved: RecipeSummary = { ...curry, allergens: { kind: "unknown", atLeast: [], unresolved: 1 } };
+  const home: Household = {
+    ...household,
+    // A dislike is Soft: it never conflicts.
+    members: [
+      { ...robin, constraints: [{ kind: "dislike", allergen: "fish" }] },
+      alex,
+      { ...sam, constraints: [{ kind: "intolerance", allergen: "milk" }] },
+    ],
+  };
+  const { open } = await openMondayPicker(home, { search_recipes: () => ({ ok: true, value: [unresolved, noodles] }) });
+  const picker = await open();
+
+  expect(pickerChip(picker, "Curry")).toBe("Sam · Milk");
+  expect(pickerChip(picker, "Noodles")).toBeNull();
+  // Its Allergens unknown chip stays, before the flag.
+  const chips = [...within(picker).getByRole("button", { name: "Curry" }).querySelectorAll(".chip")];
+  expect(chips.map((chip) => chip.textContent)).toEqual(["Allergens unknown", "Sam · Milk"]);
+});
+
+/** The text of every element `control` names as its accessible description. */
+const descriptions = (control: HTMLElement) =>
+  String(control.getAttribute("aria-describedby"))
+    .split(" ")
+    .map((id) => document.getElementById(id)?.textContent);
+
+test("a flagged Recipe's description in Choose a Recipe says who it isn't safe for and the Allergen", async () => {
+  const unresolved: RecipeSummary = { ...curry, allergens: { kind: "unknown", atLeast: [], unresolved: 1 } };
+  const { open } = await openMondayPicker(robinAllergic, {
+    search_recipes: () => ({ ok: true, value: [unresolved, noodles, pasta] }),
+  });
+  const picker = await open();
+
+  expect(descriptions(within(picker).getByRole("button", { name: "Noodles" }))).toContain(
+    "Not safe here for Robin (Sesame)",
+  );
+  expect(descriptions(within(picker).getByRole("button", { name: "Curry" }))).toContain(
+    "May not be safe here for Robin (Sesame)",
+  );
+  expect(descriptions(within(picker).getByRole("button", { name: "Pasta" }))).toHaveLength(2);
+  // The chip itself isn't read out: the description says it.
+  const chips = within(picker).getAllByText("Robin · Sesame");
+  expect(chips.map((chip) => chip.getAttribute("aria-hidden"))).toEqual(["true", "true"]);
+});
+
+test("a flagged Recipe can still be picked, and saving still asks the household, showing its refusal", async () => {
+  const { user, form, open, calls } = await openMondayPicker(robinAllergic, {
+    set_slot: () => ({
+      ok: false,
+      error: {
+        code: "constraint_conflict",
+        message: "Refused",
+        conflicts: [
+          { date: "2026-10-26", meal: "dinner", who: 1, allergen: "sesame", constraint: "allergy", cause: "contains" },
+        ],
+      },
+    }),
+  });
+  await user.click(within(await open()).getByRole("button", { name: "Noodles" }));
+  expect(within(form).getByRole("button", { name: "Recipe Noodles" })).toBeTruthy();
+  await user.click(within(form).getByRole("button", { name: "Save" }));
+
+  const warning = await within(form).findByRole("alert");
+  expect(warning.textContent).toContain("Not safe for Robin (Sesame, Allergy): Noodles contains it.");
+  expect(writes(calls)).toEqual([
+    { name: "set_slot", input: { date: "2026-10-26", meal: "dinner", kind: "recipe", recipeId: 3, note: null } },
+  ]);
+});
+
+/** Choose a Recipe over Tuesday's Pasta, Robin allergic to wheat, the Slot holding `conflicts`. */
+async function openTuesdayPicker(conflicts: Slot["conflicts"]) {
+  const week = emptyWeek("2026-10-26");
+  Object.assign(week.slots[5] as Slot, {
+    kind: "recipe",
+    recipe: { id: 1, title: "Pasta", baseServings: 4, photoKey: "photos/pasta" },
+    conflicts,
+  });
+  const { client } = fakeClient({
+    get_household: () => ({
+      ok: true,
+      value: {
+        ...household,
+        members: [{ ...robin, constraints: [{ kind: "allergy", allergen: "wheat" }] }, alex, sam],
+      },
+    }),
+    get_week: (input) => (input.date === "2026-11-02" ? undefined : { ok: true, value: week }),
+  });
+  const user = userEvent.setup();
+  render(() => <App client={client} />);
+  const tuesday = await screen.findByRole("region", { name: "Tuesday, October 27" });
+  await user.click(within(tuesday).getByRole("button", { name: "Pasta" }));
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Pasta" })).getByRole("button", { name: "Edit dinner" }),
+  );
+  const form = within(tuesday).getByRole("form", { name: "Dinner" });
+  await user.click(within(form).getByRole("button", { name: "Recipe Pasta" }));
+  const picker = await screen.findByRole("dialog", { name: "Choose a Recipe" });
+  await within(picker).findByRole("button", { name: "Pasta" });
+  return { user, form, picker };
+}
+
+const robinsWheat = { who: 1, allergen: "wheat", constraint: "allergy", cause: "contains" } as const;
+
+test("the Recipe the Slot holds is flagged in Choose a Recipe too when it isn't safe", async () => {
+  const { picker } = await openTuesdayPicker([{ ...robinsWheat, override: null }]);
+
+  expect(within(picker).getByRole("button", { name: "Pasta" }).getAttribute("aria-current")).toBe("true");
+  expect(pickerChip(picker, "Pasta")).toBe("Robin · Wheat");
+});
+
+test("an overridden Conflict flags another Recipe in Choose a Recipe, not the one it was given for", async () => {
+  const { user, form, picker } = await openTuesdayPicker([{ ...robinsWheat, override: "Hers gluten-free" }]);
+
+  // Keeping the Recipe keeps its Override, as the Week shows; changing it drops it (ADR 0012).
+  expect(pickerChip(picker, "Pasta")).toBeNull();
+  expect(pickerChip(picker, "Curry")).toBe("Robin · Wheat");
+
+  // Still once Curry is picked in the form, unsaved: the Override is for the Recipe the Slot holds.
+  await user.click(within(picker).getByRole("button", { name: "Curry" }));
+  await user.click(within(form).getByRole("button", { name: "Recipe Curry" }));
+  const again = await screen.findByRole("dialog", { name: "Choose a Recipe" });
+  await within(again).findByRole("button", { name: "Pasta" });
+  expect(pickerChip(again, "Pasta")).toBeNull();
+  expect(pickerChip(again, "Curry")).toBe("Robin · Wheat");
+});
+
 test("a late save closes only its own Slot's form, leaving another's open with what was typed", async () => {
   let finish = (_: ToolResult<unknown>) => {};
   const { client, calls } = fakeClient({ set_slot: () => new Promise((resolve) => (finish = resolve)) });

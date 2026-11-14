@@ -123,7 +123,7 @@ function unresolvedGroups(recipes: Recipe[]): UnresolvedGroup[] {
  * A client over a fixed set of Recipes that records every tool call made and every photo uploaded;
  * offline, every call fails.
  */
-function fakeClient(stored: Recipe[], { online = true } = {}) {
+function fakeClient(stored: Recipe[], { online = true, home = household } = {}) {
   let recipes = stored;
   const calls: { name: string; input: unknown }[] = [];
   const photos: { recipeId: number; photo: Blob }[] = [];
@@ -132,7 +132,7 @@ function fakeClient(stored: Recipe[], { online = true } = {}) {
       calls.push({ name, input });
       switch (name) {
         case "get_household":
-          return { ok: true, value: household };
+          return { ok: true, value: home };
         case "get_caller":
           return { ok: true, value: null };
         case "search_recipes": {
@@ -312,6 +312,19 @@ function watchScrolling() {
 
 afterEach(() => {
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+});
+
+test("a Recipe row on the Recipes screen is never flagged for a Conflict: only Choose a Recipe, over a Slot, flags", async () => {
+  const home: Household = {
+    ...household,
+    members: [{ id: 1, name: "Robin", email: null, constraints: [{ kind: "allergy", allergen: "milk" }] }],
+  };
+  const { client } = fakeClient([toast, rice], { home });
+  await openRecipes(client);
+
+  const row = await screen.findByRole("button", { name: "Toast" });
+  expect(row.querySelector(".chip-warn")).toBeNull();
+  expect(String(row.getAttribute("aria-describedby")).split(" ")).toHaveLength(2);
 });
 
 test("a Recipe's tags, cuisine and main protein are sentence-cased, and its lines are not", async () => {
