@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { slotConflicts } from "./conflicts";
+import { type SlotConflict, slotConflicts, wouldFlag } from "./conflicts";
 import type { Member } from "./members";
 import type { RecipeAllergens } from "./recipes";
 
@@ -62,5 +62,100 @@ describe("slotConflicts", () => {
       { who: "guests", allergen: "sesame", constraint: "allergy", cause: "contains" },
     ]);
     expect(slotConflicts({ allergens, diners: [sam], guests: 0, guestConstraints: [...guestConstraints] })).toEqual([]);
+  });
+});
+
+describe("wouldFlag", () => {
+  const peanutMilkCurry = { id: 7, allergens: { kind: "known", allergens: ["peanut", "milk"] } } satisfies {
+    id: number;
+    allergens: RecipeAllergens;
+  };
+  const eating = { diners: [robin, alex], guests: 0, guestConstraints: [] };
+  const robinsPeanut: SlotConflict = {
+    who: 1,
+    allergen: "peanut",
+    constraint: "allergy",
+    cause: "contains",
+    override: "Hers without the peanuts",
+  };
+
+  test("another Recipe flags a Conflict the Slot has overridden: changing its Recipe drops its Overrides", () => {
+    const slot = { recipe: { id: 3 }, leftoversOf: null, conflicts: [robinsPeanut] };
+
+    expect(wouldFlag({ recipe: peanutMilkCurry, ...eating, slot })).toEqual({
+      who: 1,
+      allergen: "peanut",
+      constraint: "allergy",
+      cause: "contains",
+    });
+  });
+
+  test("the Recipe the Slot holds keeps its Overrides, and flags a Conflict that has none", () => {
+    const slot = { recipe: { id: 7 }, leftoversOf: null, conflicts: [robinsPeanut] };
+
+    expect(wouldFlag({ recipe: peanutMilkCurry, ...eating, slot })).toEqual({
+      who: 2,
+      allergen: "milk",
+      constraint: "intolerance",
+      cause: "contains",
+    });
+    expect(
+      wouldFlag({ recipe: peanutMilkCurry, diners: [robin], guests: 0, guestConstraints: [], slot }),
+    ).toBeUndefined();
+  });
+
+  test("Leftovers hold the Recipe they were cooked from, and keep its Overrides", () => {
+    const slot = { recipe: null, leftoversOf: { recipe: { id: 7 } }, conflicts: [robinsPeanut] };
+
+    expect(
+      wouldFlag({ recipe: peanutMilkCurry, diners: [robin], guests: 0, guestConstraints: [], slot }),
+    ).toBeUndefined();
+  });
+
+  test("a Slot with no Recipe has no Overrides to keep: every Conflict counts", () => {
+    // Even an Override the Slot shows counts for nothing: it holds no Recipe for it to belong to.
+    const slot = { recipe: null, leftoversOf: null, conflicts: [robinsPeanut] };
+
+    expect(wouldFlag({ recipe: peanutMilkCurry, ...eating, slot })).toEqual({
+      who: 1,
+      allergen: "peanut",
+      constraint: "allergy",
+      cause: "contains",
+    });
+  });
+
+  test("the Conflict flagged is the first with no Override, Diners in order and then the Guests", () => {
+    const slot = { recipe: { id: 7 }, leftoversOf: null, conflicts: [robinsPeanut] };
+    const guestConstraints = [{ kind: "allergy", allergen: "peanut" }] as const;
+
+    expect(
+      wouldFlag({
+        recipe: peanutMilkCurry,
+        diners: [robin, sam],
+        guests: 2,
+        guestConstraints: [...guestConstraints],
+        slot,
+      }),
+    ).toEqual({ who: "guests", allergen: "peanut", constraint: "allergy", cause: "contains" });
+    expect(
+      wouldFlag({
+        recipe: peanutMilkCurry,
+        diners: [alex, robin],
+        guests: 2,
+        guestConstraints: [...guestConstraints],
+        slot,
+      }),
+    ).toEqual({ who: 2, allergen: "milk", constraint: "intolerance", cause: "contains" });
+  });
+
+  test("an Override given while the Recipe might contain the Allergen doesn't hold once it's known to", () => {
+    const slot = { recipe: { id: 7 }, leftoversOf: null, conflicts: [{ ...robinsPeanut, cause: "unknown" as const }] };
+
+    expect(wouldFlag({ recipe: peanutMilkCurry, diners: [robin], guests: 0, guestConstraints: [], slot })).toEqual({
+      who: 1,
+      allergen: "peanut",
+      constraint: "allergy",
+      cause: "contains",
+    });
   });
 });

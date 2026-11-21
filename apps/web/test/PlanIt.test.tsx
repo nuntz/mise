@@ -460,6 +460,24 @@ test("a day whose dinner already has the same Conflict is still flagged: plannin
   await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Sesame"));
 });
 
+test("a pencilled dinner that already holds the Recipe keeps its Override, so isn't flagged, while another day is", async () => {
+  const fake = fakeClient(noodles, {}, robinAllergic);
+  fake.weeks.set("2026-11-15", "dinner", {
+    recipe: dish(7, "Sesame noodles"),
+    conflicts: [
+      { who: 1, allergen: "sesame", constraint: "allergy", cause: "contains", override: "Sauce on the side" },
+    ],
+  });
+  const user = await openRecipe(fake.client);
+  const sheet = await openSheet(user);
+
+  // Friday has the same people eating; planning on Sunday keeps its Recipe, and so its Override (ADR 0012).
+  await waitFor(() => expect(chip(row(sheet, "Fri 13"))).toBe("Robin · Sesame"));
+  expect(chip(row(sheet, "Sun 15"))).toBeNull();
+  // Not for want of being pickable: a pencilled dinner is.
+  expect((row(sheet, "Sun 15") as HTMLButtonElement).disabled).toBe(false);
+});
+
 test("a Recipe with Unresolved Ingredients flags every day where someone eating has a Hard Constraint", async () => {
   const unresolved: Recipe = { ...noodles, allergens: { kind: "unknown", atLeast: [], unresolved: 1 } };
   const home: Household = {

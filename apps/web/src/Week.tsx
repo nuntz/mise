@@ -25,12 +25,12 @@ import {
   type SlotKind,
   type SlotRecipe,
   sameConflict,
-  slotConflicts,
   type ToolInput,
   type ToolResult,
   type Week,
   type WeekSpan,
   weekDates,
+  wouldFlag,
 } from "@mise/domain";
 import {
   batch,
@@ -1195,16 +1195,15 @@ function SlotForm(props: {
   const guestCount = () => Number(guests()) || 0;
   // The Conflict a Recipe would bring the Slot, as the Week's card would flag it once saved: with who is
   // eating as the form has them, saved or not, a Constraint still being filled in counting for nothing.
-  // The Recipe the Slot holds keeps its Overrides; any other drops them (ADR 0012).
   const flag = (found: RecipeSummary): RecipeFlag | undefined => {
     const draft = diners();
-    const kept = found.id === slot.recipe?.id ? slot.conflicts.filter((conflict) => conflict.override !== null) : [];
-    const conflict = slotConflicts({
-      allergens: found.allergens,
+    const conflict = wouldFlag({
+      recipe: found,
       diners: props.household.members.filter((member) => draft.everyone || draft.diners.includes(member.id)),
       guests: guestCount(),
       guestConstraints: constraintsOf(guestConstraints()).filter((each) => Constraint.safeParse(each).success),
-    }).find((each) => !kept.some((overridden) => sameConflict(overridden, each)));
+      slot,
+    });
     if (!conflict) return undefined;
     const description = t(
       conflict.cause === "contains" ? "slot.recipeUnsafe" : "slot.recipeUnsafeMaybe",

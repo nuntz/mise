@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Allergen, type Constraint, type Member, MemberId } from "./members";
-import type { RecipeAllergens } from "./recipes";
+import type { RecipeAllergens, RecipeId } from "./recipes";
+import type { Slot } from "./weeks";
 
 /** Whom a Conflict is about: a Diner, by Member id, or the Slot's Guests, who are known only by number. */
 export const ConflictWho = z.union([MemberId, z.literal("guests")]);
@@ -50,6 +51,29 @@ export function slotConflicts({ allergens, diners, guests, guestConstraints }: C
     }
   }
   return conflicts;
+}
+
+/** What `wouldFlag` asks: a Recipe, who would eat it, and the Slot as read. */
+export type FlagCheck = Omit<ConflictCheck, "allergens"> & {
+  recipe: { id: RecipeId; allergens: RecipeAllergens };
+  slot: { recipe: { id: RecipeId } | null; leftoversOf: { recipe: { id: RecipeId } | null } | null } & Pick<
+    Slot,
+    "conflicts"
+  >;
+};
+
+/**
+ * The Conflict the Week's card would flag once the Slot holds the Recipe, with these people eating it: the
+ * first with no Override. The Slot's Overrides count only while it keeps the Recipe it holds now (its own,
+ * or for Leftovers the one they were cooked from); with any other, every Conflict counts (ADR 0012).
+ */
+export function wouldFlag({ recipe, slot, ...eating }: FlagCheck): Conflict | undefined {
+  const held = slot.recipe?.id ?? slot.leftoversOf?.recipe?.id ?? null;
+  // An Override covers a Conflict about the same person and Allergen, for the cause it was given for.
+  const kept = held === recipe.id ? slot.conflicts.filter((conflict) => conflict.override !== null) : [];
+  return slotConflicts({ allergens: recipe.allergens, ...eating }).find(
+    (conflict) => !kept.some((overridden) => sameConflict(overridden, conflict) && overridden.cause === conflict.cause),
+  );
 }
 
 /** Two Conflicts, or a Conflict and an Override, are about the same person and Allergen. */

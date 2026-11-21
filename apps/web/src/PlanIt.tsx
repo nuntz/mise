@@ -10,8 +10,8 @@ import {
   type RecipeId,
   type RefusedConflict,
   type Slot,
-  slotConflicts,
   type Week,
+  wouldFlag,
 } from "@mise/domain";
 import { type Accessor, createMemo, createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import type { MiseClient } from "./client";
@@ -205,17 +205,18 @@ function PlanSheet(props: {
     setError(undefined);
     change();
   };
-  // What the Week would show once the Recipe is planned here, with the Diners and Guests as they are: every
-  // Conflict, even one the Slot already had, as changing its Recipe drops its Overrides (ADR 0012).
-  const conflicts = (slot: Slot): Conflict[] =>
-    slotConflicts({
-      allergens: props.recipe.allergens,
-      diners: slot.diners.flatMap((id) => props.household.members.filter((member) => member.id === id)),
-      guests: slot.guests,
-      guestConstraints: slot.guestConstraints,
-    });
-  // A day that can't be picked brings nothing.
-  const wouldConflict = (slot: Slot): Conflict | undefined => (pickable(slot) ? conflicts(slot)[0] : undefined);
+  // What the Week would flag once the Recipe is planned here, with the Diners and Guests as they are. A day
+  // that can't be picked brings nothing.
+  const wouldConflict = (slot: Slot): Conflict | undefined =>
+    pickable(slot)
+      ? wouldFlag({
+          recipe: props.recipe,
+          diners: slot.diners.flatMap((id) => props.household.members.filter((member) => member.id === id)),
+          guests: slot.guests,
+          guestConstraints: slot.guestConstraints,
+          slot,
+        })
+      : undefined;
   // The chip's Conflict in words: it is about the Recipe planned, not the dish the row shows.
   const conflictName = (conflict: Conflict) =>
     t(conflict.cause === "contains" ? "plan.unsafe" : "plan.unsafeMaybe", {
