@@ -15,6 +15,15 @@ that is kinder than the real thing hides bugs in every screen that leans on it, 
 that fetched on subscribe hid #24. When a fake stands in for an adapter, one test drives both
 through the same contract (as `apps/web/test/client.test.ts` does for subscribing).
 
+## A rule the worker and the web share fails a test on each side
+
+A domain rule with more than one caller (the worker's tools and a screen's flags, as `heldRecipe`
+and `overrideCovers` in `packages/domain/src/conflicts.ts` are) has, for each of its branches, a
+test in each caller that goes red when that branch changes. Otherwise one side can drift while its
+suite stays green: with `heldRecipe` ignoring Leftovers, every worker test still passed (#172).
+Review breaks each branch the diff touches and names the test that goes red on each side, or asks
+for one.
+
 ## Tightening a parser is a change to stored data
 
 A parser that newly refuses a value (a field made required, an enum narrowed, a format made
