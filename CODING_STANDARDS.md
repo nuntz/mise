@@ -46,6 +46,13 @@ neither repeatable nor free. Real models are checked by hand with `bun run eval`
 fixtures in `fixtures/eval/`, whenever a prompt or a model changes; the agent's turns, with
 `bun run eval:agent` on the cases in `apps/worker/eval/`.
 
+## A tool's description agrees with the brief
+
+When a brief says how the agent acts through a tool, review reads that tool's entry in `AGENT_TOOLS`
+(`apps/worker/src/agent.ts`) and the system prompt against it. The model follows a description over
+a brief it never sees, and only `eval:agent` would show the difference: in #160 `set_slot` said to
+ask before replacing any dinner, while the brief said a pencilled one is planned at once.
+
 ## A late answer acts only on what asked for it
 
 A save, fetch or navigation that finishes after the person has moved on touches only the row, form

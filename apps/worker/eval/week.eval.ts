@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, inject, test, vi } fr
 import { useAgentModels } from "../src/agent";
 import { connectAs } from "../test/connect";
 import { dinnerOn, familyHousehold, type HouseholdStub, weekOf } from "../test/scripted";
-import { answeredFirst, realModels } from "./models";
+import { answeredFirst, realModels, requireWorkingKey } from "./models";
 
 /**
  * Typed turns about a Week on the real agent model: which Week a day name means, which Weeks “this
@@ -45,8 +45,8 @@ const RECIPE_TITLES = [
   "Shepherd's pie",
 ];
 
-beforeAll(() => {
-  if (!env.ANTHROPIC_API_KEY) throw new Error("Put ANTHROPIC_API_KEY in apps/worker/.dev.vars to run the eval.");
+beforeAll(async () => {
+  await requireWorkingKey(env);
   useAgentModels(realModels);
   console.log(`Agent model: ${inject("agentModel") || "the agent's own"}`);
   vi.useFakeTimers({ toFake: ["Date"] });

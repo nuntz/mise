@@ -1,7 +1,8 @@
-# Agent briefs: wording for the screens
+# Agent briefs: wording for the screens and the agent
 
-A brief or ticket that decides what a screen says (a message, a reason, a hint) is an acceptance
-criterion the implementer must meet word for word, so the wording has to hold up against the screens.
+A brief or ticket that decides what a screen says (a message, a reason, a hint) or what the agent
+does is an acceptance criterion the implementer must meet word for word, so the wording has to hold
+up against the screens and the tools.
 
 - **Controls by their label.** Name a control as its message in `apps/web/src/messages.ts` reads
   (`slot.edit.dinner` is "Edit dinner"), and say where it shows: on the card, in the dinner's sheet or
@@ -24,6 +25,11 @@ criterion the implementer must meet word for word, so the wording has to hold up
   Conflict `wouldFlag` (`conflicts.ts`) returns: a Slot's Override hides it only while the Slot keeps
   its Recipe, or for Leftovers the one they were cooked from (ADR 0012). Once planned, the
   page's "On the plan" line has "Show the Week". Wording that tells someone to plan from a Recipe names these.
+- **The agent, planning a Slot.** Plan it's "Replace {title}" is a step on the screen, not a held call.
+  A `set_slot` from the agent waits for a tap only when it carries an Override (ADR 0024). Over the
+  Household's own dinner it asks in words, replace or swap; over Nothing planned or a pencilled
+  dinner it plans at once, as Plan it's one tap does (#160). A brief that says how the agent plans
+  quotes these, or says which one it changes.
 - **Choose a Recipe, from the Slot form's Recipe field.** A Recipe that would bring the Slot a
   Conflict, with the Diners and Guests as the form has them (saved or not), carries the Week's
   Conflict chip ("Robin · Peanut") on its row, and can still be picked. It is `wouldFlag`'s Conflict,

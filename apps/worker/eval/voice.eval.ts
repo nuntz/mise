@@ -7,7 +7,7 @@ import { useLive } from "../src/live";
 import { connectAs } from "../test/connect";
 import { pretendLive } from "../test/liveService";
 import { dinnerOn, familyHousehold, type HouseholdStub, weekOf } from "../test/scripted";
-import { answeredFirst, realModels } from "./models";
+import { answeredFirst, realModels, requireWorkingKey } from "./models";
 
 /**
  * Spoken turns on the real agent model: what a Voice Session's agent does with a turn, and how it
@@ -24,8 +24,8 @@ const ON_THE_PANTRY: ChatWhere = { screen: "pantry" };
 // How long a turn may take: the agent may read the Week and make several calls first.
 const TURN_MS = 90_000;
 
-beforeAll(() => {
-  if (!env.ANTHROPIC_API_KEY) throw new Error("Put ANTHROPIC_API_KEY in apps/worker/.dev.vars to run the eval.");
+beforeAll(async () => {
+  await requireWorkingKey(env);
   useAgentModels(realModels);
   console.log(`Agent model: ${inject("agentModel") || "the agent's own"}`);
   vi.useFakeTimers({ toFake: ["Date"] });

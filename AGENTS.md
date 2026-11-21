@@ -23,7 +23,7 @@ Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, 
 
 ### Agent briefs
 
-Wording a brief or ticket decides for a screen: see `docs/agents/agent-briefs.md`.
+Wording a brief or ticket decides for a screen or the agent: see `docs/agents/agent-briefs.md`.
 
 ### Design canvases
 
