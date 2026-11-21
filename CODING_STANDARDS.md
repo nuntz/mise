@@ -87,7 +87,7 @@ release note true of the library can be false of Mise: Pi 1.5 ends a run cut off
 answers, so the turn still looked answered until the fix in #153. `bun run upstream-notes <package>
 <from> <to>` prints the package's changelog and release notes in between, cut to the entries that
 concern the package. A note's own wording doesn't settle what it reaches: judge that from the diff
-of the package Mise installs. Pi 1.5.2 named an output-cap fix for OpenRouter, but the change was in
+of the package Mise installs, which `--source` lists and writes to a file. Pi 1.5.2 named an output-cap fix for OpenRouter, but the change was in
 pi-ai's shared code and capped Mise's calls too.
 
 A test the upgrade adds runs Mise's own code, its tools and its Household, so it fails when the

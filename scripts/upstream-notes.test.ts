@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
-import { changelogBetween, entriesFor, metaOf, releasesBetween, scopesOf, shortenLinks } from "./upstream-notes";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  changelogBetween,
+  diffPackages,
+  entriesFor,
+  metaOf,
+  releasesBetween,
+  scopesOf,
+  shortenLinks,
+} from "./upstream-notes";
 
 test("releasesBetween keeps the releases after `from` up to `to`, oldest first, without prereleases", () => {
   const tags = ["11.12.0", "11.12.0-alpha.1", "10.78.0", "11.11.0", "11.4.0", "11.3.0", "11.13.0"];
@@ -103,4 +114,25 @@ test("changelogBetween keeps the changelog's sections after `from` up to `to`, a
   );
   expect(changelogBetween("## 2.0.0\n\n- New.\n\n## 1.0.0\n\n- Old.\n", "1.0.0", "2.0.0")).toBe("## 2.0.0\n\n- New.");
   expect(changelogBetween(CHANGELOG, "1.5.2", "1.5.2")).toBe("");
+});
+
+test("diffPackages lists the files that changed between two versions, leaving out source maps, and writes their diff", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "upstream-test-"));
+  await Bun.write(join(dir, "1.5.2/dist/retry.js"), "export const codes = [500];\n");
+  await Bun.write(join(dir, "1.5.2/dist/retry.js.map"), "{}");
+  await Bun.write(join(dir, "1.5.2/dist/same.js"), "export {};\n");
+  await Bun.write(join(dir, "1.6.0/dist/retry.js"), "export const codes = [500, 529];\n");
+  await Bun.write(join(dir, "1.6.0/dist/retry.js.map"), "{ }");
+  await Bun.write(join(dir, "1.6.0/dist/same.js"), "export {};\n");
+  await Bun.write(join(dir, "1.6.0/dist/hooks.js"), "export const hookTask = 1;\n");
+
+  const { stat, path } = await diffPackages(dir, "1.5.2", "1.6.0");
+
+  expect(stat).toContain("dist/retry.js ");
+  expect(stat).toContain("hooks.js");
+  expect(stat).not.toContain(".map");
+  expect(stat).not.toContain("same.js");
+  const diff = await Bun.file(path).text();
+  expect(diff).toContain("+export const codes = [500, 529];");
+  expect(diff).toContain("+export const hookTask = 1;");
 });

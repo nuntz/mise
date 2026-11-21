@@ -8,8 +8,14 @@
  * chore and CI entries. A release whose notes have no scoped entries, like Pi's, prints whole.
  * GitHub is read over REST only, so it works where its GraphQL API is blocked.
  *
- *   bun run upstream-notes <package> <from> <to>    (after `from`, up to and including `to`)
+ * `--source` prints instead which files of the published package changed between the two versions,
+ * and writes their diff to a file: a note's wording doesn't say what it reaches, the installed code does.
+ *
+ *   bun run upstream-notes <package> <from> <to> [--source]    (after `from`, up to and including `to`)
  */
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { $ } from "bun";
 
 type Version = [number, number, number];
@@ -114,11 +120,49 @@ export function shortenLinks(text: string): string {
   return text.replace(/\[#(\d+)\]\(https:\/\/github\.com\/[^)\s]+\/(?:pull|issues)\/\d+\)/g, "#$1");
 }
 
+/**
+ * The changes from the package in `dir/<from>` to the one in `dir/<to>`, without source maps: which
+ * files changed and by how many lines, and the whole diff, written to `dir/source.diff`.
+ */
+export async function diffPackages(dir: string, from: string, to: string): Promise<{ stat: string; path: string }> {
+  for (const version of [from, to]) {
+    const files = await readdir(join(dir, version), { recursive: true });
+    for (const file of files.filter((name) => name.endsWith(".map"))) await rm(join(dir, version, file));
+  }
+  const path = join(dir, "source.diff");
+  // `git diff --no-index` exits 1 when the folders differ.
+  const diff = await $`git diff --no-index ${from} ${to}`.cwd(dir).quiet().nothrow();
+  if (diff.exitCode > 1) throw new Error(diff.stderr.toString());
+  await Bun.write(path, diff.stdout);
+  const stat = await $`git diff --no-index --stat=200 ${from} ${to}`.cwd(dir).quiet().nothrow();
+  return { stat: stat.stdout.toString().trimEnd(), path };
+}
+
+/** The published package at `version`, unpacked into `dir/<version>`. */
+async function unpack(pkg: string, version: string, dir: string): Promise<void> {
+  const into = join(dir, version);
+  await mkdir(into);
+  const tarball = (await $`npm pack ${`${pkg}@${version}`} --silent --pack-destination ${dir}`.cwd(dir).text()).trim();
+  await $`tar -xzf ${join(dir, tarball)} -C ${into} --strip-components=1`;
+  await rm(join(dir, tarball));
+}
+
 if (import.meta.main) {
-  const [pkg, from, to] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const source = args.includes("--source");
+  const [pkg, from, to] = args.filter((arg) => arg !== "--source");
   if (!pkg || !from || !to) {
-    console.error("Usage: bun run upstream-notes <package> <from> <to>");
+    console.error("Usage: bun run upstream-notes <package> <from> <to> [--source]");
     process.exit(2);
+  }
+  if (source) {
+    const dir = await mkdtemp(join(tmpdir(), "upstream-source-"));
+    const [low, high] = [from.replace(/^v/, ""), to.replace(/^v/, "")];
+    for (const version of [low, high]) await unpack(pkg, version, dir);
+    const { stat, path } = await diffPackages(dir, low, high);
+    console.log(`${pkg} ${low} → ${high}, as published, without source maps:\n\n${stat || "(no changes)"}\n`);
+    console.log(`The whole diff: ${path}`);
+    process.exit(0);
   }
   const spec = `${pkg}@${to.replace(/^v/, "")}`;
   const view = await $`npm view ${spec} --json`.quiet().nothrow();
