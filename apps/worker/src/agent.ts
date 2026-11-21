@@ -526,8 +526,8 @@ type JsonSchema = {
 };
 
 /**
- * A tool's input as one object. Anthropic takes a tool's input that way, and pi-ai sends only the
- * root's `properties` and `required`, so alternatives at the root (`set_slot`'s, one for a Recipe and
+ * A tool's input as one object. Anthropic takes a tool's input that way, and pi-ai sends the root's
+ * `properties`, `required` and `additionalProperties` but no alternatives, so alternatives at the root (`set_slot`'s, one for a Recipe and
  * one for every other kind) would reach the model as a tool without parameters. Their properties are
  * merged, a property the alternatives describe differently taking any of its descriptions, and only
  * what every alternative requires is required; the household still validates the call as it is.

@@ -537,8 +537,9 @@ describe("what the agent is told when nothing changed", () => {
 });
 
 describe("what the agent is offered, as Anthropic takes it", () => {
-  // Anthropic takes a tool's input as one object, and pi-ai sends only the root's `properties` and
-  // `required`: a schema of alternatives at the root reaches the model as a tool without parameters.
+  // Anthropic takes a tool's input as one object, and pi-ai sends the root's `properties`, `required` and
+  // `additionalProperties` but no alternatives: a schema of alternatives at the root reaches the model as
+  // a tool without parameters.
   test("every tool's input is one object with its properties at the root", async () => {
     const offered: { name: string; parameters: { type?: string; properties?: object; oneOf?: unknown } }[][] = [];
     scriptModel((context) => {
@@ -561,6 +562,51 @@ describe("what the agent is offered, as Anthropic takes it", () => {
       expect.arrayContaining(["date", "meal", "kind", "recipeId", "overrides"]),
     );
     expect(setSlot?.parameters).toMatchObject({ required: ["date", "meal", "kind"] });
+  });
+
+  // Claude's own provider builds the request from the tools Pi offers, which is caught before it is sent.
+  test("a tool that takes no other properties says so to Claude", async () => {
+    let offered: { name: string; description: string; parameters: { additionalProperties?: unknown } }[] = [];
+    scriptModel((context) => {
+      const system = context.messages.find((message) => (message.role as string) === "system") as
+        | { toolsAdded?: typeof offered }
+        | undefined;
+      offered = system?.toolsAdded ?? [];
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+    await household.chat("Hello", ON_THE_WEEK);
+    const { models, model: ref } = claudeAgentModels("a key");
+    const model = models.getModel(ref.provider, ref.id);
+    if (!model) throw new Error(`pi-ai has no model ${ref.id}`);
+    let sent: { tools?: { name: string; input_schema: { additionalProperties?: unknown } }[] } | undefined;
+
+    const stream = models.stream(
+      model,
+      {
+        messages: [
+          { role: "system", content: "You help a family plan.", toolsAdded: offered, timestamp: 1 },
+          { role: "user", content: "Hello", timestamp: 2 },
+        ],
+      },
+      {
+        onPayload: (payload) => {
+          sent = payload as typeof sent;
+          throw new Error("Not sent");
+        },
+      },
+    );
+    await stream.result();
+
+    const closed = (tools: { name: string; additionalProperties?: unknown }[]) =>
+      Object.fromEntries(tools.map((tool) => [tool.name, tool.additionalProperties]));
+    expect(closed((sent?.tools ?? []).map((tool) => ({ name: tool.name, ...tool.input_schema })))).toEqual(
+      closed(offered.map((tool) => ({ name: tool.name, ...tool.parameters }))),
+    );
+    expect(closed(offered.map((tool) => ({ name: tool.name, ...tool.parameters })))).toMatchObject({
+      get_week: false,
+      propose_dinner: false,
+    });
   });
 
   test("“a rice bowl for breakfast Friday” plans breakfast", async () => {

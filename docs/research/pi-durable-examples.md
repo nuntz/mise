@@ -1,6 +1,6 @@
 # Pi Durable: the upstream examples against Mise's agent
 
-How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise moved to Pi 1.5.0 on 2026-11-06 (#153) and pins 1.5.2 as of 2026-11-14. **Pi 1.5.2** and **Pi 1.5** below say what changed, and win over the 1.4.0 citations in §1–§5. The agent's model is `AGENT_MODEL` in `apps/worker/src/agent.ts`: Sonnet 5.5 since 2026-11-05 (#142). §1–§5 were written when it was Haiku 5.5, so their Haiku figures are history.
+How the official `@earendil-works/pi-durable` examples set up and use the Harness, and where Mise's agent (SPEC §2, §4.7; ADR 0024) does something different. Researched 2026-10-24 against Pi 1.4.0. Mise moved to Pi 1.5.0 on 2026-11-06 (#153), to 1.5.2 on 2026-11-14, and to 1.6.0 on 2026-11-21. **Pi 1.6**, **Pi 1.5.2** and **Pi 1.5** below say what changed, and win over the 1.4.0 citations in §1–§5. The agent's model is `AGENT_MODEL` in `apps/worker/src/agent.ts`: Sonnet 5.5 since 2026-11-05 (#142). §1–§5 were written when it was Haiku 5.5, so their Haiku figures are history.
 
 ## Decisions (2026-10-24)
 
@@ -12,6 +12,18 @@ How the official `@earendil-works/pi-durable` examples set up and use the Harnes
 - **Kept on purpose:** `afterFailedRun: "withdraw"`, for every speaker's queued turn.
 - **Not now:** splitting the preamble, an `operationId` per turn, `progress` intervals, a stream timeout, a `beforeCompact` prompt, reading `usage()`.
 - **Open questions settled since:** with `thinkingLevel: "off"`, Haiku 5.5 is sent `thinking: { type: "disabled" }`. Compaction spans carry no content, and their error text is already replaced by `internal_error`.
+
+## Pi 1.6 (2026-11-21)
+
+The four direct Pi dependencies and the transitive `pi-codemode` and `pi-telemetry` move together from 1.5.2 to 1.6.0, and `agents` from 0.33.0 to 0.34.0 in the Worker and the PWA: its Pi peers require `~1.6.0`. Sources: the [Pi v1.6.0](https://github.com/earendil-works/pi/releases/tag/v1.6.0) release, each package's `CHANGELOG.md` at `v1.6.0`, and [agents 0.34.0](https://github.com/cloudflare/agents/releases/tag/agents%400.34.0).
+
+- **No rolling back:** Pi's SQLite schema is unchanged and `agentLog.ts` still reads `pi_entries`, but `pi.tool` moves to version 4 and `pi.generation` to 3. A 1.5.2 Harness stops at a newer task with `task_too_old`, so once 1.6 has run a conversation, a bad deploy is fixed forward. A Backup holds no `pi_` table, so it can't undo this.
+- **The root is made lazily:** agents no longer makes Pi's root when it opens Pi. `followAgentModel()` in `household.ts` calls `harness.root()` first, from `onStart`, so the root carries the harness's defaults; the turn, `heldButtonsSince()` and `conversation()` reach the root through `pi.root()` only after it. The only default is the model, so without the call a new Household's root would still end on `AGENT_MODEL`, a write later.
+- **Wake jobs:** a Lifecycle job replaced while its retry waits no longer runs with the old job. `PiHarness` replaces its `pi-wake` job on every `submit()`, so this applies to every turn's wake, as it does to the Household's scheduled runs.
+- **Tool schemas to Claude:** pi-ai now sends a tool's root `additionalProperties`, so every tool whose Zod input is strict tells Claude it takes no other properties. `set_slot` doesn't: `asOneObject()` merges its alternatives without it, and the household still validates the call. The `llm.ts` tools are sent the same way. Mise sets no `constrainedSampling`, so the strict-schema fallback doesn't apply.
+- **Provider session cleanup:** when Pi closes after a storage error, it now clears pi-ai's Anthropic thread, so the first request after Pi reopens sends the whole conversation again. Mise never calls `PiHarness.dispose()`.
+- **Retries:** the socket-code and "Connection closed." retry fixes are in pi-ai's shared retry code, so they apply to the agent's and `llm.ts`'s requests. Threads widened to any provider at `api.anthropic.com` change nothing: Mise's provider is `anthropic` at its default address.
+- **Unused:** hooks (the `RunEndTask` rename), code mode, namespaces, signals, parks, `onAbort: "keep"`, Durable's `read` tool and JSONL storage, the non-Anthropic providers, Chord beyond `/context` (unchanged), and agents' MCP, AIChatAgent and browser changes.
 
 ## Pi 1.5.2 (2026-11-14)
 
