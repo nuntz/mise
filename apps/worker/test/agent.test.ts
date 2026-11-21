@@ -631,6 +631,9 @@ describe("what the agent is told about pencilled dinners", () => {
     }
     expect(described("propose_week")).toMatch(/pencilled dinners/);
     expect(described("keep_slot")).toMatch(/Keeps a pencilled dinner/);
+    // Planned over at once, as Plan it on a Recipe's page does (#160); only the Household's own asks first.
+    expect(described("set_slot")).toMatch(/dinner of the Household's own, first ask whether to replace it or swap/);
+    expect(described("set_slot")).toMatch(/A pencilled dinner is replaced without asking/);
   });
 });
 
