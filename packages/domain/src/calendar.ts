@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { heldRecipe } from "./conflicts";
 import type { HouseholdSettings } from "./household";
 import type { RecipeId } from "./recipes";
 import { offsetTransitions, utcOffset } from "./time";
@@ -114,10 +115,10 @@ function title(slot: Slot): string | null {
   return null;
 }
 
-/** The Recipe a Slot cooks or serves: its own, or for Leftovers the one they were cooked from. */
+/** The Recipe a Slot cooks or serves, as `heldRecipe` reads it: none, or that one. */
 export function linkedRecipe(slot: Slot): RecipeId[] {
-  const recipe = slot.kind === "leftovers" ? slot.leftoversOf?.recipe : slot.recipe;
-  return recipe ? [recipe.id] : [];
+  const recipe = heldRecipe(slot);
+  return recipe === null ? [] : [recipe];
 }
 
 /**

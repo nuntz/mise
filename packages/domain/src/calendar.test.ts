@@ -79,6 +79,29 @@ describe("calendarFeed", () => {
     );
   });
 
+  test("links a dinner to its Recipe, and Leftovers to the Recipe they were cooked from", () => {
+    const links = (slot: Slot) =>
+      unfolded(feed([slot])).filter((line) => line.startsWith("URL:") || line.startsWith("DESCRIPTION:"));
+    const leftovers = dinner("2026-11-05", "Chili", {
+      kind: "leftovers",
+      recipe: null,
+      leftoversOf: {
+        date: "2026-11-04",
+        meal: "dinner",
+        recipe: { id: 9, title: "Chili", baseServings: 4, photoKey: null, readyMade: false },
+      },
+    });
+
+    expect(links(dinner("2026-11-04", "Dal"))).toEqual([
+      "DESCRIPTION:Servings: 1\\nDiners: 1\\nRecipe: https://example.com/?recipe=7",
+      "URL:https://example.com/?recipe=7",
+    ]);
+    expect(links(leftovers)).toEqual([
+      "DESCRIPTION:Servings: 1\\nDiners: 1\\nRecipe: https://example.com/?recipe=9",
+      "URL:https://example.com/?recipe=9",
+    ]);
+  });
+
   test("gives each dinner a UID that stays the same when the dinner changes", () => {
     const uid = (ics: string) => unfolded(ics).find((line) => line.startsWith("UID:"));
 
