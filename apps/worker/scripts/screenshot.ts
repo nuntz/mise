@@ -9,8 +9,9 @@
  * Week, a Week not yet proposed, then the rest once both Weeks are proposed.
  * `--only week,import` takes just the screens whose names contain one of those words, and `--variants
  * daylight` just those variants, to retake a screen quickly while working on it. Each screen
- * records the web source it was taken from, and `--check` lists the screens taken before the source
- * last changed, or never taken, without starting anything.
+ * records the web source it was taken from, or that its last attempt failed and why. `--check` lists the
+ * screens that failed, and those taken before the source last changed or never taken, without starting
+ * anything; every run ends naming the screens that failed before and weren't retaken.
  * A screen that fails is skipped in the variants after it, and the run ends listing every failure and
  * exiting 1.
  * Usage: bun run screenshot [--screens [--only <words>] [--variants <names>] | --check].
@@ -56,8 +57,9 @@ function listArg(flag: string): string[] {
 const only = listArg("--only");
 const wanted = (name: string) => only.length === 0 || only.some((word) => name.includes(word));
 
-/** Which web source each screen was last taken from, by screen name. */
+/** Which web source each screen was last taken from, or `failed: <error>`, by "variant/screen". */
 const takenFile = join(screensOut, "taken.json");
+const FAILED = "failed: ";
 
 /** A hash of every file under apps/web/src, so a screen taken from older source shows as stale. */
 function webSource(): string {
@@ -74,6 +76,19 @@ function webSource(): string {
 async function readTaken(): Promise<Record<string, string>> {
   const file = Bun.file(takenFile);
   return (await file.exists()) ? file.json() : {};
+}
+
+/** Every screen in every variant, as "variant/screen", the keys of the `taken` record. */
+function screenKeys(): string[] {
+  const names = screens(new Map()).map((screen) => screen.name);
+  return VARIANTS.flatMap((variant) => names.map((name) => `${variant.name}/${name}`));
+}
+
+/** The screens whose last attempt failed, as "variant/screen: error", less those in `except`. */
+function failedBefore(taken: Record<string, string>, except: Set<string> = new Set()): string[] {
+  return screenKeys()
+    .filter((key) => taken[key]?.startsWith(FAILED) && !except.has(key))
+    .map((key) => `${key}: ${taken[key]?.slice(FAILED.length)}`);
 }
 
 async function run(command: string[], cwd: string) {
@@ -651,7 +666,9 @@ async function screenshotEveryScreen(browser: Browser): Promise<string[]> {
   const source = webSource();
   const failures: string[] = [];
   // A screen that failed once fails the same way in every variant: its wait would only time out again.
-  const failed = new Set<string>();
+  // By screen name, the `taken` entry its first failure recorded, for the variants it's skipped in.
+  const failed = new Map<string, string>();
+  const attempted = new Set<string>();
   const saved: string[] = [];
   // Filled as the sample Recipes are seeded, for the screens that open one by its link.
   const ids = new Map<string, number>();
@@ -669,17 +686,26 @@ async function screenshotEveryScreen(browser: Browser): Promise<string[]> {
       const dir = join(screensOut, variant.name);
       await mkdir(dir, { recursive: true });
       for (const [index, screen] of screens(ids).entries()) {
-        if (stageOf(screen) !== stage || !wanted(screen.name) || failed.has(screen.name)) continue;
+        if (stageOf(screen) !== stage || !wanted(screen.name)) continue;
+        const key = `${variant.name}/${screen.name}`;
+        attempted.add(key);
+        const failure = failed.get(screen.name);
+        if (failure !== undefined) {
+          taken[key] = failure;
+          continue;
+        }
         const context = await phone(browser, variant);
         const page = await context.newPage();
         const base = join(dir, `${String(index).padStart(2, "0")}-${screen.name}`);
         try {
           await removeEarlier(dir, screen.name);
           saved.push(...(await capture(page, screen, variant.query, base)));
-          taken[`${variant.name}/${screen.name}`] = source;
+          taken[key] = source;
         } catch (error) {
-          failed.add(screen.name);
-          failures.push(`${variant.name}/${screen.name}: ${error}`);
+          // Its first line: a Playwright error goes on with its call log.
+          taken[key] = `${FAILED}${String(error).split("\n")[0]}`;
+          failed.set(screen.name, taken[key]);
+          failures.push(`${key}: ${error}`);
         } finally {
           await context.close();
         }
@@ -691,23 +717,36 @@ async function screenshotEveryScreen(browser: Browser): Promise<string[]> {
   console.log(`Saved ${failures.length > 0 ? `the rest of ${which}` : which}:`);
   // Absolute: the workspace filter prefixes each line with the worker's name, so a relative path misleads.
   for (const file of saved) console.log(`  ${file}`);
+  // What a run of a few screens can't show: others broken since, by a change to what they open.
+  const earlier = failedBefore(taken, attempted);
+  if (earlier.length > 0) {
+    console.error(`Failed on their last attempt, and not retaken now (${earlier.length}):`);
+    for (const failure of earlier) console.error(`  ${failure}`);
+  }
   return failures;
 }
 
-/** Lists the screens taken from older web source than now, or never taken, and fails if there are any. */
+/**
+ * Lists the screens whose last attempt failed, then those taken from older web source than now or never
+ * taken, and fails if there are any.
+ */
 async function checkScreens() {
   const taken = await readTaken();
   const source = webSource();
-  const names = screens(new Map()).map((screen) => screen.name);
-  const stale = VARIANTS.flatMap((variant) =>
-    names.map((name) => `${variant.name}/${name}`).filter((key) => taken[key] !== source),
-  );
-  if (stale.length === 0) {
+  const failed = failedBefore(taken);
+  const stale = screenKeys().filter((key) => taken[key] !== source && !taken[key]?.startsWith(FAILED));
+  if (failed.length === 0 && stale.length === 0) {
     console.log("Every screen in dist/screens shows the current web source.");
     return;
   }
-  console.error(`Taken before the web source last changed, or never taken (${stale.length}):`);
-  for (const key of stale) console.error(`  ${key}`);
+  if (failed.length > 0) {
+    console.error(`Failed on their last attempt (${failed.length}):`);
+    for (const failure of failed) console.error(`  ${failure}`);
+  }
+  if (stale.length > 0) {
+    console.error(`Taken before the web source last changed, or never taken (${stale.length}):`);
+    for (const key of stale) console.error(`  ${key}`);
+  }
   console.error("Retake them with: bun run screenshot --screens --only <words>");
   process.exit(1);
 }
