@@ -90,6 +90,12 @@ concern the package. A note's own wording doesn't settle what it reaches: judge 
 of the package Mise installs. Pi 1.5.2 named an output-cap fix for OpenRouter, but the change was in
 pi-ai's shared code and capped Mise's calls too.
 
+A test the upgrade adds runs Mise's own code, its tools and its Household, so it fails when the
+change stops reaching Mise: Pi 1.6's `additionalProperties` test first checked a tool the test
+built, which passes whatever Mise's tools send (#171). Where the account says tests cover a
+change, it names the test. A comment that gives upstream's old behaviour as its reason changes
+with the upgrade: `conversation()` credited agents 0.33 for a root that 0.34 leaves to `onStart`.
+
 ## A value the deploy log must not show is a secret
 
 The deploy log is public. GitHub masks a secret everywhere, but `::add-mask::` hides only what
