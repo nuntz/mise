@@ -266,6 +266,10 @@ class HouseholdAgent extends Agent<Env> {
    */
   private async followAgentModel(): Promise<void> {
     const { model } = this.models;
+    // The harness makes the root with its defaults; Pi's own `root` below, finding none, would make it
+    // bare. The only default is the model, which the check below would also set, but in a second write.
+    // Every other use of the root comes after this one, as it runs from `onStart`.
+    await this.harness.root();
     const root = await (await this.harness.pi()).root(BACKGROUND_CONTEXT);
     const current = (await root.agent(BACKGROUND_CONTEXT)).model;
     if (current?.provider === model.provider && current.modelId === model.id) return;
@@ -601,7 +605,7 @@ class HouseholdAgent extends Agent<Env> {
   /** The latest turns of the Household's conversation with the agent, oldest first. */
   @callable()
   async conversation(): Promise<ChatMessage[]> {
-    // The harness opened Pi with its root conversation, so `root` finds it rather than making one.
+    // `onStart` made the root through the harness (`followAgentModel`), so `root` finds it rather than making one.
     const pi = await this.harness.pi();
     const { sql } = this.ctx.storage;
     return recentChat(pi, await pi.root(BACKGROUND_CONTEXT), RECENT_CHAT_TURNS, {
