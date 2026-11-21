@@ -2,7 +2,9 @@ import {
   addDays,
   Conflict,
   Constraint,
+  coveringOverride,
   currentWeek,
+  heldRecipe,
   isEaten,
   isKeepable,
   isPencilled,
@@ -13,6 +15,7 @@ import {
   type Member,
   type MemberId,
   Override,
+  overrideCovers,
   PLANNED_WEIGHS_FOR_DAYS,
   type Proposal,
   ProposalChoice,
@@ -201,7 +204,7 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
     const unknown = unknownMember(sql, input.diners);
     if (unknown !== undefined) return memberNotFound(unknown);
     const slot = readSlot(sql, input.date, input.meal);
-    const recipeId = input.recipeId === undefined ? eatenRecipe(slot) : input.recipeId;
+    const recipeId = input.recipeId === undefined ? heldRecipe(slot) : input.recipeId;
     const diners = input.diners === undefined ? slot.diners : (input.diners ?? memberIds(sql));
     const conflicts = conflictsOf(readMembers(sql), readRecipeAllergens(sql, recipeId === null ? [] : [recipeId]), {
       recipeId,
@@ -209,14 +212,9 @@ export const weekHandlers: Pick<Handlers, WeekTools> = {
       guests: input.guests ?? slot.guests,
       guestConstraints: input.guestConstraints ?? slot.guestConstraints,
     });
-    // An Override is for the Recipe it was given with.
-    const kept = recipeId === eatenRecipe(slot) ? slot.conflicts : [];
     return {
       ok: true,
-      value: conflicts.map((conflict) => ({
-        ...conflict,
-        override: kept.find((other) => sameConflict(other, conflict))?.override ?? null,
-      })),
+      value: conflicts.map((conflict) => ({ ...conflict, override: coveringOverride(slot, recipeId, conflict) })),
     };
   },
 
@@ -562,11 +560,6 @@ function isProposedLeftovers(slot: Slot): boolean {
   return slot.kind === "leftovers" && slot.reason?.kind === "leftovers";
 }
 
-/** The Recipe eaten at the Slot: its own, or for Leftovers the one they were cooked from. */
-function eatenRecipe(slot: Slot): RecipeId | null {
-  return slot.recipe?.id ?? slot.leftoversOf?.recipe?.id ?? null;
-}
-
 /** Whether Slot `a` comes before Slot `b`: an earlier date, or an earlier meal that day. */
 function isBefore(a: SlotKey & { meal: Meal }, b: SlotKey & { meal: Meal }): boolean {
   return a.date < b.date || (a.date === b.date && MEALS.indexOf(a.meal) < MEALS.indexOf(b.meal));
@@ -649,7 +642,7 @@ function editSlot(
   const refused: RefusedConflict[] = [];
   for (const was of before) {
     const after = readSlot(sql, was.date, was.meal);
-    const sameRecipe = eatenRecipe(was) === eatenRecipe(after);
+    const sameRecipe = heldRecipe(was) === heldRecipe(after);
     const known = sameRecipe ? was.conflicts : [];
     const overrides: StoredOverride[] = [];
     for (const conflict of after.conflicts) {
@@ -988,9 +981,7 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
         leftovers: leftovers.map((other) => ({ date: other.date, meal: other.meal })),
         conflicts: conflicts.map((conflict) => ({
           ...conflict,
-          override:
-            stored.find((override) => sameConflict(override, conflict) && override.cause === conflict.cause)?.reason ??
-            null,
+          override: stored.find((override) => overrideCovers(override, conflict))?.reason ?? null,
         })),
         reason: reason ? ProposalReason.parse(JSON.parse(reason.reason)) : null,
         cookedAt: row.cooked_at,

@@ -56,10 +56,7 @@ export function slotConflicts({ allergens, diners, guests, guestConstraints }: C
 /** What `wouldFlag` asks: a Recipe, who would eat it, and the Slot as read. */
 export type FlagCheck = Omit<ConflictCheck, "allergens"> & {
   recipe: { id: RecipeId; allergens: RecipeAllergens };
-  slot: { recipe: { id: RecipeId } | null; leftoversOf: { recipe: { id: RecipeId } | null } | null } & Pick<
-    Slot,
-    "conflicts"
-  >;
+  slot: HoldsRecipe & Pick<Slot, "conflicts">;
 };
 
 /**
@@ -68,12 +65,47 @@ export type FlagCheck = Omit<ConflictCheck, "allergens"> & {
  * or for Leftovers the one they were cooked from); with any other, every Conflict counts (ADR 0012).
  */
 export function wouldFlag({ recipe, slot, ...eating }: FlagCheck): Conflict | undefined {
-  const held = slot.recipe?.id ?? slot.leftoversOf?.recipe?.id ?? null;
-  // An Override covers a Conflict about the same person and Allergen, for the cause it was given for.
-  const kept = held === recipe.id ? slot.conflicts.filter((conflict) => conflict.override !== null) : [];
   return slotConflicts({ allergens: recipe.allergens, ...eating }).find(
-    (conflict) => !kept.some((overridden) => sameConflict(overridden, conflict) && overridden.cause === conflict.cause),
+    (conflict) => coveringOverride(slot, recipe.id, conflict) === null,
   );
+}
+
+/**
+ * The reason of the Slot's Override that would still cover the Conflict with this Recipe in the Slot, or
+ * null: an Override counts only while the Slot has the Recipe it was given with (ADR 0012).
+ */
+export function coveringOverride(
+  slot: HoldsRecipe & Pick<Slot, "conflicts">,
+  recipeId: RecipeId | null,
+  conflict: Pick<Conflict, "who" | "allergen" | "cause">,
+): string | null {
+  if (recipeId !== heldRecipe(slot)) return null;
+  return slot.conflicts.find((other) => other.override !== null && overrideCovers(other, conflict))?.override ?? null;
+}
+
+/** What a Slot's held Recipe is read from: its own Recipe, and for Leftovers the Slot they were cooked at. */
+export type HoldsRecipe = {
+  recipe: { id: RecipeId } | null;
+  leftoversOf: { recipe: { id: RecipeId } | null } | null;
+};
+
+/**
+ * The Recipe a Slot holds: its own, or for Leftovers the one they were cooked from. Its Overrides count
+ * only while this stays the same (ADR 0012).
+ */
+export function heldRecipe(slot: HoldsRecipe): RecipeId | null {
+  return slot.recipe?.id ?? slot.leftoversOf?.recipe?.id ?? null;
+}
+
+/**
+ * Whether an Override covers a Conflict: the same person and Allergen, and the cause it was given for, so
+ * one given while the Allergens were unknown stops covering once they are known to be there (ADR 0012).
+ */
+export function overrideCovers(
+  override: Pick<Conflict, "who" | "allergen" | "cause">,
+  conflict: Pick<Conflict, "who" | "allergen" | "cause">,
+): boolean {
+  return sameConflict(override, conflict) && override.cause === conflict.cause;
 }
 
 /** Two Conflicts, or a Conflict and an Override, are about the same person and Allergen. */

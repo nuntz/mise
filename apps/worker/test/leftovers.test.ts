@@ -243,6 +243,40 @@ describe("Leftovers", () => {
     expect(slotOf(await week(household), MONDAY).recipe?.id).toBe(CHILI);
   });
 
+  test("an Override on Leftovers is for the Recipe they were cooked from: changing that Recipe needs a new one", async () => {
+    const household = await setUpHousehold();
+    const noodles = succeeded<{ id: number }>(
+      await household.callTool("create_recipe", {
+        title: "Peanut noodles",
+        baseServings: 4,
+        ingredients: ["3 tbsp peanut butter"],
+        effortMinutes: 20,
+      }),
+    ).id;
+    succeeded(
+      await household.callTool("set_slot", { ...dinner(TUESDAY), kind: "recipe", recipeId: SATAY, diners: [2] }),
+    );
+    succeeded(
+      await household.callTool("link_leftovers", {
+        ...dinner(WEDNESDAY),
+        of: dinner(TUESDAY),
+        overrides: [{ who: 1, allergen: "peanut", reason: "Robin's bowl without the sauce" }],
+      }),
+    );
+    expect(await household.callTool("check_slot_constraints", dinner(WEDNESDAY))).toMatchObject({
+      ok: true,
+      value: [{ who: 1, allergen: "peanut", override: "Robin's bowl without the sauce" }],
+    });
+
+    expect(
+      await household.callTool("set_slot", { ...dinner(TUESDAY), kind: "recipe", recipeId: noodles, diners: [2] }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "constraint_conflict", conflicts: [{ ...dinner(WEDNESDAY), who: 1, allergen: "peanut" }] },
+    });
+    expect(slotOf(await week(household), TUESDAY).recipe?.id).toBe(SATAY);
+  });
+
   test("clearing the Week of the Slot they were cooked for unlinks Leftovers in the next Week", async () => {
     const household = await setUpHousehold();
     const sunday = "2026-11-01";
