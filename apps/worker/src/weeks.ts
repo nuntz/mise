@@ -903,20 +903,46 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
     .toArray();
   const members = readMembers(sql);
   const defaults = members.map((member) => member.id);
-  // The Recipe eaten: for Leftovers, the one they were cooked from.
-  const eaten = (row: SlotRow) => row.recipe_id ?? (row.kind === "leftovers" ? row.of_recipe_id : null);
+  // Each row's Recipe and Leftovers link, shaped as the Slot carries them, and the Recipe it holds.
+  const shaped = rows.map((row) => {
+    const recipe =
+      row.recipe_id === null
+        ? null
+        : {
+            id: row.recipe_id,
+            title: row.title,
+            baseServings: row.base_servings,
+            photoKey: row.photo_key,
+            readyMade: row.ready_made === 1,
+          };
+    const leftoversOf =
+      row.leftovers_of_date === null
+        ? null
+        : {
+            date: row.leftovers_of_date,
+            meal: row.leftovers_of_meal,
+            recipe:
+              row.of_recipe_id === null
+                ? null
+                : {
+                    id: row.of_recipe_id,
+                    title: row.of_title,
+                    baseServings: row.of_base_servings,
+                    photoKey: row.of_photo_key,
+                    readyMade: row.of_ready_made === 1,
+                  },
+          };
+    return { row, recipe, leftoversOf, held: heldRecipe({ recipe, leftoversOf }) };
+  });
   const allergens = readRecipeAllergens(
     sql,
-    rows.flatMap((row) => {
-      const id = eaten(row);
-      return id === null ? [] : [id];
-    }),
+    shaped.flatMap(({ held }) => (held === null ? [] : [held])),
   );
   const of = <T extends SlotKey>(all: T[], row: SlotKey) =>
     all.filter((other) => other.date === row.date && other.meal === row.meal);
 
-  return rows
-    .map((row) => {
+  return shaped
+    .map(({ row, recipe, leftoversOf, held }) => {
       const eating = row.diners_chosen === 1 ? of(diners, row).map((diner) => diner.member_id) : defaults;
       const theirConstraints = of(guestConstraints, row).map((constraint) =>
         Constraint.parse(constraintOf(constraint)),
@@ -935,7 +961,7 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
       const leftovers = linked.filter((other) => other.of_date === row.date && other.of_meal === row.meal);
       const servings = eating.length + row.guests;
       const conflicts = conflictsOf(members, allergens, {
-        recipeId: eaten(row),
+        recipeId: held,
         diners: eating,
         guests: row.guests,
         guestConstraints: theirConstraints,
@@ -944,16 +970,7 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
         date: row.date,
         meal: row.meal,
         kind: row.kind,
-        recipe:
-          row.recipe_id === null
-            ? null
-            : {
-                id: row.recipe_id,
-                title: row.title,
-                baseServings: row.base_servings,
-                photoKey: row.photo_key,
-                readyMade: row.ready_made === 1,
-              },
+        recipe,
         note: row.note,
         diners: eating,
         dinersAreDefault: row.diners_chosen === 0,
@@ -961,23 +978,7 @@ export function readSlots(sql: SqlStorage, from?: LocalDate, to?: LocalDate): Sl
         guestConstraints: theirConstraints,
         servings,
         cookFor: row.recipe_id === null ? 0 : servings + leftovers.reduce((total, other) => total + other.servings, 0),
-        leftoversOf:
-          row.leftovers_of_date === null
-            ? null
-            : {
-                date: row.leftovers_of_date,
-                meal: row.leftovers_of_meal,
-                recipe:
-                  row.of_recipe_id === null
-                    ? null
-                    : {
-                        id: row.of_recipe_id,
-                        title: row.of_title,
-                        baseServings: row.of_base_servings,
-                        photoKey: row.of_photo_key,
-                        readyMade: row.of_ready_made === 1,
-                      },
-              },
+        leftoversOf,
         leftovers: leftovers.map((other) => ({ date: other.date, meal: other.meal })),
         conflicts: conflicts.map((conflict) => ({
           ...conflict,
