@@ -5,6 +5,8 @@
  * docs/screenshots/. Nothing is committed: look the images over, then commit the ones to keep.
  * With `--screens`, saves every screen instead, as a phone shows it a screenful at a time, in
  * daylight, kitchen mode and the pseudo-locale, to dist/screens/ (never committed), for a design review.
+ * It seeds in stages (`STAGES`), taking each stage's screens before seeding on: the setup form, an empty
+ * Week, a Week not yet proposed, then the rest once both Weeks are proposed.
  * `--only week,import` takes just the screens whose names contain one of those words, and `--variants
  * daylight` just those variants, to retake a screen quickly while working on it. Each screen
  * records the web source it was taken from, and `--check` lists the screens taken before the source
@@ -124,45 +126,51 @@ async function call(agent: AgentClient, name: string, input: unknown) {
   return result.value;
 }
 
-/** The sample Household, its Recipes, and this Week's dinners from fixtures/sample-week.json. */
-async function seed(): Promise<Map<string, number>> {
+/** Opens a connection to the Household for `seeding`, and closes it after. */
+async function withAgent(seeding: (agent: AgentClient) => Promise<void>) {
   const agent = new AgentClient({ ...HOUSEHOLD_AGENT, host });
   try {
-    await call(agent, "setup_household", sampleHousehold);
-    const ids = new Map<string, number>();
-    for (const recipe of sampleWeek.recipes) {
-      const created = (await call(agent, "create_recipe", recipe)) as { id: number };
-      ids.set(recipe.title, created.id);
-    }
-    // Some dinners photographed and some not, so the screens show a dish's photo and its placeholder.
-    const photo = Bun.file(join(repo, "fixtures/photos/sample-dish.jpg"));
-    for (const title of sampleWeek.photographed) {
-      const id = ids.get(title);
-      if (id === undefined) throw new Error(`No sample Recipe ${title} to photograph`);
-      const response = await fetch(`http://${host}${recipePhotoPath(id)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "image/jpeg" },
-        body: photo,
-      });
-      if (!response.ok) throw new Error(`Photographing ${title}: ${response.status}`);
-    }
-    const week = (await call(agent, "get_week", {})) as Week;
-    const dates = [...new Set(week.slots.map((slot) => slot.date))];
-    for (const dinner of sampleWeek.dinners) {
-      const slot = { date: dates[dinner.day], meal: "dinner" };
-      if (dinner.recipe) {
-        await call(agent, "set_slot", { ...slot, kind: "recipe", recipeId: ids.get(dinner.recipe) });
-      } else if (dinner.eatOut) {
-        await call(agent, "set_slot", { ...slot, kind: "eat_out", note: dinner.eatOut });
-      } else if (dinner.leftovers !== undefined) {
-        await call(agent, "set_slot", { ...slot, kind: "leftovers" });
-        await call(agent, "link_leftovers", { ...slot, of: { date: dates[dinner.leftovers], meal: "dinner" } });
-      }
-    }
-    if (everyScreen) await seedTheRest(agent, ids);
-    return ids;
+    await seeding(agent);
   } finally {
     agent.close();
+  }
+}
+
+/** The sample Household, set up with nothing planned. */
+async function setUp(agent: AgentClient) {
+  await call(agent, "setup_household", sampleHousehold);
+}
+
+/** The sample Recipes and this Week's dinners from fixtures/sample-week.json, their ids put in `ids` by title. */
+async function seedSample(agent: AgentClient, ids: Map<string, number>) {
+  for (const recipe of sampleWeek.recipes) {
+    const created = (await call(agent, "create_recipe", recipe)) as { id: number };
+    ids.set(recipe.title, created.id);
+  }
+  // Some dinners photographed and some not, so the screens show a dish's photo and its placeholder.
+  const photo = Bun.file(join(repo, "fixtures/photos/sample-dish.jpg"));
+  for (const title of sampleWeek.photographed) {
+    const id = ids.get(title);
+    if (id === undefined) throw new Error(`No sample Recipe ${title} to photograph`);
+    const response = await fetch(`http://${host}${recipePhotoPath(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: photo,
+    });
+    if (!response.ok) throw new Error(`Photographing ${title}: ${response.status}`);
+  }
+  const week = (await call(agent, "get_week", {})) as Week;
+  const dates = [...new Set(week.slots.map((slot) => slot.date))];
+  for (const dinner of sampleWeek.dinners) {
+    const slot = { date: dates[dinner.day], meal: "dinner" };
+    if (dinner.recipe) {
+      await call(agent, "set_slot", { ...slot, kind: "recipe", recipeId: ids.get(dinner.recipe) });
+    } else if (dinner.eatOut) {
+      await call(agent, "set_slot", { ...slot, kind: "eat_out", note: dinner.eatOut });
+    } else if (dinner.leftovers !== undefined) {
+      await call(agent, "set_slot", { ...slot, kind: "leftovers" });
+      await call(agent, "link_leftovers", { ...slot, of: { date: dates[dinner.leftovers], meal: "dinner" } });
+    }
   }
 }
 
@@ -170,9 +178,8 @@ async function seed(): Promise<Map<string, number>> {
  * What the screens past the Week need to show more than their empty states: a Recipe with
  * Unresolved Ingredients and, given a model, Suggestions for them, a Recipe to tag, a link-only
  * Draft to review, Staples due and run low, a Grocery List, a calendar link and a Kitchen Display;
- * this Week proposed with every dinner the Household's own, so Re-roll is disabled and says why; and
- * next Week, a Ready-made dish after a Monday of Leftovers whose form reaches back into this Week, then
- * pencilled dinners for the rest, using up broccoli and apples.
+ * and next Week, a Ready-made dish after a Monday of Leftovers whose form reaches back into this Week.
+ * Neither Week is proposed yet: `proposeWeeks` does that.
  */
 async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
   const resolving = (await call(agent, "create_recipe", {
@@ -232,11 +239,38 @@ async function seedTheRest(agent: AgentClient, ids: Map<string, number>) {
     kind: "recipe",
     recipeId: readyMade.id,
   });
+}
+
+/**
+ * This Week proposed with every dinner the Household's own, so Re-roll is disabled and says why; and
+ * next Week's pencilled dinners after its Monday and Tuesday, using up broccoli and apples.
+ */
+async function proposeWeeks(agent: AgentClient) {
+  const thisWeek = (await call(agent, "get_week", {})) as Week;
+  const next = addDays(thisWeek.startDate, 7);
   // Proposing a Week chosen entirely by hand changes no dinner.
   await call(agent, "propose_week", { date: thisWeek.startDate });
   await call(agent, "set_use_up", { date: next, items: ["broccoli", "apple"] });
   await call(agent, "propose_week", { date: next });
 }
+
+/**
+ * How far the sample Household is seeded when a screen is taken, in the order the run seeds them:
+ * `setup` before the Household exists, `empty` set up with nothing planned, `before-propose` with every
+ * sample Recipe, dinner and the rest in but neither Week proposed, and `proposed` as the seed ends.
+ */
+const STAGES = ["setup", "empty", "before-propose", "proposed"] as const;
+type Stage = (typeof STAGES)[number];
+
+/** What seeding on to each stage from the one before it adds. */
+const SEED_TO: Record<Exclude<Stage, "setup">, (agent: AgentClient, ids: Map<string, number>) => Promise<void>> = {
+  empty: setUp,
+  "before-propose": async (agent, ids) => {
+    await seedSample(agent, ids);
+    await seedTheRest(agent, ids);
+  },
+  proposed: proposeWeeks,
+};
 
 /** The Ready-made dish seeded, whose product the add-dish form then finds already an Item. */
 const READY_MADE = {
@@ -286,6 +320,8 @@ const SETTINGS = [
  */
 type Screen = {
   name: string;
+  /** How far the Household is seeded when it's taken: `proposed`, as the seed ends, unless it says. */
+  stage?: Stage;
   path?: string;
   open?: (page: Page) => Promise<void>;
   /** A sheet or kitchen mode over the page: one screenful, as scrolling moves what's underneath. */
@@ -297,7 +333,9 @@ type Screen = {
 function screens(ids: Map<string, number>): Screen[] {
   const recipe = ids.get(sampleWeek.dinners[0]?.recipe ?? "");
   const nav = (index: number) => (page: Page) => page.locator("nav.nav button").nth(index).click();
-  const header = (index: number) => (page: Page) => page.locator(".app-header .button-row").nth(index).click();
+  // Ran out and Chat: icons on the Week, rows that say what they are elsewhere.
+  const header = (index: number) => (page: Page) =>
+    page.locator(".app-header :is(.button-row, .icon-button)").nth(index).click();
   // The add-dish form, its title and product filled in.
   const readyMadeForm = (title: string, product: string) => async (page: Page) => {
     await nav(1)(page);
@@ -330,8 +368,14 @@ function screens(ids: Map<string, number>): Screen[] {
     await page.locator("article button.button-secondary").first().click();
     await page.locator(".plan-row").first().waitFor();
   };
+  // Numbered from 00, by place in this list.
   return [
+    { name: "setup", stage: "setup" },
     { name: "week" },
+    // Before any Recipe, Proposing the Week is the one thing to do.
+    { name: "week-empty", stage: "empty" },
+    // Dinners chosen by hand, the Week not yet proposed: Propose in place of Re-roll and Use it up.
+    { name: "week-unproposed", stage: "before-propose", focus: weekControls },
     { name: "week-dinner", open: (page) => page.locator(".dish-open").first().click(), overlay: true },
     { name: "week-next", path: "/?week=next" },
     { name: "week-offline", open: (page) => page.context().setOffline(true) },
@@ -598,35 +642,51 @@ async function removeEarlier(dir: string, name: string) {
   for (const file of await readdir(dir)) if (earlier.test(file)) await rm(join(dir, file));
 }
 
-/** Saves every wanted screen in each variant taken; returns the ones not saved, as "variant/screen: error". */
-async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>): Promise<string[]> {
+/**
+ * Seeds the Household a stage at a time, as far as the last wanted screen needs, and after each saves
+ * that stage's wanted screens in each variant taken; returns the ones not saved, as "variant/screen: error".
+ */
+async function screenshotEveryScreen(browser: Browser): Promise<string[]> {
   const taken = await readTaken();
   const source = webSource();
   const failures: string[] = [];
   // A screen that failed once fails the same way in every variant: its wait would only time out again.
   const failed = new Set<string>();
   const saved: string[] = [];
-  for (const variant of variants) {
-    const dir = join(screensOut, variant.name);
-    await mkdir(dir, { recursive: true });
-    for (const [index, screen] of screens(ids).entries()) {
-      if (!wanted(screen.name) || failed.has(screen.name)) continue;
-      const context = await phone(browser, variant);
-      const page = await context.newPage();
-      const base = join(dir, `${String(index + 1).padStart(2, "0")}-${screen.name}`);
-      try {
-        await removeEarlier(dir, screen.name);
-        saved.push(...(await capture(page, screen, variant.query, base)));
-        taken[`${variant.name}/${screen.name}`] = source;
-      } catch (error) {
-        failed.add(screen.name);
-        failures.push(`${variant.name}/${screen.name}: ${error}`);
-      } finally {
-        await context.close();
+  // Filled as the sample Recipes are seeded, for the screens that open one by its link.
+  const ids = new Map<string, number>();
+  const stageOf = (screen: Screen) => screen.stage ?? "proposed";
+  const stagesWanted = new Set(
+    screens(ids)
+      .filter((screen) => wanted(screen.name))
+      .map(stageOf),
+  );
+  const last = Math.max(-1, ...[...stagesWanted].map((stage) => STAGES.indexOf(stage)));
+  for (const stage of STAGES.slice(0, last + 1)) {
+    if (stage !== "setup") await withAgent((agent) => SEED_TO[stage](agent, ids));
+    if (!stagesWanted.has(stage)) continue;
+    for (const variant of variants) {
+      const dir = join(screensOut, variant.name);
+      await mkdir(dir, { recursive: true });
+      for (const [index, screen] of screens(ids).entries()) {
+        if (stageOf(screen) !== stage || !wanted(screen.name) || failed.has(screen.name)) continue;
+        const context = await phone(browser, variant);
+        const page = await context.newPage();
+        const base = join(dir, `${String(index).padStart(2, "0")}-${screen.name}`);
+        try {
+          await removeEarlier(dir, screen.name);
+          saved.push(...(await capture(page, screen, variant.query, base)));
+          taken[`${variant.name}/${screen.name}`] = source;
+        } catch (error) {
+          failed.add(screen.name);
+          failures.push(`${variant.name}/${screen.name}: ${error}`);
+        } finally {
+          await context.close();
+        }
       }
     }
+    await Bun.write(takenFile, JSON.stringify(taken, null, 2));
   }
-  await Bun.write(takenFile, JSON.stringify(taken, null, 2));
   const which = only.length > 0 ? `the screens matching ${only.join(", ")}` : "every screen";
   console.log(`Saved ${failures.length > 0 ? `the rest of ${which}` : which}:`);
   // Absolute: the workspace filter prefixes each line with the worker's name, so a relative path misleads.
@@ -638,7 +698,7 @@ async function screenshotEveryScreen(browser: Browser, ids: Map<string, number>)
 async function checkScreens() {
   const taken = await readTaken();
   const source = webSource();
-  const names = ["setup", ...screens(new Map()).map((screen) => screen.name)];
+  const names = screens(new Map()).map((screen) => screen.name);
   const stale = VARIANTS.flatMap((variant) =>
     names.map((name) => `${variant.name}/${name}`).filter((key) => taken[key] !== source),
   );
@@ -650,26 +710,6 @@ async function checkScreens() {
   for (const key of stale) console.error(`  ${key}`);
   console.error("Retake them with: bun run screenshot --screens --only <words>");
   process.exit(1);
-}
-
-/** The first-run setup form, from a Household not set up yet. */
-async function screenshotSetup(browser: Browser) {
-  if (!wanted("setup")) return;
-  const taken = await readTaken();
-  for (const variant of variants) {
-    await mkdir(join(screensOut, variant.name), { recursive: true });
-    const context = await phone(browser, variant);
-    await capture(
-      await context.newPage(),
-      { name: "setup" },
-      variant.query,
-      join(screensOut, variant.name, "00-setup"),
-    );
-    await context.close();
-    taken[`${variant.name}/setup`] = webSource();
-  }
-  await mkdir(screensOut, { recursive: true });
-  await Bun.write(takenFile, JSON.stringify(taken, null, 2));
 }
 
 if (process.argv.includes("--check")) {
@@ -699,10 +739,14 @@ try {
   await waitForWorker();
   const browser = await chromium.launch();
   try {
-    if (everyScreen) await screenshotSetup(browser);
-    const ids = await seed();
-    if (everyScreen) failures = await screenshotEveryScreen(browser, ids);
-    else await screenshot(browser);
+    if (everyScreen) failures = await screenshotEveryScreen(browser);
+    else {
+      await withAgent(async (agent) => {
+        await setUp(agent);
+        await seedSample(agent, new Map());
+      });
+      await screenshot(browser);
+    }
   } finally {
     await browser.close();
   }
