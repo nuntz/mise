@@ -20,10 +20,13 @@ criterion the implementer must meet word for word, so the wording has to hold up
   Slot holds: Nothing planned and a pencilled dinner are planned in one tap; the Household's own (a
   Recipe, Leftovers, Eating out, No meal) asks "{title} is yours. Replace it with {recipe}?" with
   "Replace {title}"; a cooked one can't be picked. A day the Recipe isn't safe for carries the Week's
-  Conflict chip ("Robin · Peanut") before it's tapped, and can still be tapped. Once planned, the
+  Conflict chip ("Robin · Peanut") before it's tapped, and can still be tapped. The chip is the
+  Conflict `wouldFlag` (`conflicts.ts`) returns: a Slot's Override hides it only while the Slot keeps
+  its Recipe, or for Leftovers the one they were cooked from (ADR 0012). Once planned, the
   page's "On the plan" line has "Show the Week". Wording that tells someone to plan from a Recipe names these.
 - **Choose a Recipe, from the Slot form's Recipe field.** A Recipe that would bring the Slot a
   Conflict, with the Diners and Guests as the form has them (saved or not), carries the Week's
-  Conflict chip ("Robin · Peanut") on its row, and can still be picked.
+  Conflict chip ("Robin · Peanut") on its row, and can still be picked. It is `wouldFlag`'s Conflict,
+  as in Plan it.
 - **English only.** The pseudo-locale is generated from the English messages (`pseudoText` in
   `messages.ts`), so a change to a message changes it there too.
