@@ -129,7 +129,7 @@ describe("presentTurn", () => {
     });
   });
 
-  test("leaves the Week out when the screen shows none", () => {
+  test("gives a written turn from a screen with no Week the coming days too, so a day name means one ahead", () => {
     const presented = presentTurn({
       speaker: "Sam",
       today: "2026-10-26",
@@ -138,19 +138,26 @@ describe("presentTurn", () => {
       text: "we're out of cumin",
     });
 
-    expect(presented).toBe("[Sam, writing on Monday 2026-10-26, on the Pantry screen]\nwe're out of cumin");
+    expect(presented).toBe(
+      "[Sam, writing on Monday 2026-10-26, on the Pantry screen, so day names mean the coming days: " +
+        "Monday 2026-10-26, Tuesday 2026-10-27, Wednesday 2026-10-28, Thursday 2026-10-29, Friday 2026-10-30, " +
+        "Saturday 2026-10-31, Sunday 2026-11-01]\n" +
+        "we're out of cumin",
+    );
   });
 
   test("says so when no one signed in is speaking", () => {
     const presented = presentTurn({
       speaker: null,
       today: "2026-10-26",
-      where: { screen: "recipes" },
+      where: { screen: "week", week: "2026-10-26" },
       spoken: false,
       text: "hello",
     });
 
-    expect(presented).toBe("[Someone not signed in, writing on Monday 2026-10-26, on the Recipes screen]\nhello");
+    expect(presented).toBe(
+      "[Someone not signed in, writing on Monday 2026-10-26, on the Week screen, showing the Week of Monday 2026-10-26]\nhello",
+    );
   });
 
   test("says a spoken turn was spoken, with the Week on screen", () => {
@@ -191,14 +198,14 @@ describe("presentTurn", () => {
     const presented = presentTurn({
       speaker: "Robin",
       today: "2026-10-30",
-      where: { screen: "pantry" },
+      where: { screen: "week", week: "2026-10-26" },
       spoken: false,
       afterUnanswered: true,
       text: "we're out of cumin",
     });
 
     expect(presented).toBe(
-      "[Robin, writing on Friday 2026-10-30, on the Pantry screen; " +
+      "[Robin, writing on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-10-26; " +
         "Mise couldn't answer the messages before this one: answer only this message]\n" +
         "we're out of cumin",
     );
@@ -219,6 +226,42 @@ describe("presentTurn", () => {
         "answer for the ear: one or two plain sentences; " +
         "Mise couldn't answer the messages before this one: answer only this message]\n" +
         "next step",
+    );
+  });
+});
+
+describe("presentTurn on a Recipe's page (#160)", () => {
+  const COMING =
+    "so day names mean the coming days: Friday 2026-10-30, Saturday 2026-10-31, Sunday 2026-11-01, " +
+    "Monday 2026-11-02, Tuesday 2026-11-03, Wednesday 2026-11-04, Thursday 2026-11-05";
+  const turn = {
+    speaker: "Robin",
+    today: "2026-10-30",
+    where: { screen: "recipes" as const, recipe: 42 },
+    spoken: false,
+    text: "put this on Thursday",
+  };
+
+  test("names the Recipe open by its id and title, and gives a written turn the coming days", () => {
+    const presented = presentTurn({ ...turn, recipeShown: { id: 42, title: "Lentil soup", draft: false } });
+
+    expect(presented).toBe(
+      `[Robin, writing on Friday 2026-10-30, on the Recipes screen, showing Recipe 42, Lentil soup, ${COMING}]\n` +
+        "put this on Thursday",
+    );
+  });
+
+  test("calls a Draft a Draft, so the agent says to accept it before planning it", () => {
+    const presented = presentTurn({ ...turn, recipeShown: { id: 42, title: "Lentil soup", draft: true } });
+
+    expect(presented).toStartWith(
+      "[Robin, writing on Friday 2026-10-30, on the Recipes screen, showing Recipe 42, Lentil soup, a Draft, so day",
+    );
+  });
+
+  test("leaves out a Recipe that no longer exists, as if the list were shown", () => {
+    expect(presentTurn(turn)).toBe(
+      `[Robin, writing on Friday 2026-10-30, on the Recipes screen, ${COMING}]\nput this on Thursday`,
     );
   });
 });
@@ -266,17 +309,21 @@ describe("presentTurn from the Week screen", () => {
 });
 
 describe("presentTurn after a held call (ADR 0024)", () => {
-  const turn = { speaker: "Robin", today: "2026-10-30", where: { screen: "recipes" as const }, spoken: false };
+  const turn = {
+    speaker: "Robin",
+    today: "2026-10-30",
+    where: { screen: "week", week: "2026-10-26" } as const,
+    spoken: false,
+  };
+  const header = "[Robin, writing on Friday 2026-10-30, on the Week screen, showing the Week of Monday 2026-10-26]";
 
   test("says nothing of taps when the conversation has never held a call", () => {
-    expect(presentTurn({ ...turn, text: "delete the satay" })).toBe(
-      "[Robin, writing on Friday 2026-10-30, on the Recipes screen]\ndelete the satay",
-    );
+    expect(presentTurn({ ...turn, text: "delete the satay" })).toBe(`${header}\ndelete the satay`);
   });
 
   test("says nothing is waiting for a tap once none is", () => {
     expect(presentTurn({ ...turn, waiting: [], text: "delete the satay" })).toBe(
-      "[Robin, writing on Friday 2026-10-30, on the Recipes screen]\n[Nothing is waiting for a tap]\ndelete the satay",
+      `${header}\n[Nothing is waiting for a tap]\ndelete the satay`,
     );
   });
 
@@ -287,7 +334,7 @@ describe("presentTurn after a held call (ADR 0024)", () => {
     ];
 
     expect(presentTurn({ ...turn, waiting, text: "is it done?" })).toBe(
-      "[Robin, writing on Friday 2026-10-30, on the Recipes screen]\n" +
+      `${header}\n` +
         "[Waiting for a tap: 11 “Delete “Cheesy Pan Pizza””; 12 “Clear the Week of Monday 2026-10-26”]\n" +
         "is it done?",
     );
@@ -420,7 +467,9 @@ describe("presentTurn in Kitchen mode", () => {
       text: "next step",
     });
 
-    expect(presented).toBe("[Robin, writing on Tuesday 2026-11-03, in Kitchen mode]\nnext step");
+    expect(presented).toMatch(
+      /^\[Robin, writing on Tuesday 2026-11-03, in Kitchen mode, so day names mean [^\]]*\]\nnext step$/,
+    );
   });
 });
 
@@ -489,6 +538,15 @@ describe("ChatWhere", () => {
     expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1 }).success).toBe(true);
     expect(ChatWhere.safeParse({ screen: "kitchen", recipe: 1, step: 0 }).success).toBe(false);
     expect(ChatWhere.safeParse({ screen: "kitchen", week: "2026-10-26" }).success).toBe(false);
+  });
+
+  test("names the Recipe open on the Recipes screen, and on no other screen", () => {
+    expect(ChatWhere.safeParse({ screen: "recipes", recipe: 42 }).success).toBe(true);
+    expect(ChatWhere.safeParse({ screen: "recipes" }).success).toBe(true);
+    for (const screen of ["week", "grocery", "pantry", "household"]) {
+      expect(ChatWhere.safeParse({ screen, recipe: 42 }).success).toBe(false);
+    }
+    expect(ChatWhere.safeParse({ screen: "recipes", recipe: 42, week: "2026-10-26" }).success).toBe(false);
   });
 });
 

@@ -40,11 +40,22 @@ export const KitchenWhere = z
 export type KitchenWhere = z.infer<typeof KitchenWhere>;
 
 /**
- * Where the chat was opened from, sent with each message so that "Thursday" means the day the person
- * sees: the screen, and the Week it shows, if it shows one; or Kitchen mode, where only a Voice
- * Session is heard from.
+ * The Recipes screen, and the Recipe whose page is open on it (none on the list), so that "put this on
+ * Thursday" names that Recipe (#160).
  */
-export const ChatWhere = z.union([z.object({ screen: ChatScreen, week: LocalDate.optional() }).strict(), KitchenWhere]);
+export const RecipesWhere = z.object({ screen: z.literal("recipes"), recipe: RecipeId.optional() }).strict();
+export type RecipesWhere = z.infer<typeof RecipesWhere>;
+
+/**
+ * Where the chat was opened from, sent with each message so that "Thursday" means the day the person
+ * sees: the screen, and the Week it shows, if it shows one; the Recipes screen, and the Recipe open on
+ * it; or Kitchen mode, where only a Voice Session is heard from.
+ */
+export const ChatWhere = z.union([
+  z.object({ screen: ChatScreen.exclude(["recipes"]), week: LocalDate.optional() }).strict(),
+  RecipesWhere,
+  KitchenWhere,
+]);
 export type ChatWhere = z.infer<typeof ChatWhere>;
 
 /**
@@ -63,6 +74,9 @@ export type Cooking = {
   servings: number;
   locale: string;
 };
+
+/** What a turn from a Recipe's page is shown of the Recipe open on it, as the household read it when the turn was sent. */
+export type RecipeShown = Pick<Recipe, "id" | "title" | "draft">;
 
 /** A Staple a spoken turn from the Pantry screen asks about, as `list_due_staples` gives it, in card order. */
 export type CheckInStaple = Pick<Staple, "item" | "name" | "status">;
@@ -98,8 +112,11 @@ const SCREEN_NAMES: Record<ChatScreen, string> = {
  * (the conversation spans days, so "tomorrow" in an earlier turn meant another day), and from where,
  * then what they said. From Kitchen mode, that is the Recipe `cooking`, its Slot and the step on
  * screen, then its steps and its Ingredients scaled as the screen shows them, so that "next step" and
- * "how much garlic" are answered without a tool call, and amounts aren't left to the model's arithmetic. A spoken turn from a screen with no Week is given the dates of the coming
- * seven days, so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
+ * "how much garlic" are answered without a tool call, and amounts aren't left to the model's arithmetic.
+ * From a Recipe's page, that is the Recipe open on it, `recipeShown`, by its id and title, and whether it
+ * is a Draft, so that "put this on Thursday" names it (#160); one no longer found is left out.
+ * A turn from a screen with no Week, written or spoken, is given the dates of the coming seven days,
+ * so that "Tuesday" said on a Friday means next Tuesday, not the one eaten already.
  * A spoken turn from the Pantry screen is given the Staples due, `checkIn`, in the order the Pantry's
  * cards ask about them, with their Items to record each answer by, so that it can lead the Check-in.
  * A turn from a screen showing a Week names it This Week or Next Week when it is one, by the two the
@@ -120,6 +137,7 @@ export function presentTurn(turn: {
   today: LocalDate;
   where: ChatWhere;
   cooking?: Cooking;
+  recipeShown?: RecipeShown;
   checkIn?: readonly CheckInStaple[];
   spoken: boolean;
   afterUnanswered?: boolean;
@@ -136,8 +154,12 @@ export function presentTurn(turn: {
   const kitchen = where.screen === "kitchen" ? kitchenLines(where, turn.cooking) : undefined;
   if (where.screen === "kitchen") parts.push(...(kitchen?.parts ?? ["in Kitchen mode"]));
   else parts.push(`on the ${SCREEN_NAMES[where.screen]} screen`);
+  if (where.screen === "recipes" && turn.recipeShown) {
+    const { id, title, draft } = turn.recipeShown;
+    parts.push(`showing Recipe ${id}, ${title}${draft ? ", a Draft" : ""}`);
+  }
   if ("week" in where && where.week) parts.push(`showing ${weekNamed(where.week, turn.thisAndNext)}`);
-  else if (turn.spoken) {
+  else {
     const coming = Array.from({ length: 7 }, (_, days) => dayOf(addDays(turn.today, days)));
     parts.push(`so day names mean the coming days: ${coming.join(", ")}`);
   }

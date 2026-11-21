@@ -1,4 +1,5 @@
 import {
+  type ChatWhere,
   DEFAULT_EFFORT_BUDGETS,
   type Household,
   ITEMS,
@@ -112,49 +113,60 @@ function weeks() {
 type Answer = (input: Record<string, unknown>) => ToolResult<unknown> | undefined;
 
 /**
- * A client over `recipe` and the two Weeks, recording every tool call made. `set_slot` plans a Recipe as
- * the household does: the Slot becomes the Household's own, and the plan's change notice follows.
+ * A client over `recipe` and the two Weeks, recording every tool call made, and where each message to
+ * the agent was sent from. `set_slot` plans a Recipe as the household does: the Slot becomes the
+ * Household's own, and the plan's change notice follows.
  */
 function fakeClient(recipe: Recipe = noodles, answers: Record<string, Answer> = {}, home: Household = household) {
   const store = weeks();
   const calls: { name: string; input: Record<string, unknown> }[] = [];
-  const fake = createFakeClient(async (name: string, input: Record<string, unknown>) => {
-    calls.push({ name, input });
-    const answer = answers[name]?.(input);
-    if (answer) return answer;
-    switch (name) {
-      case "get_household":
-        return { ok: true, value: home };
-      case "get_caller":
-        return { ok: true, value: null };
-      case "get_week":
-        return { ok: true, value: store.get(input.date as string | undefined) };
-      case "search_recipes":
-        return { ok: true, value: [summaryOf(recipe)] };
-      case "get_recipe":
-        return { ok: true, value: recipe };
-      case "list_items":
-        return { ok: true, value: ITEMS };
-      case "list_unresolved_ingredients":
-      case "list_suggestions":
-      case "list_drafts":
-      case "list_import_flags":
-      case "list_untagged_recipes":
-        return { ok: true, value: [] };
-      case "set_slot": {
-        const slot = store.set(String(input.date), input.meal as Slot["meal"], {
-          kind: "recipe",
-          recipe: dish(recipe.id, recipe.title),
-          reason: null,
-        });
-        queueMicrotask(() => fake.notify("plan"));
-        return { ok: true, value: structuredClone(slot) };
+  const sentFrom: ChatWhere[] = [];
+  const fake = createFakeClient(
+    async (name: string, input: Record<string, unknown>) => {
+      calls.push({ name, input });
+      const answer = answers[name]?.(input);
+      if (answer) return answer;
+      switch (name) {
+        case "get_household":
+          return { ok: true, value: home };
+        case "get_caller":
+          return { ok: true, value: null };
+        case "get_week":
+          return { ok: true, value: store.get(input.date as string | undefined) };
+        case "search_recipes":
+          return { ok: true, value: [summaryOf(recipe)] };
+        case "get_recipe":
+          return { ok: true, value: recipe };
+        case "list_items":
+          return { ok: true, value: ITEMS };
+        case "list_unresolved_ingredients":
+        case "list_suggestions":
+        case "list_drafts":
+        case "list_import_flags":
+        case "list_untagged_recipes":
+          return { ok: true, value: [] };
+        case "set_slot": {
+          const slot = store.set(String(input.date), input.meal as Slot["meal"], {
+            kind: "recipe",
+            recipe: dish(recipe.id, recipe.title),
+            reason: null,
+          });
+          queueMicrotask(() => fake.notify("plan"));
+          return { ok: true, value: structuredClone(slot) };
+        }
+        default:
+          throw new Error(`Unexpected tool ${name}`);
       }
-      default:
-        throw new Error(`Unexpected tool ${name}`);
-    }
-  });
-  return { ...fake, calls, weeks: store };
+    },
+    {
+      conversation: async () => [],
+      chat: async (_, where) => {
+        sentFrom.push(where);
+        return { ok: true, value: { role: "agent", text: "Done." } };
+      },
+    },
+  );
+  return { ...fake, calls, sentFrom, weeks: store };
 }
 
 async function openRecipe(client: ReturnType<typeof fakeClient>["client"]) {
@@ -554,4 +566,24 @@ test("a cooked day, which can't be picked, isn't flagged", async () => {
 
   await waitFor(() => expect(chip(row(sheet, "Thu 12"))).toBe("Robin · Sesame"));
   expect(chip(row(sheet, "Wed 11"))).toBeNull();
+});
+
+test("the chat from a Recipe's page names that Recipe, so “put this on Thursday” plans it, and from the list names none (#160)", async () => {
+  const { client, sentFrom } = fakeClient();
+  const user = await openRecipe(client);
+  const send = async (text: string) => {
+    await user.click(await screen.findByRole("button", { name: "Ask Mise" }));
+    const chat = await screen.findByRole("dialog", { name: "Ask Mise" });
+    await user.type(within(chat).getByRole("textbox", { name: "Message" }), text);
+    await user.click(within(chat).getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sentFrom.length).toBeGreaterThan(0));
+    await user.click(within(chat).getByRole("button", { name: "Close the chat" }));
+  };
+
+  await send("Put this on Thursday");
+  await user.click(screen.getByRole("button", { name: "All Recipes" }));
+  await screen.findByRole("button", { name: "Sesame noodles" });
+  await send("What's quick?");
+
+  expect(sentFrom).toEqual([{ screen: "recipes", recipe: 7 }, { screen: "recipes" }]);
 });

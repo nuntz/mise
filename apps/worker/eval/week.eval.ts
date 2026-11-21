@@ -9,16 +9,19 @@ import { answeredFirst, realModels } from "./models";
 
 /**
  * Typed turns about a Week on the real agent model: which Week a day name means, which Weeks “this
- * week” and “next week” mean whatever Week is shown (#146), and reading a Week's dinners on their
- * right days (#142). Calls Claude with the key in `.dev.vars`, so it runs only by hand:
+ * week” and “next week” mean whatever Week is shown (#146), reading a Week's dinners on their right
+ * days (#142), and planning the Recipe open on its page on a day named (#160). Calls Claude with the
+ * key in `.dev.vars`, so it runs only by hand:
  *
  *   bun run eval:agent
  */
 
 // Thursday 5 November 2026, in a Week of Monday 2 November; next Week starts on Monday 9 November.
 const THURSDAY_NOON = new Date("2026-11-05T12:00:00-07:00");
+const THIS_TUESDAY = "2026-11-03";
 const THIS_WEDNESDAY = "2026-11-04";
 const NEXT_MONDAY = "2026-11-09";
+const NEXT_TUESDAY = "2026-11-10";
 const NEXT_WEDNESDAY = "2026-11-11";
 const NEXT_THURSDAY = "2026-11-12";
 const THIS_SUNDAY = "2026-11-08";
@@ -192,4 +195,24 @@ describe("“this week” and “next week” in a typed turn", () => {
       TURN_MS,
     );
   }
+});
+
+// From a Recipe's page, the chat once sent only the Recipes screen, so “this” named nothing; and a typed
+// turn from a screen with no Week was given no coming days, leaving the day to the model's guess (#160).
+describe("a typed turn from a Recipe's page", () => {
+  test(
+    "“put this on Tuesday” plans the Recipe open on next Week's Tuesday, the one still to come",
+    async () => {
+      const { household, write } = await robinWriting();
+
+      await write("Put this on Tuesday", { screen: "recipes", recipe: 6 });
+
+      const planned = await dinnerOn(household, NEXT_TUESDAY);
+      expect(planned?.recipe?.title, "next Tuesday's dinner").toBe("Salmon teriyaki");
+      // The Proposal may have pencilled it there already: planned, it is the Household's own.
+      expect(planned?.reason, "planned, not left pencilled").toBeNull();
+      expect((await dinnerOn(household, THIS_TUESDAY))?.kind, "this Week's Tuesday, already passed").toBe("unplanned");
+    },
+    TURN_MS,
+  );
 });

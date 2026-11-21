@@ -64,6 +64,7 @@ import {
   type RecipeId,
   type RecipeImage,
   type RecipeReading,
+  type RecipeShown,
   type ResolvedCaller,
   readPaprikaExport,
   reviewMessage,
@@ -341,6 +342,7 @@ class HouseholdAgent extends Agent<Env> {
       today,
       where,
       cooking: this.cookingAt(where),
+      recipeShown: this.recipeShownAt(where),
       checkIn: spoken && where.screen === "pantry" ? this.dueStaples() : undefined,
       spoken,
       afterUnanswered,
@@ -382,6 +384,13 @@ class HouseholdAgent extends Agent<Env> {
       if (slot?.recipe?.id === where.recipe && slot.cookFor > 0) servings = slot.cookFor;
     }
     return { recipe: recipe.value, servings, locale: household.locale };
+  }
+
+  /** The Recipe whose page is open at `where`, as it is now; none from the list, another screen, or once it is gone. */
+  private recipeShownAt(where: ChatWhere): RecipeShown | undefined {
+    if (where.screen !== "recipes" || where.recipe === undefined) return undefined;
+    const recipe = handlers.get_recipe(this.ctx.storage.sql, { id: where.recipe }, { caller: null });
+    return recipe.ok ? recipe.value : undefined;
   }
 
   /** The Week the Week screen shows at `where`, as it is now; none from any other screen. */

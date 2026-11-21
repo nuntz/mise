@@ -21,9 +21,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Robin, signed in, with a Voice Session started on a pretend Live, and the agent answering with `respond`. */
+/**
+ * Robin, signed in, with a Voice Session started from `where` on a pretend Live, and the agent
+ * answering with `respond`.
+ */
 async function robinTalking(
   respond: FauxResponseFactory = () => fauxAssistantMessage("Thursday's dinner is Rice bowl 2."),
+  where: ChatWhere = ON_THE_WEEK,
 ) {
   const prompts: string[] = [];
   scriptModel((context, options, state, model) => {
@@ -34,7 +38,7 @@ async function robinTalking(
   useLive(() => live);
   const household = await familyHousehold();
   const robin = await connectAs(household, "robin@example.com");
-  const reply = (await robin.rpc("startVoice", [OFFER, ON_THE_WEEK])) as VoiceStartReply;
+  const reply = (await robin.rpc("startVoice", [OFFER, where])) as VoiceStartReply;
   const session = sessions[0];
   if (!session) throw new Error("No session was created");
   return { household, robin, reply, session, sessions, prompts };
@@ -140,6 +144,30 @@ describe("a Voice Session", () => {
     expect(prompts[1]).toMatch(
       /^\[Robin, speaking on .*, on the Pantry screen, so day names mean the coming days: .*\]\n/,
     );
+  });
+
+  test("started on a Recipe's page, hears that Recipe, then each one opened, then none from the list (#160)", async () => {
+    const { robin, session, prompts } = await robinTalking(() => fauxAssistantMessage("Noted."), {
+      screen: "recipes",
+      recipe: 2,
+    });
+    const say = async (text: string, item: string, count: number) => {
+      session.serverSends({ type: "session.input_transcript.delta", delta: text });
+      session.serverSends({ type: "session.delegation.created", delegation: { id: item } });
+      await vi.waitFor(() => expect(session.sent).toHaveLength(count));
+    };
+
+    await say("Put this on Thursday.", "item_1", 1);
+    await robin.rpc("moveVoice", [{ screen: "recipes", recipe: 3 }]);
+    await say("And this one on Friday.", "item_2", 2);
+    await robin.rpc("moveVoice", [{ screen: "recipes" }]);
+    await say("What's for dinner Saturday?", "item_3", 3);
+
+    expect(prompts[0]).toMatch(
+      /^\[Robin, speaking on .*, on the Recipes screen, showing Recipe 2, Rice bowl 2, so day names mean the coming days: .*\]\n/,
+    );
+    expect(prompts[1]).toMatch(/, on the Recipes screen, showing Recipe 3, Rice bowl 3, so day names mean /);
+    expect(prompts[2]).toMatch(/, on the Recipes screen, so day names mean /);
   });
 
   test("is moved only by the connection that started it", async () => {

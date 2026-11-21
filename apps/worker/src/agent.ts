@@ -342,8 +342,6 @@ const SPOKEN_TURNS = [
     "I name the next three, starting with Risotto?”). Asked for the same list again, answer afresh the same way: " +
     "how many, up to three of them, then “say more”. This rule holds even when your earlier answers in the " +
     "conversation ended otherwise, such as with “Want the next three?”: answer by this rule, not by them.",
-  "- From a screen with no Week, a day name means the date the message gives for it, among the coming days: " +
-    "on a Friday, “Tuesday” is next Tuesday. Only “last Tuesday”, or asking what was eaten, means one past.",
   "- Before changing a day that has already passed, ask first (“Tuesday has passed. Change it anyway?”), " +
     "and change it only once they say yes.",
   "- When a change waits for a tap, name the button by what it says (“tap Delete Lemon chicken on the " +
@@ -396,15 +394,20 @@ function preamble(household: Household | null): string {
       ? household.members.map((member) => `- ${member.name} (Member ${member.id})${constraintsOf(member.constraints)}`)
       : ["- none yet"]),
     "",
-    "Each message starts, in brackets, with who is speaking, the day they wrote it, and the screen (and Week) " +
-      "they are looking at. From the Week screen, a line in brackets then gives that Week as it is now, day by " +
+    "Each message starts, in brackets, with who is speaking, the day they wrote it, and the screen (and the Week " +
+      "or Recipe) they are looking at. From the Week screen, a line in brackets then gives that Week as it is now, day by " +
       "day: each dinner, pencilled or the Household's own, and the breakfasts and lunches that hold something. " +
       "“I”, “me” and “us” mean that speaker. " +
       "“Today”, “tonight” and “tomorrow” count from the day the message was written, whatever Week they see, " +
       "and so do “this week”, “next week” and “last week”: This Week, Next Week and the Week before This Week. " +
       "So with Next Week on screen, “next week” is the Week they see and “this week” the one before it. " +
       "Take them so without asking which Week is meant. " +
-      "A day name on its own means that day of the Week they see, even when earlier turns were about another Week.",
+      "A day name on its own means that day of the Week they see, even when earlier turns were about another Week. " +
+      "From a screen with no Week, a day name means the date the message gives for it, among the coming days: " +
+      "on a Friday, “Tuesday” is next Tuesday. Only “last Tuesday”, or asking what was eaten, means one past. " +
+      "From a Recipe's page, the message names the Recipe open on it: “this” and “it” mean that Recipe, so " +
+      "“put this on Thursday” plans it with set_slot, for dinner unless they name another meal. One the message " +
+      "calls a Draft can't be planned until a person accepts it on the screen: say so instead of planning it.",
     "Change things only through the tools. Answer from what they return: never guess what is planned, read it. " +
       "Don't say why something happened, or what a Week or list holds, unless a tool you just called, or this " +
       "message's Week, says so; " +

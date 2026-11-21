@@ -7,12 +7,31 @@ import {
   fauxToolCall,
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
-import type { ChatWhere, WeekForTheAgent } from "@mise/domain";
+import type { JsonObject } from "@earendil-works/pi-durable";
+import {
+  type ChatMessage,
+  type ChatWhere,
+  FakeLlm,
+  type RecipeReading,
+  type ToolOutput,
+  type ToolResult,
+  type WeekForTheAgent,
+} from "@mise/domain";
 import type { PiHarness } from "agents/harness/pi";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AGENT_MODEL, agentModels, claudeAgentModels, useAgentModels } from "../src/agent";
+import { useLlm } from "../src/llm";
 import { connectAs } from "./connect";
-import { caller, dinnerOn, familyHousehold, lastText, scriptModel, textOf, weekOf } from "./scripted";
+import {
+  caller,
+  dinnerOn,
+  familyHousehold,
+  type HouseholdStub,
+  lastText,
+  scriptModel,
+  textOf,
+  weekOf,
+} from "./scripted";
 
 // Monday 26 October 2026 to Sunday 1 November.
 const MONDAY = "2026-10-26";
@@ -248,6 +267,113 @@ describe("a turn from the Week screen", () => {
 });
 
 /**
+ * A scripted model that plans the Recipe a turn says is open on the coming Thursday's dinner, as the
+ * turn dates it, with `overrides` when given: the Recipe's id and the date are only in the turn.
+ */
+function plansOnThursday(overrides?: JsonObject[]): FauxResponseFactory {
+  return (context, ...rest) => {
+    const turn = lastUserText(context);
+    const recipeId = Number(/showing Recipe (\d+),/.exec(turn)?.[1]);
+    const date = /day names mean the coming days: [^\]]*Thursday (\d{4}-\d{2}-\d{2})/.exec(turn)?.[1] ?? "";
+    const call: JsonObject = { date, meal: "dinner", kind: "recipe", recipeId, ...(overrides && { overrides }) };
+    return caller([["set_slot", call]])(context, ...rest);
+  };
+}
+
+const LENTIL_SOUP: RecipeReading = {
+  isRecipe: true,
+  title: "Lentil soup",
+  ingredients: ["1 cup lentils"],
+  steps: ["Simmer."],
+  servings: 4,
+  minutes: 40,
+  course: "main",
+};
+
+describe("a turn from a Recipe's page (#160)", () => {
+  // Friday 30 October: the coming Thursday is Next Week's, 5 November.
+  const NEXT_THURSDAY = "2026-11-05";
+  const ON_RICE_BOWL_2: ChatWhere = { screen: "recipes", recipe: 2 };
+
+  /** `text` sent from `where` on Friday 30 October, as Robin. */
+  async function onFriday(household: HouseholdStub, text: string, where: ChatWhere) {
+    const robin = await connectAs(household, "robin@example.com");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-30T12:00:00-07:00"));
+    try {
+      return await robin.rpc("chat", [text, where]);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  test("names the Recipe open, and plans it on the coming Thursday's dinner from “put this on Thursday”", async () => {
+    const seen: string[] = [];
+    const planner = plansOnThursday();
+    scriptModel((context, ...rest) => {
+      if (context.messages.at(-1)?.role === "user") seen.push(lastUserText(context));
+      return planner(context, ...rest);
+    });
+    const household = await familyHousehold();
+
+    const reply = await onFriday(household, "Put this on Thursday", ON_RICE_BOWL_2);
+
+    expect(seen[0]).toMatch(
+      /^\[Robin, writing on Friday 2026-10-30, on the Recipes screen, showing Recipe 2, Rice bowl 2, so day names mean the coming days: Friday 2026-10-30, .*, Thursday 2026-11-05\]\nPut this on Thursday$/,
+    );
+    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringMatching(/^Done: /) } });
+    expect(await dinnerOn(household, NEXT_THURSDAY)).toMatchObject({ recipe: { id: 2, title: "Rice bowl 2" } });
+  });
+
+  test("holds the plan for a tap when it brings a Conflict the person overrides (ADR 0024)", async () => {
+    scriptModel(plansOnThursday([{ who: 1, allergen: "peanut", reason: "We'll make Robin's without the sauce" }]));
+    const household = await familyHousehold();
+
+    const reply = await onFriday(household, "Put this on Thursday, we'll make Robin's without the sauce", {
+      screen: "recipes",
+      recipe: 1,
+    });
+
+    expect(reply).toMatchObject({ ok: true, value: { text: expect.stringMatching(/^Done: Nothing is changed yet/) } });
+    expect(await dinnerOn(household, NEXT_THURSDAY)).toMatchObject({ recipe: null });
+    const conversation = (await household.conversation()) as ChatMessage[];
+    expect(conversation.filter((message) => message.role === "confirmation")).toEqual([
+      {
+        role: "confirmation",
+        id: 1,
+        summary: "Plan “Satay” for dinner on Thursday, November 5 although Robin is allergic to peanut",
+        status: "pending",
+      },
+    ]);
+  });
+
+  test("calls a Draft a Draft, and leaves out a Recipe that is gone", async () => {
+    const seen: string[] = [];
+    scriptModel((context) => {
+      seen.push(lastUserText(context));
+      return fauxAssistantMessage("Noted.");
+    });
+    const llm = new FakeLlm();
+    llm.reading = { ...LENTIL_SOUP };
+    useLlm(() => llm);
+    const household = await familyHousehold();
+    const imported = (await household.callTool("import_text", { text: "Lentil soup: 1 cup lentils" })) as ToolResult<
+      ToolOutput<"import_text">
+    >;
+    const draft = imported.ok ? imported.value.recipe?.id : undefined;
+    await household.callTool("delete_recipe", { id: 3, confirm: true });
+
+    await household.chat("Plan this", { screen: "recipes", recipe: draft ?? 0 });
+    await household.chat("Plan this", { screen: "recipes", recipe: 3 });
+
+    expect(seen[0]).toMatch(
+      new RegExp(`, on the Recipes screen, showing Recipe ${draft}, Lentil soup, a Draft, so day names mean `),
+    );
+    expect(seen[1]).toMatch(/, on the Recipes screen, so day names mean /);
+  });
+});
+
+/**
  * A scripted model that fails the requests `failing` names (by the message's text), and otherwise
  * answers like a model shown several waiting messages: every message since its last answer, unless
  * the newest says to answer only it.
@@ -376,6 +502,23 @@ describe("what the agent is told", () => {
     expect(system).toMatch(/Robin \(Member 1\).*allergic to peanut/);
     expect(system).toContain("Alex (Member 2)");
     expect(system).toContain("Sam (Member 3)");
+  });
+
+  test("the system prompt says what a day name and “this” mean from a screen with no Week, written or spoken (#160)", async () => {
+    const seen: string[] = [];
+    scriptModel((context) => {
+      seen.push(systemOf(context).sections);
+      return fauxAssistantMessage("Hello.");
+    });
+    const household = await familyHousehold();
+
+    await household.chat("Hello", ON_THE_WEEK);
+
+    const [general = "", spoken = ""] = (seen[0] ?? "").split(/^Spoken turns:/m);
+    expect(general).toMatch(/From a screen with no Week, a day name means the date the message gives for it/);
+    expect(spoken).not.toMatch(/From a screen with no Week/);
+    expect(general).toMatch(/From a Recipe's page, .*“this” and “it” mean that Recipe/);
+    expect(general).toMatch(/Draft/);
   });
 
   test("the system prompt says how to answer a spoken turn", async () => {

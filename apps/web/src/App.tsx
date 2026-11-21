@@ -153,11 +153,18 @@ export function App(props: { client: MiseClient; voice?: OpenVoice; updates?: Up
     const opened = opening();
     return opened?.page === "household" ? opened : undefined;
   };
-  // The Week the Week or Grocery page last showed, for the chat to say where it was opened.
+  // The Week the Week or Grocery page last showed, and the Recipe whose page the Recipes page last
+  // showed, for the chat to say where it was opened.
   const [weekShown, setWeekShown] = createSignal<LocalDate>();
+  const [recipeShown, setRecipeShown] = createSignal<RecipeId>();
   const where = (): ChatWhere => {
-    const week = page() === "week" || page() === "grocery" ? weekShown() : undefined;
-    return { screen: page(), ...(week && { week }) };
+    const screen = page();
+    if (screen === "recipes") {
+      const recipe = recipeShown();
+      return { screen, ...(recipe !== undefined && { recipe }) };
+    }
+    const week = screen === "week" || screen === "grocery" ? weekShown() : undefined;
+    return { screen, ...(week && { week }) };
   };
   const [inKitchen, setInKitchen] = createSignal<KitchenRecipe>();
   const [kitchenMode, setKitchenMode] = createKitchenMode();
@@ -332,6 +339,7 @@ export function App(props: { client: MiseClient; voice?: OpenVoice; updates?: Up
                       onCook={cook}
                       onResolve={resolve}
                       onWeek={week}
+                      onRecipeShown={setRecipeShown}
                     />
                   </Match>
                   <Match when={page() === "household"}>

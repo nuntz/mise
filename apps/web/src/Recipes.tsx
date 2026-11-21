@@ -11,7 +11,7 @@ import {
   type RecipeSummary,
   type Recurrence,
 } from "@mise/domain";
-import { createEffect, createSignal, createUniqueId, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { createConfirm } from "./ConfirmSheet";
 import type { MiseClient } from "./client";
 import { errorText } from "./errors";
@@ -43,8 +43,16 @@ export function RecipesPage(props: {
   onResolve: (text?: string) => void;
   /** Opens This Week, or Next Week when `next`. */
   onWeek: (next: boolean) => void;
+  /** Told the Recipe whose page shows, or none, as that changes: the chat says it was opened there. */
+  onRecipeShown?: (id: RecipeId | undefined) => void;
 }) {
   const [view, setView] = createSignal<View>(props.open ? { kind: "recipe", id: props.open } : { kind: "list" });
+  createEffect(() => {
+    const shown = view();
+    props.onRecipeShown?.(shown.kind === "recipe" ? shown.id : undefined);
+  });
+  // Left for another screen, it shows none: coming back must not name the last one before it says.
+  onCleanup(() => props.onRecipeShown?.(undefined));
   const list = () => setView({ kind: "list" });
   const show = (recipe: { id: RecipeId }) => setView({ kind: "recipe", id: recipe.id });
 
