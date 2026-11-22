@@ -2,7 +2,7 @@
  * Waits for a pushed commit's CI run and says whether it was deployed. Deploying is the `deploy` job
  * of the CI run on master (.github/workflows/ci.yml), not a separate workflow, so a commit is live
  * once that job succeeds. Exits 0 only then; 1 if a job failed or deploy was skipped; 2 if there is
- * no run to wait for.
+ * no run to wait for, or gh fails for a reason other than a GitHub server error (which it tries again).
  *
  *   bun run deployed [commit]    (defaults to HEAD)
  *
@@ -10,6 +10,7 @@
  * what each `pulumi up` changed ("pulumi up: 13 unchanged").
  */
 import { $ } from "bun";
+import { ghFailure } from "./gh-failure";
 import { resourceSummaries } from "./pulumi-resources";
 
 const WORKFLOW = "ci.yml";
@@ -50,20 +51,20 @@ const deadline = Date.now() + RUN_TIMEOUT_MS;
 let jobs: Job[] = [];
 let done = false;
 while (!done) {
-  const view = (await $`gh run view ${run.databaseId} --json status,conclusion,jobs`.json()) as {
-    status: string;
-    conclusion: string | null;
-    jobs: Job[];
-  };
-  jobs = view.jobs;
-  for (const job of jobs) {
-    const state = job.status === "completed" ? (job.conclusion ?? "completed") : job.status;
-    if (reported.get(job.name) !== state) {
-      console.log(`  ${job.name}: ${state}`);
-      reported.set(job.name, state);
+  const view = await ghJson<{ status: string; conclusion: string | null; jobs: Job[] }>(
+    $`gh run view ${run.databaseId} --json status,conclusion,jobs`,
+  );
+  if (view) {
+    jobs = view.jobs;
+    for (const job of jobs) {
+      const state = job.status === "completed" ? (job.conclusion ?? "completed") : job.status;
+      if (reported.get(job.name) !== state) {
+        console.log(`  ${job.name}: ${state}`);
+        reported.set(job.name, state);
+      }
     }
+    done = view.status === "completed";
   }
-  done = view.status === "completed";
   if (!done) {
     if (Date.now() > deadline) {
       console.log(`Still running after ${RUN_TIMEOUT_MS / 60_000} minutes; giving up.`);
@@ -96,7 +97,9 @@ process.exit(1);
 async function pulumiSummaries(runId: number, jobId: number): Promise<{ summaries: string[]; error: string }> {
   const until = Date.now() + LOG_TIMEOUT_MS;
   for (;;) {
+    // Any failure is read again: a log not yet written is not known to fail with a server error.
     const read = await $`gh run view ${runId} --log --job ${jobId}`.nothrow().quiet();
+    if (read.exitCode !== 0) reportServerError(read.stderr.toString().trim());
     const summaries = resourceSummaries(read.stdout.toString());
     if (summaries.length > 0 || Date.now() > until) return { summaries, error: read.stderr.toString().trim() };
     await Bun.sleep(5_000);
@@ -106,11 +109,32 @@ async function pulumiSummaries(runId: number, jobId: number): Promise<{ summarie
 async function findRun(): Promise<Run | null> {
   const until = Date.now() + APPEAR_TIMEOUT_MS;
   for (;;) {
-    const runs =
-      (await $`gh run list --workflow ${WORKFLOW} --branch ${BRANCH} --event push --limit 20 --json databaseId,headSha,status,conclusion,url`.json()) as Run[];
-    const found = runs.find((r) => r.headSha === sha);
+    const runs = await ghJson<Run[]>(
+      $`gh run list --workflow ${WORKFLOW} --branch ${BRANCH} --event push --limit 20 --json databaseId,headSha,status,conclusion,url`,
+    );
+    const found = runs?.find((r) => r.headSha === sha);
     if (found) return found;
     if (Date.now() > until) return null;
     await Bun.sleep(5_000);
   }
+}
+
+/**
+ * A `gh … --json` call's answer, or null when GitHub answered a server error and the caller's next
+ * poll should try again. Any other failure would fail again, so it ends the script with gh's message.
+ */
+async function ghJson<T>(call: $.ShellPromise): Promise<T | null> {
+  const result = await call.nothrow().quiet();
+  if (result.exitCode === 0) return result.json() as T;
+  const stderr = result.stderr.toString().trim();
+  if (reportServerError(stderr)) return null;
+  console.log(`gh failed: ${stderr}`);
+  process.exit(2);
+}
+
+/** Says so when gh's failure is a GitHub server error, which the caller tries again. */
+function reportServerError(stderr: string): boolean {
+  if (ghFailure(stderr) !== "transient") return false;
+  console.log(`  GitHub answered a server error (${stderr.split("\n")[0]}); trying again.`);
+  return true;
 }
