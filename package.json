@@ -31,7 +31,8 @@
     "deployed": "bun scripts/deployed.ts",
     "transcript": "bun scripts/transcript.ts",
     "sentry": "bun scripts/sentry.ts",
-    "upstream-notes": "bun scripts/upstream-notes.ts"
+    "upstream-notes": "bun scripts/upstream-notes.ts",
+    "usage": "bun scripts/usage.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

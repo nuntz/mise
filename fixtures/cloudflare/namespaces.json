@@ -1,0 +1,29 @@
+{
+  "result": [
+    {
+      "id": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "name": "other_Household",
+      "script": "other",
+      "class": "Household",
+      "use_sqlite": true
+    },
+    {
+      "id": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+      "name": "mise_Household",
+      "script": "mise",
+      "class": "Household",
+      "use_sqlite": true
+    },
+    {
+      "id": "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+      "name": "mise_Spare",
+      "script": "mise",
+      "class": "Spare",
+      "use_sqlite": true
+    }
+  ],
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result_info": { "page": 1, "per_page": 100, "count": 3, "total_count": 3 }
+}

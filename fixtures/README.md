@@ -14,3 +14,4 @@ Clearly fictional sample data, shared by tests and local development. Nothing he
 - `photos/sample-dish.jpg`: a fictional dish on a plate, rendered with ImageMagick by `photos/render.sh`: the photo of the sample Week's `photographed` Recipes, and a dish's photo on a design canvas.
 - `screenshots/`: fictional screenshots of a recipe spread over two screens, rendered with ImageMagick.
 - `eval/screenshots.json`: sets of those screenshots `bun run eval` has the real model read together, with what a good reading holds.
+- `cloudflare/`: fictional answers from Cloudflare, for `bun run usage`'s tests, shaped as recorded from the live APIs: `usage.json` from GraphQL Analytics to the script's query, `unauthorized.json` its refusal, and `namespaces.json` a Durable Object namespace list with another Worker's namespace in it.

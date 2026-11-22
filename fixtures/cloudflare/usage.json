@@ -1,0 +1,120 @@
+{
+  "data": {
+    "viewer": {
+      "accounts": [
+        {
+          "doDays": [
+            { "dimensions": { "date": "2026-11-14" }, "sum": { "requests": 260 } },
+            { "dimensions": { "date": "2026-11-13" }, "sum": { "requests": 45 } }
+          ],
+          "doPeriodic": [
+            {
+              "dimensions": { "date": "2026-11-14" },
+              "sum": {
+                "activeTime": 50000000,
+                "inboundWebsocketMsgCount": 12,
+                "outboundWebsocketMsgCount": 40,
+                "rowsRead": 2500000,
+                "rowsWritten": 900
+              }
+            },
+            {
+              "dimensions": { "date": "2026-11-13" },
+              "sum": {
+                "activeTime": 10000000,
+                "inboundWebsocketMsgCount": 3,
+                "outboundWebsocketMsgCount": 10,
+                "rowsRead": 400000,
+                "rowsWritten": 100
+              }
+            }
+          ],
+          "doSql": [
+            { "dimensions": { "date": "2026-11-14" }, "max": { "storedBytes": 6900000 } },
+            { "dimensions": { "date": "2026-11-13" }, "max": { "storedBytes": 6850000 } }
+          ],
+          "doStatus": [
+            { "dimensions": { "status": "clientDisconnected" }, "sum": { "requests": 5 } },
+            { "dimensions": { "status": "success" }, "sum": { "requests": 300 } }
+          ],
+          "r2Gets": [
+            { "dimensions": { "datetimeHour": "2026-11-14T09:00:00Z" }, "sum": { "requests": 45 } },
+            { "dimensions": { "datetimeHour": "2026-11-13T18:00:00Z" }, "sum": { "requests": 5 } },
+            { "dimensions": { "datetimeHour": "2026-11-14T20:00:00Z" }, "sum": { "requests": 10 } }
+          ],
+          "r2Ops": [
+            { "dimensions": { "actionType": "PutObject" }, "sum": { "requests": 4 } },
+            { "dimensions": { "actionType": "GetObject" }, "sum": { "requests": 60 } },
+            { "dimensions": { "actionType": "ListObjects" }, "sum": { "requests": 2 } },
+            { "dimensions": { "actionType": "HeadBucket" }, "sum": { "requests": 6 } }
+          ],
+          "r2Storage": [
+            {
+              "dimensions": { "date": "2026-11-14" },
+              "max": { "metadataSize": 10000, "objectCount": 380, "payloadSize": 150000000 }
+            },
+            {
+              "dimensions": { "date": "2026-11-13" },
+              "max": { "metadataSize": 9900, "objectCount": 377, "payloadSize": 148000000 }
+            }
+          ],
+          "workerAll": [
+            {
+              "quantiles": { "cpuTimeP50": 5000, "cpuTimeP99": 40000, "wallTimeP50": 400000, "wallTimeP99": 300000000 },
+              "sum": { "requests": 120 }
+            }
+          ],
+          "workerHours": [
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T09:00:00Z", "status": "success" },
+              "sum": { "requests": 70 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-13T18:00:00Z", "status": "success" },
+              "sum": { "requests": 10 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T20:00:00Z", "status": "success" },
+              "sum": { "requests": 30 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T09:00:00Z", "status": "clientDisconnected" },
+              "sum": { "requests": 6 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T20:00:00Z", "status": "clientDisconnected" },
+              "sum": { "requests": 2 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T20:00:00Z", "status": "responseStreamDisconnected" },
+              "sum": { "requests": 2 }
+            }
+          ],
+          "workerStatus": [
+            {
+              "dimensions": { "status": "responseStreamDisconnected" },
+              "quantiles": {
+                "cpuTimeP50": 28000,
+                "cpuTimeP99": 55000,
+                "wallTimeP50": 270000000,
+                "wallTimeP99": 1800000000
+              },
+              "sum": { "requests": 2 }
+            },
+            {
+              "dimensions": { "status": "clientDisconnected" },
+              "quantiles": { "cpuTimeP50": 4500, "cpuTimeP99": 36000, "wallTimeP50": 420000, "wallTimeP99": 370000000 },
+              "sum": { "requests": 8 }
+            },
+            {
+              "dimensions": { "status": "success" },
+              "quantiles": { "cpuTimeP50": 5100, "cpuTimeP99": 39000, "wallTimeP50": 380000, "wallTimeP99": 2000000 },
+              "sum": { "requests": 110 }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "errors": null
+}
