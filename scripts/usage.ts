@@ -18,6 +18,9 @@
  *
  * Needs `CLOUDFLARE_API_TOKEN` (with Account · Account Analytics: Read) and `CF_ACCOUNT_ID`, from the
  * environment or `~/.config/mise/deploy.env`. Exits 0 once it has printed, 2 when it can't ask.
+ *
+ * The tests read fictional answers, so a change to `usageQuery` is checked only by running
+ * `bun run usage` once against the deployment: GraphQL Analytics refuses a field it doesn't have.
  */
 import { parseArgs } from "node:util";
 import wrangler from "../apps/worker/wrangler.jsonc";
