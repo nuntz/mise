@@ -1,5 +1,6 @@
 /**
- * Fails if a committed file holds a deployment's private values (ADR 0005).
+ * Fails if a committed file, or one `git add` would commit, holds a deployment's private values
+ * (ADR 0005). Files not yet tracked are scanned too, so a local run sees what CI will.
  *
  *   bun run check:private                    # any email address outside the placeholder domains,
  *                                            # and any Cloudflare ray id but the placeholder
@@ -45,7 +46,7 @@ export function lineFindings(text: string, privateValues: { key: string; value: 
 
 if (import.meta.main) {
   const privateValues = process.argv[2] === "-" ? configValues(JSON.parse(await Bun.stdin.text())) : [];
-  const files = (await $`git ls-files -z`.text()).split("\0").filter(Boolean);
+  const files = (await $`git ls-files -z --cached --others --exclude-standard`.text()).split("\0").filter(Boolean);
   const findings: Finding[] = [];
 
   for (const file of files) {
@@ -62,7 +63,7 @@ if (import.meta.main) {
     console.error(`\n${findings.length} private value(s) committed. Use placeholders such as mise.example.com.`);
     process.exit(1);
   }
-  console.log(`No private values in ${files.length} tracked files (${privateValues.length} config values checked).`);
+  console.log(`No private values in ${files.length} files (${privateValues.length} config values checked).`);
 }
 
 /** Every string in `pulumi config --json` output, lower-cased, with the setting it came from. */
