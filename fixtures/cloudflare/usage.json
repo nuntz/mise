@@ -7,6 +7,21 @@
             { "dimensions": { "date": "2026-11-14" }, "sum": { "requests": 260 } },
             { "dimensions": { "date": "2026-11-13" }, "sum": { "requests": 45 } }
           ],
+          "doHours": [
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T09:00:00Z", "status": "success" },
+              "sum": { "requests": 200 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-13T18:00:00Z", "status": "success" },
+              "sum": { "requests": 45 }
+            },
+            {
+              "dimensions": { "datetimeHour": "2026-11-14T09:00:00Z", "status": "clientDisconnected" },
+              "sum": { "requests": 5 }
+            },
+            { "dimensions": { "datetimeHour": "2026-11-14T20:00:00Z", "status": "success" }, "sum": { "requests": 55 } }
+          ],
           "doPeriodic": [
             {
               "dimensions": { "date": "2026-11-14" },

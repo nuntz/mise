@@ -4,9 +4,10 @@
  *   bun run usage [--days N] [--until <ISO>]    (default: the 7 days before now)
  *
  * Prints, for the window:
- *   - the Worker's requests by status, CPU and wall time p50/p99, and its busiest hour against the rest
- *   - the Household Durable Object namespace's requests by status, rows read and written, WebSocket
- *     messages and active time
+ *   - the Worker's requests by status, CPU and wall time p50/p99, its busiest hour against the rest,
+ *     and the UTC hours in which it threw exceptions
+ *   - the Household Durable Object namespace's requests by status, the UTC hours in which it threw
+ *     exceptions, rows read and written, WebSocket messages and active time
  *   - the R2 bucket's operations by type, its busiest hour for GetObject, and what it stores
  *   - each UTC day: Worker and Durable Object requests, rows read and written, SQLite storage and
  *     R2 GetObject, marking a day the window only partly covers
@@ -96,6 +97,7 @@ export function usageQuery(own: Own, window: Window, accountTag: string): { quer
     workerHours: workersInvocationsAdaptive(limit: ${HOURLY_LIMIT}, filter: {${worker}}) { sum { requests } dimensions { datetimeHour status } }
     doStatus: durableObjectsInvocationsAdaptiveGroups(limit: 100, filter: {${durable}}) { sum { requests } dimensions { status } }
     doDays: durableObjectsInvocationsAdaptiveGroups(limit: 100, filter: {${durable}}) { sum { requests } dimensions { date } }
+    doHours: durableObjectsInvocationsAdaptiveGroups(limit: ${HOURLY_LIMIT}, filter: {${durable}}) { sum { requests } dimensions { datetimeHour status } }
     doPeriodic: durableObjectsPeriodicGroups(limit: 100, filter: {${durable}}) { sum { rowsRead rowsWritten inboundWebsocketMsgCount outboundWebsocketMsgCount activeTime } dimensions { date } }
     doSql: durableObjectsSqlStorageGroups(limit: 100, filter: {namespaceId: $namespace, date_geq: $firstDay, date_leq: $lastDay}) { max { storedBytes } dimensions { date } }
     r2Ops: r2OperationsAdaptiveGroups(limit: 100, filter: {${bucket}}) { sum { requests } dimensions { actionType } }
@@ -125,6 +127,8 @@ function utcDate(at: Date): string {
 
 type Quantiles = { cpuTimeP50: number; cpuTimeP99: number; wallTimeP50: number; wallTimeP99: number };
 type Requests = { sum: { requests: number } };
+/** A dataset's requests in one UTC hour with one status. */
+type HourlyStatus = Requests & { dimensions: { datetimeHour: string; status: string } };
 /** What GraphQL Analytics answers to `usageQuery`, one field per dataset. */
 export type Answer = {
   data: {
@@ -132,9 +136,10 @@ export type Answer = {
       accounts: {
         workerAll: (Requests & { quantiles: Quantiles })[];
         workerStatus: (Requests & { quantiles: Quantiles; dimensions: { status: string } })[];
-        workerHours: (Requests & { dimensions: { datetimeHour: string; status: string } })[];
+        workerHours: HourlyStatus[];
         doStatus: (Requests & { dimensions: { status: string } })[];
         doDays: (Requests & { dimensions: { date: string } })[];
+        doHours: HourlyStatus[];
         doPeriodic: {
           dimensions: { date: string };
           sum: {
@@ -163,6 +168,8 @@ export type Times = { cpuP50: number; cpuP99: number; wallP50: number; wallP99: 
 /** Counts by name, largest first. */
 export type Counts = [string, number][];
 type Storage = { date: string; objects: number; bytes: number };
+/** The UTC hours in which a script threw an exception, each with how many times, oldest first. */
+export type Exceptions = { hour: string; count: number }[];
 
 /** This deployment's Cloudflare usage over a window. */
 export type Usage = {
@@ -173,6 +180,7 @@ export type Usage = {
     byStatus: { status: string; requests: number; times: Times }[];
     busiestHour: { hour: string; requests: number; byStatus: Counts } | null;
     rest: { hours: number; requests: number; byStatus: Counts };
+    exceptions: Exceptions;
   };
   durableObject: {
     requests: number;
@@ -182,6 +190,7 @@ export type Usage = {
     websocketIn: number;
     websocketOut: number;
     activeSeconds: number;
+    exceptions: Exceptions;
   };
   r2: {
     operations: number;
@@ -214,7 +223,7 @@ export function readUsage(answer: Answer, window: Window): Usage {
   }
   const account = answer.data?.viewer.accounts[0];
   if (!account) throw new Error("Cloudflare's GraphQL Analytics answered no account.");
-  for (const key of ["workerHours", "r2Gets"] as const) {
+  for (const key of ["workerHours", "doHours", "r2Gets"] as const) {
     if (account[key].length >= HOURLY_LIMIT)
       throw new Error(`${key} filled its page of ${HOURLY_LIMIT}: shorten --days.`);
   }
@@ -259,6 +268,7 @@ export function readUsage(answer: Answer, window: Window): Usage {
         requests: total(rest),
         byStatus: largest(rest),
       },
+      exceptions: exceptionsOf(account.workerHours),
     },
     durableObject: {
       requests: sumOf(account.doStatus.map((g) => g.sum.requests)),
@@ -268,6 +278,7 @@ export function readUsage(answer: Answer, window: Window): Usage {
       websocketIn: sumOf(periodic.map((p) => p.inboundWebsocketMsgCount)),
       websocketOut: sumOf(periodic.map((p) => p.outboundWebsocketMsgCount)),
       activeSeconds: sumOf(periodic.map((p) => p.activeTime)) / 1e6,
+      exceptions: exceptionsOf(account.doHours),
     },
     r2: {
       operations: sumOf(account.r2Ops.map((g) => g.sum.requests)),
@@ -294,6 +305,17 @@ export function readUsage(answer: Answer, window: Window): Usage {
       };
     }),
   };
+}
+
+/** The status Cloudflare gives a request in which the script threw. */
+const EXCEPTION_STATUS = "scriptThrewException";
+
+/** The hours among `groups` in which the script threw, oldest first. */
+function exceptionsOf(groups: HourlyStatus[]): Exceptions {
+  const hours = new Map<string, number>();
+  for (const g of groups)
+    if (g.dimensions.status === EXCEPTION_STATUS) add(hours, g.dimensions.datetimeHour, g.sum.requests);
+  return [...hours].map(([hour, count]) => ({ hour, count })).sort((a, b) => a.hour.localeCompare(b.hour));
 }
 
 /** How many hourly buckets the window reaches into, the partial ones at either end included. */
@@ -360,10 +382,14 @@ export function formatUsage(usage: Usage, names: { script: string; namespace: st
     const statuses = others > 0 ? ` (${joined(worker.rest.byStatus)})` : "";
     lines.push(`  the other ${hours} hours: ${count(others)} requests, ${perHour} an hour${statuses}`);
   }
+  if (worker.exceptions.length > 0) lines.push(`  ${exceptionLine(worker.exceptions)}`);
   lines.push(
     "",
     `Durable Object namespace ${names.namespace}`,
     `  ${count(durable.requests)} requests${listed(durable.byStatus)}`,
+  );
+  if (durable.exceptions.length > 0) lines.push(`  ${exceptionLine(durable.exceptions)}`);
+  lines.push(
     `  rows read ${count(durable.rowsRead)} · written ${count(durable.rowsWritten)}`,
     `  WebSocket messages in ${count(durable.websocketIn)} · out ${count(durable.websocketOut)} · active ${count(Math.round(durable.activeSeconds))} s`,
     "",
@@ -404,6 +430,11 @@ export function formatUsage(usage: Usage, names: { script: string; namespace: st
   }
   if (partly) lines.push("* partly in the window");
   return lines.join("\n");
+}
+
+/** When the script threw, by the UTC hour. */
+function exceptionLine(exceptions: Exceptions): string {
+  return `${EXCEPTION_STATUS} by UTC hour: ${exceptions.map((e) => `${time(new Date(e.hour))} ${count(e.count)}`).join(" · ")}`;
 }
 
 function time(at: Date): string {

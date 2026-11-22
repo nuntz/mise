@@ -13,7 +13,7 @@ const QUIET = {
     viewer: {
       accounts: [
         {
-          ...{ workerAll: [], workerStatus: [], workerHours: [], doStatus: [], doDays: [] },
+          ...{ workerAll: [], workerStatus: [], workerHours: [], doStatus: [], doDays: [], doHours: [] },
           ...{ doPeriodic: [], doSql: [], r2Ops: [], r2Gets: [], r2Storage: [] },
         },
       ],
@@ -21,6 +21,61 @@ const QUIET = {
   },
   errors: null,
 };
+/**
+ * The recorded answer with fictional exceptions: the Worker's 3 in two hours, the Household's 3 in one,
+ * each counted in its status and day totals too.
+ */
+const WITH_EXCEPTIONS = {
+  ...recorded,
+  data: {
+    viewer: {
+      accounts: [
+        {
+          ...ACCOUNT,
+          workerAll: ACCOUNT.workerAll.map((g) => ({ ...g, sum: { requests: g.sum.requests + 3 } })),
+          workerStatus: [
+            ...ACCOUNT.workerStatus,
+            {
+              dimensions: { status: "scriptThrewException" },
+              quantiles: { cpuTimeP50: 20000, cpuTimeP99: 30000, wallTimeP50: 200000, wallTimeP99: 250000 },
+              sum: { requests: 3 },
+            },
+          ],
+          workerHours: [
+            ...ACCOUNT.workerHours,
+            {
+              dimensions: { datetimeHour: "2026-11-14T20:00:00Z", status: "scriptThrewException" },
+              sum: { requests: 1 },
+            },
+            {
+              dimensions: { datetimeHour: "2026-11-13T18:00:00Z", status: "scriptThrewException" },
+              sum: { requests: 2 },
+            },
+          ],
+          doStatus: [...ACCOUNT.doStatus, { dimensions: { status: "scriptThrewException" }, sum: { requests: 3 } }],
+          doDays: ACCOUNT.doDays.map((g) =>
+            g.dimensions.date === "2026-11-14" ? { ...g, sum: { requests: g.sum.requests + 3 } } : g,
+          ),
+          doHours: [
+            ...ACCOUNT.doHours,
+            {
+              dimensions: { datetimeHour: "2026-11-14T09:00:00Z", status: "scriptThrewException" },
+              sum: { requests: 3 },
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+
+/** `heading`'s lines in printed usage, up to the blank line that ends its section. */
+function section(printed: string, heading: string): string[] {
+  const lines = printed.split("\n");
+  const from = lines.indexOf(heading);
+  const to = lines.indexOf("", from);
+  return lines.slice(from, to === -1 ? undefined : to);
+}
 
 describe("windowOf", () => {
   test("is the 7 days before now by default", () => {
@@ -173,6 +228,7 @@ describe("readUsage", () => {
       websocketIn: 15,
       websocketOut: 50,
       activeSeconds: 60,
+      exceptions: [],
     });
   });
 
@@ -272,6 +328,23 @@ describe("formatUsage", () => {
       "2026-11-13*      10           45    400,000           100  6.85 MB             5",
       "2026-11-14      110          260  2,500,000           900  6.90 MB            55",
       "* partly in the window",
+    ]);
+  });
+
+  test("ends the Worker's section with the hours it threw exceptions in, oldest first", () => {
+    const worker = section(formatUsage(readUsage(WITH_EXCEPTIONS, WINDOW), names), "Worker mise");
+    expect(worker.at(-1)).toBe("  scriptThrewException by UTC hour: 2026-11-13 18:00Z 2 · 2026-11-14 20:00Z 1");
+  });
+
+  test("names the hours the Household threw exceptions in, after its requests", () => {
+    expect(
+      section(formatUsage(readUsage(WITH_EXCEPTIONS, WINDOW), names), "Durable Object namespace mise_Household"),
+    ).toEqual([
+      "Durable Object namespace mise_Household",
+      "  308 requests: success 300 · clientDisconnected 5 · scriptThrewException 3",
+      "  scriptThrewException by UTC hour: 2026-11-14 09:00Z 3",
+      "  rows read 2,900,000 · written 1,000",
+      "  WebSocket messages in 15 · out 50 · active 60 s",
     ]);
   });
 
