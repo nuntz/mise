@@ -19,6 +19,8 @@ const APPEAR_TIMEOUT_MS = 90_000;
 const POLL_MS = 10_000;
 /** Test and deploy together take a few minutes; give up well after that. */
 const RUN_TIMEOUT_MS = 30 * 60_000;
+/** A job's log can lag its success by some seconds: read it again until it has a summary, this long. */
+const LOG_TIMEOUT_MS = 60_000;
 
 type Job = { databaseId: number; name: string; status: string; conclusion: string | null };
 type Run = { databaseId: number; headSha: string; status: string; conclusion: string | null; url: string };
@@ -74,10 +76,12 @@ while (!done) {
 const deploy = jobs.find((job) => job.name === "deploy");
 if (deploy?.conclusion === "success") {
   console.log(`Deployed: ${short}. Settings in Mise shows this build once the app reloads.`);
-  const log = await $`gh run view ${run.databaseId} --log --job ${deploy.databaseId}`.nothrow().text();
-  const summaries = resourceSummaries(log);
+  const { summaries, error } = await pulumiSummaries(run.databaseId, deploy.databaseId);
   for (const summary of summaries) console.log(`  ${summary}`);
-  if (summaries.length === 0) console.log("  The deploy log has no Pulumi Resources summary.");
+  if (summaries.length === 0) {
+    console.log(`  The deploy log has no Pulumi Resources summary after ${LOG_TIMEOUT_MS / 1000}s.`);
+    if (error) console.log(`  gh run view said: ${error}`);
+  }
   process.exit(0);
 }
 const failed = jobs.filter((job) => job.conclusion === "failure").map((job) => job.name);
@@ -87,6 +91,17 @@ if (failed.length > 0) {
   console.log(`Not deployed: deploy was ${deploy?.conclusion ?? "absent"}.`);
 }
 process.exit(1);
+
+/** What each `pulumi up` in the job changed, or none once its log has had time; with gh's last error. */
+async function pulumiSummaries(runId: number, jobId: number): Promise<{ summaries: string[]; error: string }> {
+  const until = Date.now() + LOG_TIMEOUT_MS;
+  for (;;) {
+    const read = await $`gh run view ${runId} --log --job ${jobId}`.nothrow().quiet();
+    const summaries = resourceSummaries(read.stdout.toString());
+    if (summaries.length > 0 || Date.now() > until) return { summaries, error: read.stderr.toString().trim() };
+    await Bun.sleep(5_000);
+  }
+}
 
 async function findRun(): Promise<Run | null> {
   const until = Date.now() + APPEAR_TIMEOUT_MS;
