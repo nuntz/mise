@@ -14,8 +14,8 @@ jobs:
   test:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
@@ -39,13 +39,13 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bun run --filter @mise/web build
-      - uses: pulumi/actions@v7
+      - uses: pulumi/actions@96c7761824268174e0d2a4e8c7d75671eebd24a7 # v7.1.0
         with:
           pulumi-version: 3.270.0
 
@@ -68,9 +68,9 @@ jobs:
       # PULUMI_ACCESS_TOKEN; the action masks both. Pulumi Cloud grants it only to this job on a
       # push to master (scripts/trust-pulumi-ci.ts). A deploy takes about a minute and a first one
       # runs `pulumi up` twice: half an hour leaves room, as a token that expires mid-`pulumi up`
-      # leaves the stack locked. Pinned to the commit of v2.1.1.
+      # leaves the stack locked.
       - name: Sign in to Pulumi Cloud through OIDC
-        uses: pulumi/auth-actions@159c3e431aab767d4519b96f3f784d7d3d725622
+        uses: pulumi/auth-actions@159c3e431aab767d4519b96f3f784d7d3d725622 # v2.1.1
         with:
           organization: ${{ steps.names.outputs.organization }}
           requested-token-type: urn:pulumi:token-type:access_token:personal

@@ -1,0 +1,8 @@
+# Every action in .github/workflows is pinned to a commit, with its release in a comment on the
+# `uses:` line; Dependabot moves both together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
